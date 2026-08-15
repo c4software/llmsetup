@@ -123,7 +123,7 @@ llama_model() {
 }
 
 # =============================================================================
-# Préchargés par défaut (cf. DEFAULT_PRELOAD / preload.conf) :
+# Groupe de tête du ini — candidats naturels au préchargement (preload.conf) :
 #   9b = tâches auxiliaires, 35b-a3b-nothink = default agentic (opencode & co)
 # =============================================================================
 
@@ -662,5 +662,6 @@ cache-reuse      = 0
 jinja            = true
 parallel         = 1"
 
-# Préchargement par défaut (sans preload.conf) : 9b = tâches auxiliaires,
+# Préchargement par défaut (sans preload.conf) : le léger agentic edge seul,
+# le reste en LRU — les always-on se choisissent via --preload.
 DEFAULT_PRELOAD=(lfm2.5-2.6b)
