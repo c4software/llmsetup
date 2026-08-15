@@ -1,0 +1,2 @@
+passe 2 : prompt=118 t/s (n=23, cache=8100)  gen=31.75 t/s  n=1000
+GEN=31.75

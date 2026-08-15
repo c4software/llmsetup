@@ -1,0 +1,1 @@
+passe 1 : erreur serveur — {'code': 404, 'message': "model 'nope' not found", 'type': 'not_found_error'}

@@ -1,0 +1,4 @@
+2026-08-15 10:00:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	2	22.2	0.700	5000	3000	4800
+2026-08-15 10:20:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	4	25.5	0.557	7000	3900	5200
+2026-08-15 10:40:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	6	26.0	0.467	9000	4200	5400
+; QUARANTAINE (tokens/forward > plafond, n-max réel différent) 2026-08-15 11:00:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	2	30.1	0.816	4900	4000	4900

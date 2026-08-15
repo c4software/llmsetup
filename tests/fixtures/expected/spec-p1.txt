@@ -1,0 +1,4 @@
+passe 1 : prompt=413 t/s (n=8123, cache=0)  gen=25.48 t/s  n=1500  acceptance=0.62 (1310/2100)  (cache froid, à ignorer)
+GEN=25.48
+ACC=0.624
+DN=2100 DA=1310 PN=1500

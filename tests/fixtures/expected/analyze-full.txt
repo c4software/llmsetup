@@ -1,0 +1,7 @@
+  run courant : n-max 6  26.00 t/s  acceptance/token 0.467  → α≈0.785  tokens/forward 4.50 (plafond 7)
+  calibration sur n-max [2, 4, 6] : t_base≈97 ms/forward (≈10.3 t/s sans spéculation), t_draft≈13.2 ms/token drafté
+  prédiction  : k1=16.2  k2=19.4  k3=21.1  k4=21.8  k5=21.8  k6=21.5  k7=21.0  k8=20.3  k9=19.6  k10=18.9
+  mesuré      : k2=22.2  k4=25.5  k6=26.0
+  → mesuré : n-max 4 (meilleur 26.0 t/s ; à <2 %, le plus petit k gagne)
+REC=4
+  → modèle : n-max 4 suggéré mais gain <3 % vs 6 : plateau atteint.
