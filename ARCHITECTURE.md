@@ -58,7 +58,7 @@ common → models → presets → ini → preload → setup → bench → spec �
 - `bench.sh` : `cmd_bench` (mesure API du serveur en l'état), `_bench_one`,
   sélections, `cmd_list_devices`.
 - `spec.sh` : `cmd_spec_test`, `cmd_spec_tune`, `_spec_save_conf`, sélection
-  des presets MTP ; l'analyse est déléguée à `lib/py/spec_analyze.py`.
+  des presets MTP ; l'analyse est déléguée à `py/spec_analyze.py`.
 - `service.sh` : `cmd_start` (`--models-max` = préchargés + 1, min 2),
   `cmd_install_service` (service **système**, `ExecStart` via `realpath` du
   script, `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` posé d'office pour ROCm/iGPU),
@@ -68,9 +68,9 @@ common → models → presets → ini → preload → setup → bench → spec �
 Les fichiers de conf restent à côté du **point d'entrée** (`SCRIPT_DIR`),
 jamais dans les sous-dossiers.
 
-## Scripts Python (`lib/py/`)
+## Scripts Python (`py/`)
 
-Appelés par chemin absolu `python3 "$SCRIPT_DIR/lib/py/x.py"` (jamais relatif
+Appelés par chemin absolu `python3 "$SCRIPT_DIR/py/x.py"` (jamais relatif
 au cwd : le service systemd démarre ailleurs). Python 3 stdlib uniquement.
 Leurs sorties sont contractuelles : le bash les consomme au `sed -n`/`grep`
 près — voir `tests/py-golden.sh`.
@@ -79,11 +79,11 @@ près — voir `tests/py-golden.sh`.
 |---|---|---|---|
 | `timings.py --bench <json> <passe>` | réponse `/v1/chat/completions` en argv | ligne d'affichage + `PP=`/`G=`/`A=` (+ `PPCACHED=1` si `cache_n` > 0 en passe 1 → prefill marqué `*` au récap) | `_bench_one` (bench.sh) |
 | `timings.py --spec <json> <passe> <flag>` | idem + `spec` si preset spéculatif | ligne + `GEN=`/`ACC=`/`DN= DA= PN=` | `cmd_spec_test` (spec.sh) |
-| `build_body.py <preset> <max_tokens> <seed> <prompt> [--filler-file F --filler-repeat N]` | fichiers de `lib/prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
+| `build_body.py <preset> <max_tokens> <seed> <prompt> [--filler-file F --filler-repeat N]` | fichiers de `prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
 | `spec_server_nmax.py <preset>` | JSON de `/v1/models` sur stdin | n-max réel du serveur (vide si absent) | `cmd_spec_test` |
 | `spec_analyze.py <log> <preset> <gguf> <device> <k> [rec]` | `spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
 
-## Prompts de mesure (`lib/prompts/`)
+## Prompts de mesure (`prompts/`)
 
 Texte brut (français, multiligne autorisé), chargé par `build_body.py` qui
 fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
@@ -135,7 +135,7 @@ pas à remplacer la mesure.
 
 - `models.ini` **byte-identique** à confs égales : `generate_models_ini` est
   déterministe, toute variation vient d'un choix explicite (preset ou conf).
-- Sorties des `lib/py/*.py` au caractère près — `tests/py-golden.sh`
+- Sorties des `py/*.py` au caractère près — `tests/py-golden.sh`
   (fixtures capturées sur le code inline d'origine).
 - `parallel = 1` sur tous les presets MTP (contrainte llama.cpp np/mmproj).
 - `--cleanup` piloté uniquement par `KNOWN_FILES`.

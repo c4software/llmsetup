@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Construit le body JSON d'une requête /v1/chat/completions à partir des
-# fichiers de prompt de lib/prompts/. L'échappement JSON passe par json.dumps
+# fichiers de prompt de prompts/. L'échappement JSON passe par json.dumps
 # (les fichiers sont du texte brut multiligne) — remplace l'ancien printf bash
 # sur des chaînes pré-échappées (\n littéraux, apostrophes contournées).
 #

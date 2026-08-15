@@ -134,7 +134,7 @@ cmd_spec_test() {
   # (le routeur lit le ini au démarrage — le script peut dire 2 quand le serveur
   # tourne encore à 4). C'est elle qui est journalisée et affichée.
   nmax_srv="$(curl -s "$SPEC_TEST_URL/v1/models" \
-    | python3 "$SCRIPT_DIR/lib/py/spec_server_nmax.py" "$preset" 2>/dev/null || true)"
+    | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" 2>/dev/null || true)"
   nmax="${nmax_srv:-$nmax_cfg}"
   if [[ -n "$nmax_srv" && -n "$nmax_cfg" && "$nmax_srv" != "$nmax_cfg" ]]; then
     warn "Désaccord n-max : serveur=$nmax_srv, script/conf=$nmax_cfg → le ini a changé sans restart."
@@ -178,10 +178,10 @@ cmd_spec_test() {
   fi
   echo "--- résultats ---"
 
-  # Prompt de référence : lib/prompts/spec-test.txt (texte brut multiligne,
+  # Prompt de référence : prompts/spec-test.txt (texte brut multiligne,
   # échappement JSON par build_body.py). ⚠ Le modifier invalide les
   # comparaisons avec les runs antérieurs de spec-tests.log (cf. ARCHITECTURE.md).
-  local prompt_file="$SCRIPT_DIR/lib/prompts/spec-test.txt"
+  local prompt_file="$SCRIPT_DIR/prompts/spec-test.txt"
   [[ -f "$prompt_file" ]] || error "Prompt manquant : $prompt_file"
 
   # seed fixe PAR PASSE (42+i) : chaque passe est reproductible d'un run à
@@ -194,11 +194,11 @@ cmd_spec_test() {
   local -a gens=() accs=()
   local sum_dn=0 sum_da=0 sum_pn=0
   for (( i=1; i<=passes; i++ )); do
-    body="$(python3 "$SCRIPT_DIR/lib/py/build_body.py" "$preset" 1500 $((42 + i)) "$prompt_file")"
+    body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 1500 $((42 + i)) "$prompt_file")"
     out="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body")" \
       || { warn "Passe $i : échec curl"; continue; }
     local line
-    line="$(python3 "$SCRIPT_DIR/lib/py/timings.py" --spec "$out" "$i" "${nmax:+spec}")" || true
+    line="$(python3 "$SCRIPT_DIR/py/timings.py" --spec "$out" "$i" "${nmax:+spec}")" || true
     echo "$line" | grep -v '^GEN=\|^ACC=\|^DN=' | sed 's/^/  /'
     local g a dn da pn
     g="$(echo "$line" | sed -n 's/^GEN=//p')"
@@ -257,9 +257,9 @@ cmd_spec_test() {
 
 # Analyse des runs journalisés pour (preset, gguf, device) — la logique
 # (modèle T(k)/t(k), calibration, quarantaine, recommandation) vit dans
-# lib/py/spec_analyze.py, voir son commentaire de tête. Ici : simple appel.
+# py/spec_analyze.py, voir son commentaire de tête. Ici : simple appel.
 _spec_analyze() {
-  python3 "$SCRIPT_DIR/lib/py/spec_analyze.py" "$SPEC_LOG" "$1" "$2" "$3" "$4" "${5:-}"
+  python3 "$SCRIPT_DIR/py/spec_analyze.py" "$SPEC_LOG" "$1" "$2" "$3" "$4" "${5:-}"
 }
 
 # =============================================================================

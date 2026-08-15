@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Test golden des scripts lib/py/ — leurs sorties sur les fixtures doivent
+# Test golden des scripts py/ — leurs sorties sur les fixtures doivent
 # rester BYTE-IDENTIQUES aux références de tests/fixtures/expected/, capturées
 # avec le code inline d'origine AVANT extraction.
 #
-# À rejouer après toute modification d'un lib/py/*.py. Si la sortie change
+# À rejouer après toute modification d'un py/*.py. Si la sortie change
 # volontairement : mettre à jour la fixture attendue ET vérifier les sed/grep
 # bash qui la consomment (PP=/G=/A=, GEN=/ACC=/DN=, REC=).
 #
@@ -18,8 +18,8 @@ set -euo pipefail
 
 TESTS_DIR="$(dirname "$(realpath "$0")")"
 REPO_DIR="$(dirname "$TESTS_DIR")"
-PY="$REPO_DIR/lib/py"
-PROMPTS="$REPO_DIR/lib/prompts"
+PY="$REPO_DIR/py"
+PROMPTS="$REPO_DIR/prompts"
 F="$TESTS_DIR/fixtures"
 E="$F/expected"
 

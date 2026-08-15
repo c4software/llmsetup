@@ -27,11 +27,11 @@
 # =============================================================================
 
 BENCH_PASSES=3
-# Préfixe de préremplissage : phrase ~20 tokens (lib/prompts/bench-filler.txt)
+# Préfixe de préremplissage : phrase ~20 tokens (prompts/bench-filler.txt)
 # répétée, chaque répétition préfixée de son numéro « [i] » à la construction
 # (build_body.py — casse la répétitivité exacte, préfixe reproductible entre
 # runs). La taille réelle du préfixe est le n= mesuré en passe 1, pas une
-# taille visée. La tâche vit dans lib/prompts/bench-task.txt.
+# taille visée. La tâche vit dans prompts/bench-task.txt.
 # ⚠ Modifier un de ces fichiers invalide les comparaisons avec les tableaux de
 #   bench antérieurs (cf. ARCHITECTURE.md).
 BENCH_FILLER_REPEAT=400
@@ -44,8 +44,8 @@ _bench_one() {
   local preset="$1" passes="$2"
   BENCH_ROW=""
 
-  local task_file="$SCRIPT_DIR/lib/prompts/bench-task.txt"
-  local filler_file="$SCRIPT_DIR/lib/prompts/bench-filler.txt"
+  local task_file="$SCRIPT_DIR/prompts/bench-task.txt"
+  local filler_file="$SCRIPT_DIR/prompts/bench-filler.txt"
   [[ -f "$task_file" ]] || error "Prompt manquant : $task_file"
   [[ -f "$filler_file" ]] || error "Prompt manquant : $filler_file"
 
@@ -54,12 +54,12 @@ _bench_one() {
   local body out pp="" pp_mark="" acc="-" i
   local -a gens=() accs=()
   for (( i=1; i<=passes; i++ )); do
-    body="$(python3 "$SCRIPT_DIR/lib/py/build_body.py" "$preset" 1000 $((42 + i)) "$task_file" \
+    body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 1000 $((42 + i)) "$task_file" \
       --filler-file "$filler_file" --filler-repeat "$BENCH_FILLER_REPEAT")"
     out="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body")" \
       || { warn "  passe $i : échec curl"; continue; }
     local line
-    line="$(python3 "$SCRIPT_DIR/lib/py/timings.py" --bench "$out" "$i")" \
+    line="$(python3 "$SCRIPT_DIR/py/timings.py" --bench "$out" "$i")" \
       || { echo "$line" | grep -v '^PP=\|^G=\|^A=\|^PPCACHED='; continue; }
     echo "$line" | grep -v '^PP=\|^G=\|^A=\|^PPCACHED='
     if [[ "$i" -eq 1 ]]; then

@@ -41,7 +41,7 @@ résumer ou la supprimer, non.
   source sans réseau ni service) et signaler tout écart involontaire dans le
   commit. (Le test golden du refactor a été retiré une fois la migration
   validée — commit du 15/08/2026.)
-- Toute modif d'un `lib/py/*.py` ⇒ `./tests/py-golden.sh`. Si la sortie
+- Toute modif d'un `py/*.py` ⇒ `./tests/py-golden.sh`. Si la sortie
   change : mettre à jour la fixture attendue **et** vérifier les `sed`/`grep`
   bash qui la consomment (`PP=`/`G=`/`A=`, `GEN=`/`ACC=`/`DN=`, `REC=`).
 - `bash -n` sur chaque fichier touché ; `shellcheck` si dispo (signaler
@@ -50,8 +50,8 @@ résumer ou la supprimer, non.
 ## Règles de terrain
 
 - Les scripts Python sont appelés **par chemin absolu depuis `SCRIPT_DIR`**
-  (`python3 "$SCRIPT_DIR/lib/py/x.py"`) — le service systemd démarre ailleurs.
-- Les prompts de mesure vivent dans `lib/prompts/`. **Toute modification d'un
+  (`python3 "$SCRIPT_DIR/py/x.py"`) — le service systemd démarre ailleurs.
+- Les prompts de mesure vivent dans `prompts/`. **Toute modification d'un
   prompt invalide les comparaisons avec les runs antérieurs de
   `spec-tests.log`** : le signaler dans le message de commit et le récap ;
   ne jamais modifier un prompt au détour d'un autre changement.
