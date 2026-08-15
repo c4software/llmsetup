@@ -1,0 +1,91 @@
+Cahier des charges : système de gestion d'inventaire « Stockroom »
+
+1. Vue d'ensemble
+
+Stockroom est un service de gestion d'inventaire destiné à un réseau de
+boutiques indépendantes (2 à 40 points de vente) partageant un entrepôt
+central. Il tient le stock article par article, valorise l'inventaire en
+temps réel, déclenche des alertes de réassort et expose une API JSON pour
+les caisses, le site marchand et l'outil de préparation de commandes.
+Le système doit rester utilisable hors connexion en boutique : chaque point
+de vente conserve une copie locale de son stock et se resynchronise par lots
+horodatés dès que la liaison revient, les conflits étant résolus au profit
+du mouvement le plus ancien.
+
+2. Entités
+
+Article : identifié par un SKU alphanumérique unique (3 à 32 caractères,
+insensible à la casse, stocké en majuscules). Porte un libellé, une quantité
+en stock (entier positif ou nul), un prix unitaire hors taxes (décimal
+strictement positif, 4 décimales max), un seuil de réassort propre (défaut :
+5 unités), une catégorie et un code TVA. Un article peut être marqué
+« dormant » : il reste consultable mais refuse tout mouvement.
+
+Mouvement : toute variation de stock est un mouvement immuable, horodaté en
+UTC, portant le SKU, la quantité signée, le motif (vente, réception,
+inventaire, casse, transfert, retour client), l'identifiant de l'opérateur
+et le point de vente d'origine. Le stock courant d'un article est la somme
+de ses mouvements ; aucune mise à jour directe de la quantité n'est admise.
+
+Emplacement : un article peut être réparti sur plusieurs emplacements
+(entrepôt, réserve boutique, surface de vente). La somme des quantités par
+emplacement doit toujours égaler la quantité totale de l'article, contrainte
+vérifiée à chaque écriture.
+
+3. Règles de gestion
+
+R1. Un retrait qui amènerait la quantité totale sous zéro est refusé avec
+une erreur explicite indiquant la quantité disponible ; aucun retrait
+partiel implicite n'est effectué.
+R2. Un ajout ou un retrait sur un SKU inconnu est refusé ; la création d'un
+article est une opération distincte et explicite.
+R3. La valorisation totale de l'inventaire est la somme des quantités
+multipliées par le prix unitaire, calculée en décimal exact, jamais en
+flottant binaire ; l'arrondi ne se fait qu'à l'affichage, à deux décimales,
+au demi-pair.
+R4. La liste de réassort contient les articles non dormants dont la quantité
+est inférieure ou égale à leur seuil, triée par quantité croissante puis par
+SKU ; elle exclut les articles ayant une réception en cours.
+R5. Un transfert entre emplacements génère deux mouvements atomiques (retrait
+puis ajout) ; si le second échoue, le premier est annulé et l'incident est
+journalisé.
+R6. Les prix ne sont jamais modifiés rétroactivement : un changement de prix
+crée une nouvelle version tarifaire datée, les mouvements antérieurs restant
+valorisés au tarif en vigueur à leur date.
+R7. Un inventaire physique fige les mouvements du point de vente concerné le
+temps de la saisie ; les écarts constatés génèrent des mouvements de motif
+« inventaire » avec la référence de la session de comptage.
+
+4. API attendue
+
+Toutes les réponses sont en JSON UTF-8. Les erreurs suivent un format
+uniforme : code stable en majuscules (ITEM_NOT_FOUND, INSUFFICIENT_STOCK,
+SKU_ALREADY_EXISTS, VALIDATION_ERROR, ITEM_DORMANT), message lisible en
+français, détails structurés facultatifs. Les listes sont paginées par
+curseur opaque, 50 éléments par page au plus. Les écritures exigent une clé
+d'idempotence : rejouer une requête avec la même clé renvoie le résultat
+initial sans créer de second mouvement. Les horodatages sont au format ISO
+8601 avec suffixe Z. Points d'entrée minimaux : création d'article, consultation
+par SKU, ajout et retrait de stock, liste de réassort, valorisation totale,
+export complet de l'inventaire et import de contrôle (l'import vérifie la
+cohérence sans écrire).
+
+5. Contraintes non fonctionnelles
+
+La consultation d'un article doit répondre en moins de 50 ms au 95e centile
+sur un inventaire d'un million de mouvements. L'export complet est un flux,
+jamais une construction en mémoire. Toute opération d'écriture est
+journalisée avant acquittement. Les tests automatisés couvrent chaque règle
+de gestion, chaque code d'erreur et les cas limites : quantité nulle, SKU en
+casse mixte, retrait exactement égal au stock, article dormant, transfert
+vers un emplacement inexistant, double soumission avec la même clé
+d'idempotence, prix à quatre décimales, seuil de réassort à zéro.
+
+6. Glossaire
+
+SKU : identifiant unique d'article (stock keeping unit). Dormant : article
+gelé, consultable mais sans mouvement possible. Réassort : besoin de
+réapprovisionnement détecté par le seuil. Valorisation : valeur monétaire
+du stock à un instant donné. Session de comptage : période d'inventaire
+physique identifiée, pendant laquelle les mouvements ordinaires du point de
+vente sont suspendus.

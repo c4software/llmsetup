@@ -79,7 +79,7 @@ près — voir `tests/py-golden.sh`.
 |---|---|---|---|
 | `timings.py --bench <json> <passe>` | réponse `/v1/chat/completions` en argv | ligne d'affichage + `PP=`/`G=`/`A=` (+ `PPCACHED=1` si `cache_n` > 0 en passe 1 → prefill marqué `*` au récap) | `_bench_one` (bench.sh) |
 | `timings.py --spec <json> <passe> <flag>` | idem + `spec` si modèle spéculatif | ligne + `GEN=`/`ACC=`/`DN= DA= PN=` | `cmd_spec_test` (spec.sh) |
-| `build_body.py <modèle> <max_tokens> <seed> <prompt> [--filler-file F --filler-repeat N]` | fichiers de `prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
+| `build_body.py <modèle> <max_tokens> <seed> <fichier prompt> [fichier...]` (contenus joints par une ligne vide) | fichiers de `prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
 | `spec_server_nmax.py <modèle>` | JSON de `/v1/models` sur stdin | n-max réel du serveur (vide si absent) | `cmd_spec_test` |
 | `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
 
@@ -91,15 +91,15 @@ fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
 | Fichier | Consommé par | Contenu |
 |---|---|---|
 | `spec-test.txt` | `cmd_spec_test` | prompt de référence (module `inventory.py` + tests pytest — code structuré = meilleur cas MTP) |
-| `bench-task.txt` | `_bench_one` | tâche posée après le préfixe de remplissage |
-| `bench-filler.txt` | `_bench_one` | phrase ~20 tokens, répétée `BENCH_FILLER_REPEAT` (400) fois, chaque répétition préfixée de son numéro `[i]` par `build_body.py` (casse la répétitivité exacte, reste reproductible) → long préfixe de prefill, taille réelle = `n=` de la passe 1. ⚠ La ligne se termine par **un espace significatif** avant le newline |
+| `bench-context.txt` | `_bench_one` | contexte réaliste du bench : cahier des charges du système que la tâche demande d'implémenter (long prefill varié ; taille réelle = `n=` de la passe 1) |
+| `bench-task.txt` | `_bench_one` | tâche de génération posée après le contexte (référence les sections du cahier des charges) |
 
 **⚠ Comparabilité.** Modifier un de ces fichiers invalide les comparaisons
 avec les runs journalisés et la calibration n-max : après un changement de
 `spec-test.txt`, les anciennes lignes de `spec-tests.log` ne sont plus
 comparables — repartir sur un journal vierge (ou laisser la quarantaine et
 l'écart de mesures le révéler). Idem pour le bench : les tableaux avant/après
-modification de `bench-task.txt` ou `bench-filler.txt` ne se comparent pas.
+modification de `bench-task.txt` ou `bench-context.txt` ne se comparent pas.
 Ne jamais modifier un prompt au détour d'un autre changement ; le signaler
 dans le message de commit.
 

@@ -23,7 +23,7 @@ Commandes :
   --preload                Re-sélectionne les modèles préchargés (always-on) et
                            régénère models.ini (--models-max = nb préchargés + 1)
   --bench [modèle|all] [n] Perfs du serveur tel qu'il tourne : n passes (défaut 3)
-                           par modèle, long préfixe de remplissage (passe 1) +
+                           par modèle, long contexte réaliste (passe 1) +
                            décode et acceptance MTP médians, tableau récapitulatif.
                            Pas de restart, rien d'écrit. Sans argument : sélection
                            interactive

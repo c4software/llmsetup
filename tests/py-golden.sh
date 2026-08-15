@@ -12,7 +12,7 @@
 # pas en octets : json.dumps et l'ancien printf ne sérialisent pas pareil,
 # seul le contenu parsé (messages, seed, etc.) doit être identique.
 # (body-spec.json = équivalent à l'ancien printf ; body-bench.json =
-#  référence régénérée au passage au filler numéroté « [i] », 15/08/2026.)
+#  référence régénérée au passage au contexte réaliste bench-context.txt, 15/08/2026.)
 # =============================================================================
 set -euo pipefail
 
@@ -71,8 +71,7 @@ _ck analyze-empty.txt "$TMP/empty.txt"
 
 # --- build_body.py : équivalence json.loads avec les bodies de référence -----
 python3 "$PY/build_body.py" qwen3.8-27b-mtp-nothink 1500 43 "$PROMPTS/spec-test.txt" > "$TMP/body-spec.json"
-python3 "$PY/build_body.py" qwen3.6-35b-a3b-nothink 1000 43 "$PROMPTS/bench-task.txt" \
-  --filler-file "$PROMPTS/bench-filler.txt" --filler-repeat 400 > "$TMP/body-bench.json"
+python3 "$PY/build_body.py" qwen3.6-35b-a3b-nothink 1000 43 "$PROMPTS/bench-context.txt" "$PROMPTS/bench-task.txt" > "$TMP/body-bench.json"
 for b in body-spec body-bench; do
   if python3 -c '
 import json, sys

@@ -55,7 +55,7 @@ résumer ou la supprimer, non.
   prompt invalide les comparaisons avec les runs antérieurs de
   `spec-tests.log`** : le signaler dans le message de commit et le récap ;
   ne jamais modifier un prompt au détour d'un autre changement.
-  (`bench-filler.txt` finit par un espace significatif avant le newline.)
+  
 - Ne pas éditer `~/models/models.ini` (généré).
 - Les fichiers `.conf` (`bench-devices.conf`, `preload.conf`,
   `spec-nmax.conf`) sont des **choix utilisateur** : ne pas les régénérer ni

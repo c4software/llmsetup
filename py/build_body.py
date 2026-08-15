@@ -5,21 +5,18 @@
 # sur des chaînes pré-échappées (\n littéraux, apostrophes contournées).
 #
 # Usage :
-#   build_body.py <modèle> <max_tokens> <seed> <fichier prompt>
-#       body spec-test : un message user = contenu du fichier
-#   build_body.py <modèle> <max_tokens> <seed> <fichier tâche> \
-#       --filler-file <fichier> --filler-repeat <N>
-#       body bench : un message user = filler répété N fois + tâche
+#   build_body.py <modèle> <max_tokens> <seed> <fichier prompt> [fichier...]
+#       un message user = contenus des fichiers, joints par une ligne vide
+#       (spec-test : un seul fichier ; bench : contexte puis tâche)
 #
-# temperature fixée à 0.7 (identique aux deux printf d'origine). Le JSON émis
+# temperature fixée à 0.7 (identique aux printf d'origine). Le JSON émis
 # doit rester ÉQUIVALENT (json.loads) aux bodies de référence de
 # tests/fixtures/expected/ — vérifié par tests/py-golden.sh.
 import json, sys
 
 
 def read_prompt(path):
-    """Texte brut du fichier, moins l'unique newline final (les chaînes
-    d'origine n'en avaient pas ; le trailing space du filler est préservé)."""
+    """Texte brut du fichier, moins l'unique newline final."""
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     return text[:-1] if text.endswith("\n") else text
@@ -27,23 +24,11 @@ def read_prompt(path):
 
 def main():
     args = sys.argv[1:]
-    filler_file, filler_repeat = None, 0
-    if "--filler-file" in args:
-        i = args.index("--filler-file"); filler_file = args[i+1]; del args[i:i+2]
-    if "--filler-repeat" in args:
-        i = args.index("--filler-repeat"); filler_repeat = int(args[i+1]); del args[i:i+2]
-    if len(args) != 4:
-        sys.exit("usage : build_body.py <modèle> <max_tokens> <seed> <fichier prompt>"
-                 " [--filler-file F --filler-repeat N]")
-    modèle, max_tokens, seed, prompt_file = args[0], int(args[1]), int(args[2]), args[3]
+    if len(args) < 4:
+        sys.exit("usage : build_body.py <modèle> <max_tokens> <seed> <fichier prompt> [fichier...]")
+    modèle, max_tokens, seed = args[0], int(args[1]), int(args[2])
 
-    content = read_prompt(prompt_file)
-    if filler_file:
-        # Répétitions numérotées "[i] <phrase>" : casse la répétitivité exacte
-        # (un filler strictement répété donne un prefill meilleur cas irréaliste)
-        # sans texte aléatoire — le préfixe reste identique d'un run à l'autre.
-        filler = read_prompt(filler_file)
-        content = "".join(f"[{i}] {filler}" for i in range(1, filler_repeat + 1)) + content
+    content = "\n\n".join(read_prompt(f) for f in args[3:])
 
     print(json.dumps({
         "model": modèle,

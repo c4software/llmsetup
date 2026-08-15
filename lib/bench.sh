@@ -6,8 +6,9 @@
 #
 # Simple : pour chaque modèle choisi, N requêtes API (défaut 3) sur le routeur
 # en l'état — pas de restart, pas de comparaison de devices, pas d'écriture de
-# conf. La passe 1 porte un long préfixe de remplissage → prefill réel (la
-# taille qui fait foi est le n= mesuré, affiché sur la passe 1) ; les
+# conf. La passe 1 porte un long contexte réaliste (cahier des charges,
+# prompts/bench-context.txt) → prefill réel (la taille qui fait foi est le
+# n= mesuré, affiché sur la passe 1) ; les
 # passes suivantes (prompt cache) → décode réel, spéculation incluse pour les
 # modèles MTP. Affiche par modèle : prefill t/s, décode t/s (médiane),
 # acceptance MTP le cas échéant (médiane hors passe 1, comme le décode).
@@ -27,14 +28,12 @@
 # =============================================================================
 
 BENCH_PASSES=3
-# Préfixe de préremplissage : phrase ~20 tokens (prompts/bench-filler.txt)
-# répétée, chaque répétition préfixée de son numéro « [i] » à la construction
-# (build_body.py — casse la répétitivité exacte, préfixe reproductible entre
-# runs). La taille réelle du préfixe est le n= mesuré en passe 1, pas une
-# taille visée. La tâche vit dans prompts/bench-task.txt.
+# Le prompt = contexte réaliste (prompts/bench-context.txt, cahier des charges
+# du système que la tâche demande d'implémenter) + tâche de génération
+# (prompts/bench-task.txt), joints par build_body.py. La taille réelle du
+# contexte est le n= mesuré en passe 1, pas une taille visée.
 # ⚠ Modifier un de ces fichiers invalide les comparaisons avec les tableaux de
 #   bench antérieurs (cf. ARCHITECTURE.md).
-BENCH_FILLER_REPEAT=400
 
 # Mesure d'un modèle sur le serveur en l'état. Affiche les passes, retourne
 # via BENCH_ROW une ligne "modèle|prefill|décode|acceptance" pour le récap
@@ -44,18 +43,17 @@ _bench_one() {
   local preset="$1" passes="$2"
   BENCH_ROW=""
 
+  local context_file="$SCRIPT_DIR/prompts/bench-context.txt"
   local task_file="$SCRIPT_DIR/prompts/bench-task.txt"
-  local filler_file="$SCRIPT_DIR/prompts/bench-filler.txt"
+  [[ -f "$context_file" ]] || error "Prompt manquant : $context_file"
   [[ -f "$task_file" ]] || error "Prompt manquant : $task_file"
-  [[ -f "$filler_file" ]] || error "Prompt manquant : $filler_file"
 
-  info "=== $preset ($passes passes, long préfixe de remplissage en passe 1) ==="
+  info "=== $preset ($passes passes, long contexte en passe 1) ==="
 
   local body out pp="" pp_mark="" acc="-" i
   local -a gens=() accs=()
   for (( i=1; i<=passes; i++ )); do
-    body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 1000 $((42 + i)) "$task_file" \
-      --filler-file "$filler_file" --filler-repeat "$BENCH_FILLER_REPEAT")"
+    body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 1000 $((42 + i)) "$context_file" "$task_file")"
     out="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body")" \
       || { warn "  passe $i : échec curl"; continue; }
     local line
@@ -181,7 +179,7 @@ cmd_bench() {
   done
 
   [[ ${#rows[@]} -gt 0 ]] || { warn "Aucune mesure exploitable."; return; }
-  info "════════ Récapitulatif ($(date '+%F %T'), $passes passes, long préfixe de remplissage) ════════"
+  info "════════ Récapitulatif ($(date '+%F %T'), $passes passes, long contexte) ════════"
   {
     echo "modèle|prefill t/s|décode t/s|acceptance"
     printf '%s\n' "${rows[@]}"
