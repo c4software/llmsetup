@@ -663,4 +663,4 @@ jinja            = true
 parallel         = 1"
 
 # Préchargement par défaut (sans preload.conf) : 9b = tâches auxiliaires,
-DEFAULT_PRELOAD=(qwen3.5-9b qwen3.6-35b-a3b-nothink)
+DEFAULT_PRELOAD=(lfm2.5-2.6b)
