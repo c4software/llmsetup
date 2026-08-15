@@ -5,9 +5,9 @@
 # sur des chaînes pré-échappées (\n littéraux, apostrophes contournées).
 #
 # Usage :
-#   build_body.py <preset> <max_tokens> <seed> <fichier prompt>
+#   build_body.py <modèle> <max_tokens> <seed> <fichier prompt>
 #       body spec-test : un message user = contenu du fichier
-#   build_body.py <preset> <max_tokens> <seed> <fichier tâche> \
+#   build_body.py <modèle> <max_tokens> <seed> <fichier tâche> \
 #       --filler-file <fichier> --filler-repeat <N>
 #       body bench : un message user = filler répété N fois + tâche
 #
@@ -33,9 +33,9 @@ def main():
     if "--filler-repeat" in args:
         i = args.index("--filler-repeat"); filler_repeat = int(args[i+1]); del args[i:i+2]
     if len(args) != 4:
-        sys.exit("usage : build_body.py <preset> <max_tokens> <seed> <fichier prompt>"
+        sys.exit("usage : build_body.py <modèle> <max_tokens> <seed> <fichier prompt>"
                  " [--filler-file F --filler-repeat N]")
-    preset, max_tokens, seed, prompt_file = args[0], int(args[1]), int(args[2]), args[3]
+    modèle, max_tokens, seed, prompt_file = args[0], int(args[1]), int(args[2]), args[3]
 
     content = read_prompt(prompt_file)
     if filler_file:
@@ -46,7 +46,7 @@ def main():
         content = "".join(f"[{i}] {filler}" for i in range(1, filler_repeat + 1)) + content
 
     print(json.dumps({
-        "model": preset,
+        "model": modèle,
         "max_tokens": max_tokens,
         "temperature": 0.7,
         "seed": seed,

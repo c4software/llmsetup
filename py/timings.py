@@ -9,7 +9,7 @@
 #     (+ PPCACHED=1 si cache_n > 0 en passe 1 : prefill contaminé, marqué "*"
 #      dans le récap côté bash)
 #   timings.py --spec  <json> <n° de passe> <flag>     → ligne + GEN=/ACC=/DN=
-#     (flag = "spec" si le preset est spéculatif : affiche "acceptance=n/a …"
+#     (flag = "spec" si le modèle est spéculatif : affiche "acceptance=n/a …"
 #      quand draft_n est absent des timings ; "" sinon)
 #
 # Les deux branches sont les copies exactes des heredocs d'origine : sys.argv

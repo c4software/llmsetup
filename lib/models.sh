@@ -38,7 +38,7 @@ MODEL_QWEN3_CODER_NEXT_FILE="Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
 # MTP : tête MTP embarquée dans le GGUF principal (unsloth : "MTP for fast
 #   inference is available", pas de repo -MTP séparé dans la collection Qwen3.8 —
 #   seul Qwen3.6 exigeait encore un GGUF MTP à part). Un seul fichier sert donc
-#   les presets non-MTP ET MTP, fini le doublon Q6 + Q4 de la 3.6.
+#   les modèles non-MTP ET MTP, fini le doublon Q6 + Q4 de la 3.6.
 # Quant UD-Q4_K_XL (~16 Go, quant par défaut du guide llama.cpp unsloth) :
 #   ~26 % de poids en moins que le Q6 à relire par token → décode ×1,3-1,5
 #   (mesuré Q6 : 8,5 t/s brut / 16 t/s MTP → attendu Q4 : ~12 / ~22-25).

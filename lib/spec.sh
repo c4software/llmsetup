@@ -2,11 +2,11 @@
 # Ordre de source : common → models → presets → ini → preload → setup → bench → spec → service → help
 
 # =============================================================================
-# spec-test — mesure le décode réel d'un preset via l'API (chemin spéculatif
+# spec-test — mesure le décode réel d'un modèle via l'API (chemin spéculatif
 # inclus, contrairement à --bench qui ne mesure que le forward standard)
 #
-# Usage : ./setup-llm.sh --spec-test [preset] [passes]
-#   preset : sans argument, sélection interactive parmi les presets MTP dont
+# Usage : ./setup-llm.sh --spec-test [modèle] [passes]
+#   modèle : sans argument, sélection interactive parmi les modèles MTP dont
 #            le GGUF est présent (gum ou fallback numéroté ; non interactif =
 #            premier de la liste) ; passes : défaut 4 (1 froide + 3 utiles)
 #
@@ -19,19 +19,19 @@
 # draft_n, renvoyés dans le même `timings` — pas besoin de journalctl). La 1re
 # passe est marquée (cache froid), comparer les médianes des suivantes.
 # L'en-tête reprend tout le contexte (host, versions llama-cpp/ggml, GGUF,
-# device, corps du preset) pour que le bloc soit auto-suffisant à partager.
+# device, corps du modèle) pour que le bloc soit auto-suffisant à partager.
 # Chaque run est journalisé dans spec-tests.log (les runs incohérents —
 # tokens/forward > plafond, ini changé sans restart — sont mis en quarantaine
 # automatiquement, lignes commentées) ; dès 2 runs valides à des n-max
-# différents (même preset/GGUF/device), l'analyse calibre
+# différents (même modèle/GGUF/device), l'analyse calibre
 # t/s = (1+Σα^i)/(t_base + k·t_draft), recommande le n-max cible et
 # l'écrit directement dans spec-nmax.conf (ini régénéré, restart proposé).
-# --spec-test suffit donc à régler un preset ; --spec-tune reste le mode
+# --spec-test suffit donc à régler un modèle ; --spec-tune reste le mode
 # batch (enchaîne plusieurs n-max avec restart entre chaque).
 #
-# Protocole pour régler spec-draft-n-max d'un preset MTP :
-#   1. --spec-test <preset>                    (valeur courante)
-#   2. éditer spec-draft-n-max dans MODEL_INI[<preset>] du SCRIPT (pas le ini,
+# Protocole pour régler spec-draft-n-max d'un modèle MTP :
+#   1. --spec-test <modèle>                    (valeur courante)
+#   2. éditer spec-draft-n-max dans MODEL_INI[<modèle>] du SCRIPT (pas le ini,
 #      il est régénéré), ./setup-llm.sh --preload (+ restart), --spec-test
 #   3. répéter, garder la meilleure valeur, --preload une dernière fois
 # =============================================================================
@@ -41,7 +41,7 @@ _spec_save_conf() {
   local key="$1" val="$2" tmp
   tmp="$(mktemp)"
   {
-    echo "; spec-nmax.conf — spec-draft-n-max retenu par preset MTP"
+    echo "; spec-nmax.conf — spec-draft-n-max retenu par modèle MTP"
     echo "; généré par ./setup-llm.sh --spec-tune ; édition manuelle OK ;"
     echo "; supprimer une ligne = retour au défaut du script"
     if [[ -f "$SPEC_CONF" ]]; then
@@ -52,7 +52,7 @@ _spec_save_conf() {
   mv "$tmp" "$SPEC_CONF"
 }
 
-# Presets spéculatifs (spec-type = draft-mtp) dont le GGUF est présent, dans
+# Modèles spéculatifs (spec-type = draft-mtp) dont le GGUF est présent, dans
 # l'ordre de PRESET_ORDER → SPEC_PRESETS
 SPEC_PRESETS=()
 _spec_presets() {
@@ -67,17 +67,17 @@ _spec_presets() {
   done
 }
 
-# Sélection interactive du preset MTP à tester (gum si dispo, sinon numéroté).
+# Sélection interactive du modèle MTP à tester (gum si dispo, sinon numéroté).
 # Non interactif : premier de la liste. Résultat dans SPEC_CHOICE (vide = annulé).
 SPEC_CHOICE=""
 _spec_select_preset() {
   _spec_presets
   SPEC_CHOICE=""
-  [[ ${#SPEC_PRESETS[@]} -gt 0 ]] || error "Aucun preset MTP avec GGUF présent — lancer --setup."
+  [[ ${#SPEC_PRESETS[@]} -gt 0 ]] || error "Aucun modèle MTP avec GGUF présent — lancer --setup."
 
   if [[ ! -t 0 ]]; then
     SPEC_CHOICE="${SPEC_PRESETS[0]}"
-    info "Entrée non interactive — preset MTP : $SPEC_CHOICE"
+    info "Entrée non interactive — modèle MTP : $SPEC_CHOICE"
     return
   fi
 
@@ -92,12 +92,12 @@ _spec_select_preset() {
   if command -v gum >/dev/null 2>&1; then
     local line
     line="$(printf '%s\n' "${labels[@]}" \
-      | gum choose --height 15 --header "Preset MTP à tester (entrée = valider)")" || line=""
+      | gum choose --height 15 --header "Modèle MTP à tester (entrée = valider)")" || line=""
     [[ -n "$line" ]] && SPEC_CHOICE="${line%% — *}"
   else
     info "gum absent (pacman -S gum) — fallback numéroté."
     echo ""
-    echo "Presets MTP disponibles :"
+    echo "Modèles MTP disponibles :"
     local i=1
     for p in "${labels[@]}"; do
       printf "  %2d  %s\n" "$i" "$p"
@@ -120,7 +120,7 @@ cmd_spec_test() {
     [[ -n "$SPEC_CHOICE" ]] || { info "Rien sélectionné — spec-test annulé."; return; }
     preset="$SPEC_CHOICE"
   fi
-  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Preset inconnu : '$preset' (voir --help)"
+  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset' (voir --help)"
   [[ "$passes" =~ ^[0-9]+$ && "$passes" -ge 1 ]] || error "Nombre de passes invalide : '$passes'"
   command -v curl >/dev/null || error "curl introuvable"
   command -v python3 >/dev/null || error "python3 introuvable"
@@ -130,7 +130,7 @@ cmd_spec_test() {
   load_spec_conf
   local nmax nmax_cfg nmax_srv
   nmax_cfg="$(_preset_nmax "$preset")"
-  # Valeur RÉELLE côté serveur : /v1/models expose status.args de chaque preset
+  # Valeur RÉELLE côté serveur : /v1/models expose status.args de chaque modèle
   # (le routeur lit le ini au démarrage — le script peut dire 2 quand le serveur
   # tourne encore à 4). C'est elle qui est journalisée et affichée.
   nmax_srv="$(curl -s "$SPEC_TEST_URL/v1/models" \
@@ -157,13 +157,13 @@ cmd_spec_test() {
   echo "date       : $(date '+%F %T')"
   echo "host       : $(hostname) — $cpu — $kernel"
   echo "llama.cpp  : ${llver:-?}"
-  echo "preset     : $preset"
+  echo "modèle     : $preset"
   echo "gguf       : $(basename "$gguf") ($gsize)"
   echo "device     : $mdev"
   echo "n-max      : ${nmax:-n/a}$( [[ -n "$nmax_srv" ]] && echo " (lu sur le serveur)" || echo " (script/conf)" )$( [[ -n "$nmax_srv" && -n "$nmax_cfg" && "$nmax_srv" != "$nmax_cfg" ]] && echo "  ⚠ script/conf=$nmax_cfg, restart requis" )"
   echo "passes     : $passes (max_tokens=1500, temp=0.7, seed=42+n° de passe, prompt fixe inventory/pytest)"
   echo "note       : prompt t/s significatif en passe 1 seulement (prompt cache ensuite, cf. n=/cache=)"
-  echo "--- preset ($preset) ---"
+  echo "--- modèle ($preset) ---"
   if [[ -n "$nmax" ]]; then
     echo "${MODEL_INI[$preset]}" | sed '/^$/d' \
       | sed "s/^\(spec-draft-n-max[[:space:]]*=[[:space:]]*\)[0-9]*[[:space:]]*$/\1$nmax/;s/^/  /"
@@ -227,7 +227,7 @@ cmd_spec_test() {
 
   # --- Journal + analyse n-max ---------------------------------------------
   if [[ -n "$nmax" && -n "$med_gen" && "$sum_dn" -gt 0 ]]; then
-    # date preset gguf device nmax gen acc drafted accepted predicted
+    # date modèle gguf device nmax gen acc drafted accepted predicted
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$(date '+%F %T')" "$preset" "$(basename "$gguf")" "$mdev" "$nmax" \
       "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" >> "$SPEC_LOG"
@@ -255,7 +255,7 @@ cmd_spec_test() {
   echo "================="
 }
 
-# Analyse des runs journalisés pour (preset, gguf, device) — la logique
+# Analyse des runs journalisés pour (modèle, gguf, device) — la logique
 # (modèle T(k)/t(k), calibration, quarantaine, recommandation) vit dans
 # py/spec_analyze.py, voir son commentaire de tête. Ici : simple appel.
 _spec_analyze() {
@@ -265,8 +265,8 @@ _spec_analyze() {
 # =============================================================================
 # spec-tune — boucle automatique sur plusieurs n-max, mesure, choisit, persiste
 #
-# Usage : ./setup-llm.sh --spec-tune [preset] [k1,k2,...] [passes]
-#   preset : sélection interactive si absent ; liste défaut "2,4,6" ; passes 4.
+# Usage : ./setup-llm.sh --spec-tune [modèle] [k1,k2,...] [passes]
+#   modèle : sélection interactive si absent ; liste défaut "2,4,6" ; passes 4.
 #
 # Pour chaque k : models.ini régénéré avec le n-max forcé (SPEC_NMAX_FORCE),
 # restart du service systemd, attente /health, --spec-test (journalisé). À la
@@ -286,9 +286,9 @@ cmd_spec_tune() {
     [[ -n "$SPEC_CHOICE" ]] || { info "Rien sélectionné — spec-tune annulé."; return; }
     preset="$SPEC_CHOICE"
   fi
-  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Preset inconnu : '$preset'"
+  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset'"
   echo "${MODEL_INI[$preset]}" | grep -q '^spec-type[[:space:]]*=[[:space:]]*draft-mtp' \
-    || error "'$preset' n'est pas un preset spéculatif (spec-type = draft-mtp requis)"
+    || error "'$preset' n'est pas un modèle spéculatif (spec-type = draft-mtp requis)"
   systemctl is-enabled "$SERVICE_NAME" &>/dev/null \
     || error "Service $SERVICE_NAME non installé — --spec-tune a besoin de le redémarrer entre deux n-max (--install-service)."
 

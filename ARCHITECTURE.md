@@ -7,7 +7,7 @@ lib/presets.sh (MODEL_INI, défauts)
         │
         ▼                    surcharges
 generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
-   (lib/ini.sh)      ◄──  spec-nmax.conf       (spec-draft-n-max par preset)
+   (lib/ini.sh)      ◄──  spec-nmax.conf       (spec-draft-n-max par modèle)
         │            ◄──  preload.conf         (load-on-startup)
         ▼
 ~/models/models.ini  ──►  llama-server --models-preset (router mode)
@@ -17,7 +17,7 @@ generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
 Le script ne parle jamais directement aux GGUF pour mesurer : `--bench` et
 `--spec-test` passent par l'API du serveur **tel qu'il tourne**
 (`/v1/chat/completions`, `/v1/models`). Toute mesure dépendant d'un paramètre
-de preset lit l'état réel du serveur (`/v1/models` → `status.args`), pas le
+de modèle lit l'état réel du serveur (`/v1/models` → `status.args`), pas le
 script ni le ini — c'est l'invariant n° 1 de `cmd_spec_test`, à ne pas
 régresser.
 
@@ -42,7 +42,7 @@ common → models → presets → ini → preload → setup → bench → spec �
   `KNOWN_FILES` (inventaire, source unique de `--cleanup` et des mkdir),
   `ROCM_PKGS`.
 - `presets.sh` : `DEFAULT_DEVICE`, `BENCH_DEVICES`, `MODEL_INI[...]` (corps des
-  presets **avec leurs commentaires métier** : sampling officiels, contraintes
+  modèles **avec leurs commentaires métier** : sampling officiels, contraintes
   cache/MTP/SWA, historique des choix) et `PRESET_ORDER` (l'ordre d'émission —
   `declare -A` ne préserve pas l'ordre d'insertion).
 - `ini.sh` : loaders des trois confs (`load_bench_conf`, `load_preload_conf`,
@@ -58,7 +58,7 @@ common → models → presets → ini → preload → setup → bench → spec �
 - `bench.sh` : `cmd_bench` (mesure API du serveur en l'état), `_bench_one`,
   sélections, `cmd_list_devices`.
 - `spec.sh` : `cmd_spec_test`, `cmd_spec_tune`, `_spec_save_conf`, sélection
-  des presets MTP ; l'analyse est déléguée à `py/spec_analyze.py`.
+  des modèles MTP ; l'analyse est déléguée à `py/spec_analyze.py`.
 - `service.sh` : `cmd_start` (`--models-max` = préchargés + 1, min 2),
   `cmd_install_service` (service **système**, `ExecStart` via `realpath` du
   script, `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` posé d'office pour ROCm/iGPU),
@@ -78,10 +78,10 @@ près — voir `tests/py-golden.sh`.
 | Script | Entrées | Sorties | Appelé par |
 |---|---|---|---|
 | `timings.py --bench <json> <passe>` | réponse `/v1/chat/completions` en argv | ligne d'affichage + `PP=`/`G=`/`A=` (+ `PPCACHED=1` si `cache_n` > 0 en passe 1 → prefill marqué `*` au récap) | `_bench_one` (bench.sh) |
-| `timings.py --spec <json> <passe> <flag>` | idem + `spec` si preset spéculatif | ligne + `GEN=`/`ACC=`/`DN= DA= PN=` | `cmd_spec_test` (spec.sh) |
-| `build_body.py <preset> <max_tokens> <seed> <prompt> [--filler-file F --filler-repeat N]` | fichiers de `prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
-| `spec_server_nmax.py <preset>` | JSON de `/v1/models` sur stdin | n-max réel du serveur (vide si absent) | `cmd_spec_test` |
-| `spec_analyze.py <log> <preset> <gguf> <device> <k> [rec]` | `spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
+| `timings.py --spec <json> <passe> <flag>` | idem + `spec` si modèle spéculatif | ligne + `GEN=`/`ACC=`/`DN= DA= PN=` | `cmd_spec_test` (spec.sh) |
+| `build_body.py <modèle> <max_tokens> <seed> <prompt> [--filler-file F --filler-repeat N]` | fichiers de `prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
+| `spec_server_nmax.py <modèle>` | JSON de `/v1/models` sur stdin | n-max réel du serveur (vide si absent) | `cmd_spec_test` |
+| `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
 
 ## Prompts de mesure (`prompts/`)
 
@@ -103,13 +103,13 @@ modification de `bench-task.txt` ou `bench-filler.txt` ne se comparent pas.
 Ne jamais modifier un prompt au détour d'un autre changement ; le signaler
 dans le message de commit.
 
-## Cycle de vie d'un preset
+## Cycle de vie d'un modèle
 
-1. Défaut : corps `MODEL_INI[preset]` (presets.sh), device hérité du `[*]`
+1. Défaut : corps `MODEL_INI[modèle]` (presets.sh), device hérité du `[*]`
    (Vulkan0).
 2. Surcharges appliquées par `generate_models_ini` :
    `bench-devices.conf` (ligne `device =` si le vainqueur du GGUF ≠ défaut ;
-   clé = **dossier du GGUF**, donc partagée entre presets d'un même fichier),
+   clé = **dossier du GGUF**, donc partagée entre modèles d'un même fichier),
    `spec-nmax.conf` (substitution de `spec-draft-n-max`),
    `preload.conf` (ajout de `load-on-startup = true`).
 3. Émission dans l'ordre `PRESET_ORDER`, avec les séparateurs de groupe.
@@ -122,7 +122,7 @@ Par forward, k tokens draftés, acceptés en séquence avec probabilité α par
 position : tokens/forward `T(k) = 1 + Σ_{i=1..k} α^i` ; temps/forward
 `t(k) = t_base + k·t_draft` → `t/s = T(k)/t(k)`. α est ajusté (bissection)
 sur le run courant, `t_base`/`t_draft` par régression sur les runs à n-max
-distincts (même preset/GGUF/device, un point par n-max : le plus récent).
+distincts (même modèle/GGUF/device, un point par n-max : le plus récent).
 Recommandation : à <2 % du max, le plus petit k (l'acceptance chute sur du
 texte moins prévisible que le prompt de test) ; les **mesures priment sur le
 modèle** (REC= = meilleur mesuré). Garde-fou : tokens/forward > k+1 = run
@@ -134,10 +134,10 @@ pas à remplacer la mesure.
 ## Invariants (à ne pas casser)
 
 - `models.ini` **byte-identique** à confs égales : `generate_models_ini` est
-  déterministe, toute variation vient d'un choix explicite (preset ou conf).
+  déterministe, toute variation vient d'un choix explicite (modèle ou conf).
 - Sorties des `py/*.py` au caractère près — `tests/py-golden.sh`
   (fixtures capturées sur le code inline d'origine).
-- `parallel = 1` sur tous les presets MTP (contrainte llama.cpp np/mmproj).
+- `parallel = 1` sur tous les modèles MTP (contrainte llama.cpp np/mmproj).
 - `--cleanup` piloté uniquement par `KNOWN_FILES`.
 - Restart requis après toute régénération du ini (routeur = lecture au boot).
 - Mesures spec : l'état réel vient de `/v1/models`, jamais du script/ini.

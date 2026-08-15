@@ -10,8 +10,8 @@ _save_preload_conf() {
   local tmp p
   tmp="$(mktemp)"
   {
-    echo "; preload.conf — presets préchargés (load-on-startup) au démarrage"
-    echo "; généré par ./setup-llm.sh (--setup / --preload) — un preset par ligne"
+    echo "; preload.conf — modèles préchargés (load-on-startup) au démarrage"
+    echo "; généré par ./setup-llm.sh (--setup / --preload) — un modèle par ligne"
     echo "; édition manuelle OK ; --models-max = nb de lignes + 1 slot LRU"
     for p in "${PRESET_ORDER[@]}"; do
       [[ -n "${PRELOADED[$p]:-}" ]] && echo "$p"
@@ -20,7 +20,7 @@ _save_preload_conf() {
   mv "$tmp" "$PRELOAD_CONF"
 }
 
-# Sélection interactive des presets préchargés. gum si dispo (cases à cocher,
+# Sélection interactive des modèles préchargés. gum si dispo (cases à cocher,
 # espace pour sélectionner) ; sinon fallback bash (numéros à toggler). Entrée
 # non interactive : conserve la sélection courante sans rien demander.
 select_preload_models() {
@@ -44,7 +44,7 @@ select_preload_models() {
     sel_csv="$(IFS=,; echo "${preselected[*]}")"
     mapfile -t chosen < <(printf '%s\n' "${PRESET_ORDER[@]}" \
       | gum choose --no-limit --height 20 \
-          --header "Presets préchargés au démarrage (espace = cocher, entrée = valider)" \
+          --header "Modèles préchargés au démarrage (espace = cocher, entrée = valider)" \
           --selected="$sel_csv") || {
         warn "Sélection annulée — préchargement inchangé : $(_preload_summary)"
         _save_preload_conf
@@ -54,7 +54,7 @@ select_preload_models() {
     # Fallback sans gum : liste numérotée, toggle par numéros
     info "gum absent (pacman -S gum pour les cases à cocher) — fallback numéroté."
     echo ""
-    echo "Presets préchargés au démarrage (always-on) :"
+    echo "Modèles préchargés au démarrage (always-on) :"
     local i=1
     local -a idx=()
     for p in "${PRESET_ORDER[@]}"; do
@@ -114,9 +114,9 @@ _preload_summary() {
 _preload_sanity() {
   local count=${#PRELOADED[@]}
   [[ $count -eq 0 ]] \
-    && warn "Aucun preset préchargé — premier appel de chaque modèle = temps de chargement complet."
+    && warn "Aucun modèle préchargé — premier appel de chaque modèle = temps de chargement complet."
   [[ $count -gt 3 ]] \
-    && warn "$count presets préchargés — vérifier que la somme des poids + KV tient dans les 128 Go."
+    && warn "$count modèles préchargés — vérifier que la somme des poids + KV tient dans les 128 Go."
   # Doublons connus : même GGUF chargé deux fois
   if [[ -n "${PRELOADED[qwen3.6-35b-a3b-nothink]:-}" && -n "${PRELOADED[qwen3.6-35b-a3b-mtp-nothink]:-}" ]]; then
     warn "35b-a3b nothink ET mtp-nothink préchargés : ~29 Go chargés deux fois pour le même modèle."
@@ -126,7 +126,7 @@ _preload_sanity() {
     [[ -n "${PRELOADED[$p]:-}" ]] && n38=$((n38 + 1))
   done
   if [[ $n38 -gt 1 ]]; then
-    warn "$n38 presets Qwen3.8-27B préchargés : même GGUF (~16 Go) chargé $n38 fois."
+    warn "$n38 modèles Qwen3.8-27B préchargés : même GGUF (~16 Go) chargé $n38 fois."
   fi
   # Toujours retourner 0 : sous set -e, un dernier test [[ ]] && ... faux
   # ferait sortir la fonction en 1 et tuerait le script avant la génération du ini.

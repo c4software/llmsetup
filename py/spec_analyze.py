@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Analyse des runs journalisés (spec-tests.log) pour (preset, gguf, device).
+# Analyse des runs journalisés (spec-tests.log) pour (modèle, gguf, device).
 # Modèle : par forward, k tokens draftés, acceptés en séquence avec proba α par
 # position (α^i) → tokens/forward T(k) = 1 + Σ_{i=1..k} α^i ; temps/forward
 # t(k) = t_base + k·t_draft. α est ajusté sur le run courant (accepted/drafted),
@@ -12,14 +12,14 @@
 # (ligne commentée ";", conservée pour trace), exclue de la calibration.
 #
 # Appelé par lib/spec.sh (_spec_analyze) :
-#   spec_analyze.py <log> <preset> <gguf> <device> <k courant> [rec]
+#   spec_analyze.py <log> <modèle> <gguf> <device> <k courant> [rec]
 # Sortie texte d'affichage ; ligne "REC=k" si "rec" demandé et >= 2 n-max
 # mesurés (consommée par sed -n 's/^REC=//p' côté bash).
 import sys, math
 
 
-def load_runs(log, preset, gguf, dev):
-    """Lit le log TSV, filtre (preset, gguf, device), met en quarantaine les
+def load_runs(log, modèle, gguf, dev):
+    """Lit le log TSV, filtre (modèle, gguf, device), met en quarantaine les
     runs incohérents (réécrit le log) et retourne la liste des runs valides."""
     runs, lines, bad_idx = [], [], []
     try:
@@ -29,7 +29,7 @@ def load_runs(log, preset, gguf, dev):
     for i, line in enumerate(lines):
         if line.startswith(";"): continue  # ligne mise en quarantaine
         f = line.split("\t")
-        if len(f) < 10 or f[1] != preset or f[2] != gguf or f[3] != dev: continue
+        if len(f) < 10 or f[1] != modèle or f[2] != gguf or f[3] != dev: continue
         try:
             r = dict(k=int(f[4]), gen=float(f[5]), dn=int(f[7]), da=int(f[8]), pn=int(f[9]))
         except ValueError:
@@ -94,8 +94,8 @@ def recommend(pred, pts):
 
 
 def main():
-    log, preset, gguf, dev, cur_k = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
-    runs = load_runs(log, preset, gguf, dev)
+    log, modèle, gguf, dev, cur_k = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
+    runs = load_runs(log, modèle, gguf, dev)
     if not runs:
         print("  (aucun run exploitable journalisé)"); sys.exit(0)
 

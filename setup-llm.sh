@@ -12,7 +12,7 @@ set -euo pipefail
 #     runtime ROCm — le runtime seul ne fait plus apparaître ROCm0.
 #   - ./setup-llm.sh --bench <modèle|all> : llama-bench Vulkan0 vs ROCm0,
 #     sauvegarde le vainqueur dans bench-devices.conf (à côté du models.ini),
-#     et régénère le ini — chaque preset hérite automatiquement du meilleur
+#     et régénère le ini — chaque modèle hérite automatiquement du meilleur
 #     device mesuré pour son GGUF. Sans bench, tout reste sur Vulkan0.
 # =============================================================================
 

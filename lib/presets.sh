@@ -8,13 +8,13 @@
 # paquets séparés (split Arch mi-août 2026) : ggml-vulkan pour Vulkan0,
 # ggml-hip + runtime ROCm pour ROCm0 — le runtime seul ne suffit plus.
 #
-# Sélection par preset : automatique via bench-devices.conf (généré par
-# --bench). Chaque preset dont le GGUF a une entrée dans le conf reçoit
+# Sélection par modèle : automatique via bench-devices.conf (généré par
+# --bench). Chaque modèle dont le GGUF a une entrée dans le conf reçoit
 # `device = <vainqueur>` dans le ini généré. Pas d'entrée → héritage du [*].
 #
-# ⚠ Les presets MTP/spéculatifs héritent du device benché sur leur GGUF, mais
+# ⚠ Les modèles MTP/spéculatifs héritent du device benché sur leur GGUF, mais
 #   le bench ne mesure PAS le chemin spéculatif : après une bascule ROCm d'un
-#   preset MTP, valider la spéculation dans les logs (acceptance, pas de
+#   modèle MTP, valider la spéculation dans les logs (acceptance, pas de
 #   fallback silencieux) avant de garder.
 # =============================================================================
 
@@ -24,7 +24,7 @@ BENCH_DEVICES=(Vulkan0 ROCm0)
 # =============================================================================
 # PRESETS INI
 #
-# Chaque entrée du tableau associatif définit le corps d'un preset [section].
+# Chaque entrée du tableau associatif définit le corps d'un modèle [section].
 # Conventions :
 #   - Une clé ini par ligne, format "key = value"
 #   - Les flags globaux ([*]) ne sont pas répétés ici
@@ -45,10 +45,10 @@ BENCH_DEVICES=(Vulkan0 ROCm0)
 #     (note : sans effet sur les 35B A3B, pas de SWA — llama-server le
 #      désactive au chargement, seul ctx-checkpoints travaille)
 #   - spec-draft-model : drafter externe (Gemma MTP uniquement)
-#   - parallel = 1 OBLIGATOIRE sur tous les presets MTP : "-np > 1 and --mmproj
+#   - parallel = 1 OBLIGATOIRE sur tous les modèles MTP : "-np > 1 and --mmproj
 #     are not yet supported with MTP" (doc unsloth, confirmée sur les README
 #     Qwen MTP et Gemma QAT, juin/juillet 2026). Les anciens parallel 2/3 sur
-#     les presets MTP étaient au mieux ignorés, au pire cassaient la spéculation.
+#     les modèles MTP étaient au mieux ignorés, au pire cassaient la spéculation.
 # =============================================================================
 
 declare -A MODEL_INI
@@ -101,7 +101,7 @@ parallel         = 4"
 #   re-download de template ne doit pas réactiver le thinking en douce).
 # n-predict 1024 : borne dure, aucune tâche auxiliaire n'a besoin de plus —
 #   plus jamais de génération qui court jusqu'au plafond de contexte
-# NB : la variante MTP existe en preset séparé (qwen3.5-9b-mtp) — MTP impose
+# NB : la variante MTP existe en modèle séparé (qwen3.5-9b-mtp) — MTP impose
 #   parallel=1, incompatible avec les 4 slots de tâches concurrentes : on
 #   garde le non-MTP en always-on ici.
 MODEL_INI[qwen3.5-9b]="
@@ -172,7 +172,7 @@ ctx-checkpoints  = 128"
 #   sans perte, gain max sur tool calls / JSON,
 #   mais rollback GDN fragile en agentic (cf. ci-dessus) → bascule manuelle
 #   uniquement : /model qwen3.6-35b-a3b-mtp-nothink
-# (ne PAS précharger ce preset en même temps que le nothink dans --preload,
+# (ne PAS précharger ce modèle en même temps que le nothink dans --preload,
 #  ce serait ~29 Go chargés deux fois pour le même modèle)
 # cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
 # cache-reuse 0 : ignoré sur GDN — nothink via chat-template-kwargs (pas --reasoning off)
@@ -229,20 +229,20 @@ parallel         = 1"
 
 # =============================================================================
 # Famille Qwen3.8-27B — un seul GGUF (UD-Q4_K_XL, tête MTP embarquée) partagé
-# par les deux presets ci-dessous. Remplace qwen3.6-27b, qwen3.6-27b-nothink
-# et qwen3.6-27b-mtp-nothink. Pas de preset nothink non-MTP : à parallel 1 il
+# par les deux modèles ci-dessous. Remplace qwen3.6-27b, qwen3.6-27b-nothink
+# et qwen3.6-27b-mtp-nothink. Pas de modèle nothink non-MTP : à parallel 1 il
 # ferait doublon strict avec le mtp-nothink (même GGUF, mêmes réglages, juste
 # sans la spéculation). Le thinking reste non-MTP volontairement : c'est le
 # chemin checkpoints/prompt-cache fiable (rollback GDN sur rejet de draft
 # encore fragile en agentic, cf. 35B-A3B) — spec-type à ajouter si envie. (Le Qwopus, SFT coder de la 3.6-27B, est gardé
-# en preset séparé plus bas — choix perso, pas un doublon strict.)
+# en modèle séparé plus bas — choix perso, pas un doublon strict.)
 #
 # Sampling officiel Qwen3.8-27B (model card + doc unsloth) :
 #   thinking : temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 / presence 0.0
 #   instruct : temp 0.7 / top-p 0.80 / top-k 20 / min-p 0.0 / presence 1.5
 #   (le "temp 0.6" du 3.6 pour le coding précis n'est plus la reco 3.8)
 # Thinking ON par défaut, désactivable par requête. reasoning_effort :
-#   xhigh (défaut) / medium / low / none, via chat-template-kwargs. Le preset
+#   xhigh (défaut) / medium / low / none, via chat-template-kwargs. Le modèle
 #   thinking est calé sur medium (équilibre précision/vitesse — xhigh pense
 #   trop pour un usage local) ; passer à "xhigh"/"low" dans le kwargs si besoin.
 #   preserve_thinking (garde les traces des tours précédents) : côté client.
@@ -254,7 +254,7 @@ parallel         = 1"
 # Vision : mmproj non téléchargé (--include du seul GGUF texte) → pas de
 #   --mmproj, texte seul. Ajouter mmproj-F16.gguf + "mmproj =" si besoin un jour
 #   (attention : mmproj incompatible MTP, cf. contrainte np/mmproj plus haut).
-# ⚠ Hypothèse MTP embarqué à VALIDER au premier chargement du preset MTP :
+# ⚠ Hypothèse MTP embarqué à VALIDER au premier chargement du modèle MTP :
 #   llama-server doit logger le chargement de la tête MTP + acceptance ; s'il
 #   refuse (spec-type sans tête), c'est qu'unsloth a finalement publié un repo
 #   -MTP séparé → réintroduire une variable REPO/PATH dédiée.
@@ -280,7 +280,7 @@ ctx-checkpoints      = 128"
 #   Q4/ROCm0 15/08/2026 : k2=22,2 / k4=25,5 / k6=26,0 t/s → 4 = plateau,
 #   le plus petit à <2 % du max ; reco unsloth de départ était 2).
 #   Bascule manuelle : /model qwen3.8-27b-mtp-nothink
-# Même GGUF que le preset thinking ci-dessus (tête MTP embarquée) — ne PAS
+# Même GGUF que le modèle thinking ci-dessus (tête MTP embarquée) — ne PAS
 #   précharger les deux en même temps (~16 Go chargés deux fois).
 # Historique : Q6/n-max 2 = 16 t/s ; Q4/n-max 2 = 22 ; Q4/n-max 4 = 25,5.
 #   Re-régler avec ./setup-llm.sh --spec-tune après changement de quant/build/device.
@@ -358,7 +358,7 @@ parallel             = 1"
 # spec-draft-n-max 4 : aligné sur la reco unsloth (était 2)
 # Pas de swa-full : architecture ISWA différente (issue #21468)
 # parallel 1 : contrainte MTP (np > 1 non supporté) — pour retrouver du parallel,
-#   faire un preset non-MTP séparé sur le même GGUF.
+#   faire un modèle non-MTP séparé sur le même GGUF.
 MODEL_INI[gemma4-12b-mtp]="
 model                = $GEMMA_12B_PATH
 spec-draft-model     = $GEMMA_12B_MTP_PATH
@@ -432,7 +432,7 @@ parallel         = 1"
 # cache-reuse 0 : MoE + attention mixte, non testé avec le cache-reuse global.
 # cache-type-v q8_0 : précision V critique pour les diffs de code.
 # thinking activé par défaut (recommandé en agentic coding, avec preserved
-#   thinking côté client) — pour un preset nothink, ajouter :
+#   thinking côté client) — pour un modèle nothink, ajouter :
 #     chat-template-kwargs = {"enable_thinking":false}
 # Spéculation DFlash (drafter laguna-s-2.1-DFlash-BF16.gguf, 2,2 Go) : disponible
 #   uniquement via le fork poolside/llama.cpp branche `laguna`
@@ -453,7 +453,7 @@ jinja            = true
 parallel         = 1"
 
 # =============================================================================
-# Ordre d'émission des presets dans le ini
+# Ordre d'émission des modèles dans le ini
 # (declare -A ne préserve pas l'ordre d'insertion)
 # =============================================================================
 

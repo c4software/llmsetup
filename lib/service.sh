@@ -10,7 +10,7 @@ cmd_start() {
   command -v llama-server >/dev/null || error "llama-server introuvable"
   [[ -f "$CONFIG_DIR/models.ini" ]] || error "Config introuvable — lance d'abord --setup"
 
-  # --models-max dérivé de preload.conf : nb de presets préchargés + 1 slot
+  # --models-max dérivé de preload.conf : nb de modèles préchargés + 1 slot
   #   LRU pour le modèle appelé à la demande (minimum 2).
   load_preload_conf
   local models_max=$(( ${#PRELOADED[@]} + 1 ))
@@ -44,7 +44,7 @@ cmd_install_service() {
 
   # GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 : sans effet côté Vulkan, nécessaire côté
   # ROCm/HIP sur iGPU (alloc en mémoire unifiée/GTT au lieu de la VRAM dédiée) —
-  # posé d'office pour que la bascule d'un preset en ROCm0 ne demande pas de
+  # posé d'office pour que la bascule d'un modèle en ROCm0 ne demande pas de
   # retoucher le service.
   sudo tee "$SERVICE_FILE" > /dev/null << SERVICE
 [Unit]

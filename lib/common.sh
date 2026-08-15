@@ -114,10 +114,10 @@ fi
 # =============================================================================
 # PRÉCHARGEMENT (always-on)
 #
-# La liste des presets préchargés (load-on-startup) vit dans preload.conf
+# La liste des modèles préchargés (load-on-startup) vit dans preload.conf
 # (à côté du script, comme bench-devices.conf — versionnable avec lui),
 # alimenté par la sélection interactive à cases à cocher du --setup (gum si
-# présent, fallback bash sinon) ou par ./setup-llm.sh --preload. Un preset
+# présent, fallback bash sinon) ou par ./setup-llm.sh --preload. Un modèle
 # sélectionné devient always-on (load-on-startup=true) ; les autres sont
 # chargés à la demande et évincés par le LRU de --models-max (dérivé
 # automatiquement : nb préchargés + 1 slot LRU).
@@ -134,12 +134,12 @@ fi
 
 SPEC_TEST_URL="http://localhost:8009"
 # Journal des runs (à côté du script) — sert à l'analyse n-max : dès 2 runs à
-# des n-max différents sur le même preset/GGUF/device, le script calibre un
+# des n-max différents sur le même modèle/GGUF/device, le script calibre un
 # modèle simple et prédit la courbe t/s(n-max).
 SPEC_LOG="$SCRIPT_DIR/spec-tests.log"
-# Surcharges spec-draft-n-max par preset (à côté du script, comme
+# Surcharges spec-draft-n-max par modèle (à côté du script, comme
 # bench-devices.conf) — écrit par --spec-tune, appliqué par generate_models_ini
-# par-dessus la valeur de MODEL_INI (qui reste le défaut). Format "preset = k".
+# par-dessus la valeur de MODEL_INI (qui reste le défaut). Format "modèle = k".
 SPEC_CONF="$SCRIPT_DIR/spec-nmax.conf"
 
 SERVICE_NAME="llama-server"

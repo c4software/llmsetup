@@ -17,7 +17,7 @@ résumer ou la supprimer, non.
    pas de renommage sans collision réelle, pas d'abstraction spéculative.
 4. **Français** dans le code, les commentaires, les messages et la doc.
 5. Le routeur lit `models.ini` **au démarrage seulement** : toute mesure
-   dépendant d'un paramètre de preset lit `/v1/models` → `status.args`
+   dépendant d'un paramètre de modèle lit `/v1/models` → `status.args`
    (état réel), jamais le script ni le ini. Déjà fait dans `cmd_spec_test` —
    ne pas le régresser.
 
@@ -36,7 +36,7 @@ résumer ou la supprimer, non.
 
 ## Tests — quand relancer quoi
 
-- Toute modif de `generate_models_ini`, d'un preset (`lib/presets.sh`) ou du
+- Toute modif de `generate_models_ini`, d'un modèle (`lib/presets.sh`) ou du
   découpage ⇒ comparer le ini généré avant/après (`generate_models_ini` se
   source sans réseau ni service) et signaler tout écart involontaire dans le
   commit. (Le test golden du refactor a été retiré une fois la migration

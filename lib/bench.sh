@@ -4,25 +4,25 @@
 # =============================================================================
 # bench — mesure de perfs via le serveur, tel qu'il tourne
 #
-# Simple : pour chaque preset choisi, N requêtes API (défaut 3) sur le routeur
+# Simple : pour chaque modèle choisi, N requêtes API (défaut 3) sur le routeur
 # en l'état — pas de restart, pas de comparaison de devices, pas d'écriture de
 # conf. La passe 1 porte un long préfixe de remplissage → prefill réel (la
 # taille qui fait foi est le n= mesuré, affiché sur la passe 1) ; les
 # passes suivantes (prompt cache) → décode réel, spéculation incluse pour les
-# presets MTP. Affiche par preset : prefill t/s, décode t/s (médiane),
+# modèles MTP. Affiche par modèle : prefill t/s, décode t/s (médiane),
 # acceptance MTP le cas échéant (médiane hors passe 1, comme le décode).
 # Tableau récapitulatif en fin de run ; un prefill dont la passe 1 a été
 # partiellement servie par le cache (cache_n > 0) est marqué "*" — signalé,
 # jamais "corrigé" (pas de purge de slots ni de restart : mesure passive).
 #
 # Usage :
-#   ./setup-llm.sh --bench                 # sélection interactive des presets
-#   ./setup-llm.sh --bench <preset> [n]    # un preset, n passes (défaut 3)
-#   ./setup-llm.sh --bench all [n]         # tous les presets dont le GGUF existe
+#   ./setup-llm.sh --bench                 # sélection interactive des modèles
+#   ./setup-llm.sh --bench <modèle> [n]    # un modèle, n passes (défaut 3)
+#   ./setup-llm.sh --bench all [n]         # tous les modèles dont le GGUF existe
 #
-# NB : chaque preset non chargé est chargé par le routeur à la 1re requête
+# NB : chaque modèle non chargé est chargé par le routeur à la 1re requête
 # (LRU --models-max) — sur --bench all, prévoir les temps de chargement.
-# Le choix du device par preset reste celui de bench-devices.conf (édition
+# Le choix du device par modèle reste celui de bench-devices.conf (édition
 # manuelle) ; le réglage MTP passe par --spec-test/--spec-tune.
 # =============================================================================
 
@@ -36,8 +36,8 @@ BENCH_PASSES=3
 #   bench antérieurs (cf. ARCHITECTURE.md).
 BENCH_FILLER_REPEAT=400
 
-# Mesure d'un preset sur le serveur en l'état. Affiche les passes, retourne
-# via BENCH_ROW une ligne "preset|prefill|décode|acceptance" pour le récap
+# Mesure d'un modèle sur le serveur en l'état. Affiche les passes, retourne
+# via BENCH_ROW une ligne "modèle|prefill|décode|acceptance" pour le récap
 # (vide si échec).
 BENCH_ROW=""
 _bench_one() {
@@ -87,7 +87,7 @@ _bench_one() {
   return 0
 }
 
-# Presets benchables = tous ceux dont le GGUF est sur disque, ordre PRESET_ORDER
+# Modèles benchables = tous ceux dont le GGUF est sur disque, ordre PRESET_ORDER
 BENCH_PRESETS=()
 _bench_presets() {
   BENCH_PRESETS=()
@@ -98,7 +98,7 @@ _bench_presets() {
   done
 }
 
-# Sélection interactive des presets à bencher (gum ou fallback numéroté).
+# Sélection interactive des modèles à bencher (gum ou fallback numéroté).
 BENCH_TARGETS=()
 _bench_select_presets() {
   _bench_presets
@@ -109,7 +109,7 @@ _bench_select_presets() {
   if command -v gum >/dev/null 2>&1; then
     mapfile -t chosen < <(printf '%s\n' "${BENCH_PRESETS[@]}" \
       | gum choose --no-limit --height 20 \
-          --header "Presets à bencher (espace = cocher, entrée = valider)") || chosen=()
+          --header "Modèles à bencher (espace = cocher, entrée = valider)") || chosen=()
     local line
     for line in "${chosen[@]}"; do
       [[ -n "$line" ]] && BENCH_TARGETS+=("$line")
@@ -117,7 +117,7 @@ _bench_select_presets() {
   else
     info "gum absent (pacman -S gum pour les cases à cocher) — fallback numéroté."
     echo ""
-    echo "Presets à bencher :"
+    echo "Modèles à bencher :"
     local i=1 p
     for p in "${BENCH_PRESETS[@]}"; do
       printf "  %2d  %s\n" "$i" "$p"
@@ -154,17 +154,17 @@ cmd_bench() {
       [[ ${#BENCH_TARGETS[@]} -gt 0 ]] || { info "Rien sélectionné — bench annulé."; return; }
     else
       _bench_presets
-      info "Presets benchables : ${BENCH_PRESETS[*]:-aucun}"
-      info "Lancer : ./setup-llm.sh --bench <preset|all> [passes]"
+      info "Modèles benchables : ${BENCH_PRESETS[*]:-aucun}"
+      info "Lancer : ./setup-llm.sh --bench <modèle|all> [passes]"
       return
     fi
   elif [[ "$target" == "all" ]]; then
     _bench_presets
     [[ ${#BENCH_PRESETS[@]} -gt 0 ]] || error "Aucun GGUF présent — lancer --setup."
     BENCH_TARGETS=("${BENCH_PRESETS[@]}")
-    warn "--bench all : chaque preset non chargé sera chargé à sa 1re requête (LRU) — prévoir les temps de chargement."
+    warn "--bench all : chaque modèle non chargé sera chargé à sa 1re requête (LRU) — prévoir les temps de chargement."
   else
-    [[ -n "${MODEL_INI[$target]:-}" ]] || error "Preset inconnu : '$target' (voir --help)"
+    [[ -n "${MODEL_INI[$target]:-}" ]] || error "Modèle inconnu : '$target' (voir --help)"
     BENCH_TARGETS=("$target")
   fi
 
@@ -183,7 +183,7 @@ cmd_bench() {
   [[ ${#rows[@]} -gt 0 ]] || { warn "Aucune mesure exploitable."; return; }
   info "════════ Récapitulatif ($(date '+%F %T'), $passes passes, long préfixe de remplissage) ════════"
   {
-    echo "preset|prefill t/s|décode t/s|acceptance"
+    echo "modèle|prefill t/s|décode t/s|acceptance"
     printf '%s\n' "${rows[@]}"
   } | column -t -s'|'
   if printf '%s\n' "${rows[@]}" | grep -q '\*|'; then
@@ -195,7 +195,7 @@ cmd_bench() {
 # list-devices — devices exposés par ggml (Vulkan0, ROCm0…) + backends installés
 #
 # Diagnostic rapide après une mise à jour (split ggml, runtime ROCm) : si un
-# device référencé dans bench-devices.conf n'apparaît plus ici, les presets
+# device référencé dans bench-devices.conf n'apparaît plus ici, les modèles
 # qui en héritent échoueront au chargement.
 # =============================================================================
 
@@ -231,7 +231,7 @@ cmd_list_devices() {
     echo ""
     warn "Clés de bench-devices.conf pointant sur un device NON exposé :"
     printf '  %s\n' "${missing[@]}" | sort
-    warn "  → ces presets échoueront au chargement. Réinstaller le backend"
+    warn "  → ces modèles échoueront au chargement. Réinstaller le backend"
     warn "    (ex. paru -S ggml-hip) ou forcer Vulkan0 dans $BENCH_CONF puis --preload."
   fi
 }

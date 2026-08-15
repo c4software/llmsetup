@@ -19,14 +19,14 @@ load_bench_conf() {
   done < "$BENCH_CONF"
 }
 
-# Clé modèle d'un preset = dossier du GGUF référencé par sa ligne "model ="
+# Clé modèle d'un modèle = dossier du GGUF référencé par sa ligne "model ="
 _preset_model_key() {
   local body="${MODEL_INI[$1]}" path
   path="$(echo "$body" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
   [[ -n "$path" ]] && _key "$path"
 }
 
-# Charge preload.conf → PRELOADED[preset]=1. Sans fichier : DEFAULT_PRELOAD.
+# Charge preload.conf → PRELOADED[modèle]=1. Sans fichier : DEFAULT_PRELOAD.
 declare -A PRELOADED
 load_preload_conf() {
   PRELOADED=()
@@ -55,8 +55,8 @@ load_spec_conf() {
   done < "$SPEC_CONF"
 }
 
-# n-max effectif d'un preset : surcharge conf sinon valeur MODEL_INI (vide si
-# preset non spéculatif). SPEC_NMAX_FORCE (env) prime sur tout — utilisé par
+# n-max effectif d'un modèle : surcharge conf sinon valeur MODEL_INI (vide si
+# modèle non spéculatif). SPEC_NMAX_FORCE (env) prime sur tout — utilisé par
 # --spec-tune pour tester une valeur sans l'écrire.
 _preset_nmax() {
   local p="$1" v
@@ -77,11 +77,11 @@ generate_models_ini() {
 version = 1
 
 ; =============================================================================
-; Flags globaux — appliqués à tous les presets sauf surcharge locale
+; Flags globaux — appliqués à tous les modèles sauf surcharge locale
 ;
 ; device = Vulkan0 : backend par défaut. Les surcharges "device = ..." par
-;   preset ci-dessous proviennent de bench-devices.conf (./setup-llm.sh --bench)
-;   — chaque preset hérite du vainqueur mesuré sur son GGUF. Vérifier au
+;   modèle ci-dessous proviennent de bench-devices.conf (./setup-llm.sh --bench)
+;   — chaque modèle hérite du vainqueur mesuré sur son GGUF. Vérifier au
 ;   chargement dans les logs : device retenu + flash-attn effectivement actif
 ;   (certaines archs le coupent silencieusement sous HIP, ce qui annule le
 ;   gain de prefill).
@@ -127,13 +127,13 @@ HEADER
     esac
 
     echo "[$name]"
-    # Surcharge device issue du bench (clé = dossier du GGUF du preset)
+    # Surcharge device issue du bench (clé = dossier du GGUF du modèle)
     mkey="$(_preset_model_key "$name" || true)"
     mdev="${BENCH_DEVICE[$mkey]:-}"
     if [[ -n "$mdev" && "$mdev" != "$DEFAULT_DEVICE" ]]; then
       echo "device           = $mdev"
     fi
-    # Corps du preset + préchargement piloté par preload.conf
+    # Corps du modèle + préchargement piloté par preload.conf
     # (pas de stop-timeout : l'éviction est gérée par le LRU de --models-max)
     # spec-draft-n-max : surcharge spec-nmax.conf / --spec-tune si présente
     local eff_nmax

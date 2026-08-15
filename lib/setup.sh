@@ -94,7 +94,7 @@ cmd_setup() {
   info "✅ Config générée : $CONFIG_DIR/models.ini"
   info "Setup terminé → ./setup-llm.sh --start"
   info "Changer le préchargement → ./setup-llm.sh --preload"
-  info "Mesurer les perfs → ./setup-llm.sh --bench [preset|all]"
+  info "Mesurer les perfs → ./setup-llm.sh --bench [modèle|all]"
   info "Devices exposés → ./setup-llm.sh --list-devices"
 
   _maybe_restart_service
