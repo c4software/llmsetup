@@ -106,11 +106,6 @@ CONFIG_DIR="$HOME/models"
 # Vit À CÔTÉ DU SCRIPT (local, non versionné — .gitignore), pas dans $MODELS_BASE.
 BENCH_CONF="$SCRIPT_DIR/bench-devices.conf"
 
-# Migration depuis l'ancien emplacement ($CONFIG_DIR) — one-shot, idempotent
-if [[ -f "$CONFIG_DIR/bench-devices.conf" && ! -f "$BENCH_CONF" ]]; then
-  mv "$CONFIG_DIR/bench-devices.conf" "$BENCH_CONF"
-  echo "[INFO] bench-devices.conf migré : $CONFIG_DIR → $SCRIPT_DIR"
-fi
 # =============================================================================
 # PRÉCHARGEMENT (always-on)
 #
@@ -125,12 +120,6 @@ fi
 
 PRELOAD_CONF="$SCRIPT_DIR/preload.conf"
 DEFAULT_PRELOAD=(qwen3.5-9b qwen3.6-35b-a3b-nothink)
-
-# Migration depuis l'ancien emplacement ($CONFIG_DIR) — one-shot, idempotent
-if [[ -f "$CONFIG_DIR/preload.conf" && ! -f "$PRELOAD_CONF" ]]; then
-  mv "$CONFIG_DIR/preload.conf" "$PRELOAD_CONF"
-  echo "[INFO] preload.conf migré : $CONFIG_DIR → $SCRIPT_DIR"
-fi
 
 SPEC_TEST_URL="http://localhost:8009"
 # Journal des runs (à côté du script) — sert à l'analyse n-max : dès 2 runs à

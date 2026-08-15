@@ -34,8 +34,7 @@ common → models → presets → ini → preload → setup → bench → spec �
   `_dl`, `_dl_shard`, `_maybe_restart_service`) et **toutes les variables
   globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `BENCH_CONF`,
   `PRELOAD_CONF`, `SPEC_TEST_URL`, `SPEC_LOG`, `SPEC_CONF`, `SERVICE_NAME`,
-  `SERVICE_FILE`, `REFRESH`/`ONLY`, plus les migrations one-shot des `.conf`
-  depuis `$CONFIG_DIR`. Elles vivent ici parce que plusieurs modules les
+  `SERVICE_FILE`, `REFRESH`/`ONLY`. Elles vivent ici parce que plusieurs modules les
   consomment (`_maybe_restart_service` utilise `SERVICE_NAME`, `cmd_bench`
   utilise `SPEC_TEST_URL`) — définies **avant** toute fonction qui les utilise.
 - `models.sh` : repos/fichiers HF (`MODEL_*_REPO/FILE`), chemins `*_PATH`,
