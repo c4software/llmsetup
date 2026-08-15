@@ -43,7 +43,7 @@ Commandes :
                            spec-nmax.conf (surcharge du défaut script), restart final.
                            sudo requis (restarts du service système entre les n-max)
                            Sans modèle : choix interactif parmi les MTP présents.
-                           3 passes par défaut. Sert à régler
+                           4 passes par défaut. Sert à régler
                            spec-draft-n-max (éditer le script, --preload, re-tester)
   --start                  Lance llama-server sur :8009 (défaut sans argument)
   --install-service        Installe/active le service systemd $SERVICE_NAME
