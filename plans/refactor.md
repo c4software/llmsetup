@@ -35,6 +35,30 @@ Règles pour ce découpage Python :
 - `spec_analyze.py` : c'est le seul avec de la logique ; garde son texte de sortie identique, mais structure-le en fonctions (`fit_alpha`, `fit_timing`, `predict`, `recommend`) avec un `main()` — c'est ce qui permettra plus tard de le tester ou de changer le modèle sans toucher au bash. Conserve le commentaire de tête qui décrit le modèle (`T(k) = 1 + Σαⁱ`, `t(k) = t_base + k·t_draft`, règle « à <2 %, le plus petit k », garde-fou « tokens/forward > k+1 = run incohérent »).
 - Le bash garde uniquement l'orchestration (curl, boucles, restart, écriture des conf/log). Zéro logique métier calculée en bash qui pourrait l'être en Python déjà appelé.
 
+## Prompts de test : les sortir en fichiers
+
+Les textes de prompt utilisés par les mesures sont aujourd'hui codés en dur dans le bash et doivent devenir des fichiers éditables sans toucher au code :
+
+- le prompt de référence de `--spec-test` (module Python `inventory.py` + tests pytest, dans `cmd_spec_test`) ;
+- la tâche de `--bench` (variante avec préfixe long, variable `task` dans `_bench_one`) ;
+- la phrase de remplissage du prefill (`BENCH_FILLER_SENTENCE`, répétée `BENCH_FILLER_REPEAT` fois).
+
+Cible :
+
+```
+lib/prompts/
+  spec-test.txt        # prompt de référence spec-test (texte brut, une seule tâche)
+  bench-task.txt       # tâche du bench (posée après le préfixe de remplissage)
+  bench-filler.txt     # phrase de remplissage (une ligne ; la répétition reste dans le bash)
+```
+
+Règles :
+- Chargement par chemin absolu depuis `SCRIPT_DIR` (comme les `.py`), lecture brute (`$(< "$SCRIPT_DIR/lib/prompts/…")`) ; fichier manquant = `error` explicite, pas de fallback silencieux vers un texte embarqué.
+- **Le contenu du JSON est construit à partir du texte du fichier** : il faut donc l'échapper proprement pour JSON au moment de construire le body (aujourd'hui le texte est écrit pré-échappé dans le bash, avec des `\n` littéraux et des apostrophes contournées — c'est exactement ce que l'externalisation doit faire disparaître). Fais passer la construction du body par Python (ex. `spec_timings.py` gagne un mode `--build-body`, ou un petit `lib/py/build_body.py` : argv = preset, max_tokens, seed, fichier(s) prompt → JSON sur stdout via `json.dumps`), plutôt que d'échapper en bash.
+- Les fichiers de prompt sont en français, texte brut multiligne autorisé (le `json.dumps` s'occupe des retours à la ligne).
+- ⚠ Piège de comparabilité, à écrire en tête de chaque fichier en commentaire d'accompagnement dans `ARCHITECTURE.md` (pas dans le .txt lui-même, qui doit rester du prompt pur) : **modifier un prompt invalide les comparaisons avec les runs journalisés** (`spec-tests.log`) et la calibration n-max. Après modification de `spec-test.txt`, les anciennes lignes du journal ne sont plus comparables — le README et AGENTS.md doivent dire de repartir sur un journal vierge (ou de laisser la quarantaine/l'écart de mesures le révéler). Idem pour le bench : les tableaux avant/après changement de `bench-task.txt` ou `bench-filler.txt` ne se comparent pas.
+- Fixtures : ajouter les trois fichiers de prompt actuels (contenu extrait tel quel du bash, dé-échappé) et vérifier dans `tests/py-golden.sh` que le body JSON construit depuis les fichiers est strictement équivalent au body construit par l'ancien `printf` (mêmes messages une fois parsés — comparer `json.loads(a) == json.loads(b)`, pas les chaînes brutes).
+
 ## Découpage attendu
 
 Proposition de départ (à ajuster si tu vois mieux, en le justifiant en une phrase) :
@@ -51,6 +75,7 @@ lib/
   bench.sh                # cmd_bench et helpers _bench_*, cmd_list_devices
   spec.sh                 # cmd_spec_test, cmd_spec_tune, _spec_* — orchestration seule, appelle lib/py/spec_*.py
   py/                     # scripts Python externes (voir section dédiée)
+  prompts/                # textes des prompts de mesure (voir section dédiée)
   service.sh              # cmd_start, cmd_install_service, cmd_uninstall_service
   help.sh                 # cmd_help
 ```
@@ -70,14 +95,15 @@ Ajouter un `.gitignore` : `spec-tests.log` (journal local), et laisser versionn�
 ## Documentation à écrire
 
 - **README.md** : quoi/pourquoi en 10 lignes, prérequis (paquets Arch, split ggml → `ggml-cpu`, `ggml-vulkan`, `ggml-hip` + runtime ROCm), install (`--setup`, `--install-service`), tableau des sous-commandes, workflow typique (`--setup` → `--bench all` → `--spec-tune`), les fichiers de conf et leur rôle, comment ajouter un modèle (variables + `KNOWN_FILES` + `MODEL_INI` + `PRESET_ORDER` + ligne `_dl` — c'est aujourd'hui 5 endroits, documente-les tels quels, ne les fusionne pas dans ce PR), FAQ courte (device ROCm0 disparu → `--list-devices` ; ini regénéré donc jamais éditer à la main ; MTP = `parallel 1`).
-- **ARCHITECTURE.md** : flux de données (script → conf files → `models.ini` → llama-server), rôle de chaque module de `lib/` et de chaque script `lib/py/` (entrées/sorties, qui l'appelle), ordre de source et dépendances entre modules, cycle de vie d'un preset (défaut `MODEL_INI` → surcharges `bench-devices.conf`/`spec-nmax.conf`/`preload.conf` → ini), le modèle d'analyse n-max (formule `t/s = (1+Σαⁱ)/(t_base + k·t_draft)`, ce qu'il approxime, ses limites), les invariants (ini byte-identique, `parallel 1` sur MTP, `--cleanup` piloté par `KNOWN_FILES`, restart requis car le routeur lit le ini au démarrage). Reprends les blocs de commentaires métier du script comme source, ne les paraphrase pas de mémoire.
-- **AGENTS.md** : instructions pour toi et les futurs agents : les contraintes ci-dessus (comportement identique, KISS, bash pur, français), les pièges bash, "lire le module + `ARCHITECTURE.md` avant d'éditer", "toute modif de `generate_models_ini` ou d'un preset ⇒ relancer `tests/golden-ini.sh` et mettre à jour `golden.ini` volontairement (jamais en silence)", "toute modif d'un `lib/py/*.py` ⇒ `tests/py-golden.sh`, et si la sortie change, mettre à jour la fixture attendue **et** vérifier le `sed`/`grep` bash qui la consomme", "les scripts Python sont appelés par chemin absolu depuis `SCRIPT_DIR`", "ne pas éditer `models.ini`", "les fichiers `.conf` sont des choix utilisateur, ne pas les régénérer sans demande", où ajouter un modèle, où ajouter une sous-commande (fichier + `case` + `cmd_help`).
+- **ARCHITECTURE.md** : flux de données (script → conf files → `models.ini` → llama-server), rôle de chaque module de `lib/`, de chaque script `lib/py/` (entrées/sorties, qui l'appelle) et de chaque fichier `lib/prompts/` (qui le consomme, et l'avertissement de comparabilité : changer un prompt invalide le journal et les comparaisons passées), ordre de source et dépendances entre modules, cycle de vie d'un preset (défaut `MODEL_INI` → surcharges `bench-devices.conf`/`spec-nmax.conf`/`preload.conf` → ini), le modèle d'analyse n-max (formule `t/s = (1+Σαⁱ)/(t_base + k·t_draft)`, ce qu'il approxime, ses limites), les invariants (ini byte-identique, `parallel 1` sur MTP, `--cleanup` piloté par `KNOWN_FILES`, restart requis car le routeur lit le ini au démarrage). Reprends les blocs de commentaires métier du script comme source, ne les paraphrase pas de mémoire.
+- **AGENTS.md** : instructions pour toi et les futurs agents : les contraintes ci-dessus (comportement identique, KISS, bash pur, français), les pièges bash, "lire le module + `ARCHITECTURE.md` avant d'éditer", "toute modif de `generate_models_ini` ou d'un preset ⇒ relancer `tests/golden-ini.sh` et mettre à jour `golden.ini` volontairement (jamais en silence)", "toute modif d'un `lib/py/*.py` ⇒ `tests/py-golden.sh`, et si la sortie change, mettre à jour la fixture attendue **et** vérifier le `sed`/`grep` bash qui la consomme", "les scripts Python sont appelés par chemin absolu depuis `SCRIPT_DIR`", "les prompts de mesure vivent dans `lib/prompts/` — toute modification d'un prompt invalide les comparaisons avec les runs antérieurs de `spec-tests.log` : le signaler dans le message de commit et le récap, ne jamais modifier un prompt au détour d'un autre changement", "ne pas éditer `models.ini`", "les fichiers `.conf` sont des choix utilisateur, ne pas les régénérer sans demande", où ajouter un modèle, où ajouter une sous-commande (fichier + `case` + `cmd_help`).
 
 ## Déroulé demandé
 
 1. Lecture complète, puis un plan court (découpage final + ce que tu ferais différemment de la proposition et pourquoi). Attends ma validation.
 2. `golden.ini` généré depuis le script actuel + `tests/golden-ini.sh` ; fixtures + sorties de référence des heredocs Python + `tests/py-golden.sh` (générées avec le code inline, avant extraction).
 3. Découpage bash, un module à la fois, `bash -n` + golden après chaque étape.
-4. Extraction des Python vers `lib/py/`, un script à la fois, `tests/py-golden.sh` après chacun.
+4. Extraction des Python vers `lib/py/`, un script à la fois, `tests/py-golden.sh` après chacun ; puis extraction des prompts vers `lib/prompts/` avec le test d'équivalence des bodies JSON.
 5. Docs.
 6. Récap final : ce qui a bougé, ce qui n'a pas bougé, ce que tu as vu et volontairement pas touché (dette à traiter dans des PR séparés — ex. les 5 endroits pour ajouter un modèle, `SERVICE_NAME` défini tard, l'absence de tests unitaires sur `spec_analyze.py` maintenant qu'il est isolable).
+
