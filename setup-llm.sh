@@ -21,9 +21,9 @@ set -euo pipefail
 # Point d'entrée — le corps du script vit dans lib/ (voir ARCHITECTURE.md).
 #
 # Ordre de source IMPOSÉ : common (helpers + variables globales de config,
-# dont les chemins *_CONF et SERVICE_NAME) → models (chemins des GGUF) →
-# presets (MODEL_INI référence les chemins) → ini (génération, référence les
-# presets) → le reste (préload/setup/bench/spec référencent ini). Toute
+# dont les chemins *_CONF et SERVICE_NAME) → models (déclaration des modèles :
+# téléchargements, chemins, corps MODEL_INI) → ini (génération, référence les
+# modèles) → le reste (préload/setup/bench/spec référencent ini). Toute
 # variable globale doit être définie avant les fonctions qui l'utilisent.
 # =============================================================================
 
@@ -31,7 +31,6 @@ SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/models.sh"
-source "$SCRIPT_DIR/lib/presets.sh"
 source "$SCRIPT_DIR/lib/ini.sh"
 source "$SCRIPT_DIR/lib/preload.sh"
 source "$SCRIPT_DIR/lib/setup.sh"

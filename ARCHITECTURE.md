@@ -3,7 +3,7 @@
 ## Flux de données
 
 ```
-lib/presets.sh (MODEL_INI, défauts)
+lib/models.sh (déclarations : telechargement/modele/groupe → MODEL_INI, défauts)
         │
         ▼                    surcharges
 generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
@@ -27,23 +27,26 @@ régresser.
 ordre imposé :
 
 ```
-common → models → presets → ini → preload → setup → bench → spec → service → help
+common → models → ini → preload → setup → bench → spec → service → help
 ```
 
-- `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`, `_path_for_key`,
+- `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
   `_dl`, `_dl_shard`, `_maybe_restart_service`) et **toutes les variables
   globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `BENCH_CONF`,
   `PRELOAD_CONF`, `SPEC_TEST_URL`, `SPEC_LOG`, `SPEC_CONF`, `SERVICE_NAME`,
   `SERVICE_FILE`, `REFRESH`/`ONLY`. Elles vivent ici parce que plusieurs modules les
   consomment (`_maybe_restart_service` utilise `SERVICE_NAME`, `cmd_bench`
   utilise `SPEC_TEST_URL`) — définies **avant** toute fonction qui les utilise.
-- `models.sh` : repos/fichiers HF (`MODEL_*_REPO/FILE`), chemins `*_PATH`,
-  `KNOWN_FILES` (inventaire, source unique de `--cleanup` et des mkdir),
-  `ROCM_PKGS`.
-- `presets.sh` : `DEFAULT_DEVICE`, `MODEL_INI[...]` (corps des
-  modèles **avec leurs commentaires métier** : sampling officiels, contraintes
-  cache/MTP/SWA, historique des choix) et `PRESET_ORDER` (l'ordre d'émission —
-  `declare -A` ne préserve pas l'ordre d'insertion).
+- `models.sh` : `DEFAULT_DEVICE` et la **déclaration des modèles**, un bloc
+  par modèle **avec ses commentaires métier** (sampling officiels, contraintes
+  cache/MTP/SWA, historique des choix, repo/quant). Quatre helpers déclaratifs :
+  `telechargement`/`telechargement_shards` (définissent les chemins `*_PATH`,
+  alimentent `KNOWN_FILES` — inventaire, source unique de `--cleanup` et des
+  mkdir — et `DL_SPECS`, consommé en boucle par `cmd_setup`), `groupe`
+  (en-têtes de groupe du ini, `GROUPE_AVANT`), `modele` (corps `MODEL_INI[...]`
+  et `PRESET_ORDER` = ordre de déclaration = ordre d'émission — `declare -A`
+  ne préserve pas l'ordre d'insertion). Un `telechargement` peut servir
+  plusieurs sections (même GGUF) et porter plusieurs fichiers (drafter Gemma).
 - `ini.sh` : loaders des trois confs (`load_bench_conf`, `load_preload_conf`,
   `load_spec_conf`), `_preset_model_key`, `_preset_nmax` (surcharge
   conf > défaut script, `SPEC_NMAX_FORCE` prime — utilisé par `--spec-tune`),
@@ -104,7 +107,7 @@ dans le message de commit.
 
 ## Cycle de vie d'un modèle
 
-1. Défaut : corps `MODEL_INI[modèle]` (presets.sh), device hérité du `[*]`
+1. Défaut : corps `MODEL_INI[modèle]` (models.sh), device hérité du `[*]`
    (Vulkan0).
 2. Surcharges appliquées par `generate_models_ini` :
    `bench-devices.conf` (ligne `device =` si le vainqueur du GGUF ≠ défaut ;

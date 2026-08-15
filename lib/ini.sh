@@ -1,5 +1,5 @@
 # lib/ini.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → presets → ini → preload → setup → bench → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → bench → spec → service → help
 
 # =============================================================================
 # Génération du models.ini
@@ -109,23 +109,10 @@ HEADER
   local prev_group=""
   local mkey mdev
   for name in "${PRESET_ORDER[@]}"; do
-    # Séparateurs de groupe à partir des commentaires dans PRESET_ORDER
-    case "$name" in
-      qwen3.5-9b-mtp)
-        echo "; ============================================================================="; echo "; À la demande — évincés par le LRU de --models-max"; echo "; ============================================================================="; echo ""; echo "; --- Qwen3.5 9B MTP (bascule manuelle, parallel 1) ---"; echo "" ;;
-      lfm2.5-2.6b)
-        echo "; --- LFM2.5 2.6B (Liquid AI — agentic edge, tool calling) ---"; echo "" ;;
-      qwen3.6-35b-a3b)
-        echo "; --- Famille 35B A3B ---"; echo "" ;;
-      qwen3.8-27b)
-        echo "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée — + Qwopus 3.6 coder) ---"; echo "" ;;
-      gemma4-31b-mtp)
-        echo "; --- Famille Gemma 4 — pas de swa-full (ISWA, issue #21468) ; MTP requiert llama.cpp >= 2026-06-07 (PR #23398) ---"; echo "" ;;
-      gpt-oss)
-        echo "; --- Géants ---"; echo "" ;;
-      laguna-s-2.1)
-        echo "; --- Laguna S 2.1 — nécessite llama.cpp >= b10087 (arch 'laguna', confirmé jusqu'à b10181) ---"; echo "" ;;
-    esac
+    # Séparateurs de groupe déclarés par `groupe` dans models.sh
+    if [[ -n "${GROUPE_AVANT[$name]:-}" ]]; then
+      echo "${GROUPE_AVANT[$name]}"; echo ""
+    fi
 
     echo "[$name]"
     # Surcharge device issue du bench (clé = dossier du GGUF du modèle)

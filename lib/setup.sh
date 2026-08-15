@@ -1,9 +1,15 @@
 # lib/setup.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → presets → ini → preload → setup → bench → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → bench → spec → service → help
 
 # =============================================================================
 # setup
 # =============================================================================
+
+# Runtime ROCm + backend ggml-hip — installés en best-effort par --setup
+# (jamais bloquant). ggml-hip est le backend HIP splitté d'extra/ggml : sans
+# lui, ROCm0 n'est pas exposé même runtime installé.
+# gfx1151 requis côté rocblas/hipblaslt : contrôler avec `rocminfo | grep gfx`.
+ROCM_PKGS=(rocm-hip-runtime hipblas rocblas hipblaslt ggml-hip)
 
 cmd_setup() {
   info "Vérification des dépendances..."
@@ -68,22 +74,16 @@ cmd_setup() {
     mkdir -p "$(dirname "$f")"
   done
 
-  _dl "$QWEN35_2B_PATH"          "$MODEL_QWEN35_2B_REPO"          "$MODEL_QWEN35_2B_FILE"
-  _dl "$LFM25_26B_PATH"          "$MODEL_LFM25_26B_REPO"          "$MODEL_LFM25_26B_FILE"
-  _dl "$QWEN35_9B_PATH"          "$MODEL_QWEN35_9B_REPO"          "$MODEL_QWEN35_9B_FILE"
-  _dl "$QWEN35_9B_MTP_PATH"      "$MODEL_QWEN35_9B_MTP_REPO"      "$MODEL_QWEN35_9B_MTP_FILE"
-  _dl "$QWEN36_35B_A3B_PATH"     "$MODEL_QWEN36_35B_A3B_REPO"     "$MODEL_QWEN36_35B_A3B_FILE"
-  _dl "$QWEN3_CODER_NEXT_PATH"   "$MODEL_QWEN3_CODER_NEXT_REPO"   "$MODEL_QWEN3_CODER_NEXT_FILE"
-  _dl "$QWEN38_27B_PATH"         "$MODEL_QWEN38_27B_REPO"         "$MODEL_QWEN38_27B_FILE"
-  _dl "$QWOPUS_CODER_MTP_PATH"   "$MODEL_QWOPUS_CODER_MTP_REPO"  "$MODEL_QWOPUS_CODER_MTP_FILE"
-  _dl "$GEMMA_31B_PATH"          "$MODEL_GEMMA_31B_REPO"          "$MODEL_GEMMA_31B_FILE"
-  _dl "$GEMMA_31B_MTP_PATH"      "$MODEL_GEMMA_31B_REPO"          "$MODEL_GEMMA_31B_MTP_FILE"
-  _dl "$GEMMA_12B_PATH"          "$MODEL_GEMMA_12B_REPO"          "$MODEL_GEMMA_12B_FILE"
-  _dl "$GEMMA_12B_MTP_PATH"      "$MODEL_GEMMA_12B_REPO"          "$MODEL_GEMMA_12B_MTP_FILE"
-  _dl_shard "$GPTOSS_PATH"       "$MODEL_GPTOSS_REPO"             "$MODEL_GPTOSS_FILE_GLOB"
-  _dl "$QWEN36_35B_A3B_MTP_PATH" "$MODEL_QWEN36_35B_A3B_MTP_REPO" "$MODEL_QWEN36_35B_A3B_MTP_FILE"
-  _dl_shard "$DSV4_FLASH_PATH"   "$MODEL_DSV4_FLASH_REPO"         "$MODEL_DSV4_FLASH_FILE_GLOB"
-  _dl_shard "$LAGUNA_S_PATH"     "$MODEL_LAGUNA_S_REPO"           "$MODEL_LAGUNA_S_FILE_GLOB"
+  # Téléchargements pilotés par les déclarations de models.sh (DL_SPECS),
+  # dans l'ordre de déclaration (= ordre du ini)
+  local spec mode cible repo arg
+  for spec in "${DL_SPECS[@]}"; do
+    IFS=$'\t' read -r mode cible repo arg <<< "$spec"
+    case "$mode" in
+      plat)  _dl "$cible" "$repo" "$arg" ;;
+      shard) _dl_shard "$cible" "$repo" "$arg" ;;
+    esac
+  done
 
   info "Sélection des modèles préchargés au démarrage..."
   select_preload_models

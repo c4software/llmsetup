@@ -36,7 +36,7 @@ résumer ou la supprimer, non.
 
 ## Tests — quand relancer quoi
 
-- Toute modif de `generate_models_ini`, d'un modèle (`lib/presets.sh`) ou du
+- Toute modif de `generate_models_ini`, d'un modèle (`lib/models.sh`) ou du
   découpage ⇒ comparer le ini généré avant/après (`generate_models_ini` se
   source sans réseau ni service) et signaler tout écart involontaire dans le
   commit. (Le test golden du refactor a été retiré une fois la migration
@@ -67,12 +67,11 @@ résumer ou la supprimer, non.
 
 ## Où ajouter…
 
-- **Un modèle** : 5 endroits, voir README.md (« Ajouter un modèle ») —
-  volontairement non fusionnés dans le refactor.
+- **Un modèle** : un bloc dans `lib/models.sh` (`telechargement` + `modele`,
+  `groupe` si nouvelle famille), voir README.md (« Ajouter un modèle »).
+  L'ordre de déclaration est l'ordre d'émission du ini. Garde-fou
+  `_preload_sanity` (`lib/preload.sh`) uniquement si le modèle duplique les
+  poids d'un autre.
 - **Une sous-commande** : la fonction `cmd_*` dans le module `lib/` adapté
   (ou un nouveau module sourcé depuis le point d'entrée), une entrée dans le
   `case` de `setup-llm.sh`, une ligne dans `cmd_help` (`lib/help.sh`).
-
-## Dette connue (PR séparées, ne pas traiter en passant)
-
-- Les 5 endroits pour ajouter un modèle (fusion possible mais hors périmètre).

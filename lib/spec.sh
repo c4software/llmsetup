@@ -1,5 +1,5 @@
 # lib/spec.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → presets → ini → preload → setup → bench → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → bench → spec → service → help
 
 # =============================================================================
 # spec-test — mesure le décode réel d'un modèle via l'API (chemin spéculatif

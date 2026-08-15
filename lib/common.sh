@@ -1,5 +1,5 @@
 # lib/common.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → presets → ini → preload → setup → bench → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → bench → spec → service → help
 
 # =============================================================================
 # Helpers
@@ -53,18 +53,6 @@ _key() {
 
 _skip() {
   [[ -n "$ONLY" && "$(_key "$1")" != "$ONLY" ]]
-}
-
-# Résout la clé d'un modèle (nom de dossier) vers son chemin dans KNOWN_FILES
-_path_for_key() {
-  local key="$1" f
-  for f in "${KNOWN_FILES[@]}"; do
-    if [[ "$(_key "$f")" == "$key" ]]; then
-      echo "$f"
-      return 0
-    fi
-  done
-  return 1
 }
 
 _dl() {

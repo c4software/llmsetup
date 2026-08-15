@@ -8,7 +8,7 @@ Ce qu'il gère :
 
 - téléchargement des GGUF depuis Hugging Face (`hf`, mises à jour par etags) ;
 - génération de `~/models/models.ini` : les réglages de chaque modèle vivent
-  dans `lib/presets.sh` avec leurs justifications en commentaire ;
+  dans `lib/models.sh` avec leurs justifications en commentaire ;
 - préchargement always-on ou chargement à la demande (LRU) ;
 - mesure des perfs par l'API du serveur (`--bench`, `--spec-test`) ;
 - réglage de la spéculation MTP (`spec-draft-n-max`) par mesure et calibration ;
@@ -78,18 +78,22 @@ modification demande un restart du service.
 
 ## Ajouter un modèle
 
-Cinq endroits, volontairement non fusionnés (voir la dette dans AGENTS.md) :
+Un seul endroit : un bloc dans `lib/models.sh`, à la position voulue dans le
+ini (l'ordre de déclaration est l'ordre d'émission) :
 
-1. `lib/models.sh` : variables `MODEL_<NOM>_REPO` et `MODEL_<NOM>_FILE`
-   (`_FILE_GLOB` et `_FILE_ENTRY` pour les shards) ;
-2. `lib/models.sh` : le chemin `<NOM>_PATH`, puis l'entrée dans `KNOWN_FILES`
-   (source unique de `--cleanup`) ;
-3. `lib/presets.sh` : le corps `MODEL_INI[<modèle>]` avec son commentaire
-   (sampling, cache, contraintes MTP) ;
-4. `lib/presets.sh` : la position dans `PRESET_ORDER` (ordre d'émission du ini) ;
-5. `lib/setup.sh` : la ligne `_dl` ou `_dl_shard` dans `cmd_setup`.
+1. `telechargement <dossier> <repo> VAR_PATH=<fichier>` (ou
+   `telechargement_shards` avec le shard 00001 ; plusieurs `VAR=` pour un
+   drafter MTP externe) — définit le chemin, alimente `KNOWN_FILES`
+   (source unique de `--cleanup`) et les téléchargements de `--setup` ;
+2. `modele <section> "<corps ini>"` avec son commentaire métier (sampling,
+   cache, contraintes MTP) — un `telechargement` peut servir plusieurs
+   sections (même GGUF) ;
+3. `groupe "; --- titre ---"` avant le premier `modele` si nouvelle famille.
 
 Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.
+Cas particulier : si le nouveau modèle duplique les poids d'un autre
+(préchargement des deux = double chargement), ajouter un garde-fou dans
+`_preload_sanity` (`lib/preload.sh`).
 
 ## Outils (tools/)
 
@@ -108,7 +112,7 @@ exposés. Réinstaller `ggml-hip`, ou forcer Vulkan0 dans la conf puis `--preloa
 
 **Je peux éditer models.ini ?**
 Non, il est régénéré à chaque `--setup`, `--preload` ou `--spec-*`.
-Éditer les fichiers `.conf` ou `lib/presets.sh`.
+Éditer les fichiers `.conf` ou `lib/models.sh`.
 
 **Pourquoi `parallel = 1` sur les modèles MTP ?**
 Contrainte llama.cpp : `-np` supérieur à 1 et `--mmproj` ne sont pas supportés
