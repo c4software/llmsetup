@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENDPOINT="${ENDPOINT:-http://localhost:8009}"
+ENDPOINT="${ENDPOINT:-http://bigchuck:8009}"
 CONFIG="${CONFIG:-$HOME/.config/opencode/opencode.json}"
 PROVIDER="${PROVIDER:-llamaswap}"
 

@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const ENDPOINT = process.env.LLAMASWAP_ENDPOINT ?? "http://localhost:8009";
+const ENDPOINT = process.env.LLAMASWAP_ENDPOINT ?? "http://bigchuck:8009";
 
 interface ModelInfo {
   id: string;
@@ -46,7 +46,7 @@ export default async function (pi: ExtensionAPI) {
   }
 
   pi.registerProvider("llamaswap", {
-    name: "llama-swap (localhost)",
+    name: "llama-swap (bigchuck)",
     baseUrl: `${ENDPOINT}/v1`,
     apiKey: "llamaswap",
     api: "openai-completions",

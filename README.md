@@ -98,7 +98,7 @@ Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.
 | `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
 | `llm-setup.ts` | Extension pi : découvre les modèles sur `/v1/models` (ctx, n-predict, reasoning depuis `status.args`) et enregistre le provider `llamaswap`. A copier dans `~/.pi/agent/extensions/`. Variable : `LLAMASWAP_ENDPOINT` |
 
-Les deux pointent sur `http://localhost:8009` par défaut.
+Les deux pointent sur `http://bigchuck:8009` par défaut (surchargeable par variable d'environnement).
 
 ## FAQ
 
