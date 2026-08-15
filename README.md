@@ -1,6 +1,6 @@
-# Alpage
+# LLM Setup
 
-Alpage pilote un `llama-server` en router mode natif sur une machine Strix Halo
+LLM Setup pilote un `llama-server` en router mode natif sur une machine Strix Halo
 (Ryzen AI Max+ 395, 128 Go unifiés, CachyOS/Arch), avec un seul point d'entrée :
 `./setup-llm.sh`.
 
