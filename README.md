@@ -91,6 +91,15 @@ Cinq endroits, volontairement non fusionnés (voir la dette dans AGENTS.md) :
 
 Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.
 
+## Outils (tools/)
+
+| Fichier | Rôle |
+|---|---|
+| `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
+| `llm-setup.ts` | Extension pi : découvre les modèles sur `/v1/models` (ctx, n-predict, reasoning depuis `status.args`) et enregistre le provider `llamaswap`. A copier dans `~/.pi/agent/extensions/`. Variable : `LLAMASWAP_ENDPOINT` |
+
+Les deux pointent sur `http://localhost:8009` par défaut.
+
 ## FAQ
 
 **Un modèle échoue au chargement, ROCm0 a disparu.**
