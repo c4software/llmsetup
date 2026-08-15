@@ -3,7 +3,7 @@
 ## Flux de données
 
 ```
-lib/models.sh (déclarations : telechargement/modele/groupe → MODEL_INI, défauts)
+lib/models.sh (déclarations : download_hf/modele/groupe → MODEL_INI, défauts)
         │
         ▼                    surcharges
 generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
@@ -40,12 +40,12 @@ common → models → ini → preload → setup → bench → spec → service �
 - `models.sh` : `DEFAULT_DEVICE` et la **déclaration des modèles**, un bloc
   par modèle **avec ses commentaires métier** (sampling officiels, contraintes
   cache/MTP/SWA, historique des choix, repo/quant). Quatre helpers déclaratifs :
-  `telechargement`/`telechargement_shards` (définissent les chemins `*_PATH`,
+  `download_hf`/`download_hf_shards` (définissent les chemins `*_PATH`,
   alimentent `KNOWN_FILES` — inventaire, source unique de `--cleanup` et des
   mkdir — et `DL_SPECS`, consommé en boucle par `cmd_setup`), `groupe`
   (en-têtes de groupe du ini, `GROUPE_AVANT`), `modele` (corps `MODEL_INI[...]`
   et `PRESET_ORDER` = ordre de déclaration = ordre d'émission — `declare -A`
-  ne préserve pas l'ordre d'insertion). Un `telechargement` peut servir
+  ne préserve pas l'ordre d'insertion). Un `download_hf` peut servir
   plusieurs sections (même GGUF) et porter plusieurs fichiers (drafter Gemma).
 - `ini.sh` : loaders des trois confs (`load_bench_conf`, `load_preload_conf`,
   `load_spec_conf`), `_preset_model_key`, `_preset_nmax` (surcharge

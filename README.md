@@ -81,23 +81,23 @@ modification demande un restart du service.
 Un seul endroit : un bloc dans `lib/models.sh`, à la position voulue dans le
 ini (l'ordre de déclaration est l'ordre d'émission) :
 
-1. `telechargement <dossier> <repo> VAR_PATH=<fichier>` (ou
-   `telechargement_shards` avec le shard 00001 ; plusieurs `VAR=` pour un
+1. `download_hf <dossier> <repo> VAR_PATH=<fichier>` (ou
+   `download_hf_shards` avec le shard 00001 ; plusieurs `VAR=` pour un
    drafter MTP externe) — définit le chemin, alimente `KNOWN_FILES`
    (source unique de `--cleanup`) et les téléchargements de `--setup` ;
 2. `modele <section> "<corps ini>"` avec son commentaire métier (sampling,
-   cache, contraintes MTP) — un `telechargement` peut servir plusieurs
+   cache, contraintes MTP) — un `download_hf` peut servir plusieurs
    sections (même GGUF) ;
 3. `groupe "; --- titre ---"` avant le premier `modele` si nouvelle famille.
 
 Exemple complet (le corps ini reprend la variable définie par
-`telechargement`, qui doit donc être déclaré avant) :
+`download_hf`, qui doit donc être déclaré avant) :
 
 ```bash
 groupe "; --- Mon-Modele 7B (nouvelle famille) ---"
 
 # Mon-Modele 7B : pourquoi ce repo et ce quant (taille, reco amont, date)
-telechargement mon-modele-7b "org/Mon-Modele-7B-GGUF" \
+download_hf mon-modele-7b "org/Mon-Modele-7B-GGUF" \
   MON_MODELE_7B_PATH="Mon-Modele-7B-UD-Q4_K_XL.gguf"
 
 # Mon-Modele 7B : justification des réglages (sampling officiel, cache,
@@ -113,8 +113,8 @@ min-p            = 0.0
 parallel         = 4"
 ```
 
-Variantes : `telechargement_shards` prend le shard 00001 avec son sous-dossier
-de quant (le glob de téléchargement en est dérivé) ; un appel `telechargement`
+Variantes : `download_hf_shards` prend le shard 00001 avec son sous-dossier
+de quant (le glob de téléchargement en est dérivé) ; un appel `download_hf`
 peut porter plusieurs `VAR=fichier` (modèle + drafter MTP externe, cas Gemma) ;
 deux `modele` peuvent référencer le même `*_PATH` (même GGUF, cas Qwen3.8-27B).
 

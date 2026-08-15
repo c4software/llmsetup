@@ -23,7 +23,7 @@ DEFAULT_DEVICE="Vulkan0"
 # =============================================================================
 # DÉFINITION DES MODÈLES
 #
-# Un bloc par modèle : commentaires métier + appel `telechargement` (repo HF,
+# Un bloc par modèle : commentaires métier + appel `download_hf` (repo HF,
 # fichiers, chemins) + appel(s) `modele` (corps ini). Tout le reste est dérivé :
 # KNOWN_FILES, PRESET_ORDER (= ordre de déclaration = ordre d'émission du ini),
 # les téléchargements de cmd_setup (DL_SPECS) et les en-têtes de groupe du ini
@@ -61,20 +61,20 @@ DL_SPECS=()
 _GROUPE_EN_ATTENTE=""
 
 # Inventaire des fichiers attendus — source unique pour la création des dossiers
-# et pour --cleanup, alimenté par les appels telechargement ci-dessous. Tout
+# et pour --cleanup, alimenté par les appels download_hf ci-dessous. Tout
 # fichier qui cesse d'être déclaré devient un orphelin supprimable.
 # (retirés le 15/08/2026, remplacés par qwen3.8-27b : qwen3.6-27b et
 #  qwen3.6-27b-mtp → ./setup-llm.sh --cleanup les purge)
 KNOWN_FILES=()
 
-# telechargement <dossier> <repo> VAR=<fichier> [VAR=<fichier>...]
+# download_hf <dossier> <repo> VAR=<fichier> [VAR=<fichier>...]
 #   Pour chaque VAR=<fichier> : définit la variable VAR (chemin absolu sous
 #   $MODELS_BASE/<dossier>, utilisée par les corps `modele` — l'appel doit donc
 #   PRÉCÉDER le premier corps qui la référence), ajoute le chemin à KNOWN_FILES
 #   et enregistre un téléchargement (une ligne _dl par fichier).
 #   Plusieurs VAR= sur un appel = plusieurs fichiers du même repo/dossier
 #   (cas Gemma : modèle de base + drafter MTP).
-telechargement() {
+download_hf() {
   local dossier="$1" repo="$2" spec var fichier chemin
   shift 2
   for spec in "$@"; do
@@ -86,11 +86,11 @@ telechargement() {
   done
 }
 
-# telechargement_shards <dossier> <repo> VAR=<shard 00001, chemin relatif avec
-#   son sous-dossier de quant>. Comme telechargement, mais le glob hf est
+# download_hf_shards <dossier> <repo> VAR=<shard 00001, chemin relatif avec
+#   son sous-dossier de quant>. Comme download_hf, mais le glob hf est
 #   dérivé du shard : <sous-dossier de quant>/* (changer de quant = changer
 #   uniquement l'entrée, le glob suit).
-telechargement_shards() {
+download_hf_shards() {
   local dossier="$1" repo="$2" spec="$3" var entry chemin
   var="${spec%%=*}"; entry="${spec#*=}"
   chemin="$MODELS_BASE/$dossier/$entry"
@@ -127,7 +127,7 @@ modele() {
 #   9b = tâches auxiliaires, 35b-a3b-nothink = default agentic (opencode & co)
 # =============================================================================
 
-telechargement qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
+download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
   QWEN35_2B_PATH="Qwen3.5-2B-UD-Q4_K_XL.gguf"
 
 # Qwen3.5-2B : dense 2B hybrid-thinking, ultra-léger
@@ -144,7 +144,7 @@ parallel         = 4
 swa-full         = true
 ctx-checkpoints  = 128"
 
-telechargement qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
+download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
   QWEN35_9B_PATH="Qwen3.5-9B-UD-Q6_K_XL.gguf"
 
 # Qwen3.5-9B : dense 9B — tâches auxiliaires courtes (résumés, titres, routage)
@@ -171,7 +171,7 @@ parallel             = 4
 swa-full             = true
 ctx-checkpoints      = 128"
 
-telechargement qwen3.6-35b-a3b "unsloth/Qwen3.6-35B-A3B-GGUF" \
+download_hf qwen3.6-35b-a3b "unsloth/Qwen3.6-35B-A3B-GGUF" \
   QWEN36_35B_A3B_PATH="Qwen3.6-35B-A3B-UD-Q6_K_XL.gguf"
 
 # Qwen3.6-35B-A3B nothink — DEFAULT AGENTIC, always-on
@@ -212,7 +212,7 @@ groupe "; --- Qwen3.5 9B MTP (bascule manuelle, parallel 1) ---"
 
 # Qwen3.5-9B-MTP — variante MTP, draft intégré (MTP mergé mainline le 16/05/2026)
 # Même nom de fichier que le non-MTP (convention unsloth), dossier distinct.
-telechargement qwen3.5-9b-mtp "unsloth/Qwen3.5-9B-MTP-GGUF" \
+download_hf qwen3.5-9b-mtp "unsloth/Qwen3.5-9B-MTP-GGUF" \
   QWEN35_9B_MTP_PATH="Qwen3.5-9B-UD-Q6_K_XL.gguf"
 
 # Qwen3.5-9B-MTP nothink — variante spéculative du 9b, bascule manuelle
@@ -246,7 +246,7 @@ groupe "; --- LFM2.5 2.6B (Liquid AI — agentic edge, tool calling) ---"
 # Q8_0 officiel LiquidAI (2,87 Go) — modèle minuscule, aucune raison de
 # descendre en dessous ; pas de quant unsloth UD à ce jour (repo publié
 # le 04/08/2026 avec la sortie du modèle).
-telechargement lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-GGUF" \
+download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-GGUF" \
   LFM25_26B_PATH="LFM2.5-2.6B-Q8_0.gguf"
 
 # LFM2.5-2.6B — agentic edge Liquid AI : tool calling, instruction following,
@@ -283,7 +283,7 @@ parallel         = 4"
 groupe "; --- Famille 35B A3B ---"
 
 # Qwen3.6-35B-A3B thinking — raisonnement activé
-# Même GGUF que le nothink always-on : le telechargement est déclaré avec lui,
+# Même GGUF que le nothink always-on : le download_hf est déclaré avec lui,
 #   plus haut dans le groupe « préchargés » (l'ordre du ini prime sur la
 #   contiguïté du bloc).
 # cache-reuse 0 : ignoré sur GDN
@@ -301,7 +301,7 @@ swa-full         = true
 ctx-checkpoints  = 128"
 
 # Qwen3.6-35B-A3B-MTP — variante MTP, draft intégré (Q4_K_XL)
-telechargement qwen3.6-35b-a3b-mtp "unsloth/Qwen3.6-35B-A3B-MTP-GGUF" \
+download_hf qwen3.6-35b-a3b-mtp "unsloth/Qwen3.6-35B-A3B-MTP-GGUF" \
   QWEN36_35B_A3B_MTP_PATH="Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 
 # Qwen3.6-35B-A3B-MTP nothink — passé en LRU (ex-default)
@@ -333,7 +333,7 @@ parallel             = 1
 swa-full             = true
 ctx-checkpoints      = 128"
 
-telechargement qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
+download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
   QWEN3_CODER_NEXT_PATH="Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
 
 # Qwen3-Coder-Next — MoE 80B hybrid-attention, agentic coding
@@ -382,7 +382,7 @@ parallel         = 1"
 # ⚠ Hypothèse MTP embarqué à VALIDER au premier chargement du modèle MTP :
 #   llama-server doit logger le chargement de la tête MTP + acceptance ; s'il
 #   refuse (spec-type sans tête), c'est qu'unsloth a finalement publié un repo
-#   -MTP séparé → réintroduire un telechargement dédié.
+#   -MTP séparé → réintroduire un download_hf dédié.
 # =============================================================================
 
 groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée — + Qwopus 3.6 coder) ---"
@@ -404,7 +404,7 @@ groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée — + 
 #   UD-Q6_K_XL ici + --update qwen3.8-27b si le thinking long en pâtit.
 # ⚠ Repo day-zero (mi-août 2026) — template chat et quants encore mouvants,
 #   prévoir un --update qwen3.8-27b d'ici quelques jours.
-telechargement qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
+download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
   QWEN38_27B_PATH="Qwen3.8-27B-UD-Q4_K_XL.gguf"
 
 # Qwen3.8-27B thinking — reasoning_effort medium (défaut modèle = xhigh), tool-calling jinja
@@ -458,7 +458,7 @@ ctx-checkpoints      = 128"
 # ⚠ Repo "super-squashé" fin juillet 2026 (historique nettoyé, etags changés) :
 #   un --update qwopus3.6-27b-coder-mtp re-vérifiera proprement. Une variante
 #   Jackrong/Qwopus3.6-27B-Coder-Compat-MTP-GGUF existe aussi si souci de compat.
-telechargement qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
+download_hf qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
   QWOPUS_CODER_MTP_PATH="Qwopus3.6-27B-Coder-MTP-Q5_K_M.gguf"
 
 # Qwopus3.6-27B-Coder-MTP nothink — fine-tune coder SFT, SWE-bench 67.0%
@@ -495,7 +495,7 @@ groupe "; --- Famille Gemma 4 — pas de swa-full (ISWA, issue #21468) ; MTP req
 # Gemma 4 31B — MTP drafter embarqué dans le repo principal
 # ⚠ Template chat officiel mis à jour par Google mi-juillet 2026 → si téléchargé
 #   avant, relancer : ./setup-llm.sh --update gemma-31b
-telechargement gemma-31b "unsloth/gemma-4-31B-it-GGUF" \
+download_hf gemma-31b "unsloth/gemma-4-31B-it-GGUF" \
   GEMMA_31B_PATH="gemma-4-31B-it-Q4_K_M.gguf" \
   GEMMA_31B_MTP_PATH="mtp-gemma-4-31B-it.gguf"
 
@@ -525,7 +525,7 @@ parallel             = 1"
 
 # Gemma 4 12B — modèle unifié texte+image+audio+vidéo, MTP drafter embarqué
 # ⚠ Même remarque template : --update gemma-12b si téléchargé avant mi-juillet 2026
-telechargement gemma-12b "unsloth/gemma-4-12b-it-GGUF" \
+download_hf gemma-12b "unsloth/gemma-4-12b-it-GGUF" \
   GEMMA_12B_PATH="gemma-4-12b-it-UD-Q4_K_XL.gguf" \
   GEMMA_12B_MTP_PATH="mtp-gemma-4-12b-it.gguf"
 
@@ -558,7 +558,7 @@ parallel             = 1"
 groupe "; --- Géants ---"
 
 # GPT-OSS 120B — shards UD-Q4_K_XL
-telechargement_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
+download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
   GPTOSS_PATH="UD-Q4_K_XL/gpt-oss-120b-UD-Q4_K_XL-00001-of-00002.gguf"
 
 # GPT-OSS 120B — shards UD-Q4_K_XL
@@ -580,7 +580,7 @@ parallel         = 1"
 #   --update deepseek-v4-flash d'ici quelques jours.
 # Décode ~12,5 t/s sur Strix Halo Vulkan avec ce quant : c'est la baseline
 #   communautaire mesurée, bornée bande passante — normal, pas un bug de config.
-telechargement_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
+download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
   DSV4_FLASH_PATH="UD-IQ3_XXS/DeepSeek-V4-Flash-0731-UD-IQ3_XXS-00001-of-00004.gguf"
 
 # DeepSeek-V4-Flash-0731 — MoE 284B (13B actifs), agentic/coding, 1M ctx natif
@@ -628,7 +628,7 @@ groupe "; --- Laguna S 2.1 — nécessite llama.cpp >= b10087 (arch 'laguna', co
 #   l'entrée en conséquence, le glob suit. (UD-Q4_K_S a été RETIRÉ du repo
 #   unsloth ; il ne reste en shards que UD-IQ4_XS, UD-Q3_K_XL, UD-Q4_K_XL et
 #   UD-Q5_K_XL.)
-telechargement_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
+download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
   LAGUNA_S_PATH="UD-Q4_K_XL/Laguna-S-2.1-UD-Q4_K_XL-00001-of-00003.gguf"
 
 # Laguna S 2.1 — MoE 118B-A8B (poolside), agentic coding / long-horizon
