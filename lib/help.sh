@@ -50,7 +50,7 @@ Commandes :
   --uninstall-service      Arrête, désactive et supprime le service
   --help, -h               Cette aide
 
-Fichiers (à côté du script, versionnables) :
+Fichiers (à côté du script, locaux, non versionnés) :
   bench-devices.conf       clé (dossier GGUF) = device (Vulkan0/ROCm0), édition manuelle
   preload.conf             modèles préchargés, un par ligne
   spec-tests.log           journal des --spec-test (TSV), base de l'analyse n-max

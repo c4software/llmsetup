@@ -16,7 +16,7 @@ Ce qu'il gère :
 
 Les backends ggml (Vulkan par défaut, ROCm/HIP optionnel) sont des paquets
 Arch séparés depuis le split de mi-août 2026. Tout est piloté par des fichiers
-de conf versionnés à côté du script. Le `models.ini` est généré, jamais édité.
+de conf locaux à côté du script (non versionnés, propres à la machine). Le `models.ini` est généré, jamais édité.
 
 ## Prérequis
 
@@ -63,14 +63,14 @@ sudo systemctl start llama-server
 
 ## Fichiers de configuration
 
-À côté du script, versionnés (ce sont des choix, pas des sorties) :
+À côté du script, locaux et non versionnés (propres à la machine) :
 
 | Fichier | Rôle |
 |---|---|
 | `bench-devices.conf` | clé (dossier GGUF) = device (Vulkan0/ROCm0), édition manuelle |
 | `preload.conf` | modèles préchargés, un par ligne |
 | `spec-nmax.conf` | modèle = spec-draft-n-max retenu par les mesures |
-| `spec-tests.log` | journal TSV des runs `--spec-test`, local, non versionné |
+| `spec-tests.log` | journal TSV des runs `--spec-test` |
 
 Côté `~/models/` : `models.ini`, généré. Ne jamais l'éditer : relancer
 `--preload` ou `--setup`. Le routeur ne le lit qu'au démarrage, toute

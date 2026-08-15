@@ -1,3 +1,6 @@
-# Journal local des runs --spec-test (mesures propres à la machine)
+# Fichiers locaux propres à la machine (choix et mesures), non versionnés
+/bench-devices.conf
+/preload.conf
+/spec-nmax.conf
 /spec-tests.log
 __pycache__/

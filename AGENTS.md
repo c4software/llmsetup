@@ -59,7 +59,8 @@ résumer ou la supprimer, non.
 - Ne pas éditer `~/models/models.ini` (généré).
 - Les fichiers `.conf` (`bench-devices.conf`, `preload.conf`,
   `spec-nmax.conf`) sont des **choix utilisateur** : ne pas les régénérer ni
-  les « corriger » sans demande. `spec-tests.log` est local (.gitignore).
+  les « corriger » sans demande. Les .conf et spec-tests.log sont locaux,
+  non versionnés (.gitignore).
 
 ## Où ajouter…
 

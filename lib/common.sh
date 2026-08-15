@@ -103,7 +103,7 @@ CONFIG_DIR="$HOME/models"
 # Fichier des vainqueurs par modèle — clé = dossier sous $MODELS_BASE.
 # Format : "clé = device", commentaires ";". Édition manuelle possible
 # (conservée tant que la clé n'est pas re-benchée).
-# Vit À CÔTÉ DU SCRIPT (versionnable avec lui), pas dans $MODELS_BASE.
+# Vit À CÔTÉ DU SCRIPT (local, non versionné — .gitignore), pas dans $MODELS_BASE.
 BENCH_CONF="$SCRIPT_DIR/bench-devices.conf"
 
 # Migration depuis l'ancien emplacement ($CONFIG_DIR) — one-shot, idempotent
@@ -115,7 +115,7 @@ fi
 # PRÉCHARGEMENT (always-on)
 #
 # La liste des modèles préchargés (load-on-startup) vit dans preload.conf
-# (à côté du script, comme bench-devices.conf — versionnable avec lui),
+# (à côté du script, comme bench-devices.conf — local, non versionné),
 # alimenté par la sélection interactive à cases à cocher du --setup (gum si
 # présent, fallback bash sinon) ou par ./setup-llm.sh --preload. Un modèle
 # sélectionné devient always-on (load-on-startup=true) ; les autres sont
