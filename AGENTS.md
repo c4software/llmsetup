@@ -44,6 +44,9 @@ résumer ou la supprimer, non.
 - Toute modif d'un `py/*.py` ⇒ `./tests/py-golden.sh`. Si la sortie
   change : mettre à jour la fixture attendue **et** vérifier les `sed`/`grep`
   bash qui la consomment (`PP=`/`G=`/`A=`, `GEN=`/`ACC=`/`DN=`, `REC=`).
+- Toute modif de `spec_analyze.py` ⇒ aussi `python3 tests/py-unit.py`
+  (tests unitaires de `fit_alpha`/`fit_timing`/`predict`/`recommend` sur
+  données synthétiques exactes).
 - `bash -n` sur chaque fichier touché ; `shellcheck` si dispo (signaler
   plutôt que refactorer ; le style SC2155-like existant est assumé).
 
@@ -73,8 +76,3 @@ résumer ou la supprimer, non.
 ## Dette connue (PR séparées, ne pas traiter en passant)
 
 - Les 5 endroits pour ajouter un modèle (fusion possible mais hors périmètre).
-- `BENCH_DEVICES` n'est plus consommé depuis la réécriture API du bench.
-- `cmd_help` dit « 3 passes par défaut » pour `--spec-tune`, le code en fait 4
-  (sortie identique oblige, non corrigé).
-- Pas encore de tests unitaires sur `spec_analyze.py` (désormais isolable :
-  `fit_alpha`/`fit_timing`/`predict`/`recommend`).
