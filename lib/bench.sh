@@ -6,10 +6,14 @@
 #
 # Simple : pour chaque preset choisi, N requêtes API (défaut 3) sur le routeur
 # en l'état — pas de restart, pas de comparaison de devices, pas d'écriture de
-# conf. La passe 1 porte un long préfixe (~8K tokens) → prefill réel ; les
+# conf. La passe 1 porte un long préfixe de remplissage → prefill réel (la
+# taille qui fait foi est le n= mesuré, affiché sur la passe 1) ; les
 # passes suivantes (prompt cache) → décode réel, spéculation incluse pour les
 # presets MTP. Affiche par preset : prefill t/s, décode t/s (médiane),
-# acceptance MTP le cas échéant. Tableau récapitulatif en fin de run.
+# acceptance MTP le cas échéant (médiane hors passe 1, comme le décode).
+# Tableau récapitulatif en fin de run ; un prefill dont la passe 1 a été
+# partiellement servie par le cache (cache_n > 0) est marqué "*" — signalé,
+# jamais "corrigé" (pas de purge de slots ni de restart : mesure passive).
 #
 # Usage :
 #   ./setup-llm.sh --bench                 # sélection interactive des presets
@@ -24,7 +28,10 @@
 
 BENCH_PASSES=3
 # Préfixe de préremplissage : phrase ~20 tokens (lib/prompts/bench-filler.txt)
-# répétée → ~8K tokens de prefill. La tâche vit dans lib/prompts/bench-task.txt.
+# répétée, chaque répétition préfixée de son numéro « [i] » à la construction
+# (build_body.py — casse la répétitivité exacte, préfixe reproductible entre
+# runs). La taille réelle du préfixe est le n= mesuré en passe 1, pas une
+# taille visée. La tâche vit dans lib/prompts/bench-task.txt.
 # ⚠ Modifier un de ces fichiers invalide les comparaisons avec les tableaux de
 #   bench antérieurs (cf. ARCHITECTURE.md).
 BENCH_FILLER_REPEAT=400
@@ -42,10 +49,10 @@ _bench_one() {
   [[ -f "$task_file" ]] || error "Prompt manquant : $task_file"
   [[ -f "$filler_file" ]] || error "Prompt manquant : $filler_file"
 
-  info "=== $preset ($passes passes, prefill ~8K en passe 1) ==="
+  info "=== $preset ($passes passes, long préfixe de remplissage en passe 1) ==="
 
-  local body out pp="" acc="-" i
-  local -a gens=()
+  local body out pp="" pp_mark="" acc="-" i
+  local -a gens=() accs=()
   for (( i=1; i<=passes; i++ )); do
     body="$(python3 "$SCRIPT_DIR/lib/py/build_body.py" "$preset" 1000 $((42 + i)) "$task_file" \
       --filler-file "$filler_file" --filler-repeat "$BENCH_FILLER_REPEAT")"
@@ -53,11 +60,17 @@ _bench_one() {
       || { warn "  passe $i : échec curl"; continue; }
     local line
     line="$(python3 "$SCRIPT_DIR/lib/py/timings.py" --bench "$out" "$i")" \
-      || { echo "$line" | grep -v '^PP=\|^G=\|^A='; continue; }
-    echo "$line" | grep -v '^PP=\|^G=\|^A='
-    [[ "$i" -eq 1 ]] && pp="$(echo "$line" | sed -n 's/^PP=//p')"
-    [[ "$i" -gt 1 ]] && gens+=("$(echo "$line" | sed -n 's/^G=//p')")
-    local a; a="$(echo "$line" | sed -n 's/^A=//p')"; [[ -n "$a" ]] && acc="$a"
+      || { echo "$line" | grep -v '^PP=\|^G=\|^A=\|^PPCACHED='; continue; }
+    echo "$line" | grep -v '^PP=\|^G=\|^A=\|^PPCACHED='
+    if [[ "$i" -eq 1 ]]; then
+      pp="$(echo "$line" | sed -n 's/^PP=//p')"
+      # cache_n > 0 en passe 1 : prefill contaminé → "*" dans le récap
+      echo "$line" | grep -q '^PPCACHED=1$' && pp_mark="*"
+    else
+      gens+=("$(echo "$line" | sed -n 's/^G=//p')")
+      # acceptance : hors passe 1 (cache froid), comme le décode
+      local a; a="$(echo "$line" | sed -n 's/^A=//p')"; [[ -n "$a" ]] && accs+=("$a")
+    fi
   done
 
   if [[ -z "$pp" || ${#gens[@]} -eq 0 ]]; then
@@ -66,8 +79,11 @@ _bench_one() {
   fi
   local med
   med="$(printf '%s\n' "${gens[@]}" | sort -n | awk '{a[NR]=$1} END{print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}')"
-  info "  → prefill $pp t/s, décode $med t/s (médiane hors passe 1)$( [[ "$acc" != "-" ]] && echo ", acceptance $acc" )"
-  BENCH_ROW="$preset|$pp|$med|$acc"
+  # Médiane d'acceptance : même mécanisme awk que le décode
+  [[ ${#accs[@]} -gt 0 ]] \
+    && acc="$(printf '%s\n' "${accs[@]}" | sort -n | awk '{a[NR]=$1} END{print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}')"
+  info "  → prefill $pp$pp_mark t/s, décode $med t/s (médianes hors passe 1)$( [[ "$acc" != "-" ]] && echo ", acceptance $acc" )"
+  BENCH_ROW="$preset|$pp$pp_mark|$med|$acc"
   return 0
 }
 
@@ -165,11 +181,14 @@ cmd_bench() {
   done
 
   [[ ${#rows[@]} -gt 0 ]] || { warn "Aucune mesure exploitable."; return; }
-  info "════════ Récapitulatif ($(date '+%F %T'), $passes passes, prefill ~8K) ════════"
+  info "════════ Récapitulatif ($(date '+%F %T'), $passes passes, long préfixe de remplissage) ════════"
   {
     echo "preset|prefill t/s|décode t/s|acceptance"
     printf '%s\n' "${rows[@]}"
   } | column -t -s'|'
+  if printf '%s\n' "${rows[@]}" | grep -q '\*|'; then
+    echo "* prefill contaminé par le cache — chiffre non comparable"
+  fi
 }
 
 # =============================================================================

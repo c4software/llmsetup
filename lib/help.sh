@@ -23,9 +23,10 @@ Commandes :
   --preload                Re-sélectionne les presets préchargés (always-on) et
                            régénère models.ini (--models-max = nb préchargés + 1)
   --bench [preset|all] [n] Perfs du serveur tel qu'il tourne : n passes (défaut 3)
-                           par preset, prefill ~8K (passe 1) + décode médian +
-                           acceptance MTP, tableau récapitulatif. Pas de restart,
-                           rien d'écrit. Sans argument : sélection interactive
+                           par preset, long préfixe de remplissage (passe 1) +
+                           décode et acceptance MTP médians, tableau récapitulatif.
+                           Pas de restart, rien d'écrit. Sans argument : sélection
+                           interactive
   --list-devices           Backends ggml installés + devices exposés par llama-bench,
                            croisés avec bench-devices.conf (alerte si device disparu)
   --spec-test [preset] [n] Mesure le décode réel via l'API (spéculation incluse) :

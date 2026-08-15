@@ -11,6 +11,8 @@
 # Les bodies JSON de build_body.py sont comparés en ÉQUIVALENCE (json.loads),
 # pas en octets : json.dumps et l'ancien printf ne sérialisent pas pareil,
 # seul le contenu parsé (messages, seed, etc.) doit être identique.
+# (body-spec.json = équivalent à l'ancien printf ; body-bench.json =
+#  référence régénérée au passage au filler numéroté « [i] », 15/08/2026.)
 # =============================================================================
 set -euo pipefail
 
@@ -36,6 +38,7 @@ _ck() {  # $1 = nom de la référence, $2 = fichier produit
 # --- timings.py --------------------------------------------------------------
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-spec.json")" 1  > "$TMP/o" || true; _ck bench-p1.txt "$TMP/o"
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-spec.json")" 2  > "$TMP/o" || true; _ck bench-p2.txt "$TMP/o"
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-plain.json")" 1 > "$TMP/o" || true; _ck bench-plain-p1.txt "$TMP/o"
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-plain.json")" 2 > "$TMP/o" || true; _ck bench-plain-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-error.json")" 1 > "$TMP/o" || true; _ck bench-error.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 1 spec  > "$TMP/o" || true; _ck spec-p1.txt "$TMP/o"

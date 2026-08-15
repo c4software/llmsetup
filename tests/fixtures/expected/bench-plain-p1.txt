@@ -1,0 +1,3 @@
+  passe 1 : prefill=118 t/s (n=23, cache=8100)  décode=31.75 t/s (n=1000)  ⚠ prefill partiellement servi par le cache
+PP=118.40
+PPCACHED=1

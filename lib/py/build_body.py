@@ -39,7 +39,11 @@ def main():
 
     content = read_prompt(prompt_file)
     if filler_file:
-        content = read_prompt(filler_file) * filler_repeat + content
+        # Répétitions numérotées "[i] <phrase>" : casse la répétitivité exacte
+        # (un filler strictement répété donne un prefill meilleur cas irréaliste)
+        # sans texte aléatoire — le préfixe reste identique d'un run à l'autre.
+        filler = read_prompt(filler_file)
+        content = "".join(f"[{i}] {filler}" for i in range(1, filler_repeat + 1)) + content
 
     print(json.dumps({
         "model": preset,

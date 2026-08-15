@@ -1,2 +1,2 @@
-  passe 2 : prefill=118 t/s (n=23)  décode=31.75 t/s (n=1000)  (prompt cache)
+  passe 2 : prefill=118 t/s (n=23, cache=8100)  décode=31.75 t/s (n=1000)  (prompt cache)
 G=31.75

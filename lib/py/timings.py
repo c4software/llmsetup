@@ -6,6 +6,8 @@
 #
 # Usage :
 #   timings.py --bench <json> <n° de passe>            → ligne + PP=/G=/A=
+#     (+ PPCACHED=1 si cache_n > 0 en passe 1 : prefill contaminé, marqué "*"
+#      dans le récap côté bash)
 #   timings.py --spec  <json> <n° de passe> <flag>     → ligne + GEN=/ACC=/DN=
 #     (flag = "spec" si le preset est spéculatif : affiche "acceptance=n/a …"
 #      quand draft_n est absent des timings ; "" sinon)
@@ -28,12 +30,20 @@ if mode == "--bench":
     t = d.get("timings") or {}
     pp, tg = t.get("prompt_per_second", 0), t.get("predicted_per_second", 0)
     pn, n = t.get("prompt_n", 0), t.get("predicted_n", 0)
+    cached = t.get("cache_n", 0)
     dn, da = t.get("draft_n"), t.get("draft_n_accepted")
     acc = f"  acceptance={da/dn:.2f}" if dn else ""
     note = "" if sys.argv[2] == "1" else "  (prompt cache)"
-    print(f"  passe {sys.argv[2]} : prefill={pp:.0f} t/s (n={pn})  décode={tg:.2f} t/s (n={n}){acc}{note}")
+    # cache_n > 0 en passe 1 : le prefill est partiellement servi depuis un état
+    # antérieur (slot-prompt-similarity + cache-ram/checkpoints) → chiffre gonflé.
+    # Signalé (ligne + PPCACHED= pour le "*" du récap), jamais corrigé ici :
+    # --bench reste une mesure passive du serveur tel qu'il tourne.
+    warn = "  ⚠ prefill partiellement servi par le cache" if sys.argv[2] == "1" and cached else ""
+    print(f"  passe {sys.argv[2]} : prefill={pp:.0f} t/s (n={pn}, cache={cached})  décode={tg:.2f} t/s (n={n}){acc}{note}{warn}")
     if sys.argv[2] == "1":
         print(f"PP={pp:.2f}")
+        if cached:
+            print("PPCACHED=1")
     else:
         print(f"G={tg:.2f}")
     if dn:

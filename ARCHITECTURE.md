@@ -77,7 +77,7 @@ près — voir `tests/py-golden.sh`.
 
 | Script | Entrées | Sorties | Appelé par |
 |---|---|---|---|
-| `timings.py --bench <json> <passe>` | réponse `/v1/chat/completions` en argv | ligne d'affichage + `PP=`/`G=`/`A=` | `_bench_one` (bench.sh) |
+| `timings.py --bench <json> <passe>` | réponse `/v1/chat/completions` en argv | ligne d'affichage + `PP=`/`G=`/`A=` (+ `PPCACHED=1` si `cache_n` > 0 en passe 1 → prefill marqué `*` au récap) | `_bench_one` (bench.sh) |
 | `timings.py --spec <json> <passe> <flag>` | idem + `spec` si preset spéculatif | ligne + `GEN=`/`ACC=`/`DN= DA= PN=` | `cmd_spec_test` (spec.sh) |
 | `build_body.py <preset> <max_tokens> <seed> <prompt> [--filler-file F --filler-repeat N]` | fichiers de `lib/prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
 | `spec_server_nmax.py <preset>` | JSON de `/v1/models` sur stdin | n-max réel du serveur (vide si absent) | `cmd_spec_test` |
@@ -92,7 +92,7 @@ fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
 |---|---|---|
 | `spec-test.txt` | `cmd_spec_test` | prompt de référence (module `inventory.py` + tests pytest — code structuré = meilleur cas MTP) |
 | `bench-task.txt` | `_bench_one` | tâche posée après le préfixe de remplissage |
-| `bench-filler.txt` | `_bench_one` | phrase ~20 tokens, répétée `BENCH_FILLER_REPEAT` (400) fois → prefill ~8K. ⚠ La ligne se termine par **un espace significatif** avant le newline |
+| `bench-filler.txt` | `_bench_one` | phrase ~20 tokens, répétée `BENCH_FILLER_REPEAT` (400) fois, chaque répétition préfixée de son numéro `[i]` par `build_body.py` (casse la répétitivité exacte, reste reproductible) → long préfixe de prefill, taille réelle = `n=` de la passe 1. ⚠ La ligne se termine par **un espace significatif** avant le newline |
 
 **⚠ Comparabilité.** Modifier un de ces fichiers invalide les comparaisons
 avec les runs journalisés et la calibration n-max : après un changement de
