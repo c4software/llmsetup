@@ -37,9 +37,10 @@ résumer ou la supprimer, non.
 ## Tests — quand relancer quoi
 
 - Toute modif de `generate_models_ini`, d'un preset (`lib/presets.sh`) ou du
-  découpage ⇒ `./tests/golden-ini.sh`. Si le ini doit changer : mettre à jour
-  les références **volontairement** (`--update`), jamais en silence, et le
-  dire dans le commit.
+  découpage ⇒ comparer le ini généré avant/après (`generate_models_ini` se
+  source sans réseau ni service) et signaler tout écart involontaire dans le
+  commit. (Le test golden du refactor a été retiré une fois la migration
+  validée — commit du 15/08/2026.)
 - Toute modif d'un `lib/py/*.py` ⇒ `./tests/py-golden.sh`. Si la sortie
   change : mettre à jour la fixture attendue **et** vérifier les `sed`/`grep`
   bash qui la consomment (`PP=`/`G=`/`A=`, `GEN=`/`ACC=`/`DN=`, `REC=`).

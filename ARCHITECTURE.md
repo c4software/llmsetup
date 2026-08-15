@@ -133,8 +133,8 @@ pas à remplacer la mesure.
 
 ## Invariants (à ne pas casser)
 
-- `models.ini` **byte-identique** à confs égales — verrouillé par
-  `tests/golden-ini.sh` (deux références : sans conf, avec surcharges).
+- `models.ini` **byte-identique** à confs égales : `generate_models_ini` est
+  déterministe, toute variation vient d'un choix explicite (preset ou conf).
 - Sorties des `lib/py/*.py` au caractère près — `tests/py-golden.sh`
   (fixtures capturées sur le code inline d'origine).
 - `parallel = 1` sur tous les presets MTP (contrainte llama.cpp np/mmproj).
