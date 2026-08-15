@@ -1,4 +1,5 @@
 # Fichiers locaux propres à la machine (choix et mesures), non versionnés
+plans/
 /bench-devices.conf
 /preload.conf
 /spec-nmax.conf
