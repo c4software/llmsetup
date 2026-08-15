@@ -90,6 +90,34 @@ ini (l'ordre de déclaration est l'ordre d'émission) :
    sections (même GGUF) ;
 3. `groupe "; --- titre ---"` avant le premier `modele` si nouvelle famille.
 
+Exemple complet (le corps ini reprend la variable définie par
+`telechargement`, qui doit donc être déclaré avant) :
+
+```bash
+groupe "; --- Mon-Modele 7B (nouvelle famille) ---"
+
+# Mon-Modele 7B : pourquoi ce repo et ce quant (taille, reco amont, date)
+telechargement mon-modele-7b "org/Mon-Modele-7B-GGUF" \
+  MON_MODELE_7B_PATH="Mon-Modele-7B-UD-Q4_K_XL.gguf"
+
+# Mon-Modele 7B : justification des réglages (sampling officiel, cache,
+#   contraintes) ; ce commentaire est la connaissance métier du modèle
+modele mon-modele-7b "
+model            = $MON_MODELE_7B_PATH
+ctx-size         = 32768
+cache-ram        = 2048
+temp             = 0.7
+top-k            = 20
+top-p            = 0.8
+min-p            = 0.0
+parallel         = 4"
+```
+
+Variantes : `telechargement_shards` prend le shard 00001 avec son sous-dossier
+de quant (le glob de téléchargement en est dérivé) ; un appel `telechargement`
+peut porter plusieurs `VAR=fichier` (modèle + drafter MTP externe, cas Gemma) ;
+deux `modele` peuvent référencer le même `*_PATH` (même GGUF, cas Qwen3.8-27B).
+
 Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.
 Cas particulier : si le nouveau modèle duplique les poids d'un autre
 (préchargement des deux = double chargement), ajouter un garde-fou dans
