@@ -10,10 +10,11 @@ set -euo pipefail
 #     ggml-cuda, ggml-blas, ggml-openvino) chargés dynamiquement s'ils sont
 #     présents. Vulkan0 requiert ggml-vulkan, ROCm0 requiert ggml-hip + le
 #     runtime ROCm — le runtime seul ne fait plus apparaître ROCm0.
-#   - ./setup-llm.sh --bench <modèle|all> : llama-bench Vulkan0 vs ROCm0,
-#     sauvegarde le vainqueur dans bench-devices.conf (à côté du models.ini),
-#     et régénère le ini — chaque modèle hérite automatiquement du meilleur
-#     device mesuré pour son GGUF. Sans bench, tout reste sur Vulkan0.
+#   - ./setup-llm.sh --bench <modèle|all> : mesure le serveur tel qu'il
+#     tourne via son API (prefill, décode médian, acceptance MTP). N'écrit
+#     rien : le device par GGUF se choisit à la main dans bench-devices.conf
+#     (à côté du script), appliqué au prochain --preload/--setup + restart.
+#     Sans conf, tout reste sur Vulkan0.
 # =============================================================================
 
 # =============================================================================

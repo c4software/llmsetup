@@ -41,7 +41,7 @@ common → models → presets → ini → preload → setup → bench → spec �
 - `models.sh` : repos/fichiers HF (`MODEL_*_REPO/FILE`), chemins `*_PATH`,
   `KNOWN_FILES` (inventaire, source unique de `--cleanup` et des mkdir),
   `ROCM_PKGS`.
-- `presets.sh` : `DEFAULT_DEVICE`, `BENCH_DEVICES`, `MODEL_INI[...]` (corps des
+- `presets.sh` : `DEFAULT_DEVICE`, `MODEL_INI[...]` (corps des
   modèles **avec leurs commentaires métier** : sampling officiels, contraintes
   cache/MTP/SWA, historique des choix) et `PRESET_ORDER` (l'ordre d'émission —
   `declare -A` ne préserve pas l'ordre d'insertion).

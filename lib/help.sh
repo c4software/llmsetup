@@ -56,7 +56,7 @@ Fichiers (à côté du script, locaux, non versionnés) :
   spec-tests.log           journal des --spec-test (TSV), base de l'analyse n-max
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
 Fichiers ($CONFIG_DIR) :
-  models.ini               généré — ne pas éditer à la main, relancer --preload/--bench
+  models.ini               généré — ne pas éditer à la main, relancer --preload/--setup
 
 Workflow typique :
   ./setup-llm.sh --setup && ./setup-llm.sh --install-service

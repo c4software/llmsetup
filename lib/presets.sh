@@ -8,9 +8,9 @@
 # paquets séparés (split Arch mi-août 2026) : ggml-vulkan pour Vulkan0,
 # ggml-hip + runtime ROCm pour ROCm0 — le runtime seul ne suffit plus.
 #
-# Sélection par modèle : automatique via bench-devices.conf (généré par
-# --bench). Chaque modèle dont le GGUF a une entrée dans le conf reçoit
-# `device = <vainqueur>` dans le ini généré. Pas d'entrée → héritage du [*].
+# Sélection par modèle : via bench-devices.conf (édition manuelle, guidée
+# par les mesures de --bench). Chaque modèle dont le GGUF a une entrée dans
+# le conf reçoit `device = <retenu>` dans le ini. Pas d'entrée → héritage du [*].
 #
 # ⚠ Les modèles MTP/spéculatifs héritent du device benché sur leur GGUF, mais
 #   le bench ne mesure PAS le chemin spéculatif : après une bascule ROCm d'un
@@ -19,7 +19,6 @@
 # =============================================================================
 
 DEFAULT_DEVICE="Vulkan0"
-BENCH_DEVICES=(Vulkan0 ROCm0)
 
 # =============================================================================
 # PRESETS INI

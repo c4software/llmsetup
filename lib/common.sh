@@ -100,9 +100,9 @@ _dl_shard() {
 MODELS_BASE="$HOME/models"
 CONFIG_DIR="$HOME/models"
 
-# Fichier des vainqueurs par modèle — clé = dossier sous $MODELS_BASE.
-# Format : "clé = device", commentaires ";". Édition manuelle possible
-# (conservée tant que la clé n'est pas re-benchée).
+# Device retenu par GGUF — clé = dossier sous $MODELS_BASE.
+# Format : "clé = device", commentaires ";". Édition manuelle (guidée par
+# les mesures de --bench, qui n'écrit rien lui-même).
 # Vit À CÔTÉ DU SCRIPT (local, non versionné — .gitignore), pas dans $MODELS_BASE.
 BENCH_CONF="$SCRIPT_DIR/bench-devices.conf"
 

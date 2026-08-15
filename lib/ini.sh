@@ -80,8 +80,9 @@ version = 1
 ; Flags globaux — appliqués à tous les modèles sauf surcharge locale
 ;
 ; device = Vulkan0 : backend par défaut. Les surcharges "device = ..." par
-;   modèle ci-dessous proviennent de bench-devices.conf (./setup-llm.sh --bench)
-;   — chaque modèle hérite du vainqueur mesuré sur son GGUF. Vérifier au
+;   modèle ci-dessous proviennent de bench-devices.conf (édition manuelle,
+;   guidée par ./setup-llm.sh --bench) — chaque modèle hérite du device
+;   retenu pour son GGUF. Vérifier au
 ;   chargement dans les logs : device retenu + flash-attn effectivement actif
 ;   (certaines archs le coupent silencieusement sous HIP, ce qui annule le
 ;   gain de prefill).
