@@ -115,7 +115,7 @@ parallel         = 4"
 
 Variantes : `download_hf_shards` prend le shard 00001 avec son sous-dossier
 de quant (le glob de téléchargement en est dérivé) ; un appel `download_hf`
-peut porter plusieurs `VAR=fichier` (modèle + drafter MTP externe, cas Gemma) ;
+peut porter plusieurs `VAR=fichier` (ex : modèle + drafter spéculatif externe) ;
 deux `llama_model` peuvent référencer le même `*_PATH` (même GGUF, cas Qwen3.8-27B).
 
 Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.

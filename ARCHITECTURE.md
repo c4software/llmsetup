@@ -46,7 +46,7 @@ common → models → ini → preload → setup → bench → spec → service �
   (en-têtes de groupe du ini, `GROUPE_AVANT`), `llama_model` (corps `MODEL_INI[...]`
   et `PRESET_ORDER` = ordre de déclaration = ordre d'émission — `declare -A`
   ne préserve pas l'ordre d'insertion). Un `download_hf` peut servir
-  plusieurs sections (même GGUF) et porter plusieurs fichiers (drafter Gemma).
+  plusieurs sections (même GGUF) et porter plusieurs fichiers (drafter externe).
 - `ini.sh` : loaders des trois confs (`load_bench_conf`, `load_preload_conf`,
   `load_spec_conf`), `_preset_model_key`, `_preset_nmax` (surcharge
   conf > défaut script, `SPEC_NMAX_FORCE` prime — utilisé par `--spec-tune`),

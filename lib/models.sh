@@ -48,7 +48,6 @@ DEFAULT_DEVICE="Vulkan0"
 #   - swa-full + ctx-checkpoints : hybrides Qwen3.5/3.6/3.8 uniquement
 #     (note : sans effet sur les 35B A3B, pas de SWA — llama-server le
 #      désactive au chargement, seul ctx-checkpoints travaille)
-#   - spec-draft-model : drafter externe (Gemma MTP uniquement)
 #   - parallel = 1 OBLIGATOIRE sur tous les modèles MTP : "-np > 1 and --mmproj
 #     are not yet supported with MTP" (doc unsloth, confirmée sur les README
 #     Qwen MTP et Gemma QAT, juin/juillet 2026). Les anciens parallel 2/3 sur
@@ -64,7 +63,8 @@ _GROUPE_EN_ATTENTE=""
 # et pour --cleanup, alimenté par les appels download_hf ci-dessous. Tout
 # fichier qui cesse d'être déclaré devient un orphelin supprimable.
 # (retirés le 15/08/2026, remplacés par qwen3.8-27b : qwen3.6-27b et
-#  qwen3.6-27b-mtp → ./setup-llm.sh --cleanup les purge)
+#  qwen3.6-27b-mtp ; retirés le 15/08/2026 car jamais utilisés : qwen3.5-2b,
+#  qwen3.5-9b-mtp, gemma-31b, gemma-12b → ./setup-llm.sh --cleanup les purge)
 KNOWN_FILES=()
 
 # download_hf <dossier> <repo> VAR=<fichier> [VAR=<fichier>...]
@@ -73,7 +73,7 @@ KNOWN_FILES=()
 #   PRÉCÉDER le premier corps qui la référence), ajoute le chemin à KNOWN_FILES
 #   et enregistre un téléchargement (une ligne _dl par fichier).
 #   Plusieurs VAR= sur un appel = plusieurs fichiers du même repo/dossier
-#   (cas Gemma : modèle de base + drafter MTP).
+#   (ex : modèle de base + drafter spéculatif externe).
 download_hf() {
   local dossier="$1" repo="$2" spec var fichier chemin
   shift 2
@@ -127,23 +127,6 @@ llama_model() {
 #   9b = tâches auxiliaires, 35b-a3b-nothink = default agentic (opencode & co)
 # =============================================================================
 
-download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
-  QWEN35_2B_PATH="Qwen3.5-2B-UD-Q4_K_XL.gguf"
-
-# Qwen3.5-2B : dense 2B hybrid-thinking, ultra-léger
-# swa-full : exploite le ctx complet (SWA hybride GatedDeltaNet)
-llama_model qwen3.5-2b "
-model            = $QWEN35_2B_PATH
-ctx-size         = 32768
-cache-ram        = 2048
-temp             = 0.7
-top-k            = 20
-top-p            = 0.8
-min-p            = 0.0
-parallel         = 4
-swa-full         = true
-ctx-checkpoints  = 128"
-
 download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
   QWEN35_9B_PATH="Qwen3.5-9B-UD-Q6_K_XL.gguf"
 
@@ -154,9 +137,8 @@ download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
 #   re-download de template ne doit pas réactiver le thinking en douce).
 # n-predict 1024 : borne dure, aucune tâche auxiliaire n'a besoin de plus —
 #   plus jamais de génération qui court jusqu'au plafond de contexte
-# NB : la variante MTP existe en modèle séparé (qwen3.5-9b-mtp) — MTP impose
-#   parallel=1, incompatible avec les 4 slots de tâches concurrentes : on
-#   garde le non-MTP en always-on ici.
+# Pas de variante MTP : MTP imposerait parallel=1, incompatible avec les
+#   4 slots de tâches auxiliaires concurrentes qui font tout l'intérêt du 9b.
 llama_model qwen3.5-9b "
 model                = $QWEN35_9B_PATH
 ctx-size             = 32768
@@ -208,37 +190,6 @@ ctx-checkpoints  = 128"
 groupe "; =============================================================================" \
        "; À la demande — évincés par le LRU de --models-max" \
        "; ============================================================================="
-groupe "; --- Qwen3.5 9B MTP (bascule manuelle, parallel 1) ---"
-
-# Qwen3.5-9B-MTP — variante MTP, draft intégré (MTP mergé mainline le 16/05/2026)
-# Même nom de fichier que le non-MTP (convention unsloth), dossier distinct.
-download_hf qwen3.5-9b-mtp "unsloth/Qwen3.5-9B-MTP-GGUF" \
-  QWEN35_9B_MTP_PATH="Qwen3.5-9B-UD-Q6_K_XL.gguf"
-
-# Qwen3.5-9B-MTP nothink — variante spéculative du 9b, bascule manuelle
-#   (/model qwen3.5-9b-mtp) pour la génération mono-flux : gain annoncé
-#   ~1.5-2x en décode sans perte. NE remplace PAS le 9b always-on pour les
-#   tâches auxiliaires (MTP = parallel 1, cf. ci-dessus). LRU, léger (~9 Go).
-# spec-draft-n-max 4 : mesuré 15/08/2026 (la reco unsloth était 6 depuis le
-#   merge mainline du 16/05/2026 — la mesure prime, re-régler via --spec-tune)
-# cache-reuse 0 : incompatible MTP — nothink via chat-template-kwargs
-llama_model qwen3.5-9b-mtp "
-model                = $QWEN35_9B_MTP_PATH
-ctx-size             = 32768
-cache-ram            = 2048
-temp                 = 0.7
-top-k                = 20
-top-p                = 0.8
-min-p                = 0.0
-chat-template-kwargs = {\"enable_thinking\":false}
-cache-reuse          = 0
-spec-type            = draft-mtp
-spec-draft-n-max     = 4
-jinja                = true
-parallel             = 1
-swa-full             = true
-ctx-checkpoints      = 128"
-
 groupe "; --- LFM2.5 2.6B (Liquid AI — agentic edge, tool calling) ---"
 
 # LFM2.5-2.6B (Liquid AI) — hybride conv récurrente + GQA (arch lfm2),
@@ -485,71 +436,6 @@ jinja                = true
 parallel             = 1
 swa-full             = true
 ctx-checkpoints      = 128"
-
-# =============================================================================
-# Gemma 4
-# =============================================================================
-
-groupe "; --- Famille Gemma 4 — pas de swa-full (ISWA, issue #21468) ; MTP requiert llama.cpp >= 2026-06-07 (PR #23398) ---"
-
-# Gemma 4 31B — MTP drafter embarqué dans le repo principal
-# ⚠ Template chat officiel mis à jour par Google mi-juillet 2026 → si téléchargé
-#   avant, relancer : ./setup-llm.sh --update gemma-31b
-download_hf gemma-31b "unsloth/gemma-4-31B-it-GGUF" \
-  GEMMA_31B_PATH="gemma-4-31B-it-Q4_K_M.gguf" \
-  GEMMA_31B_MTP_PATH="mtp-gemma-4-31B-it.gguf"
-
-# Gemma 4 31B — MTP drafter embarqué, texte seul (no-mmproj), spec-draft-n-max 4
-#   (reco unsloth, acceptance ~0.78-0.79 mesurée)
-# ⚠ MTP Gemma mergé dans llama.cpp le 2026-06-07 (PR #23398) — un build
-#   antérieur ne charge pas l'arch gemma4-assistant.
-# Pas de swa-full : architecture ISWA différente (issue #21468)
-# chat-template-kwargs + jinja : désactive le thinking (--reasoning off non supporté)
-# parallel 1 : contrainte MTP (np > 1 non supporté)
-llama_model gemma4-31b-mtp "
-model                = $GEMMA_31B_PATH
-spec-draft-model     = $GEMMA_31B_MTP_PATH
-ctx-size             = 262144
-cache-ram            = 4096
-no-mmproj            = true
-chat-template-kwargs = {\"enable_thinking\":false}
-cache-reuse          = 0
-spec-type            = draft-mtp
-spec-draft-n-max     = 4
-temp                 = 1.0
-top-k                = 64
-top-p                = 0.95
-min-p                = 0.01
-jinja                = true
-parallel             = 1"
-
-# Gemma 4 12B — modèle unifié texte+image+audio+vidéo, MTP drafter embarqué
-# ⚠ Même remarque template : --update gemma-12b si téléchargé avant mi-juillet 2026
-download_hf gemma-12b "unsloth/gemma-4-12b-it-GGUF" \
-  GEMMA_12B_PATH="gemma-4-12b-it-UD-Q4_K_XL.gguf" \
-  GEMMA_12B_MTP_PATH="mtp-gemma-4-12b-it.gguf"
-
-# Gemma 4 12B — MTP drafter embarqué, modèle unifié texte+image+audio+vidéo, texte seul
-# spec-draft-n-max 4 : aligné sur la reco unsloth (était 2)
-# Pas de swa-full : architecture ISWA différente (issue #21468)
-# parallel 1 : contrainte MTP (np > 1 non supporté) — pour retrouver du parallel,
-#   faire un modèle non-MTP séparé sur le même GGUF.
-llama_model gemma4-12b-mtp "
-model                = $GEMMA_12B_PATH
-spec-draft-model     = $GEMMA_12B_MTP_PATH
-ctx-size             = 262144
-cache-ram            = 2048
-no-mmproj            = true
-chat-template-kwargs = {\"enable_thinking\":false}
-cache-reuse          = 0
-spec-type            = draft-mtp
-spec-draft-n-max     = 4
-temp                 = 1.0
-top-k                = 64
-top-p                = 0.95
-min-p                = 0.01
-jinja                = true
-parallel             = 1"
 
 # =============================================================================
 # Géants
