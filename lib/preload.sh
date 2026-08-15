@@ -160,7 +160,7 @@ _preload_sanity() {
 cmd_preload() {
   select_preload_models
   info "Régénération de models.ini..."
-  generate_models_ini > "$CONFIG_DIR/models.ini"
+  regen_models_ini
   info "✅ models.ini à jour."
 
   _maybe_restart_service

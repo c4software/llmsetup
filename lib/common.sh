@@ -86,7 +86,10 @@ _dl_shard() {
 # =============================================================================
 
 MODELS_BASE="$HOME/models"
-CONFIG_DIR="$HOME/models"
+CONFIG_DIR="$MODELS_BASE"
+
+# Port du routeur llama-server (service --start et mesures via l'API)
+SERVER_PORT=8009
 
 # Device retenu par GGUF — clé = dossier sous $MODELS_BASE.
 # Format : "clé = device", commentaires ";". Édition manuelle (guidée par
@@ -107,9 +110,8 @@ BENCH_CONF="$SCRIPT_DIR/bench-devices.conf"
 # =============================================================================
 
 PRELOAD_CONF="$SCRIPT_DIR/preload.conf"
-DEFAULT_PRELOAD=(qwen3.5-9b qwen3.6-35b-a3b-nothink)
 
-SPEC_TEST_URL="http://localhost:8009"
+SPEC_TEST_URL="http://localhost:$SERVER_PORT"
 # Journal des runs (à côté du script) — sert à l'analyse n-max : dès 2 runs à
 # des n-max différents sur le même modèle/GGUF/device, le script calibre un
 # modèle simple et prédit la courbe t/s(n-max).

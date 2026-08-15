@@ -246,7 +246,7 @@ cmd_spec_test() {
       else
         _spec_save_conf "$preset" "$rec"
         load_spec_conf
-        generate_models_ini > "$CONFIG_DIR/models.ini"
+        regen_models_ini
         info "✅ $preset : spec-draft-n-max = $rec enregistré dans $SPEC_CONF (config précédente : ${nmax_cfg:-défaut}) — models.ini régénéré."
         _maybe_restart_service
       fi
@@ -322,7 +322,7 @@ cmd_spec_tune() {
     if [[ "$SPEC_TUNE_DIRTY" -eq 1 ]]; then
       warn "spec-tune interrompu — régénération du ini sans valeur forcée + restart."
       unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET
-      generate_models_ini > "$CONFIG_DIR/models.ini"
+      regen_models_ini
       sudo systemctl restart "$SERVICE_NAME" || true
       SPEC_TUNE_DIRTY=0
     fi
@@ -334,7 +334,7 @@ cmd_spec_tune() {
     info "════════ n-max = $k ════════"
     export SPEC_NMAX_FORCE="$k" SPEC_NMAX_FORCE_PRESET="$preset"
     SPEC_TUNE_DIRTY=1
-    generate_models_ini > "$CONFIG_DIR/models.ini"
+    regen_models_ini
     sudo systemctl restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
     # attente du routeur (les poids se chargent à la 1re requête, passe froide ignorée)
     local t=0
@@ -354,7 +354,7 @@ cmd_spec_tune() {
   rec="$(echo "$report" | sed -n 's/^REC=//p')"
   if [[ ! "$rec" =~ ^[0-9]+$ ]]; then
     warn "Pas de recommandation exploitable — config remise à l'état initial ($before)."
-    generate_models_ini > "$CONFIG_DIR/models.ini"
+    regen_models_ini
     sudo systemctl restart "$SERVICE_NAME" || true
     SPEC_TUNE_DIRTY=0
     return
@@ -362,7 +362,7 @@ cmd_spec_tune() {
 
   _spec_save_conf "$preset" "$rec"
   load_spec_conf
-  generate_models_ini > "$CONFIG_DIR/models.ini"
+  regen_models_ini
   info "✅ $preset : spec-draft-n-max = $rec enregistré dans $SPEC_CONF (avant : $before)"
   info "Restart final de $SERVICE_NAME sur la valeur retenue..."
   sudo systemctl restart "$SERVICE_NAME" || warn "Restart en échec — sudo systemctl restart $SERVICE_NAME"

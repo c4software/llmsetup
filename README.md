@@ -118,7 +118,7 @@ de quant (le glob de téléchargement en est dérivé) ; un appel `download_hf`
 peut porter plusieurs `VAR=fichier` (modèle + drafter MTP externe, cas Gemma) ;
 deux `modele` peuvent référencer le même `*_PATH` (même GGUF, cas Qwen3.8-27B).
 
-Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.
+Puis `./setup-llm.sh --update <modele>` pour télécharger et régénérer.
 Les garde-fous de préchargement (poids dupliqués) sont dérivés des
 déclarations : même GGUF partagé, ou dossiers `<clé>` et `<clé>-mtp` — nommer
 la variante MTP avec le suffixe `-mtp` suffit, rien d'autre à maintenir.

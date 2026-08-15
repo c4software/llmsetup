@@ -16,15 +16,15 @@ cmd_start() {
   local models_max=$(( ${#PRELOADED[@]} + 1 ))
   (( models_max < 2 )) && models_max=2
 
-  info "Lancement de llama-server (router mode) sur :8009..."
+  info "Lancement de llama-server (router mode) sur :$SERVER_PORT..."
   info "  Préchargés : $(_preload_summary) — models-max=$models_max"
 
   # --models-autoload : désormais activé par défaut côté llama-server, gardé
   #   explicite par lisibilité.
-  # WebUI disponible sur http://0.0.0.0:8009
+  # WebUI disponible sur http://0.0.0.0:<SERVER_PORT>
   llama-server \
     --host 0.0.0.0 \
-    --port 8009 \
+    --port "$SERVER_PORT" \
     --models-preset "$CONFIG_DIR/models.ini" \
     --models-max "$models_max" \
     --models-autoload \

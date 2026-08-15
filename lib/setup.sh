@@ -89,7 +89,7 @@ cmd_setup() {
   select_preload_models
 
   info "Génération de models.ini..."
-  generate_models_ini > "$CONFIG_DIR/models.ini"
+  regen_models_ini
 
   info "✅ Config générée : $CONFIG_DIR/models.ini"
   info "Setup terminé → ./setup-llm.sh --start"

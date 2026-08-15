@@ -136,3 +136,9 @@ HEADER
     echo ""
   done
 }
+
+# Régénère le ini sur disque (routeur : relu au prochain démarrage seulement,
+# un restart reste nécessaire pour appliquer)
+regen_models_ini() {
+  generate_models_ini > "$CONFIG_DIR/models.ini"
+}

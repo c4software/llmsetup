@@ -661,3 +661,6 @@ cache-type-v     = q8_0
 cache-reuse      = 0
 jinja            = true
 parallel         = 1"
+
+# Préchargement par défaut (sans preload.conf) : 9b = tâches auxiliaires,
+DEFAULT_PRELOAD=(qwen3.5-9b)
