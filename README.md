@@ -85,10 +85,10 @@ ini (l'ordre de déclaration est l'ordre d'émission) :
    `download_hf_shards` avec le shard 00001 ; plusieurs `VAR=` pour un
    drafter MTP externe) — définit le chemin, alimente `KNOWN_FILES`
    (source unique de `--cleanup`) et les téléchargements de `--setup` ;
-2. `modele <section> "<corps ini>"` avec son commentaire métier (sampling,
+2. `llama_model <section> "<corps ini>"` avec son commentaire métier (sampling,
    cache, contraintes MTP) — un `download_hf` peut servir plusieurs
    sections (même GGUF) ;
-3. `groupe "; --- titre ---"` avant le premier `modele` si nouvelle famille.
+3. `groupe "; --- titre ---"` avant le premier `llama_model` si nouvelle famille.
 
 Exemple complet (le corps ini reprend la variable définie par
 `download_hf`, qui doit donc être déclaré avant) :
@@ -102,7 +102,7 @@ download_hf mon-modele-7b "org/Mon-Modele-7B-GGUF" \
 
 # Mon-Modele 7B : justification des réglages (sampling officiel, cache,
 #   contraintes) ; ce commentaire est la connaissance métier du modèle
-modele mon-modele-7b "
+llama_model mon-modele-7b "
 model            = $MON_MODELE_7B_PATH
 ctx-size         = 32768
 cache-ram        = 2048
@@ -116,9 +116,9 @@ parallel         = 4"
 Variantes : `download_hf_shards` prend le shard 00001 avec son sous-dossier
 de quant (le glob de téléchargement en est dérivé) ; un appel `download_hf`
 peut porter plusieurs `VAR=fichier` (modèle + drafter MTP externe, cas Gemma) ;
-deux `modele` peuvent référencer le même `*_PATH` (même GGUF, cas Qwen3.8-27B).
+deux `llama_model` peuvent référencer le même `*_PATH` (même GGUF, cas Qwen3.8-27B).
 
-Puis `./setup-llm.sh --update <modele>` pour télécharger et régénérer.
+Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.
 Les garde-fous de préchargement (poids dupliqués) sont dérivés des
 déclarations : même GGUF partagé, ou dossiers `<clé>` et `<clé>-mtp` — nommer
 la variante MTP avec le suffixe `-mtp` suffit, rien d'autre à maintenir.

@@ -24,7 +24,7 @@ DEFAULT_DEVICE="Vulkan0"
 # DÉFINITION DES MODÈLES
 #
 # Un bloc par modèle : commentaires métier + appel `download_hf` (repo HF,
-# fichiers, chemins) + appel(s) `modele` (corps ini). Tout le reste est dérivé :
+# fichiers, chemins) + appel(s) `llama_model` (corps ini). Tout le reste est dérivé :
 # KNOWN_FILES, PRESET_ORDER (= ordre de déclaration = ordre d'émission du ini),
 # les téléchargements de cmd_setup (DL_SPECS) et les en-têtes de groupe du ini
 # (appels `groupe`).
@@ -69,7 +69,7 @@ KNOWN_FILES=()
 
 # download_hf <dossier> <repo> VAR=<fichier> [VAR=<fichier>...]
 #   Pour chaque VAR=<fichier> : définit la variable VAR (chemin absolu sous
-#   $MODELS_BASE/<dossier>, utilisée par les corps `modele` — l'appel doit donc
+#   $MODELS_BASE/<dossier>, utilisée par les corps `llama_model` — l'appel doit donc
 #   PRÉCÉDER le premier corps qui la référence), ajoute le chemin à KNOWN_FILES
 #   et enregistre un téléchargement (une ligne _dl par fichier).
 #   Plusieurs VAR= sur un appel = plusieurs fichiers du même repo/dossier
@@ -101,7 +101,7 @@ download_hf_shards() {
 
 # groupe <ligne> [<ligne>...]
 #   En-tête de groupe du ini, émis (suivi d'une ligne vide) juste avant la
-#   PROCHAINE section déclarée par `modele`. Plusieurs appels consécutifs =
+#   PROCHAINE section déclarée par `llama_model`. Plusieurs appels consécutifs =
 #   plusieurs blocs séparés par une ligne vide (bannière + sous-groupe).
 groupe() {
   local bloc="" l
@@ -109,10 +109,10 @@ groupe() {
   _GROUPE_EN_ATTENTE+="${_GROUPE_EN_ATTENTE:+$'\n\n'}$bloc"
 }
 
-# modele <section> <corps ini>
+# llama_model <section> <corps ini>
 #   Enregistre la section (MODEL_INI) et sa position d'émission (PRESET_ORDER =
 #   ordre de déclaration), et lui rattache les en-têtes `groupe` en attente.
-modele() {
+llama_model() {
   MODEL_INI[$1]="$2"
   PRESET_ORDER+=("$1")
   if [[ -n "$_GROUPE_EN_ATTENTE" ]]; then
@@ -132,7 +132,7 @@ download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
 
 # Qwen3.5-2B : dense 2B hybrid-thinking, ultra-léger
 # swa-full : exploite le ctx complet (SWA hybride GatedDeltaNet)
-modele qwen3.5-2b "
+llama_model qwen3.5-2b "
 model            = $QWEN35_2B_PATH
 ctx-size         = 32768
 cache-ram        = 2048
@@ -157,7 +157,7 @@ download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
 # NB : la variante MTP existe en modèle séparé (qwen3.5-9b-mtp) — MTP impose
 #   parallel=1, incompatible avec les 4 slots de tâches concurrentes : on
 #   garde le non-MTP en always-on ici.
-modele qwen3.5-9b "
+llama_model qwen3.5-9b "
 model                = $QWEN35_9B_PATH
 ctx-size             = 32768
 cache-ram            = 2048
@@ -186,7 +186,7 @@ download_hf qwen3.6-35b-a3b "unsloth/Qwen3.6-35B-A3B-GGUF" \
 #   restauration de préfixe passe par cache-ram + ctx-checkpoints
 # NB : la variante thinking (même GGUF, $QWEN36_35B_A3B_PATH) est déclarée
 #   plus bas, dans le groupe « famille 35B A3B ».
-modele qwen3.6-35b-a3b-nothink "
+llama_model qwen3.6-35b-a3b-nothink "
 model            = $QWEN36_35B_A3B_PATH
 ctx-size         = 524288
 cache-ram        = 12288
@@ -222,7 +222,7 @@ download_hf qwen3.5-9b-mtp "unsloth/Qwen3.5-9B-MTP-GGUF" \
 # spec-draft-n-max 4 : mesuré 15/08/2026 (la reco unsloth était 6 depuis le
 #   merge mainline du 16/05/2026 — la mesure prime, re-régler via --spec-tune)
 # cache-reuse 0 : incompatible MTP — nothink via chat-template-kwargs
-modele qwen3.5-9b-mtp "
+llama_model qwen3.5-9b-mtp "
 model                = $QWEN35_9B_MTP_PATH
 ctx-size             = 32768
 cache-ram            = 2048
@@ -262,7 +262,7 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-GGUF" \
 # cache-reuse 0 : état récurrent (conv) — même logique que GDN, non supporté.
 # Pas de swa-full ni ctx-checkpoints : pas une arch hybride SWA Qwen.
 # jinja : template chat requis pour le tool calling.
-modele lfm2.5-2.6b "
+llama_model lfm2.5-2.6b "
 model            = $LFM25_26B_PATH
 ctx-size         = 131072
 cache-ram        = 2048
@@ -287,7 +287,7 @@ groupe "; --- Famille 35B A3B ---"
 #   plus haut dans le groupe « préchargés » (l'ordre du ini prime sur la
 #   contiguïté du bloc).
 # cache-reuse 0 : ignoré sur GDN
-modele qwen3.6-35b-a3b "
+llama_model qwen3.6-35b-a3b "
 model            = $QWEN36_35B_A3B_PATH
 ctx-size         = 393216
 cache-ram        = 6144
@@ -314,7 +314,7 @@ download_hf qwen3.6-35b-a3b-mtp "unsloth/Qwen3.6-35B-A3B-MTP-GGUF" \
 # cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
 # cache-reuse 0 : ignoré sur GDN — nothink via chat-template-kwargs (pas --reasoning off)
 # parallel 1 : contrainte MTP (np > 1 non supporté)
-modele qwen3.6-35b-a3b-mtp-nothink "
+llama_model qwen3.6-35b-a3b-mtp-nothink "
 model                = $QWEN36_35B_A3B_MTP_PATH
 ctx-size             = 131072
 cache-ram            = 6144
@@ -340,7 +340,7 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : MoE hybrid-attention incompatible
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench.
-modele qwen3-coder-next "
+llama_model qwen3-coder-next "
 model            = $QWEN3_CODER_NEXT_PATH
 ctx-size         = 131072
 cache-ram        = 4096
@@ -408,7 +408,7 @@ download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
   QWEN38_27B_PATH="Qwen3.8-27B-UD-Q4_K_XL.gguf"
 
 # Qwen3.8-27B thinking — reasoning_effort medium (défaut modèle = xhigh), tool-calling jinja
-modele qwen3.8-27b "
+llama_model qwen3.8-27b "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
 cache-ram            = 4096
@@ -433,7 +433,7 @@ ctx-checkpoints      = 128"
 #   Re-régler avec ./setup-llm.sh --spec-tune après changement de quant/build/device.
 # cache-reuse 0 : incompatible MTP
 # parallel 1 : contrainte MTP (np > 1 non supporté)
-modele qwen3.8-27b-mtp-nothink "
+llama_model qwen3.8-27b-mtp-nothink "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
 cache-ram            = 4096
@@ -467,7 +467,7 @@ download_hf qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
 # spec-draft-n-max 4 : mesuré 15/08/2026 (valeur historique 2)
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : incompatible MTP
-modele qwopus3.6-27b-coder-mtp-nothink "
+llama_model qwopus3.6-27b-coder-mtp-nothink "
 model                = $QWOPUS_CODER_MTP_PATH
 ctx-size             = 131072
 cache-ram            = 4096
@@ -506,7 +506,7 @@ download_hf gemma-31b "unsloth/gemma-4-31B-it-GGUF" \
 # Pas de swa-full : architecture ISWA différente (issue #21468)
 # chat-template-kwargs + jinja : désactive le thinking (--reasoning off non supporté)
 # parallel 1 : contrainte MTP (np > 1 non supporté)
-modele gemma4-31b-mtp "
+llama_model gemma4-31b-mtp "
 model                = $GEMMA_31B_PATH
 spec-draft-model     = $GEMMA_31B_MTP_PATH
 ctx-size             = 262144
@@ -534,7 +534,7 @@ download_hf gemma-12b "unsloth/gemma-4-12b-it-GGUF" \
 # Pas de swa-full : architecture ISWA différente (issue #21468)
 # parallel 1 : contrainte MTP (np > 1 non supporté) — pour retrouver du parallel,
 #   faire un modèle non-MTP séparé sur le même GGUF.
-modele gemma4-12b-mtp "
+llama_model gemma4-12b-mtp "
 model                = $GEMMA_12B_PATH
 spec-draft-model     = $GEMMA_12B_MTP_PATH
 ctx-size             = 262144
@@ -562,7 +562,7 @@ download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
   GPTOSS_PATH="UD-Q4_K_XL/gpt-oss-120b-UD-Q4_K_XL-00001-of-00002.gguf"
 
 # GPT-OSS 120B — shards UD-Q4_K_XL
-modele gpt-oss "
+llama_model gpt-oss "
 model            = $GPTOSS_PATH
 ctx-size         = 131072
 cache-ram        = 8192
@@ -603,7 +603,7 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   pas encore mergé mainline — à activer ici le jour du merge
 #   (spec-type = draft-dspark + drafter GGUF). Gain modeste attendu sur APU.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench.
-modele deepseek-v4-flash "
+llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072
 cache-ram        = 8192
@@ -649,7 +649,7 @@ download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
 #   (--spec-type draft-dflash --spec-draft-n-max 15), pas dans le mainline —
 #   retours communauté : jusqu'à +30 tok/s de décode selon les tâches.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench.
-modele laguna-s-2.1 "
+llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
 ctx-size         = 262144
 cache-ram        = 8192
@@ -663,4 +663,4 @@ jinja            = true
 parallel         = 1"
 
 # Préchargement par défaut (sans preload.conf) : 9b = tâches auxiliaires,
-DEFAULT_PRELOAD=(lfm2.5-2.6b)
+DEFAULT_PRELOAD=(qwen3.5-9b qwen3.6-35b-a3b-nothink)

@@ -67,7 +67,7 @@ résumer ou la supprimer, non.
 
 ## Où ajouter…
 
-- **Un modèle** : un bloc dans `lib/models.sh` (`download_hf` + `modele`,
+- **Un modèle** : un bloc dans `lib/models.sh` (`download_hf` + `llama_model`,
   `groupe` si nouvelle famille), voir README.md (« Ajouter un modèle »).
   L'ordre de déclaration est l'ordre d'émission du ini. Les garde-fous de
   `_preload_sanity` sont dérivés (même GGUF, suffixe `-mtp`) : nommer la

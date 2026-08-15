@@ -3,7 +3,7 @@
 ## Flux de données
 
 ```
-lib/models.sh (déclarations : download_hf/modele/groupe → MODEL_INI, défauts)
+lib/models.sh (déclarations : download_hf/llama_model/groupe → MODEL_INI, défauts)
         │
         ▼                    surcharges
 generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
@@ -43,7 +43,7 @@ common → models → ini → preload → setup → bench → spec → service �
   `download_hf`/`download_hf_shards` (définissent les chemins `*_PATH`,
   alimentent `KNOWN_FILES` — inventaire, source unique de `--cleanup` et des
   mkdir — et `DL_SPECS`, consommé en boucle par `cmd_setup`), `groupe`
-  (en-têtes de groupe du ini, `GROUPE_AVANT`), `modele` (corps `MODEL_INI[...]`
+  (en-têtes de groupe du ini, `GROUPE_AVANT`), `llama_model` (corps `MODEL_INI[...]`
   et `PRESET_ORDER` = ordre de déclaration = ordre d'émission — `declare -A`
   ne préserve pas l'ordre d'insertion). Un `download_hf` peut servir
   plusieurs sections (même GGUF) et porter plusieurs fichiers (drafter Gemma).
