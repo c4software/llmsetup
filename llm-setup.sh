@@ -960,7 +960,7 @@ _maybe_restart_service() {
   systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null || return 0
   local reply="n"
   if [[ -t 0 ]]; then
-    read -r -p "Le service $SERVICE_NAME tourne — redémarrer maintenant pour appliquer ? [O/n] " reply
+    read -r -p "Le service $SERVICE_NAME tourne — redémarrer maintenant pour appliquer (sudo) ? [O/n] " reply
     reply="${reply:-o}"
   else
     warn "Service $SERVICE_NAME actif — redémarrage non effectué (entrée non interactive)."
@@ -1568,6 +1568,7 @@ cmd_bench() {
     local reply="o"
     if [[ -t 0 ]]; then
       warn "Le service $SERVICE_NAME tourne — il doit être arrêté pendant le bench."
+      info "sudo requis : $SERVICE_NAME est un service systemd système, son stop/start passe par root."
       read -r -p "Arrêter $SERVICE_NAME maintenant (redémarré automatiquement à la fin) ? [O/n] " reply
       reply="${reply:-o}"
     else
@@ -1688,9 +1689,14 @@ cmd_list_devices() {
 # passe est marquée (cache froid), comparer les médianes des suivantes.
 # L'en-tête reprend tout le contexte (host, versions llama-cpp/ggml, GGUF,
 # device, corps du preset) pour que le bloc soit auto-suffisant à partager.
-# Chaque run est journalisé dans spec-tests.log ; dès 2 runs à des n-max
-# différents (même preset/GGUF/device), l'analyse finale calibre
-# t/s = (1+Σα^i)/(t_base + k·t_draft) et recommande le n-max cible.
+# Chaque run est journalisé dans spec-tests.log (les runs incohérents —
+# tokens/forward > plafond, ini changé sans restart — sont mis en quarantaine
+# automatiquement, lignes commentées) ; dès 2 runs valides à des n-max
+# différents (même preset/GGUF/device), l'analyse calibre
+# t/s = (1+Σα^i)/(t_base + k·t_draft), recommande le n-max cible et
+# l'écrit directement dans spec-nmax.conf (ini régénéré, restart proposé).
+# --spec-test suffit donc à régler un preset ; --spec-tune reste le mode
+# batch (enchaîne plusieurs n-max avec restart entre chaque).
 #
 # Protocole pour régler spec-draft-n-max d'un preset MTP :
 #   1. --spec-test <preset>                    (valeur courante)
@@ -1965,7 +1971,25 @@ PY
       "$(date '+%F %T')" "$preset" "$(basename "$gguf")" "$mdev" "$nmax" \
       "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" >> "$SPEC_LOG"
     echo "--- analyse n-max ---"
-    _spec_analyze "$preset" "$(basename "$gguf")" "$mdev" "$nmax"
+    local report rec
+    report="$(_spec_analyze "$preset" "$(basename "$gguf")" "$mdev" "$nmax" rec)"
+    echo "$report" | grep -v '^REC='
+    rec="$(echo "$report" | sed -n 's/^REC=//p')"
+    # Persistance automatique : dès que >= 2 n-max mesurés donnent une reco,
+    # elle est écrite dans spec-nmax.conf (surcharge du défaut script) et le
+    # ini est régénéré — plus besoin de --spec-tune pour figer le résultat.
+    # (sauf sous --spec-tune, qui pilote son propre bilan en fin de boucle)
+    if [[ "$rec" =~ ^[0-9]+$ && -z "${SPEC_NMAX_FORCE:-}" ]]; then
+      if [[ "$rec" == "$nmax_cfg" ]]; then
+        info "spec-draft-n-max = $rec déjà en config — rien à changer."
+      else
+        _spec_save_conf "$preset" "$rec"
+        load_spec_conf
+        generate_models_ini > "$CONFIG_DIR/models.ini"
+        info "✅ $preset : spec-draft-n-max = $rec enregistré dans $SPEC_CONF (config précédente : ${nmax_cfg:-défaut}) — models.ini régénéré."
+        _maybe_restart_service
+      fi
+    fi
   fi
   echo "================="
 }
@@ -1982,19 +2006,36 @@ _spec_analyze() {
   python3 - "$SPEC_LOG" "$1" "$2" "$3" "$4" "${5:-}" <<'PY'
 import sys, math
 log, preset, gguf, dev, cur_k = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
-runs = []
+runs, lines, bad_idx = [], [], []
 try:
-    for line in open(log, encoding="utf-8"):
-        f = line.rstrip("\n").split("\t")
-        if len(f) < 10 or f[1] != preset or f[2] != gguf or f[3] != dev: continue
-        try:
-            runs.append(dict(k=int(f[4]), gen=float(f[5]), dn=int(f[7]), da=int(f[8]), pn=int(f[9])))
-        except ValueError:
-            continue
+    lines = open(log, encoding="utf-8").read().splitlines()
 except FileNotFoundError:
     pass
+for i, line in enumerate(lines):
+    if line.startswith(";"): continue  # ligne mise en quarantaine
+    f = line.split("\t")
+    if len(f) < 10 or f[1] != preset or f[2] != gguf or f[3] != dev: continue
+    try:
+        r = dict(k=int(f[4]), gen=float(f[5]), dn=int(f[7]), da=int(f[8]), pn=int(f[9]))
+    except ValueError:
+        continue
+    # Cohérence : tokens/forward > k+1 = le serveur ne tournait pas à ce n-max
+    # (ini changé sans restart, anciens runs) → quarantaine automatique (ligne
+    # commentée ";" dans le log, conservée pour trace), exclue de la calibration.
+    if r["pn"] / max(1, r["pn"] - r["da"]) > r["k"] + 1.05:
+        bad_idx.append(i)
+        continue
+    runs.append(r)
+if bad_idx:
+    for i in bad_idx:
+        lines[i] = "; QUARANTAINE (tokens/forward > plafond, n-max réel différent) " + lines[i]
+    try:
+        open(log, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+        print(f"  ⚠ {len(bad_idx)} run(s) incohérent(s) mis en quarantaine dans {log} (lignes commentées) — ignorés.")
+    except OSError:
+        print(f"  ⚠ {len(bad_idx)} run(s) incohérent(s) ignorés (quarantaine impossible : {log} non inscriptible).")
 if not runs:
-    print("  (aucun run journalisé)"); sys.exit(0)
+    print("  (aucun run exploitable journalisé)"); sys.exit(0)
 
 # un point par n-max : le plus récent
 by_k = {}
@@ -2015,13 +2056,6 @@ def T(k): return 1 + sum(alpha**i for i in range(1, k+1))
 tpf_meas = cur["pn"] / max(1, cur["pn"] - cur["da"])
 print(f"  run courant : n-max {cur['k']}  {cur['gen']:.2f} t/s  acceptance/token {target:.3f}"
       f"  → α≈{alpha:.3f}  tokens/forward {tpf_meas:.2f} (plafond {cur['k']+1})")
-# Cohérence : plus de tokens/forward que k+1 = le serveur ne tournait PAS à ce
-# n-max (ini modifié sans restart). Le run est faux, on ne calibre pas dessus.
-bad = sorted(k for k, r in by_k.items() if r["pn"] / max(1, r["pn"] - r["da"]) > k + 1.05)
-if bad:
-    print(f"  ⚠ run(s) journalisé(s) sous n-max {bad} avec tokens/forward > plafond : n-max réel"
-          f" différent (ini changé sans restart). Supprimer ces lignes de {log} avant de recalibrer.")
-    sys.exit(0)
 
 pts = sorted(by_k.values(), key=lambda r: r["k"])
 if len(pts) < 2:
@@ -2058,7 +2092,7 @@ print(meas)
 best_meas = max(r["gen"] for r in pts)
 rec_meas = min(r["k"] for r in pts if r["gen"] >= best_meas*0.98)
 print(f"  → mesuré : n-max {rec_meas} (meilleur {best_meas:.1f} t/s ; à <2 %, le plus petit k gagne)")
-if len(sys.argv) > 6 and sys.argv[6] == "rec":
+if len(sys.argv) > 6 and sys.argv[6] == "rec" and len(pts) >= 2:
     print(f"REC={rec_meas}")
 gain = (pred[rec] / cur["gen"] - 1) * 100
 if rec == cur["k"]:
@@ -2112,6 +2146,11 @@ cmd_spec_tune() {
   before="$(_preset_nmax "$preset")"
   info "spec-tune '$preset' — n-max à tester : ${ks[*]} ($passes passes chacun), valeur actuelle : $before"
   warn "Chaque n-max = régénération du ini + restart de $SERVICE_NAME (les modèles préchargés se rechargent)."
+  info "sudo requis : le routeur ne lit le ini qu'au démarrage, chaque n-max impose donc"
+  info "  'systemctl restart $SERVICE_NAME' (service système). Rien d'autre ne passe par root."
+  # Prendre le ticket sudo maintenant plutôt qu'au milieu de la boucle (mot de
+  # passe demandé pendant qu'un run tourne = invite noyée dans la sortie).
+  sudo -v || error "sudo refusé — spec-tune ne peut pas redémarrer $SERVICE_NAME."
 
   local gguf mkey mdev
   gguf="$(basename "$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)")"
@@ -2311,14 +2350,16 @@ Commandes :
   --spec-test [preset] [n] Mesure le décode réel via l'API (spéculation incluse) :
                            n passes du même prompt code, prompt/gen t/s, acceptance
                            MTP + médianes (seed fixe/passe, 4 passes par défaut).
-                           Journalise dans spec-tests.log et, dès
-                           2 runs à n-max différents, prédit la courbe t/s(n-max)
-                           et recommande la valeur cible.
+                           Journalise (quarantaine auto des runs incohérents),
+                           et dès 2 n-max mesurés : prédit la courbe, choisit la
+                           cible et l'écrit dans spec-nmax.conf (ini régénéré,
+                           restart proposé).
   --spec-tune [preset] [k1,k2,..] [n]
                            Boucle automatique : pour chaque n-max (défaut 2,4,6),
                            ini régénéré + restart + spec-test ; retient le meilleur
                            mesuré (à <2 %, le plus petit), l'écrit dans
-                           spec-nmax.conf (surcharge du défaut script), restart final
+                           spec-nmax.conf (surcharge du défaut script), restart final.
+                           sudo requis (restarts du service système entre les n-max)
                            Sans preset : choix interactif parmi les MTP présents.
                            3 passes par défaut. Sert à régler
                            spec-draft-n-max (éditer le script, --preload, re-tester)
