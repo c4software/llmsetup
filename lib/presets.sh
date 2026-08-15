@@ -122,8 +122,8 @@ ctx-checkpoints      = 128"
 #   (/model qwen3.5-9b-mtp) pour la génération mono-flux : gain annoncé
 #   ~1.5-2x en décode sans perte. NE remplace PAS le 9b always-on pour les
 #   tâches auxiliaires (MTP = parallel 1, cf. ci-dessus). LRU, léger (~9 Go).
-# spec-draft-n-max 6 : reco unsloth depuis le merge mainline (16/05/2026,
-#   n-max relevé de 2 à 6 pour les Qwen3.5)
+# spec-draft-n-max 4 : mesuré 15/08/2026 (la reco unsloth était 6 depuis le
+#   merge mainline du 16/05/2026 — la mesure prime, re-régler via --spec-tune)
 # cache-reuse 0 : incompatible MTP — nothink via chat-template-kwargs
 MODEL_INI[qwen3.5-9b-mtp]="
 model                = $QWEN35_9B_MTP_PATH
@@ -136,7 +136,7 @@ min-p                = 0.0
 chat-template-kwargs = {\"enable_thinking\":false}
 cache-reuse          = 0
 spec-type            = draft-mtp
-spec-draft-n-max     = 6
+spec-draft-n-max     = 4
 jinja                = true
 parallel             = 1
 swa-full             = true
@@ -168,7 +168,8 @@ swa-full         = true
 ctx-checkpoints  = 128"
 
 # Qwen3.6-35B-A3B-MTP nothink — passé en LRU (ex-default)
-# MTP draft=2 : décodage spéculatif sans perte, gain max sur tool calls / JSON,
+# MTP draft=4 (mesuré 15/08/2026, valeur historique 2) : décodage spéculatif
+#   sans perte, gain max sur tool calls / JSON,
 #   mais rollback GDN fragile en agentic (cf. ci-dessus) → bascule manuelle
 #   uniquement : /model qwen3.6-35b-a3b-mtp-nothink
 # (ne PAS précharger ce preset en même temps que le nothink dans --preload,
@@ -189,7 +190,7 @@ chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v         = q8_0
 cache-reuse          = 0
 spec-type            = draft-mtp
-spec-draft-n-max     = 2
+spec-draft-n-max     = 4
 jinja                = true
 parallel             = 1
 swa-full             = true
@@ -307,6 +308,7 @@ ctx-checkpoints      = 128"
 # Qwopus3.6-27B-Coder-MTP nothink — fine-tune coder SFT, SWE-bench 67.0%
 #   (score confirmé : run Q5_K_M, 335/500 Verified, thinking-off)
 # Bascule manuelle : /model qwopus3.6-27b-coder-mtp-nothink
+# spec-draft-n-max 4 : mesuré 15/08/2026 (valeur historique 2)
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : incompatible MTP
 MODEL_INI[qwopus3.6-27b-coder-mtp-nothink]="
@@ -322,7 +324,7 @@ chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v         = q8_0
 cache-reuse          = 0
 spec-type            = draft-mtp
-spec-draft-n-max     = 2
+spec-draft-n-max     = 4
 jinja                = true
 parallel             = 1
 swa-full             = true
