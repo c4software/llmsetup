@@ -69,9 +69,9 @@ résumer ou la supprimer, non.
 
 - **Un modèle** : un bloc dans `lib/models.sh` (`download_hf` + `modele`,
   `groupe` si nouvelle famille), voir README.md (« Ajouter un modèle »).
-  L'ordre de déclaration est l'ordre d'émission du ini. Garde-fou
-  `_preload_sanity` (`lib/preload.sh`) uniquement si le modèle duplique les
-  poids d'un autre.
+  L'ordre de déclaration est l'ordre d'émission du ini. Les garde-fous de
+  `_preload_sanity` sont dérivés (même GGUF, suffixe `-mtp`) : nommer la
+  variante MTP `<clé>-mtp`, rien à coder.
 - **Une sous-commande** : la fonction `cmd_*` dans le module `lib/` adapté
   (ou un nouveau module sourcé depuis le point d'entrée), une entrée dans le
   `case` de `setup-llm.sh`, une ligne dans `cmd_help` (`lib/help.sh`).

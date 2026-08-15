@@ -117,16 +117,36 @@ _preload_sanity() {
     && warn "Aucun modèle préchargé — premier appel de chaque modèle = temps de chargement complet."
   [[ $count -gt 3 ]] \
     && warn "$count modèles préchargés — vérifier que la somme des poids + KV tient dans les 128 Go."
-  # Doublons connus : même GGUF chargé deux fois
-  if [[ -n "${PRELOADED[qwen3.6-35b-a3b-nothink]:-}" && -n "${PRELOADED[qwen3.6-35b-a3b-mtp-nothink]:-}" ]]; then
-    warn "35b-a3b nothink ET mtp-nothink préchargés : ~29 Go chargés deux fois pour le même modèle."
-  fi
-  local n38=0 p
-  for p in qwen3.8-27b qwen3.8-27b-mtp-nothink; do
-    [[ -n "${PRELOADED[$p]:-}" ]] && n38=$((n38 + 1))
+  # Doublons de poids, dérivés des déclarations (rien à maintenir en ajoutant
+  # un modèle) :
+  #   1. plusieurs modèles préchargés sur le même GGUF (ligne "model ="
+  #      identique — ex. les deux Qwen3.8-27B, tête MTP embarquée) ;
+  #   2. un modèle et sa variante -mtp préchargés ensemble (dossiers <clé> et
+  #      <clé>-mtp par convention : mêmes poids sémantiques en deux quants,
+  #      ex. 35b-a3b nothink + mtp-nothink).
+  local p gguf key taille
+  local -A par_gguf=() cles=()
+  for p in "${!PRELOADED[@]}"; do
+    gguf="$(echo "${MODEL_INI[$p]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
+    [[ -n "$gguf" ]] || continue
+    par_gguf[$gguf]+="$p "
+    cles[$(_key "$gguf")]=1
   done
-  if [[ $n38 -gt 1 ]]; then
-    warn "$n38 modèles Qwen3.8-27B préchargés : même GGUF (~16 Go) chargé $n38 fois."
+  if [[ ${#par_gguf[@]} -gt 0 ]]; then
+    for gguf in "${!par_gguf[@]}"; do
+      local -a partages=()
+      read -ra partages <<< "${par_gguf[$gguf]}"
+      if [[ ${#partages[@]} -gt 1 ]]; then
+        taille=""
+        [[ -f "$gguf" ]] && taille=" (~$(du -h "$gguf" | cut -f1))"
+        warn "${partages[*]} préchargés : même GGUF $(basename "$gguf")$taille chargé ${#partages[@]} fois."
+      fi
+    done
+    for key in "${!cles[@]}"; do
+      if [[ -n "${cles[$key-mtp]:-}" ]]; then
+        warn "$key ET $key-mtp préchargés : mêmes poids chargés deux fois (deux quants du même modèle)."
+      fi
+    done
   fi
   # Toujours retourner 0 : sous set -e, un dernier test [[ ]] && ... faux
   # ferait sortir la fonction en 1 et tuerait le script avant la génération du ini.

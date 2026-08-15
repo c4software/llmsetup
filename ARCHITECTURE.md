@@ -53,7 +53,8 @@ common → models → ini → preload → setup → bench → spec → service �
   `generate_models_ini`.
 - `preload.sh` : sélection interactive (`select_preload_models`, gum ou
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
-  doublons de GGUF), `cmd_preload`.
+  doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
+  dossiers `<clé>`/`<clé>-mtp`), `cmd_preload`.
 - `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).

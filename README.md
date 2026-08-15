@@ -119,9 +119,9 @@ peut porter plusieurs `VAR=fichier` (modèle + drafter MTP externe, cas Gemma) ;
 deux `modele` peuvent référencer le même `*_PATH` (même GGUF, cas Qwen3.8-27B).
 
 Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.
-Cas particulier : si le nouveau modèle duplique les poids d'un autre
-(préchargement des deux = double chargement), ajouter un garde-fou dans
-`_preload_sanity` (`lib/preload.sh`).
+Les garde-fous de préchargement (poids dupliqués) sont dérivés des
+déclarations : même GGUF partagé, ou dossiers `<clé>` et `<clé>-mtp` — nommer
+la variante MTP avec le suffixe `-mtp` suffit, rien d'autre à maintenir.
 
 ## Outils (tools/)
 
