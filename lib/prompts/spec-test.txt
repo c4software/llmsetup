@@ -1,0 +1,6 @@
+Écris un module Python `inventory.py` complet, sans commentaire superflu, contenant :
+1. une dataclass `Item` (sku: str, name: str, qty: int, unit_price: float) avec validation dans __post_init__ (qty >= 0, unit_price > 0, sku non vide) ;
+2. une classe `Inventory` avec add(item), remove(sku, qty), get(sku), total_value(), low_stock(threshold=5) qui renvoie une liste triée par qty croissante, et to_json()/from_json(str) ;
+3. les exceptions `ItemNotFound` et `InsufficientStock` ;
+4. un bloc de tests pytest (`test_inventory.py`) couvrant chaque méthode, y compris les cas d'erreur, avec au moins 12 tests.
+Réponds uniquement avec les deux fichiers dans des blocs de code.

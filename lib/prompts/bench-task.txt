@@ -1,0 +1,1 @@
+À partir de ce contexte, écris un module Python inventory.py avec une dataclass Item (sku, name, qty, unit_price) validée, une classe Inventory (add, remove, get, total_value, low_stock, to_json, from_json), les exceptions ItemNotFound et InsufficientStock, puis des tests pytest. Réponds uniquement avec le code.
