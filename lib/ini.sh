@@ -17,6 +17,10 @@ load_bench_conf() {
     dev="${line#*=}";  dev="${dev// /}"
     [[ -n "$key" && -n "$dev" ]] && BENCH_DEVICE[$key]="$dev"
   done < "$BENCH_CONF"
+  # return 0 explicite : si la dernière ligne du fichier ne passe pas le test
+  # ci-dessus, la boucle (donc la fonction) retourne 1 et set -e tue le script
+  # en plein generate_models_ini, après que la redirection a tronqué models.ini
+  return 0
 }
 
 # Clé modèle d'un modèle = dossier du GGUF référencé par sa ligne "model ="
@@ -40,6 +44,8 @@ load_preload_conf() {
   else
     for p in "${DEFAULT_PRELOAD[@]}"; do PRELOADED[$p]=1; done
   fi
+  # même garde set -e que load_bench_conf (dernière ligne = modèle retiré)
+  return 0
 }
 
 declare -A SPEC_NMAX
@@ -53,6 +59,10 @@ load_spec_conf() {
     v="${line#*=}";  v="${v// /}"
     [[ -n "${MODEL_INI[$k]:-}" && "$v" =~ ^[0-9]+$ ]] && SPEC_NMAX[$k]="$v"
   done < "$SPEC_CONF"
+  # même garde set -e que load_bench_conf : c'est ce cas précis (dernière
+  # ligne de spec-nmax.conf référençant un modèle retiré du script) qui a
+  # produit un models.ini vide
+  return 0
 }
 
 # n-max effectif d'un modèle : surcharge conf sinon valeur MODEL_INI (vide si
