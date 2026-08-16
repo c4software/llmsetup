@@ -32,7 +32,7 @@ cmd_start() {
 }
 
 # =============================================================================
-# Service systemd USER — pilotable sans root (systemctl --user).
+# Service systemd USER — piloté par systemctl --user.
 # loginctl enable-linger : les services user de ce compte démarrent au boot,
 # sans session ouverte (polkit autorise le linger sur son propre compte).
 # =============================================================================
@@ -79,7 +79,7 @@ SERVICE
   fi
 
   info "✅ Service installé : $SERVICE_FILE"
-  info "Commandes utiles (sans sudo) :"
+  info "Commandes utiles :"
   info "  systemctl --user start   $SERVICE_NAME"
   info "  systemctl --user stop    $SERVICE_NAME"
   info "  systemctl --user restart $SERVICE_NAME"

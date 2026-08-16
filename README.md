@@ -49,7 +49,7 @@ systemctl --user start llama-server
 | `--spec-test [modèle] [n]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--start` | Lance llama-server sur le port 8009 (commande du service) |
-| `--install-service`, `--uninstall-service` | Service systemd user (systemctl --user, sans sudo) |
+| `--install-service`, `--uninstall-service` | Service systemd user (systemctl --user) |
 | `--help` | Aide, liste des modèles et des clés de téléchargement |
 
 ## Workflow typique

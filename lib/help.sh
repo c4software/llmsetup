@@ -48,13 +48,13 @@ Commandes :
                            ini régénéré + restart + spec-test ; retient le meilleur
                            mesuré (à <2 %, le plus petit), l'écrit dans
                            spec-nmax.conf (surcharge du défaut script), restart final.
-                           Restarts via systemctl --user (sans root)
+                           Restarts via systemctl --user
                            Sans modèle : choix interactif parmi les MTP présents.
                            4 passes par défaut. Sert à régler
                            spec-draft-n-max (éditer le script, --preload, re-tester)
   --start                  Lance llama-server sur :$SERVER_PORT (défaut sans argument)
   --install-service        Installe/active le service systemd USER $SERVICE_NAME
-                           (systemctl --user, sans sudo) + linger (démarrage au boot)
+                           (systemctl --user) + linger (démarrage au boot)
   --uninstall-service      Arrête, désactive et supprime le service user
   --help, -h               Cette aide
 

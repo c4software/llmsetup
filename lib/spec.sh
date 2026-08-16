@@ -273,7 +273,7 @@ _spec_analyze() {
 # fin : analyse sur tous les runs, choix = meilleur MESURÉ (à <2 %, le plus
 # petit k), écriture dans spec-nmax.conf, ini régénéré, restart final.
 # Le service systemd user est requis (un llama-server manuel ne peut pas être
-# relancé proprement) ; tout passe par systemctl --user, sans root.
+# relancé proprement) ; tout passe par systemctl --user.
 # =============================================================================
 
 cmd_spec_tune() {
@@ -305,7 +305,7 @@ cmd_spec_tune() {
   info "spec-tune '$preset' — n-max à tester : ${ks[*]} ($passes passes chacun), valeur actuelle : $before"
   warn "Chaque n-max = régénération du ini + restart de $SERVICE_NAME (les modèles préchargés se rechargent)."
   info "Le routeur ne lit le ini qu'au démarrage : chaque n-max impose un"
-  info "  'systemctl --user restart $SERVICE_NAME' (service user, sans root)."
+  info "  'systemctl --user restart $SERVICE_NAME' (service user)."
 
   local gguf mkey mdev
   gguf="$(basename "$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)")"
@@ -337,7 +337,11 @@ cmd_spec_tune() {
     local t=0
     until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
       sleep 2; t=$((t+2))
-      [[ $t -ge 120 ]] && error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
+      # if/fi obligatoire : "[[ ... ]] && error" retourne 1 tant que le timeout
+      # n'est pas atteint et set -e tuerait la boucle à la 1re itération
+      if [[ $t -ge 120 ]]; then
+        error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
+      fi
     done
     cmd_spec_test "$preset" "$passes"
   done

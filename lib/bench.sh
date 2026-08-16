@@ -213,7 +213,7 @@ cmd_bench() {
 #   - verdict partagé (un device gagne le prefill, l'autre le décode, au-delà
 #     de 2 %) : rien d'écrit, tableau affiché, choix manuel dans
 #     bench-devices.conf selon l'usage (agentic = prefill, chat = décode).
-# Restarts via systemctl --user, sans root. Les modèles préchargés se
+# Restarts via systemctl --user. Les modèles préchargés se
 # rechargent à chaque restart : prévoir la durée.
 # =============================================================================
 
@@ -310,7 +310,7 @@ cmd_bench_devices() {
 
   info "Comparaison '$preset' : ${devs[*]} ($passes passes chacun)"
   warn "Chaque device = régénération du ini + restart de $SERVICE_NAME (les modèles préchargés se rechargent)."
-  info "Le routeur ne lit le ini qu'au démarrage : chaque device impose un restart du service user (sans root)."
+  info "Le routeur ne lit le ini qu'au démarrage : chaque device impose un restart du service user."
 
   # Restore garanti (Ctrl-C en pleine comparaison : config non forcée remise)
   BENCH_DEV_DIRTY=0
@@ -337,7 +337,11 @@ cmd_bench_devices() {
     t=0
     until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
       sleep 2; t=$((t+2))
-      [[ $t -ge 120 ]] && error "llama-server ne répond pas après 120 s : journalctl --user -u $SERVICE_NAME -e"
+      # if/fi obligatoire : "[[ ... ]] && error" retourne 1 tant que le timeout
+      # n'est pas atteint et set -e tuerait la boucle à la 1re itération
+      if [[ $t -ge 120 ]]; then
+        error "llama-server ne répond pas après 120 s : journalctl --user -u $SERVICE_NAME -e"
+      fi
     done
     if _bench_one "$preset" "$passes"; then
       # BENCH_ROW = "modèle|prefill|décode|acceptance" : le modèle est le même

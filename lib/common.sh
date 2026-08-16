@@ -122,6 +122,6 @@ SPEC_LOG="$SCRIPT_DIR/spec-tests.log"
 SPEC_CONF="$SCRIPT_DIR/spec-nmax.conf"
 
 SERVICE_NAME="llama-server"
-# Service systemd USER : pilotable sans root (systemctl --user), démarre au
+# Service systemd USER : piloté par systemctl --user, démarre au
 # boot sans session via loginctl enable-linger (posé par --install-service)
 SERVICE_FILE="$HOME/.config/systemd/user/${SERVICE_NAME}.service"
