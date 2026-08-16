@@ -31,9 +31,10 @@ Commandes :
                            Comparaison automatique des devices pour un modèle :
                            pour chaque device (défaut Vulkan0,ROCm0), ini régénéré
                            + restart + bench (n passes, défaut 3), tableau comparatif.
-                           Vainqueur net (marge 2 %) : écrit dans bench-devices.conf,
-                           ini régénéré, restart final. Verdict partagé : rien
-                           d'écrit, choix manuel. Restarts via systemctl --user
+                           Verdict = temps d'un tour d'usage simulé (2000 tokens de
+                           prefill froid + 3000 générés, BENCH_PROFILE_PP/GEN pour
+                           changer) ; vainqueur écrit dans bench-devices.conf,
+                           ini régénéré, restart final. Restarts via systemctl --user
   --list-devices           Backends ggml installés + devices exposés par llama-bench,
                            croisés avec bench-devices.conf (alerte si device disparu)
   --spec-test [modèle] [n] Mesure le décode réel via l'API (spéculation incluse) :

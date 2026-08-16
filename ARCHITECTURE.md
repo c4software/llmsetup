@@ -61,7 +61,9 @@ common → models → ini → preload → setup → bench → spec → service �
 - `bench.sh` : `cmd_bench` (mesure API du serveur en l'état), `_bench_one`,
   sélections, `cmd_bench_devices` (comparaison automatique des devices d'un
   modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré + restart par
-  device, verdict avec marge de 2 %, vainqueur net écrit dans
+  device, verdict = temps d'un tour d'usage simulé `PP/prefill + GEN/décode`
+  (profil `BENCH_PROFILE_PP`/`BENCH_PROFILE_GEN`, défaut 2000/3000 ; à <2 %
+  d'écart le device par défaut est préféré), vainqueur écrit dans
   `bench-devices.conf` via `_bench_save_device`), `cmd_list_devices`.
 - `spec.sh` : `cmd_spec_test`, `cmd_spec_tune`, `_spec_save_conf`, sélection
   des modèles MTP ; l'analyse est déléguée à `py/spec_analyze.py`.

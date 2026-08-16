@@ -205,17 +205,26 @@ cmd_bench() {
 # (BENCH_DEVICE_FORCE), restart du service systemd, attente /health, puis
 # _bench_one (mêmes prompts et mêmes médianes que --bench). Le restart entre
 # deux devices garantit un cache froid : le prefill de la passe 1 est propre
-# et comparable. À la fin, verdict :
-#   - vainqueur net (meilleur décode, et prefill à moins de 2 % du meilleur,
-#     un décode à moins de 2 % avec meilleur prefill prenant le dessus) :
-#     écrit dans bench-devices.conf (clé = dossier GGUF), ini régénéré,
-#     restart final sur la config retenue ;
-#   - verdict partagé (un device gagne le prefill, l'autre le décode, au-delà
-#     de 2 %) : rien d'écrit, tableau affiché, choix manuel dans
-#     bench-devices.conf selon l'usage (agentic = prefill, chat = décode).
+# et comparable.
+#
+# Verdict : temps total simulé d'un tour d'usage type,
+#   t = PP_froid/prefill + GEN/décode   (profil ci-dessous, surchargable par
+#   env : BENCH_PROFILE_PP, BENCH_PROFILE_GEN ; les tokens servis par le
+#   prompt cache coûtent un temps négligeable et sont ignorés).
+# Un scalaire unique tranche toujours, y compris quand un device gagne le
+# prefill et l'autre le décode. Le vainqueur (temps minimal ; à moins de 2 %
+# d'écart, le device par défaut $DEFAULT_DEVICE est préféré, ex aequo =
+# moins de surprises) est écrit dans bench-devices.conf (clé = dossier GGUF),
+# ini régénéré, restart final sur la config retenue.
 # Restarts via systemctl --user. Les modèles préchargés se
 # rechargent à chaque restart : prévoir la durée.
 # =============================================================================
+
+# Profil d'usage simulé : tour agentic type = 2000 tokens de prefill froid
+# (nouveau contexte réellement calculé) + 3000 tokens générés. Le trafic
+# resservi par le prompt cache est hors profil (coût quasi nul).
+BENCH_PROFILE_PP="${BENCH_PROFILE_PP:-2000}"
+BENCH_PROFILE_GEN="${BENCH_PROFILE_GEN:-3000}"
 
 # Écrit "clé = device" dans bench-devices.conf en préservant les autres lignes
 _bench_save_device() {
@@ -359,49 +368,44 @@ cmd_bench_devices() {
     error "Moins de 2 devices mesurés, pas de comparaison possible."
   fi
 
+  # Temps simulé par device : t = PP_froid/prefill + GEN/décode (le "*" d'un
+  # prefill contaminé est ignoré pour le calcul mais reste visible au tableau).
+  # Sortie : une ligne "TIME device secondes" par device, puis "WINNER device"
+  # (temps minimal ; à moins de 2 %, le device par défaut est préféré).
+  local sim winner
+  sim="$(printf '%s\n' "${rows[@]}" | awk -F'|' \
+    -v profpp="$BENCH_PROFILE_PP" -v profgen="$BENCH_PROFILE_GEN" -v def="$DEFAULT_DEVICE" '
+    { d=$1; pp=$2; gsub(/\*/,"",pp); t[d]=profpp/(pp+0)+profgen/($3+0); order[n++]=d }
+    END {
+      best=order[0]
+      for (i=1; i<n; i++) if (t[order[i]] < t[best]) best=order[i]
+      if (def in t && t[def] <= 1.02*t[best]) best=def
+      for (i=0; i<n; i++) printf "TIME %s %.1f\n", order[i], t[order[i]]
+      print "WINNER " best
+    }')"
+  winner="$(echo "$sim" | sed -n 's/^WINNER //p')"
+
   echo ""
   info "════════ Comparaison $preset ($(date '+%F %T'), $passes passes, long contexte) ════════"
   {
-    echo "device|prefill t/s|décode t/s|acceptance"
-    printf '%s\n' "${rows[@]}"
+    echo "device|prefill t/s|décode t/s|acceptance|tour simulé (s)"
+    local r d t
+    for r in "${rows[@]}"; do
+      d="${r%%|*}"
+      t="$(echo "$sim" | sed -n "s/^TIME $d //p")"
+      echo "$r|$t"
+    done
   } | column -t -s'|'
-
-  # Verdict : meilleur décode, un device à moins de 2 % de décode avec un
-  # meilleur prefill prenant le dessus ; s'il reste un device dont le prefill
-  # dépasse de plus de 2 % celui du candidat, verdict partagé (rien d'écrit).
-  local verdict
-  verdict="$(printf '%s\n' "${rows[@]}" | awk -F'|' '
-    { gsub(/\*/,"",$2); pp[$1]=$2+0; dec[$1]=$3+0; order[n++]=$1 }
-    END {
-      best=order[0]
-      for (i=1; i<n; i++) { d=order[i]; if (dec[d] > dec[best]) best=d }
-      for (i=0; i<n; i++) { d=order[i]
-        if (d != best && dec[d] >= 0.98*dec[best] && pp[d] > pp[best]) best=d }
-      for (i=0; i<n; i++) { d=order[i]
-        if (d != best && pp[d] > 1.02*pp[best]) { print "SPLIT " best; exit } }
-      print best
-    }')"
+  info "Tour simulé : $BENCH_PROFILE_PP tokens de prefill froid + $BENCH_PROFILE_GEN générés (BENCH_PROFILE_PP/BENCH_PROFILE_GEN pour changer le profil)."
 
   echo ""
-  if [[ "$verdict" == SPLIT* ]]; then
-    warn "Verdict partagé : aucun device ne domine à la fois le prefill et le décode (marge 2 %)."
-    warn "  Rien d'écrit. Choisir selon l'usage (agentic = prefill, chat = décode) :"
-    warn "  éditer $BENCH_CONF ($(_preset_model_key "$preset") = <device>) puis --preload + restart."
-    info "Restauration de la config initiale..."
-    regen_models_ini
-    systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec : systemctl --user restart $SERVICE_NAME"
-    BENCH_DEV_DIRTY=0
-    trap - EXIT
-    return
-  fi
-
-  local winner="$verdict" mkey before
+  local mkey before
   load_bench_conf
   mkey="$(_preset_model_key "$preset")"
   before="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE (défaut)}"
   _bench_save_device "$mkey" "$winner"
   regen_models_ini
-  info "Vainqueur : $winner, enregistré dans $BENCH_CONF ($mkey = $winner, avant : $before), models.ini régénéré."
+  info "Vainqueur : $winner (tour simulé le plus court), enregistré dans $BENCH_CONF ($mkey = $winner, avant : $before), models.ini régénéré."
   info "Restart final de $SERVICE_NAME sur la config retenue..."
   systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec : systemctl --user restart $SERVICE_NAME"
   BENCH_DEV_DIRTY=0
