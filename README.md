@@ -10,9 +10,10 @@ Ce qu'il gère :
 - génération de `~/models/models.ini` : les réglages de chaque modèle vivent
   dans `lib/models.sh` avec leurs justifications en commentaire ;
 - préchargement always-on ou chargement à la demande (LRU) ;
-- mesure des perfs par l'API du serveur (`--bench`, `--spec-test`) ;
+- mesure des perfs par l'API du serveur (`--bench`, `--bench-devices`,
+  `--spec-test`) ;
 - réglage de la spéculation MTP (`spec-draft-n-max`) par mesure et calibration ;
-- service systemd.
+- service systemd user.
 
 Les backends ggml (Vulkan par défaut, ROCm/HIP optionnel) sont des paquets
 Arch séparés depuis le split de mi-août 2026. Tout est piloté par des fichiers
@@ -58,9 +59,79 @@ systemctl --user start llama-server
 ```bash
 ./setup-llm.sh --setup                # première mise en place
 ./setup-llm.sh --bench all            # perfs de tous les modèles présents
+./setup-llm.sh --bench-devices        # Vulkan ou ROCm pour un modèle ?
 ./setup-llm.sh --spec-tune            # règle spec-draft-n-max d'un modèle MTP
 ./setup-llm.sh --update qwen3.8-27b   # après un re-upload unsloth
 ```
+
+## Mesures de perfs (--bench)
+
+Le script ne mesure jamais les GGUF directement : tout passe par l'API du
+serveur tel qu'il tourne (`/v1/chat/completions`), donc avec les réglages
+réels du `models.ini` (quantisation du cache KV, flash-attn, spéculation MTP
+incluse). Un chiffre de bench est un chiffre de production, pas un
+`llama-bench` sur les poids nus.
+
+`--bench` envoie n passes (défaut 3) par modèle, toutes avec le même prompt :
+
+- la passe 1 porte un long contexte réaliste (`prompts/bench-context.txt`,
+  un cahier des charges, plus la tâche `prompts/bench-task.txt`). Le serveur
+  doit le calculer entièrement : c'est la mesure de prefill. La taille qui
+  fait foi est le `n=` affiché sur la passe, pas une taille visée ;
+- les passes suivantes resoumettent le même contexte, servi par le prompt
+  cache : le temps est dominé par la génération, c'est la mesure de décode
+  (et d'acceptance MTP le cas échéant). Le récap donne la médiane hors
+  passe 1.
+
+La mesure est passive : rien n'est écrit, pas de restart, pas de purge de
+cache. Si la passe 1 a été partiellement servie par le cache (le modèle
+avait déjà vu un préfixe du prompt), le prefill est marqué `*` au récap :
+signalé comme non comparable, jamais corrigé.
+
+Comparabilité : les chiffres dépendent des prompts de `prompts/`. Modifier
+`bench-context.txt` ou `bench-task.txt` invalide la comparaison avec les
+tableaux antérieurs ; ne jamais les toucher au détour d'un autre changement.
+
+## Choix du device (--bench-devices)
+
+Chaque modèle peut tourner sur Vulkan0 (défaut) ou ROCm0, et le meilleur
+choix varie selon le modèle : ROCm est souvent devant en prefill, Vulkan en
+décode. `--bench-devices` tranche automatiquement, sans édition manuelle :
+
+```bash
+./setup-llm.sh --bench-devices                          # choix interactif du modèle
+./setup-llm.sh --bench-devices qwen3.8-27b-mtp-nothink  # modèle donné
+./setup-llm.sh --bench-devices <modèle> Vulkan0,ROCm0 5 # devices et passes explicites
+```
+
+Déroulé : pour chaque device (croisé avec ceux réellement exposés par
+`llama-bench --list-devices`, un backend absent est exclu), le script
+régénère le ini avec le device forcé, redémarre le service par
+`systemctl --user restart` (les modèles préchargés se rechargent, prévoir
+la durée) et lance la même mesure que `--bench`. Le restart entre deux
+devices garantit un cache froid : les prefills se comparent à conditions
+égales. Une interruption en cours de route restaure la config non forcée.
+
+Le verdict est le temps d'un tour d'usage simulé :
+
+```
+t(device) = 2000 tokens de prefill froid / prefill t/s + 3000 générés / décode t/s
+```
+
+Un seul scalaire tranche toujours, y compris quand un device gagne le
+prefill et l'autre le décode. Exemple réel (qwen3.8-27b-mtp-nothink) :
+ROCm0 gagne le prefill (356 contre 307 t/s) mais perd le décode (21,8
+contre 29,9 t/s) ; en temps de tour, Vulkan0 fait 106,7 s contre 143,3 s
+et l'emporte nettement. Le profil se surcharge à l'appel pour un usage
+différent, par exemple `BENCH_PROFILE_PP=8000 BENCH_PROFILE_GEN=500` pour
+du gros contexte à réponse courte. À moins de 2 % d'écart, le device par
+défaut est conservé (pas de bascule sur du bruit de mesure).
+
+Le vainqueur est écrit dans `bench-devices.conf` (clé = dossier du GGUF,
+donc partagée entre les variantes d'un même fichier), le ini est régénéré
+et le service redémarre sur la config retenue. Le fichier reste éditable à
+la main pour forcer un choix. Formule, garde-fous et limites : section
+dédiée dans ARCHITECTURE.md.
 
 ## Fichiers de configuration
 
