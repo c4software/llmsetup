@@ -45,6 +45,7 @@ systemctl --user start llama-server
 | `--cleanup [--yes]` | Supprime les dossiers et GGUF orphelins (dry-run par défaut) |
 | `--preload` | Re-sélectionne les modèles always-on et régénère le ini |
 | `--bench [modèle\|all] [n]` | Mesure le serveur tel qu'il tourne : prefill, décode médian, acceptance MTP, tableau récapitulatif. N'écrit rien |
+| `--bench-devices [modèle] [devices] [n]` | Compare les devices d'un modèle (défaut Vulkan0,ROCm0) : bench avec restart par device, verdict par temps de tour simulé, vainqueur écrit dans `bench-devices.conf` (détail dans ARCHITECTURE.md) |
 | `--list-devices` | Backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
@@ -67,7 +68,7 @@ systemctl --user start llama-server
 
 | Fichier | Rôle |
 |---|---|
-| `bench-devices.conf` | clé (dossier GGUF) = device (Vulkan0/ROCm0), édition manuelle |
+| `bench-devices.conf` | clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par `--bench-devices`, édition manuelle OK |
 | `preload.conf` | modèles préchargés, un par ligne |
 | `spec-nmax.conf` | modèle = spec-draft-n-max retenu par les mesures |
 | `spec-tests.log` | journal TSV des runs `--spec-test` |

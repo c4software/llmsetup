@@ -140,6 +140,49 @@ incohérent (ini changé sans restart) → quarantaine automatique dans le log
 de texte ; t(k) affine ; le modèle sert à suggérer le prochain k à mesurer,
 pas à remplacer la mesure.
 
+## Verdict de --bench-devices (temps de tour simulé)
+
+Comparer deux devices sur deux métriques (prefill t/s, décode t/s) ne
+tranche pas quand chacun gagne la sienne : ROCm est souvent devant en
+prefill, Vulkan en décode. Le verdict ramène donc la comparaison à un seul
+scalaire : le temps d'un tour d'usage type,
+
+```
+t(device) = PP_froid / prefill_t/s  +  GEN / décode_t/s
+```
+
+avec par défaut `PP_froid = 2000` tokens de prefill froid et `GEN = 3000`
+tokens générés (variables d'environnement `BENCH_PROFILE_PP` /
+`BENCH_PROFILE_GEN`, surchargables à l'appel sans toucher au script). Le
+profil représente un tour agentic : un morceau de contexte nouveau à
+calculer réellement, puis une réponse longue. Les tokens resservis par le
+prompt cache sont volontairement hors profil : leur coût réel est quasi
+nul (cf. les passes 2+ du bench, n=4 calculés sur ~1400), les compter
+n'ajouterait que du bruit sans changer l'ordre.
+
+Le vainqueur est le temps minimal, affiché en colonne « tour simulé (s) »
+du tableau. Deux garde-fous :
+
+- à moins de 2 % d'écart, le device par défaut (`DEFAULT_DEVICE`) est
+  préféré : on ne change pas de backend sur du bruit de mesure ;
+- un prefill marqué `*` (passe 1 partiellement servie par le cache) entre
+  dans le calcul sans l'astérisque mais reste signalé au tableau. Le cas
+  est théorique ici : le restart entre devices garantit un cache froid.
+
+Les entrées du calcul sont les médianes de `_bench_one` (prefill de la
+passe 1, décode hors passe 1), donc les mêmes chiffres et les mêmes
+prompts que `--bench` : un tableau `--bench-devices` se compare à un
+tableau `--bench` de la même époque de prompts. Limites assumées : le
+modèle est linéaire (pas de dépendance du prefill à la taille du contexte
+ni du décode à la profondeur), et l'acceptance MTP n'entre pas dans la
+formule, elle est déjà incluse dans le décode mesuré.
+
+Exemple (qwen3.8-27b-mtp-nothink, 2026-08-16) : Vulkan0 307 pp / 29,9 tg
+donne 106,7 s ; ROCm0 356 pp / 21,8 tg donne 143,3 s. Le gain de prefill
+de ROCm (+16 %) ne compense pas son décode plus lent (-27 %) : sur ce
+profil, le décode domine dès que GEN/décode dépasse largement
+PP/prefill, ce qui est le cas de tous les modèles denses de ce parc.
+
 ## Invariants (à ne pas casser)
 
 - `models.ini` **byte-identique** à confs égales : `generate_models_ini` est
