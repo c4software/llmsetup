@@ -290,7 +290,7 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 # Qwen3-Coder-Next — MoE 80B hybrid-attention, agentic coding
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : MoE hybrid-attention incompatible
-# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench.
+# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
 llama_model qwen3-coder-next "
 model            = $QWEN3_CODER_NEXT_PATH
 ctx-size         = 131072
@@ -488,7 +488,7 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 # Module DSpark (spéculation) : port llama.cpp soumis upstream (#25683),
 #   pas encore mergé mainline — à activer ici le jour du merge
 #   (spec-type = draft-dspark + drafter GGUF). Gain modeste attendu sur APU.
-# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench.
+# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072
@@ -534,7 +534,7 @@ download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
 #   uniquement via le fork poolside/llama.cpp branche `laguna`
 #   (--spec-type draft-dflash --spec-draft-n-max 15), pas dans le mainline —
 #   retours communauté : jusqu'à +30 tok/s de décode selon les tâches.
-# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench.
+# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
 llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
 ctx-size         = 262144

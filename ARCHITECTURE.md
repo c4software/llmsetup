@@ -59,11 +59,15 @@ common → models → ini → preload → setup → bench → spec → service �
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
 - `bench.sh` : `cmd_bench` (mesure API du serveur en l'état), `_bench_one`,
-  sélections, `cmd_list_devices`.
+  sélections, `cmd_bench_devices` (comparaison automatique des devices d'un
+  modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré + restart par
+  device, verdict avec marge de 2 %, vainqueur net écrit dans
+  `bench-devices.conf` via `_bench_save_device`), `cmd_list_devices`.
 - `spec.sh` : `cmd_spec_test`, `cmd_spec_tune`, `_spec_save_conf`, sélection
   des modèles MTP ; l'analyse est déléguée à `py/spec_analyze.py`.
 - `service.sh` : `cmd_start` (`--models-max` = préchargés + 1, min 2),
-  `cmd_install_service` (service **système**, `ExecStart` via `realpath` du
+  `cmd_install_service` (service **user** piloté par `systemctl --user`, linger
+  activé pour le démarrage au boot, `ExecStart` via `realpath` du
   script, `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` posé d'office pour ROCm/iGPU),
   `cmd_uninstall_service`.
 - `help.sh` : `cmd_help`.

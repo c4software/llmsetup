@@ -18,23 +18,23 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # déjà mmap'és restent sur l'ancien inode tant que le serveur n'a pas redémarré.
 # Non-interactif : jamais de restart automatique, juste le rappel.
 _maybe_restart_service() {
-  systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null || return 0
+  systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null || return 0
   local reply="n"
   if [[ -t 0 ]]; then
-    read -r -p "Le service $SERVICE_NAME tourne — redémarrer maintenant pour appliquer (sudo) ? [O/n] " reply
+    read -r -p "Le service $SERVICE_NAME tourne — redémarrer maintenant pour appliquer ? [O/n] " reply
     reply="${reply:-o}"
   else
     warn "Service $SERVICE_NAME actif — redémarrage non effectué (entrée non interactive)."
-    warn "  Appliquer : sudo systemctl restart $SERVICE_NAME"
+    warn "  Appliquer : systemctl --user restart $SERVICE_NAME"
     return 0
   fi
   if [[ "$reply" =~ ^[oOyY]$ ]]; then
     info "Redémarrage de $SERVICE_NAME..."
-    sudo systemctl restart "$SERVICE_NAME" \
+    systemctl --user restart "$SERVICE_NAME" \
       && info "✅ $SERVICE_NAME redémarré." \
-      || warn "Redémarrage en échec — voir : journalctl -u $SERVICE_NAME -e"
+      || warn "Redémarrage en échec — voir : journalctl --user -u $SERVICE_NAME -e"
   else
-    info "Redémarrage sauté — appliquer plus tard : sudo systemctl restart $SERVICE_NAME"
+    info "Redémarrage sauté — appliquer plus tard : systemctl --user restart $SERVICE_NAME"
   fi
 }
 
@@ -122,4 +122,6 @@ SPEC_LOG="$SCRIPT_DIR/spec-tests.log"
 SPEC_CONF="$SCRIPT_DIR/spec-nmax.conf"
 
 SERVICE_NAME="llama-server"
-SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+# Service systemd USER : pilotable sans root (systemctl --user), démarre au
+# boot sans session via loginctl enable-linger (posé par --install-service)
+SERVICE_FILE="$HOME/.config/systemd/user/${SERVICE_NAME}.service"

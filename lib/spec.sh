@@ -125,7 +125,7 @@ cmd_spec_test() {
   command -v curl >/dev/null || error "curl introuvable"
   command -v python3 >/dev/null || error "python3 introuvable"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — sudo systemctl start $SERVICE_NAME"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
 
   load_spec_conf
   local nmax nmax_cfg nmax_srv
@@ -138,7 +138,7 @@ cmd_spec_test() {
   nmax="${nmax_srv:-$nmax_cfg}"
   if [[ -n "$nmax_srv" && -n "$nmax_cfg" && "$nmax_srv" != "$nmax_cfg" ]]; then
     warn "Désaccord n-max : serveur=$nmax_srv, script/conf=$nmax_cfg → le ini a changé sans restart."
-    warn "  Ce run mesure et journalise n-max $nmax_srv (réel). Appliquer la config : sudo systemctl restart $SERVICE_NAME"
+    warn "  Ce run mesure et journalise n-max $nmax_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
   fi
 
   # --- En-tête : contexte complet du run, à coller tel quel dans un échange ---
@@ -272,8 +272,8 @@ _spec_analyze() {
 # restart du service systemd, attente /health, --spec-test (journalisé). À la
 # fin : analyse sur tous les runs, choix = meilleur MESURÉ (à <2 %, le plus
 # petit k), écriture dans spec-nmax.conf, ini régénéré, restart final.
-# Sudo demandé au premier restart (cache sudo ensuite). Le service systemd est
-# requis (un llama-server manuel ne peut pas être relancé proprement).
+# Le service systemd user est requis (un llama-server manuel ne peut pas être
+# relancé proprement) ; tout passe par systemctl --user, sans root.
 # =============================================================================
 
 cmd_spec_tune() {
@@ -289,7 +289,7 @@ cmd_spec_tune() {
   [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset'"
   echo "${MODEL_INI[$preset]}" | grep -q '^spec-type[[:space:]]*=[[:space:]]*draft-mtp' \
     || error "'$preset' n'est pas un modèle spéculatif (spec-type = draft-mtp requis)"
-  systemctl is-enabled "$SERVICE_NAME" &>/dev/null \
+  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
     || error "Service $SERVICE_NAME non installé — --spec-tune a besoin de le redémarrer entre deux n-max (--install-service)."
 
   local -a ks=()
@@ -304,11 +304,8 @@ cmd_spec_tune() {
   before="$(_preset_nmax "$preset")"
   info "spec-tune '$preset' — n-max à tester : ${ks[*]} ($passes passes chacun), valeur actuelle : $before"
   warn "Chaque n-max = régénération du ini + restart de $SERVICE_NAME (les modèles préchargés se rechargent)."
-  info "sudo requis : le routeur ne lit le ini qu'au démarrage, chaque n-max impose donc"
-  info "  'systemctl restart $SERVICE_NAME' (service système). Rien d'autre ne passe par root."
-  # Prendre le ticket sudo maintenant plutôt qu'au milieu de la boucle (mot de
-  # passe demandé pendant qu'un run tourne = invite noyée dans la sortie).
-  sudo -v || error "sudo refusé — spec-tune ne peut pas redémarrer $SERVICE_NAME."
+  info "Le routeur ne lit le ini qu'au démarrage : chaque n-max impose un"
+  info "  'systemctl --user restart $SERVICE_NAME' (service user, sans root)."
 
   local gguf mkey mdev
   gguf="$(basename "$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)")"
@@ -323,7 +320,7 @@ cmd_spec_tune() {
       warn "spec-tune interrompu — régénération du ini sans valeur forcée + restart."
       unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET
       regen_models_ini
-      sudo systemctl restart "$SERVICE_NAME" || true
+      systemctl --user restart "$SERVICE_NAME" || true
       SPEC_TUNE_DIRTY=0
     fi
   }
@@ -335,12 +332,12 @@ cmd_spec_tune() {
     export SPEC_NMAX_FORCE="$k" SPEC_NMAX_FORCE_PRESET="$preset"
     SPEC_TUNE_DIRTY=1
     regen_models_ini
-    sudo systemctl restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
+    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
     # attente du routeur (les poids se chargent à la 1re requête, passe froide ignorée)
     local t=0
     until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
       sleep 2; t=$((t+2))
-      [[ $t -ge 120 ]] && error "llama-server ne répond pas après 120 s — journalctl -u $SERVICE_NAME -e"
+      [[ $t -ge 120 ]] && error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
     done
     cmd_spec_test "$preset" "$passes"
   done
@@ -355,7 +352,7 @@ cmd_spec_tune() {
   if [[ ! "$rec" =~ ^[0-9]+$ ]]; then
     warn "Pas de recommandation exploitable — config remise à l'état initial ($before)."
     regen_models_ini
-    sudo systemctl restart "$SERVICE_NAME" || true
+    systemctl --user restart "$SERVICE_NAME" || true
     SPEC_TUNE_DIRTY=0
     return
   fi
@@ -365,7 +362,7 @@ cmd_spec_tune() {
   regen_models_ini
   info "✅ $preset : spec-draft-n-max = $rec enregistré dans $SPEC_CONF (avant : $before)"
   info "Restart final de $SERVICE_NAME sur la valeur retenue..."
-  sudo systemctl restart "$SERVICE_NAME" || warn "Restart en échec — sudo systemctl restart $SERVICE_NAME"
+  systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec — systemctl --user restart $SERVICE_NAME"
   SPEC_TUNE_DIRTY=0
   trap - EXIT
 }

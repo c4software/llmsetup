@@ -27,6 +27,13 @@ Commandes :
                            décode et acceptance MTP médians, tableau récapitulatif.
                            Pas de restart, rien d'écrit. Sans argument : sélection
                            interactive
+  --bench-devices [modèle] [devices] [n]
+                           Comparaison automatique des devices pour un modèle :
+                           pour chaque device (défaut Vulkan0,ROCm0), ini régénéré
+                           + restart + bench (n passes, défaut 3), tableau comparatif.
+                           Vainqueur net (marge 2 %) : écrit dans bench-devices.conf,
+                           ini régénéré, restart final. Verdict partagé : rien
+                           d'écrit, choix manuel. Restarts via systemctl --user
   --list-devices           Backends ggml installés + devices exposés par llama-bench,
                            croisés avec bench-devices.conf (alerte si device disparu)
   --spec-test [modèle] [n] Mesure le décode réel via l'API (spéculation incluse) :
@@ -41,17 +48,19 @@ Commandes :
                            ini régénéré + restart + spec-test ; retient le meilleur
                            mesuré (à <2 %, le plus petit), l'écrit dans
                            spec-nmax.conf (surcharge du défaut script), restart final.
-                           sudo requis (restarts du service système entre les n-max)
+                           Restarts via systemctl --user (sans root)
                            Sans modèle : choix interactif parmi les MTP présents.
                            4 passes par défaut. Sert à régler
                            spec-draft-n-max (éditer le script, --preload, re-tester)
   --start                  Lance llama-server sur :$SERVER_PORT (défaut sans argument)
-  --install-service        Installe/active le service systemd $SERVICE_NAME
-  --uninstall-service      Arrête, désactive et supprime le service
+  --install-service        Installe/active le service systemd USER $SERVICE_NAME
+                           (systemctl --user, sans sudo) + linger (démarrage au boot)
+  --uninstall-service      Arrête, désactive et supprime le service user
   --help, -h               Cette aide
 
 Fichiers (à côté du script, locaux, non versionnés) :
-  bench-devices.conf       clé (dossier GGUF) = device (Vulkan0/ROCm0), édition manuelle
+  bench-devices.conf       clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par
+                           --bench-devices, édition manuelle OK
   preload.conf             modèles préchargés, un par ligne
   spec-tests.log           journal des --spec-test (TSV), base de l'analyse n-max
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
@@ -60,7 +69,7 @@ Fichiers ($CONFIG_DIR) :
 
 Workflow typique :
   ./setup-llm.sh --setup && ./setup-llm.sh --install-service
-  sudo systemctl start $SERVICE_NAME ; journalctl -u $SERVICE_NAME -f
+  systemctl --user start $SERVICE_NAME ; journalctl --user -u $SERVICE_NAME -f
   ./setup-llm.sh --bench all          # perfs de tous les modèles présents
   ./setup-llm.sh --update qwen3.8-27b # après un re-upload unsloth
   ./setup-llm.sh --spec-test          # décode réel d'un modèle MTP (choix interactif)

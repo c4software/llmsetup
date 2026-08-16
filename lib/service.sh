@@ -32,12 +32,13 @@ cmd_start() {
 }
 
 # =============================================================================
-# Service systemd système
+# Service systemd USER — pilotable sans root (systemctl --user).
+# loginctl enable-linger : les services user de ce compte démarrent au boot,
+# sans session ouverte (polkit autorise le linger sur son propre compte).
 # =============================================================================
 
-
 cmd_install_service() {
-  info "Génération du service systemd système..."
+  info "Génération du service systemd user..."
 
   local script_path
   script_path="$(realpath "$0")"
@@ -46,51 +47,53 @@ cmd_install_service() {
   # ROCm/HIP sur iGPU (alloc en mémoire unifiée/GTT au lieu de la VRAM dédiée) —
   # posé d'office pour que la bascule d'un modèle en ROCm0 ne demande pas de
   # retoucher le service.
-  sudo tee "$SERVICE_FILE" > /dev/null << SERVICE
+  mkdir -p "$(dirname "$SERVICE_FILE")"
+  cat > "$SERVICE_FILE" << SERVICE
 [Unit]
 Description=llama-server — LLM router mode natif
 After=network.target
 
 [Service]
 Type=simple
-User=$USER
-Group=$(id -gn)
 ExecStart=${script_path} --start
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 Environment="PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="HOME=$HOME"
 Environment="GGML_CUDA_ENABLE_UNIFIED_MEMORY=1"
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 SERVICE
 
-  sudo systemctl daemon-reload
-  sudo systemctl enable "$SERVICE_NAME"
+  systemctl --user daemon-reload
+  systemctl --user enable "$SERVICE_NAME"
+  # linger : sans lui, les services user ne démarrent qu'à l'ouverture de
+  # session (et s'arrêtent à la fermeture) — indispensable pour un serveur
+  if loginctl enable-linger "$USER" 2>/dev/null; then
+    info "  Linger activé : le service démarre au boot, sans session ouverte."
+  else
+    warn "  loginctl enable-linger a échoué — le service ne démarrera qu'à l'ouverture"
+    warn "  de session. Activer à la main : sudo loginctl enable-linger $USER"
+  fi
 
   info "✅ Service installé : $SERVICE_FILE"
-  info "  Démarrage automatique au boot activé (multi-user.target)"
-  info "Commandes utiles :"
-  info "  sudo systemctl start   $SERVICE_NAME"
-  info "  sudo systemctl stop    $SERVICE_NAME"
-  info "  sudo systemctl restart $SERVICE_NAME"
-  info "  sudo systemctl status  $SERVICE_NAME"
-  info "  journalctl -u $SERVICE_NAME -f"
+  info "Commandes utiles (sans sudo) :"
+  info "  systemctl --user start   $SERVICE_NAME"
+  info "  systemctl --user stop    $SERVICE_NAME"
+  info "  systemctl --user restart $SERVICE_NAME"
+  info "  systemctl --user status  $SERVICE_NAME"
+  info "  journalctl --user -u $SERVICE_NAME -f"
 }
 
 cmd_uninstall_service() {
-  if ! systemctl is-enabled "$SERVICE_NAME" &>/dev/null; then
+  if ! systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null && [[ ! -f "$SERVICE_FILE" ]]; then
     warn "Service '$SERVICE_NAME' non installé, rien à faire."
     return
   fi
-
-  sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
-  sudo systemctl disable "$SERVICE_NAME"
-  sudo rm -f "$SERVICE_FILE"
-  sudo systemctl daemon-reload
-
-  info "✅ Service '$SERVICE_NAME' désinstallé."
+  systemctl --user disable --now "$SERVICE_NAME" 2>/dev/null || true
+  rm -f "$SERVICE_FILE"
+  systemctl --user daemon-reload
+  info "✅ Service user '$SERVICE_NAME' désinstallé."
 }

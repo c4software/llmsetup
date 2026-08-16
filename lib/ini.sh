@@ -80,9 +80,9 @@ version = 1
 ; Flags globaux — appliqués à tous les modèles sauf surcharge locale
 ;
 ; device = Vulkan0 : backend par défaut. Les surcharges "device = ..." par
-;   modèle ci-dessous proviennent de bench-devices.conf (édition manuelle,
-;   guidée par ./setup-llm.sh --bench) — chaque modèle hérite du device
-;   retenu pour son GGUF. Vérifier au
+;   modèle ci-dessous proviennent de bench-devices.conf (écrit par
+;   ./setup-llm.sh --bench-devices, édition manuelle OK) — chaque modèle
+;   hérite du device retenu pour son GGUF. Vérifier au
 ;   chargement dans les logs : device retenu + flash-attn effectivement actif
 ;   (certaines archs le coupent silencieusement sous HIP, ce qui annule le
 ;   gain de prefill).
@@ -118,6 +118,11 @@ HEADER
     # Surcharge device issue du bench (clé = dossier du GGUF du modèle)
     mkey="$(_preset_model_key "$name" || true)"
     mdev="${BENCH_DEVICE[$mkey]:-}"
+    # BENCH_DEVICE_FORCE (env) prime sur tout, pour le modèle visé seulement :
+    # utilisé par --bench-devices pour tester un device sans l'écrire
+    if [[ -n "${BENCH_DEVICE_FORCE:-}" && "${BENCH_DEVICE_FORCE_PRESET:-}" == "$name" ]]; then
+      mdev="$BENCH_DEVICE_FORCE"
+    fi
     if [[ -n "$mdev" && "$mdev" != "$DEFAULT_DEVICE" ]]; then
       echo "device           = $mdev"
     fi

@@ -12,9 +12,10 @@ set -euo pipefail
 #     runtime ROCm — le runtime seul ne fait plus apparaître ROCm0.
 #   - ./setup-llm.sh --bench <modèle|all> : mesure le serveur tel qu'il
 #     tourne via son API (prefill, décode médian, acceptance MTP). N'écrit
-#     rien : le device par GGUF se choisit à la main dans bench-devices.conf
-#     (à côté du script), appliqué au prochain --preload/--setup + restart.
-#     Sans conf, tout reste sur Vulkan0.
+#     rien. Le device par GGUF vit dans bench-devices.conf (à côté du
+#     script) : rempli par --bench-devices (comparaison automatique
+#     Vulkan/ROCm avec restarts) ou à la main, appliqué au prochain
+#     --preload/--setup + restart. Sans conf, tout reste sur Vulkan0.
 # =============================================================================
 
 # =============================================================================
@@ -48,6 +49,7 @@ case "${1:-}" in
   --update)            cmd_update "${2:-}" ;;
   --cleanup)           cmd_cleanup "${2:-}" ;;
   --bench)             cmd_bench "${2:-}" "${3:-}" ;;
+  --bench-devices)     cmd_bench_devices "${2:-}" "${3:-}" "${4:-}" ;;
   --preload)           cmd_preload ;;
   --list-devices)      cmd_list_devices ;;
   --spec-test)         cmd_spec_test "${2:-}" "${3:-}" ;;

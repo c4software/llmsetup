@@ -23,8 +23,9 @@
 #
 # NB : chaque modèle non chargé est chargé par le routeur à la 1re requête
 # (LRU --models-max) — sur --bench all, prévoir les temps de chargement.
-# Le choix du device par modèle reste celui de bench-devices.conf (édition
-# manuelle) ; le réglage MTP passe par --spec-test/--spec-tune.
+# Le choix du device par modèle reste celui de bench-devices.conf
+# (--bench-devices pour le comparer automatiquement, édition manuelle sinon) ;
+# le réglage MTP passe par --spec-test/--spec-tune.
 # =============================================================================
 
 BENCH_PASSES=3
@@ -94,6 +95,9 @@ _bench_presets() {
     gguf="$(echo "${MODEL_INI[$p]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
     [[ -f "$gguf" ]] && BENCH_PRESETS+=("$p")
   done
+  # Sans ce return, un dernier GGUF absent fait retourner 1 à la fonction et
+  # set -e tue le script en silence chez l'appelant
+  return 0
 }
 
 # Sélection interactive des modèles à bencher (gum ou fallback numéroté).
@@ -144,7 +148,7 @@ cmd_bench() {
   command -v curl >/dev/null || error "curl introuvable"
   command -v python3 >/dev/null || error "python3 introuvable"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — sudo systemctl start $SERVICE_NAME"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
 
   if [[ -z "$target" ]]; then
     if [[ -t 0 ]]; then
@@ -187,6 +191,217 @@ cmd_bench() {
   if printf '%s\n' "${rows[@]}" | grep -q '\*|'; then
     echo "* prefill contaminé par le cache — chiffre non comparable"
   fi
+}
+
+# =============================================================================
+# bench-devices — comparaison automatique des devices pour un modèle
+#
+# Usage : ./setup-llm.sh --bench-devices [modèle] [devices] [passes]
+#   modèle  : sélection interactive si absent
+#   devices : liste séparée par des virgules, défaut "Vulkan0,ROCm0"
+#   passes  : défaut 3 (comme --bench)
+#
+# Pour chaque device : models.ini régénéré avec le device forcé
+# (BENCH_DEVICE_FORCE), restart du service systemd, attente /health, puis
+# _bench_one (mêmes prompts et mêmes médianes que --bench). Le restart entre
+# deux devices garantit un cache froid : le prefill de la passe 1 est propre
+# et comparable. À la fin, verdict :
+#   - vainqueur net (meilleur décode, et prefill à moins de 2 % du meilleur,
+#     un décode à moins de 2 % avec meilleur prefill prenant le dessus) :
+#     écrit dans bench-devices.conf (clé = dossier GGUF), ini régénéré,
+#     restart final sur la config retenue ;
+#   - verdict partagé (un device gagne le prefill, l'autre le décode, au-delà
+#     de 2 %) : rien d'écrit, tableau affiché, choix manuel dans
+#     bench-devices.conf selon l'usage (agentic = prefill, chat = décode).
+# Restarts via systemctl --user, sans root. Les modèles préchargés se
+# rechargent à chaque restart : prévoir la durée.
+# =============================================================================
+
+# Écrit "clé = device" dans bench-devices.conf en préservant les autres lignes
+_bench_save_device() {
+  local key="$1" dev="$2" tmp
+  tmp="$(mktemp)"
+  {
+    echo "; bench-devices.conf : device retenu par dossier GGUF"
+    echo "; écrit par ./setup-llm.sh --bench-devices, édition manuelle OK,"
+    echo "; supprimer une ligne = retour au device par défaut ($DEFAULT_DEVICE)"
+    if [[ -f "$BENCH_CONF" ]]; then
+      grep -v '^[;#]' "$BENCH_CONF" | grep -v "^${key}[[:space:]]*=" | grep -v '^[[:space:]]*$' || true
+    fi
+    echo "${key} = ${dev}"
+  } > "$tmp"
+  mv "$tmp" "$BENCH_CONF"
+}
+
+# Sélection interactive d'un seul modèle à comparer (gum ou fallback numéroté).
+# Résultat dans BENCH_DEV_CHOICE (vide = annulé).
+BENCH_DEV_CHOICE=""
+_bench_select_one() {
+  _bench_presets
+  BENCH_DEV_CHOICE=""
+  [[ ${#BENCH_PRESETS[@]} -gt 0 ]] || error "Aucun GGUF présent sous $MODELS_BASE, lancer --setup."
+  if [[ ! -t 0 ]]; then
+    error "Entrée non interactive : préciser le modèle (./setup-llm.sh --bench-devices <modèle>)"
+  fi
+  if command -v gum >/dev/null 2>&1; then
+    local line
+    line="$(printf '%s\n' "${BENCH_PRESETS[@]}" \
+      | gum choose --height 20 --header "Modèle à comparer (entrée = valider)")" || line=""
+    [[ -n "$line" ]] && BENCH_DEV_CHOICE="$line"
+  else
+    info "gum absent (pacman -S gum), fallback numéroté."
+    echo ""
+    echo "Modèles disponibles :"
+    local i=1 p
+    for p in "${BENCH_PRESETS[@]}"; do
+      printf "  %2d  %s\n" "$i" "$p"
+      ((i++))
+    done
+    echo ""
+    local n
+    read -r -p "Numéro à comparer (vide = annuler) : " n
+    if [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#BENCH_PRESETS[@]} )); then
+      BENCH_DEV_CHOICE="${BENCH_PRESETS[$((n-1))]}"
+    fi
+  fi
+}
+
+cmd_bench_devices() {
+  local preset="${1:-}"
+  local devlist="${2:-Vulkan0,ROCm0}"
+  local passes="${3:-$BENCH_PASSES}"
+
+  if [[ -z "$preset" ]]; then
+    _bench_select_one
+    [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné, comparaison annulée."; return; }
+    preset="$BENCH_DEV_CHOICE"
+  fi
+  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset' (voir --help)"
+  local gguf
+  gguf="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
+  [[ -f "$gguf" ]] || error "GGUF absent pour '$preset' ($gguf), lancer --setup."
+  [[ "$passes" =~ ^[0-9]+$ && "$passes" -ge 2 ]] || error "Nombre de passes invalide : '$passes' (minimum 2)"
+  command -v curl >/dev/null || error "curl introuvable"
+  command -v python3 >/dev/null || error "python3 introuvable"
+  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
+    || error "Service $SERVICE_NAME non installé : --bench-devices doit le redémarrer entre deux devices (--install-service)."
+
+  # Devices demandés, croisés avec ceux réellement exposés par ggml
+  local -a devs=()
+  local d
+  IFS=',' read -r -a devs <<< "$devlist"
+  export PATH="$HOME/.local/bin:$PATH"
+  if command -v llama-bench >/dev/null 2>&1; then
+    local exposed
+    exposed="$(llama-bench --list-devices 2>/dev/null || true)"
+    local -a kept=()
+    for d in "${devs[@]}"; do
+      if grep -q "$d" <<<"$exposed"; then
+        kept+=("$d")
+      else
+        warn "Device '$d' non exposé (llama-bench --list-devices), exclu. Backend manquant ? (--list-devices)"
+      fi
+    done
+    devs=("${kept[@]}")
+  else
+    warn "llama-bench introuvable, devices non vérifiés avant chargement."
+  fi
+  [[ ${#devs[@]} -ge 2 ]] || error "Moins de 2 devices à comparer, rien à faire."
+
+  info "Comparaison '$preset' : ${devs[*]} ($passes passes chacun)"
+  warn "Chaque device = régénération du ini + restart de $SERVICE_NAME (les modèles préchargés se rechargent)."
+  info "Le routeur ne lit le ini qu'au démarrage : chaque device impose un restart du service user (sans root)."
+
+  # Restore garanti (Ctrl-C en pleine comparaison : config non forcée remise)
+  BENCH_DEV_DIRTY=0
+  _bench_devices_restore() {
+    if [[ "$BENCH_DEV_DIRTY" -eq 1 ]]; then
+      warn "Comparaison interrompue : régénération du ini sans device forcé + restart."
+      unset BENCH_DEVICE_FORCE BENCH_DEVICE_FORCE_PRESET
+      regen_models_ini
+      systemctl --user restart "$SERVICE_NAME" || true
+      BENCH_DEV_DIRTY=0
+    fi
+  }
+  trap _bench_devices_restore EXIT
+
+  local -a rows=()
+  local t
+  for d in "${devs[@]}"; do
+    echo ""
+    info "════════ device = $d ════════"
+    export BENCH_DEVICE_FORCE="$d" BENCH_DEVICE_FORCE_PRESET="$preset"
+    BENCH_DEV_DIRTY=1
+    regen_models_ini
+    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
+    t=0
+    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
+      sleep 2; t=$((t+2))
+      [[ $t -ge 120 ]] && error "llama-server ne répond pas après 120 s : journalctl --user -u $SERVICE_NAME -e"
+    done
+    if _bench_one "$preset" "$passes"; then
+      # BENCH_ROW = "modèle|prefill|décode|acceptance" : le modèle est le même
+      # partout, la ligne du récap porte le device
+      rows+=("$d|${BENCH_ROW#*|}")
+    else
+      warn "  $d : mesure incomplète, exclu de la comparaison."
+    fi
+  done
+  unset BENCH_DEVICE_FORCE BENCH_DEVICE_FORCE_PRESET
+
+  if [[ ${#rows[@]} -lt 2 ]]; then
+    _bench_devices_restore
+    trap - EXIT
+    error "Moins de 2 devices mesurés, pas de comparaison possible."
+  fi
+
+  echo ""
+  info "════════ Comparaison $preset ($(date '+%F %T'), $passes passes, long contexte) ════════"
+  {
+    echo "device|prefill t/s|décode t/s|acceptance"
+    printf '%s\n' "${rows[@]}"
+  } | column -t -s'|'
+
+  # Verdict : meilleur décode, un device à moins de 2 % de décode avec un
+  # meilleur prefill prenant le dessus ; s'il reste un device dont le prefill
+  # dépasse de plus de 2 % celui du candidat, verdict partagé (rien d'écrit).
+  local verdict
+  verdict="$(printf '%s\n' "${rows[@]}" | awk -F'|' '
+    { gsub(/\*/,"",$2); pp[$1]=$2+0; dec[$1]=$3+0; order[n++]=$1 }
+    END {
+      best=order[0]
+      for (i=1; i<n; i++) { d=order[i]; if (dec[d] > dec[best]) best=d }
+      for (i=0; i<n; i++) { d=order[i]
+        if (d != best && dec[d] >= 0.98*dec[best] && pp[d] > pp[best]) best=d }
+      for (i=0; i<n; i++) { d=order[i]
+        if (d != best && pp[d] > 1.02*pp[best]) { print "SPLIT " best; exit } }
+      print best
+    }')"
+
+  echo ""
+  if [[ "$verdict" == SPLIT* ]]; then
+    warn "Verdict partagé : aucun device ne domine à la fois le prefill et le décode (marge 2 %)."
+    warn "  Rien d'écrit. Choisir selon l'usage (agentic = prefill, chat = décode) :"
+    warn "  éditer $BENCH_CONF ($(_preset_model_key "$preset") = <device>) puis --preload + restart."
+    info "Restauration de la config initiale..."
+    regen_models_ini
+    systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec : systemctl --user restart $SERVICE_NAME"
+    BENCH_DEV_DIRTY=0
+    trap - EXIT
+    return
+  fi
+
+  local winner="$verdict" mkey before
+  load_bench_conf
+  mkey="$(_preset_model_key "$preset")"
+  before="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE (défaut)}"
+  _bench_save_device "$mkey" "$winner"
+  regen_models_ini
+  info "Vainqueur : $winner, enregistré dans $BENCH_CONF ($mkey = $winner, avant : $before), models.ini régénéré."
+  info "Restart final de $SERVICE_NAME sur la config retenue..."
+  systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec : systemctl --user restart $SERVICE_NAME"
+  BENCH_DEV_DIRTY=0
+  trap - EXIT
 }
 
 # =============================================================================
