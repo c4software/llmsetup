@@ -35,7 +35,9 @@
 set -euo pipefail
 
 MODELS_BASE="${MODELS_BASE:-$HOME/models}"
-DEV="${DEV:-}"
+# Liste séparée par des virgules, comme --bench-devices. Défaut = DEFAULT_DEVICE
+# du models.sh (Vulkan0) ; "auto" laisse ggml choisir.
+DEV="${DEV:-Vulkan0}"
 DEPTH="${DEPTH:-0}"
 BATCHES="${BATCHES:-1,8,16,32,48}"
 REPS="${REPS:-2}"
@@ -58,20 +60,43 @@ fi
 
 [[ ${#GGUFS[@]} -gt 0 ]] || { echo "Aucun GGUF trouvé sous $MODELS_BASE" >&2; exit 1; }
 
-declare -a DEVARG=()
-[[ -n "$DEV" ]] && DEVARG=(-dev "$DEV")
+# Devices demandés, croisés avec ceux réellement exposés par ggml (même
+# garde-fou que --bench-devices : sans ggml-hip, ROCm0 n'existe pas).
+declare -a DEVS=()
+if [[ "$DEV" == "auto" ]]; then
+  DEVS=("auto")
+else
+  exposed="$(llama-bench --list-devices 2>/dev/null || true)"
+  IFS=',' read -r -a want <<< "$DEV"
+  for d in "${want[@]}"; do
+    if [[ -z "$exposed" ]] || grep -q "$d" <<<"$exposed"; then
+      DEVS+=("$d")
+    else
+      echo "device '$d' non exposé (llama-bench --list-devices), ignoré." >&2
+    fi
+  done
+  [[ ${#DEVS[@]} -gt 0 ]] || { echo "Aucun device demandé n'est exposé." >&2; exit 1; }
+fi
+
+# ROCm/HIP sur iGPU : sans ça les allocations visent la VRAM dédiée (petite)
+# au lieu de la mémoire unifiée/GTT — les gros modèles échouent, et surtout on
+# ne mesurerait pas ce que fait réellement le service (cf. lib/service.sh).
+export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
 echo "# bench-spec-batch — $(date '+%F %T')"
-echo "# host=$(hostname)  device=${DEV:-auto}  depth=$DEPTH  batches=$BATCHES  reps=$REPS  fa=$FA"
-echo "# llama-bench: $(llama-server --version 2>&1 | head -1 || true)"
+echo "# host=$(hostname)  devices=${DEVS[*]}  depth=$DEPTH  batches=$BATCHES  reps=$REPS  fa=$FA"
+echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)"
 echo
 
 for gguf in "${GGUFS[@]}"; do
-  [[ -f "$gguf" ]] || { echo "absent, ignoré : $gguf" >&2; continue; }
-  echo "═══ $(basename "$gguf") ═══"
+ [[ -f "$gguf" ]] || { echo "absent, ignoré : $gguf" >&2; continue; }
+ for dev in "${DEVS[@]}"; do
+  declare -a DEVARG=()
+  [[ "$dev" != "auto" ]] && DEVARG=(-dev "$dev")
+  echo "═══ $(basename "$gguf")  [$dev] ═══"
   if ! out="$(llama-bench -m "$gguf" -p "$BATCHES" -n 0 -d "$DEPTH" \
                           -r "$REPS" -fa "$FA" "${DEVARG[@]}" -o jsonl 2>/dev/null)"; then
-    echo "  échec llama-bench (VRAM/RAM insuffisante ? arch non supportée ?)"
+    echo "  échec llama-bench (RAM insuffisante ? arch non supportée par ce backend ?)"
     echo
     continue
   fi
@@ -130,4 +155,5 @@ else:
         print("            pour eviter les faux departs qui paient le batch sans etre acceptes.")
 '
   echo
+ done
 done
