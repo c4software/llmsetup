@@ -18,6 +18,18 @@
 # C'est la mesure à faire AVANT d'ajouter un spec-type n-gram à un modèle, et
 # elle donne directement le --spec-ngram-map-k-size-m à retenir.
 #
+# Les marches ne sont pas du bruit : ce sont des seuils de dispatch de noyau.
+# Côté Vulkan, ggml/src/ggml-vulkan/ggml-vulkan.cpp déclare
+#     static constexpr uint32_t mul_mat_vec_max_cols = 8;
+# et n'emprunte le noyau vectoriel que si dst->ne[1] <= cette constante ; au-delà
+# il bascule sur le matmul général et son coût de mise en place. Le batch de
+# vérification valant size_m + 1, la dernière taille dans le chemin vectoriel est
+# donc size_m = 7 — mesuré x2,12 de saut à batch 9 sur le 27B Q4 (21/08/2026).
+# C'est un seuil du BACKEND, pas du modèle : même frontière pour tous les denses
+# sur Vulkan0. Les MoE passent par mul_mat_id (dispatch distinct, seuil non
+# identifié) et ROCm/HIP a le sien — d'où la mesure, qui reste la référence :
+# la constante est figée à la compilation d'un build donné et peut changer.
+#
 # Usage :
 #   tools/bench-spec-batch.sh                    # tous les GGUF présents
 #   tools/bench-spec-batch.sh <gguf> [<gguf>...] # modèles précis
