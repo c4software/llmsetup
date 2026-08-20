@@ -4,4 +4,6 @@ plans/
 /preload.conf
 /spec-nmax.conf
 /spec-tests.log
+/spec-batch.log
+/spec-batch.tsv
 __pycache__/

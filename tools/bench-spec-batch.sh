@@ -23,7 +23,13 @@
 #   tools/bench-spec-batch.sh <gguf> [<gguf>...] # modèles précis
 #
 # Variables d'env :
-#   DEV=ROCm0        device ggml (défaut : auto — cf. llama-bench --list-devices)
+#   DEV=Vulkan0,ROCm0  device(s) ggml, liste comme --bench-devices (défaut :
+#                    Vulkan0, le DEFAULT_DEVICE du models.ini) ; "auto" = ggml
+#                    choisit. Chaque modèle est mesuré sur chaque device.
+#   OUT=<fichier>    journal lisible, en APPEND (défaut : spec-batch.log à côté
+#                    de setup-llm.sh, comme spec-tests.log). La sortie reste
+#                    affichée à l'écran en même temps.
+#   TSV=<fichier>    mêmes mesures en TSV pour analyse (défaut : spec-batch.tsv)
 #   DEPTH=0          tokens de contexte déjà en KV avant la mesure.
 #                    0 = rapide, isole le coût des poids (suffit à classer
 #                    dense/MoE). 32768 = réaliste agentic mais TRÈS lent
@@ -33,6 +39,12 @@
 #   FA=auto          -fa on|off|auto
 # =============================================================================
 set -euo pipefail
+
+# Racine du dépôt = parent de tools/ ; les journaux vivent à côté de
+# setup-llm.sh comme spec-tests.log / bench-devices.conf (locaux, .gitignore).
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+OUT="${OUT:-$ROOT_DIR/spec-batch.log}"
+TSV="${TSV:-$ROOT_DIR/spec-batch.tsv}"
 
 MODELS_BASE="${MODELS_BASE:-$HOME/models}"
 # Liste séparée par des virgules, comme --bench-devices. Défaut = DEFAULT_DEVICE
@@ -83,6 +95,13 @@ fi
 # ne mesurerait pas ce que fait réellement le service (cf. lib/service.sh).
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
+# En-tête TSV si le fichier n'existe pas encore (append ensuite).
+[[ -s "$TSV" ]] || printf 'date\tmodele\tdevice\tdepth\tfa\tbatch\tt_forward_ms\tcout_rel\tgain_max\n' > "$TSV"
+export TSV DEPTH FA
+
+# Tout ce qui suit est affiché ET ajouté à $OUT (append : un run ne détruit
+# pas les précédents, on peut comparer deux backends ou deux DEPTH).
+{
 echo "# bench-spec-batch — $(date '+%F %T')"
 echo "# host=$(hostname)  devices=${DEVS[*]}  depth=$DEPTH  batches=$BATCHES  reps=$REPS  fa=$FA"
 echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)"
@@ -100,8 +119,11 @@ for gguf in "${GGUFS[@]}"; do
     echo
     continue
   fi
+  # export, pas un prefixe de commande : un prefixe ne s'appliquerait qu'a
+  # printf (premiere commande du pipeline), pas au python3 qui ecrit le TSV.
+  export DEV_NAME="$dev" MODEL_NAME="$(basename "$gguf")"
   printf '%s\n' "$out" | python3 -c '
-import sys, json
+import sys, json, os, datetime
 rows = []
 for line in sys.stdin:
     line = line.strip()
@@ -118,6 +140,8 @@ rows.sort()
 if not rows:
     print("  aucune mesure exploitable"); sys.exit()
 t1 = dict(rows).get(1) or rows[0][1]
+stamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+tsv = []
 
 hdr = ("batch", "t_forward", "cout rel.", "seuil non-perte", "gain max")
 print("  %6s %12s %10s %18s %9s" % hdr)
@@ -133,6 +157,10 @@ for n, t in rows:
     # 25%% du draft (au-dela, une acceptance partielle devient perdante)
     if n > 1 and frac <= 0.25 and gain > best_gain:
         best_m, best_gain = n, gain
+    tsv.append("%s\t%s\t%s\t%s\t%s\t%d\t%.2f\t%.4f\t%.3f" % (
+        stamp, os.environ.get("MODEL_NAME", "?"), os.environ.get("DEV_NAME", "?"),
+        os.environ.get("DEPTH", "?"), os.environ.get("FA", "?"),
+        n, t * 1000, rel, gain))
 print()
 print("  seuil non-perte = tokens a faire accepter pour ne pas etre plus lent")
 print("                    que le decodage normal ; (%) = part du draft.")
@@ -153,7 +181,19 @@ else:
     else:
         print("            courbe PENTUE (MoE / mur compute) : ajouter --spec-ngram-map-k-min-hits 2")
         print("            pour eviter les faux departs qui paient le batch sans etre acceptes.")
-'
+
+path = os.environ.get("TSV")
+if path and tsv:
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(tsv) + "\n")
+    except OSError as e:
+        print("  (TSV non ecrit : %s)" % e)
+' || echo "  (analyse en échec — mesures brutes conservées dans $OUT)"
   echo
  done
 done
+} 2>&1 | tee -a "$OUT"
+
+echo "→ journal  : $OUT"
+echo "→ mesures  : $TSV"
