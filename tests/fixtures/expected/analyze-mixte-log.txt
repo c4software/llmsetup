@@ -1,0 +1,5 @@
+2026-08-15 10:00:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	2	22.2	0.700	5000	3000	4800	draft-mtp
+2026-08-15 10:20:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	4	25.5	0.557	7000	3900	5200	draft-mtp
+2026-08-15 10:40:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	6	26.0	0.467	9000	4200	5400	draft-mtp
+2026-08-21 09:00:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	4	41.3	0.612	9000	7800	9000	ngram-map-k,draft-mtp
+2026-08-21 09:20:00	qwen3.8-27b-mtp-nothink	Qwen3.8-27B-UD-Q4_K_XL.gguf	ROCm0	4	39.8	0.598	8800	7600	8800	ngram-map-k,draft-mtp

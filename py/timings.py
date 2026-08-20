@@ -10,7 +10,11 @@
 #      dans le récap côté bash)
 #   timings.py --spec  <json> <n° de passe> <flag>     → ligne + GEN=/ACC=/DN=
 #     (flag = "spec" si le modèle est spéculatif : affiche "acceptance=n/a …"
-#      quand draft_n est absent des timings ; "" sinon)
+#      quand draft_n est absent des timings ; "" sinon. "specmix" = spec-type
+#      en liste : draft_n/draft_n_accepted sont alors agrégés sur TOUTES les
+#      implémentations — les stats sont au niveau slot côté llama-server
+#      (server_slot_stats::to_json), le détail par implémentation n'existe que
+#      dans le log du serveur via common_speculative_print_stats().)
 #
 # Les deux branches sont les copies exactes des heredocs d'origine : sys.argv
 # est décalé d'un cran (pop du mode) pour ne pas toucher aux indices.
@@ -62,6 +66,8 @@ elif mode == "--spec":
     dn, da = t.get("draft_n"), t.get("draft_n_accepted")
     if dn:
         acc = f"  acceptance={da/dn:.2f} ({da}/{dn})"
+        if "mix" in sys.argv[3]:
+            acc += " agrégée — détail par implémentation : journalctl"
     elif "spec" in sys.argv[3]:
         acc = "  acceptance=n/a (pas de draft_n dans timings : spéculation inactive ?)"
     else:

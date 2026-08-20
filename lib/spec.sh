@@ -52,15 +52,33 @@ _spec_save_conf() {
   mv "$tmp" "$SPEC_CONF"
 }
 
-# Modèles spéculatifs (spec-type = draft-mtp) dont le GGUF est présent, dans
-# l'ordre de PRESET_ORDER → SPEC_PRESETS
+# spec-type peut porter une LISTE séparée par des virgules : llama.cpp essaie
+# les implémentations dans son ordre de priorité (les draftless d'abord, les
+# draft models ensuite — cf. docs/speculative.md), et la première qui produit
+# un draft non vide gagne le pas de décode. Sortie : valeur normalisée sans
+# espaces, vide si le modèle n'est pas spéculatif.
+_preset_spec_types() {
+  echo "${MODEL_INI[$1]}" | sed -n 's/^spec-type[[:space:]]*=[[:space:]]*//p' | head -1 | tr -d ' '
+}
+
+# Vrai si le spec-type du modèle $1 contient le type $2. Ne PAS ancrer le type
+# juste après le "=" comme le faisait le grep d'origine : avec une liste
+# "ngram-map-k,draft-mtp" il ne matche plus et le modèle disparaît en silence
+# de --spec-test et de --spec-tune.
+_preset_has_spec_type() {
+  local v; v="$(_preset_spec_types "$1")"
+  [[ ",$v," == *",$2,"* ]]
+}
+
+# Modèles à tête MTP (draft-mtp dans leur spec-type, seul ou en liste) dont le
+# GGUF est présent, dans l'ordre de PRESET_ORDER → SPEC_PRESETS
 SPEC_PRESETS=()
 _spec_presets() {
   SPEC_PRESETS=()
   local p body gguf
   for p in "${PRESET_ORDER[@]}"; do
     body="${MODEL_INI[$p]}"
-    echo "$body" | grep -q '^spec-type[[:space:]]*=[[:space:]]*draft-mtp' || continue
+    _preset_has_spec_type "$p" draft-mtp || continue
     gguf="$(echo "$body" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
     [[ -f "$gguf" ]] || continue
     SPEC_PRESETS+=("$p")
@@ -133,9 +151,26 @@ cmd_spec_test() {
   # Valeur RÉELLE côté serveur : /v1/models expose status.args de chaque modèle
   # (le routeur lit le ini au démarrage — le script peut dire 2 quand le serveur
   # tourne encore à 4). C'est elle qui est journalisée et affichée.
-  nmax_srv="$(curl -s "$SPEC_TEST_URL/v1/models" \
+  # Un seul appel à /v1/models, relu deux fois : n-max ET spec-type réels.
+  local models_json
+  models_json="$(curl -s "$SPEC_TEST_URL/v1/models" || true)"
+  nmax_srv="$(printf '%s' "$models_json" \
     | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" 2>/dev/null || true)"
   nmax="${nmax_srv:-$nmax_cfg}"
+
+  # spec-type réel, pour la même raison que le n-max : le ini a pu changer sans
+  # restart. Une liste (virgules) = plusieurs implémentations en concurrence,
+  # ce qui change la lecture de l'acceptance et exclut le run de la
+  # calibration α (k variable par forward) — d'où sa journalisation.
+  local stype_srv stype_cfg stype spec_flag
+  stype_cfg="$(_preset_spec_types "$preset")"
+  stype_srv="$(printf '%s' "$models_json" \
+    | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --spec-type 2>/dev/null || true)"
+  stype="${stype_srv:-$stype_cfg}"
+  spec_flag="${nmax:+spec}"
+  if [[ -n "$spec_flag" && "$stype" == *,* ]]; then
+    spec_flag="specmix"
+  fi
   if [[ -n "$nmax_srv" && -n "$nmax_cfg" && "$nmax_srv" != "$nmax_cfg" ]]; then
     warn "Désaccord n-max : serveur=$nmax_srv, script/conf=$nmax_cfg → le ini a changé sans restart."
     warn "  Ce run mesure et journalise n-max $nmax_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
@@ -161,6 +196,8 @@ cmd_spec_test() {
   echo "gguf       : $(basename "$gguf") ($gsize)"
   echo "device     : $mdev"
   echo "n-max      : ${nmax:-n/a}$( [[ -n "$nmax_srv" ]] && echo " (lu sur le serveur)" || echo " (script/conf)" )$( [[ -n "$nmax_srv" && -n "$nmax_cfg" && "$nmax_srv" != "$nmax_cfg" ]] && echo "  ⚠ script/conf=$nmax_cfg, restart requis" )"
+  [[ "$stype" == *,* ]] && echo "spec-type  : $stype (liste — la 1re implémentation qui drafte gagne le pas ;"
+  [[ "$stype" == *,* ]] && echo "             acceptance agrégée, run exclu de la calibration α)"
   echo "passes     : $passes (max_tokens=1500, temp=0.7, seed=42+n° de passe, prompt fixe inventory/pytest)"
   echo "note       : prompt t/s significatif en passe 1 seulement (prompt cache ensuite, cf. n=/cache=)"
   echo "--- modèle ($preset) ---"
@@ -198,7 +235,7 @@ cmd_spec_test() {
     out="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body")" \
       || { warn "Passe $i : échec curl"; continue; }
     local line
-    line="$(python3 "$SCRIPT_DIR/py/timings.py" --spec "$out" "$i" "${nmax:+spec}")" || true
+    line="$(python3 "$SCRIPT_DIR/py/timings.py" --spec "$out" "$i" "$spec_flag")" || true
     echo "$line" | grep -v '^GEN=\|^ACC=\|^DN=' | sed 's/^/  /'
     local g a dn da pn
     g="$(echo "$line" | sed -n 's/^GEN=//p')"
@@ -227,10 +264,12 @@ cmd_spec_test() {
 
   # --- Journal + analyse n-max ---------------------------------------------
   if [[ -n "$nmax" && -n "$med_gen" && "$sum_dn" -gt 0 ]]; then
-    # date modèle gguf device nmax gen acc drafted accepted predicted
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    # date modèle gguf device nmax gen acc drafted accepted predicted spectype
+    # (11e colonne ajoutée avec le support des listes ; les lignes plus
+    #  anciennes n'en ont pas et sont lues comme draft-mtp seul)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$(date '+%F %T')" "$preset" "$(basename "$gguf")" "$mdev" "$nmax" \
-      "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" >> "$SPEC_LOG"
+      "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" "${stype:-draft-mtp}" >> "$SPEC_LOG"
     echo "--- analyse n-max ---"
     local report rec
     report="$(_spec_analyze "$preset" "$(basename "$gguf")" "$mdev" "$nmax" rec)"
@@ -287,8 +326,8 @@ cmd_spec_tune() {
     preset="$SPEC_CHOICE"
   fi
   [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset'"
-  echo "${MODEL_INI[$preset]}" | grep -q '^spec-type[[:space:]]*=[[:space:]]*draft-mtp' \
-    || error "'$preset' n'est pas un modèle spéculatif (spec-type = draft-mtp requis)"
+  _preset_has_spec_type "$preset" draft-mtp \
+    || error "'$preset' n'a pas de tête MTP (draft-mtp attendu dans spec-type, seul ou en liste)"
   systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
     || error "Service $SERVICE_NAME non installé — --spec-tune a besoin de le redémarrer entre deux n-max (--install-service)."
 

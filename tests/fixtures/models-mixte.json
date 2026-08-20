@@ -1,0 +1,1 @@
+{"object": "list", "data": [{"id": "qwen3.8-27b", "object": "model", "status": {"state": "loaded"}}, {"id": "qwen3.8-27b-mtp-nothink", "object": "model", "status": {"state": "loaded", "args": ["--ctx-size", "131072", "--spec-type", "ngram-map-k,draft-mtp", "--spec-ngram-map-k-size-m", "7", "--spec-draft-n-max", "4", "--parallel", "1"]}}]}

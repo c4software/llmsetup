@@ -19,9 +19,10 @@ import sys, math
 
 
 def load_runs(log, modèle, gguf, dev):
-    """Lit le log TSV, filtre (modèle, gguf, device), met en quarantaine les
-    runs incohérents (réécrit le log) et retourne la liste des runs valides."""
-    runs, lines, bad_idx = [], [], []
+    """Lit le log TSV, filtre (modèle, gguf, device), écarte les runs en
+    spec-type mixte, met en quarantaine les runs incohérents (réécrit le log).
+    Retourne (runs valides, nombre de runs mixtes écartés)."""
+    runs, lines, bad_idx, n_mixte = [], [], [], 0
     try:
         lines = open(log, encoding="utf-8").read().splitlines()
     except FileNotFoundError:
@@ -30,6 +31,21 @@ def load_runs(log, modèle, gguf, dev):
         if line.startswith(";"): continue  # ligne mise en quarantaine
         f = line.split("\t")
         if len(f) < 10 or f[1] != modèle or f[2] != gguf or f[3] != dev: continue
+        # 11e colonne = spec-type du run. Absente des lignes antérieures au
+        # support des listes : à l'époque c'était forcément draft-mtp seul.
+        spectype = f[10] if len(f) > 10 and f[10] else "draft-mtp"
+        # Le modèle T(k) = 1 + Σα^i suppose un k CONSTANT à chaque forward. En
+        # spec-type mixte un hit n-gram drafte jusqu'à size_m tokens, le k varie
+        # d'un pas à l'autre, et draft_n/draft_n_accepted sont agrégés sur toutes
+        # les implémentations (stats au niveau slot côté llama-server, cf.
+        # server_slot_stats::to_json). α n'a alors plus de sens. Ces runs sont
+        # écartés de la calibration — surtout PAS mis en quarantaine : ils sont
+        # valides, simplement hors modèle. Sans ce filtre le garde-fou
+        # tokens/forward > k+1 les prendrait tous pour des runs incohérents et
+        # commenterait le log.
+        if spectype != "draft-mtp":
+            n_mixte += 1
+            continue
         try:
             r = dict(k=int(f[4]), gen=float(f[5]), dn=int(f[7]), da=int(f[8]), pn=int(f[9]))
         except ValueError:
@@ -49,7 +65,7 @@ def load_runs(log, modèle, gguf, dev):
             print(f"  ⚠ {len(bad_idx)} run(s) incohérent(s) mis en quarantaine dans {log} (lignes commentées) — ignorés.")
         except OSError:
             print(f"  ⚠ {len(bad_idx)} run(s) incohérent(s) ignorés (quarantaine impossible : {log} non inscriptible).")
-    return runs
+    return runs, n_mixte
 
 
 def fit_alpha(cur):
@@ -95,7 +111,10 @@ def recommend(pred, pts):
 
 def main():
     log, modèle, gguf, dev, cur_k = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
-    runs = load_runs(log, modèle, gguf, dev)
+    runs, n_mixte = load_runs(log, modèle, gguf, dev)
+    if n_mixte:
+        print(f"  {n_mixte} run(s) en spec-type mixte écarté(s) : k variable par forward,"
+              " le modèle α ne s'applique pas (comparer les t/s bruts).")
     if not runs:
         print("  (aucun run exploitable journalisé)"); sys.exit(0)
 
