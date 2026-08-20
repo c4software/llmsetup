@@ -172,7 +172,8 @@ stamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 fa_real = ",".join(sorted(fa_seen))
 tsv = []
 
-print("  %6s %14s %10s %18s %9s" % ("batch", "t_forward", "cout rel.", "seuil non-perte", "gain max"))
+print("  batch = size_m + 1 (le token echantillonne + les size_m draftes)")
+print("  %6s %7s %14s %10s %16s %8s" % ("batch", "size_m", "t_forward", "cout rel.", "seuil non-perte", "gain"))
 print("  " + "-" * 64)
 noisy = []
 prev = None
@@ -190,8 +191,8 @@ for n, t, tsd in rows:
             noisy.append((prev[0], n))
         else:
             flag = "  (plateau)"
-    print("  %6d %8.1f+-%-4.1f ms %8.2fx %8.1f tok (%2.0f%%) %8.1fx%s"
-          % (n, t * 1000, tsd * 1000, rel, rel, 100 * frac, gain, flag))
+    print("  %6d %7d %8.1f+-%-4.1f ms %8.2fx %6.1f tok (%2.0f%%) %7.1fx%s"
+          % (n, n - 1, t * 1000, tsd * 1000, rel, rel, 100 * frac, gain, flag))
     tsv.append("%s\t%s\t%s\t%s\t%s\t%d\t%.2f\t%.2f\t%.4f\t%.3f" % (
         stamp, os.environ.get("MODEL_NAME", "?"), os.environ.get("DEV_NAME", "?"),
         os.environ.get("DEPTH", "?"), fa_real, n, t * 1000, tsd * 1000, rel, gain))
@@ -223,6 +224,25 @@ for n, t in env:
     if n > 1 and (t / t1) / n <= 0.25 and n / (t / t1) > best_gain:
         best_m, best_gain = n, n / (t / t1)
 
+# Marche : un saut brutal entre deux batches consecutifs = changement de
+# noyau. La plus grande taille SOUS la marche est un reglage sur : elle ne
+# franchit jamais le cout fixe, donc son seuil de non-perte reste minuscule.
+steps = []
+for i in range(1, len(rows)):
+    lo, hi = rows[i-1], rows[i]
+    if hi[1] > 1.5 * lo[1]:
+        steps.append((lo[0], hi[0], hi[1] / lo[1]))
+if steps:
+    print("  MARCHE(S) detectee(s) — cout fixe franchi entre deux tailles :")
+    for a, b, f in steps:
+        print("      entre batch %d et %d : x%.2f d un coup" % (a, b, f))
+    a = steps[0][0]
+    print("    -> size_m %d (batch %d) reste sous la premiere marche : reglage sur," % (a - 1, a))
+    print("       seuil minimal, mais gain plafonne a x%.1f." % (a / (dict((n, t) for n, t, _ in rows)[a] / t1)))
+    print("    -> au-dela, il faut viser LARGE pour amortir le cout fixe : les")
+    print("       tailles juste au-dessus de la marche sont les pires du lot.")
+    print()
+
 dominated = []
 for i, (n, t, _) in enumerate(rows):
     if n <= 1:
@@ -235,7 +255,8 @@ if dominated:
     print("  Tailles DOMINEES (un draft plus court fait mieux sur les deux axes,")
     print("  typiquement un palier de noyau ggml juste en dessous) :")
     for n, m2 in dominated:
-        print("      size_m %d : batch %d est meilleur en gain ET en seuil" % (n, m2))
+        print("      size_m %d (batch %d) : size_m %d fait mieux en gain ET en seuil"
+              % (n - 1, n, m2 - 1))
     print()
 
 if best_m is None:
@@ -243,8 +264,8 @@ if best_m is None:
     print("            ne pas activer de spec-type n-gram sur ce modele.")
 else:
     rel_last = env[-1][1] / t1
-    print("  VERDICT : --spec-ngram-map-k-size-m %d  (gain max x%.1f si tout accepte)"
-          % (best_m, best_gain))
+    print("  VERDICT : --spec-ngram-map-k-size-m %d   (batch %d, gain max x%.1f)"
+          % (best_m - 1, best_m, best_gain))
     if rel_last < 1.5:
         print("            courbe PLATE (dense, borne bande passante) : aucun risque de perte.")
     else:
