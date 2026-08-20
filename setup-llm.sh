@@ -52,8 +52,9 @@ case "${1:-}" in
   --bench-devices)     cmd_bench_devices "${2:-}" "${3:-}" "${4:-}" ;;
   --preload)           cmd_preload ;;
   --list-devices)      cmd_list_devices ;;
-  --spec-test)         cmd_spec_test "${2:-}" "${3:-}" ;;
+  --spec-test)         cmd_spec_test "${2:-}" "${3:-}" "${4:-}" ;;
   --spec-tune)         cmd_spec_tune "${2:-}" "${3:-}" "${4:-}" ;;
+  --spec-ngram-tune)   cmd_spec_ngram_tune "${2:-}" "${3:-}" "${4:-}" ;;
   --start | "")        cmd_start ;;
   --install-service)   cmd_install_service ;;
   --uninstall-service) cmd_uninstall_service ;;

@@ -1,0 +1,17 @@
+  batch = size_m + 1 (le token échantillonné + les size_m draftés)
+   batch  size_m      t_forward  coût rel.  seuil non-perte     gain
+  ------------------------------------------------------------------
+       1       0     90.0±0.1  ms     1.00x    1.0 tok (100%)     1.0x
+       8       7     93.0±0.1  ms     1.03x    1.0 tok (13%)     7.7x
+      16      15     96.0±0.1  ms     1.07x    1.1 tok ( 7%)    15.0x
+      32      31    102.0±0.2  ms     1.13x    1.1 tok ( 4%)    28.2x
+      48      47    108.0±0.2  ms     1.20x    1.2 tok ( 2%)    40.0x
+
+  seuil non-perte = tokens à faire accepter pour ne pas être plus lent
+                    que le décodage normal ; (%) = part du draft.
+
+  VERDICT : --spec-ngram-map-k-size-m 47 (gain max x40.0 si tout accepté)
+SIZEM_SAFE=47
+SIZEM_LARGE=47
+STEP_LO=
+STEP_HI=

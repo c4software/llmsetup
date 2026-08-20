@@ -120,6 +120,13 @@ SPEC_LOG="$SCRIPT_DIR/spec-tests.log"
 # bench-devices.conf) — écrit par --spec-tune, appliqué par generate_models_ini
 # par-dessus la valeur de MODEL_INI (qui reste le défaut). Format "modèle = k".
 SPEC_CONF="$SCRIPT_DIR/spec-nmax.conf"
+# Surcharges spec-ngram-map-k-size-m par modèle (même statut que spec-nmax.conf :
+# choix utilisateur, local, non versionné). Écrit par --spec-ngram-tune, appliqué
+# par generate_models_ini par-dessus la valeur de MODEL_INI. Format "modèle = m".
+# La longueur de draft n-gram dépend du couple (modèle, device) : le coût d'un
+# forward de batch m+1 dépend du noyau ggml retenu, qui n'est pas le même d'un
+# backend à l'autre — d'où une conf locale plutôt qu'une valeur dans le script.
+SPEC_NGRAM_CONF="$SCRIPT_DIR/spec-ngram.conf"
 
 SERVICE_NAME="llama-server"
 # Service systemd USER : piloté par systemctl --user, démarre au

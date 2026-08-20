@@ -3,6 +3,7 @@ plans/
 /bench-devices.conf
 /preload.conf
 /spec-nmax.conf
+/spec-ngram.conf
 /spec-tests.log
 /spec-batch.log
 /spec-batch.tsv

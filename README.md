@@ -50,6 +50,7 @@ systemctl --user start llama-server
 | `--list-devices` | Backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
+| `--spec-ngram-tune [modèle] [n] [prompt]` | Règle la longueur de draft n-gram (`spec-ngram-map-k-size-m`) : courbe `t_forward(batch)` pour localiser la marche de noyau ggml, puis arbitrage des candidats sur mesure réelle |
 | `--start` | Lance llama-server sur le port 8009 (commande du service) |
 | `--install-service`, `--uninstall-service` | Service systemd user (systemctl --user) |
 | `--help` | Aide, liste des modèles et des clés de téléchargement |
@@ -61,6 +62,7 @@ systemctl --user start llama-server
 ./setup-llm.sh --bench all            # perfs de tous les modèles présents
 ./setup-llm.sh --bench-devices        # Vulkan ou ROCm pour un modèle ?
 ./setup-llm.sh --spec-tune            # règle spec-draft-n-max d'un modèle MTP
+./setup-llm.sh --spec-ngram-tune      # règle la longueur de draft n-gram
 ./setup-llm.sh --update qwen3.8-27b   # après un re-upload unsloth
 ```
 
@@ -142,7 +144,9 @@ dédiée dans ARCHITECTURE.md.
 | `bench-devices.conf` | clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par `--bench-devices`, édition manuelle OK |
 | `preload.conf` | modèles préchargés, un par ligne |
 | `spec-nmax.conf` | modèle = spec-draft-n-max retenu par les mesures |
+| `spec-ngram.conf` | modèle = spec-ngram-map-k-size-m retenu par les mesures |
 | `spec-tests.log` | journal TSV des runs `--spec-test` |
+| `spec-batch.log` / `.tsv` | journal des balayages `tools/bench-spec-batch.sh` |
 
 Côté `~/models/` : `models.ini`, généré. Ne jamais l'éditer : relancer
 `--preload` ou `--setup`. Le routeur ne le lit qu'au démarrage, toute

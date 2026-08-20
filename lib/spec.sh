@@ -198,7 +198,8 @@ cmd_spec_test() {
   echo "n-max      : ${nmax:-n/a}$( [[ -n "$nmax_srv" ]] && echo " (lu sur le serveur)" || echo " (script/conf)" )$( [[ -n "$nmax_srv" && -n "$nmax_cfg" && "$nmax_srv" != "$nmax_cfg" ]] && echo "  ⚠ script/conf=$nmax_cfg, restart requis" )"
   [[ "$stype" == *,* ]] && echo "spec-type  : $stype (liste — la 1re implémentation qui drafte gagne le pas ;"
   [[ "$stype" == *,* ]] && echo "             acceptance agrégée, run exclu de la calibration α)"
-  echo "passes     : $passes (max_tokens=1500, temp=0.7, seed=42+n° de passe, prompt fixe inventory/pytest)"
+  echo "passes     : $passes (max_tokens=1500, temp=0.7, seed=42+n° de passe)"
+  echo "prompt     : $(basename "$prompt_file")"
   echo "note       : prompt t/s significatif en passe 1 seulement (prompt cache ensuite, cf. n=/cache=)"
   echo "--- modèle ($preset) ---"
   if [[ -n "$nmax" ]]; then
@@ -218,7 +219,11 @@ cmd_spec_test() {
   # Prompt de référence : prompts/spec-test.txt (texte brut multiligne,
   # échappement JSON par build_body.py). ⚠ Le modifier invalide les
   # comparaisons avec les runs antérieurs de spec-tests.log (cf. ARCHITECTURE.md).
-  local prompt_file="$SCRIPT_DIR/prompts/spec-test.txt"
+  # Un autre prompt peut être passé en 3e argument (--spec-ngram-tune s'en sert
+  # pour mesurer sur du refactor, seul cas où un n-gram a des hits) : il est
+  # alors journalisé, car deux runs sur des prompts différents ne se comparent
+  # pas et ne doivent pas alimenter la même calibration.
+  local prompt_file="${3:-$SCRIPT_DIR/prompts/spec-test.txt}"
   [[ -f "$prompt_file" ]] || error "Prompt manquant : $prompt_file"
 
   # seed fixe PAR PASSE (42+i) : chaque passe est reproductible d'un run à
@@ -250,6 +255,11 @@ cmd_spec_test() {
     fi
   done
 
+  # Médianes exposées aux appelants (--spec-tune, --spec-ngram-tune) sur le
+  # modèle de BENCH_ROW dans lib/bench.sh : vides si la mesure a échoué.
+  SPEC_TEST_MED_GEN=""
+  SPEC_TEST_MED_ACC=""
+
   local med
   if [[ ${#gens[@]} -gt 0 ]]; then
     med="$(printf '%s\n' "${gens[@]}" | sort -n | awk '{a[NR]=$1} END{print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}')"
@@ -261,15 +271,19 @@ cmd_spec_test() {
     med_acc="$(printf '%s\n' "${accs[@]}" | sort -n | awk '{a[NR]=$1} END{print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}')"
     info "Médiane acceptance (hors 1re passe) : $med_acc"
   fi
+  SPEC_TEST_MED_GEN="$med_gen"
+  SPEC_TEST_MED_ACC="$med_acc"
 
   # --- Journal + analyse n-max ---------------------------------------------
   if [[ -n "$nmax" && -n "$med_gen" && "$sum_dn" -gt 0 ]]; then
-    # date modèle gguf device nmax gen acc drafted accepted predicted spectype
-    # (11e colonne ajoutée avec le support des listes ; les lignes plus
-    #  anciennes n'en ont pas et sont lues comme draft-mtp seul)
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    # date modèle gguf device nmax gen acc drafted accepted predicted spectype prompt
+    # (colonnes 11 et 12 ajoutées avec le support des listes et du prompt
+    #  paramétrable ; les lignes plus anciennes n'en ont pas et sont lues comme
+    #  "draft-mtp" seul sur spec-test.txt)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$(date '+%F %T')" "$preset" "$(basename "$gguf")" "$mdev" "$nmax" \
-      "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" "${stype:-draft-mtp}" >> "$SPEC_LOG"
+      "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" "${stype:-draft-mtp}" \
+      "$(basename "$prompt_file")" >> "$SPEC_LOG"
     echo "--- analyse n-max ---"
     local report rec
     report="$(_spec_analyze "$preset" "$(basename "$gguf")" "$mdev" "$nmax" rec)"
@@ -407,5 +421,240 @@ cmd_spec_tune() {
   info "Restart final de $SERVICE_NAME sur la valeur retenue..."
   systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec — systemctl --user restart $SERVICE_NAME"
   SPEC_TUNE_DIRTY=0
+  trap - EXIT
+}
+
+# =============================================================================
+# spec-ngram-tune — règle spec-ngram-map-k-size-m d'un modèle, en deux moitiés
+#
+# Usage : ./setup-llm.sh --spec-ngram-tune [modèle] [passes] [prompt]
+#
+# 1. COURBE (llama-bench, service arrêté, ~2 min) : balayage grossier puis
+#    raffinement automatique autour de la marche détectée, sur le device
+#    EFFECTIF du modèle (bench-devices.conf) — la marche n'est pas au même
+#    endroit d'un backend à l'autre. Sortie : deux candidats, le « sûr » (sous
+#    la marche, ne peut pas perdre) et le « large » (amortit le coût fixe).
+#    Détail du raisonnement dans py/batch_curve.py.
+#
+# 2. ARBITRAGE (service, ~10 min) : chaque candidat est écrit, le ini régénéré,
+#    le service redémarré, et --spec-test mesuré. La courbe ne PEUT PAS trancher
+#    seule — le choix dépend de la longueur des répétitions réellement
+#    rencontrées, que seule une génération réelle donne.
+#
+#    ⚠ Le prompt par défaut (prompts/spec-test.txt) écrit un module de zéro :
+#    aucune répétition à retrouver, donc aucun hit n-gram et deux candidats
+#    indistinguables. Passer un prompt de refactor en 3e argument pour que
+#    cette moitié mesure quelque chose.
+#
+# min-hits n'est pas réglé ici : le tuner par-dessus size_m multiplierait les
+# restarts pour un effet de second ordre. La valeur vit dans lib/models.sh.
+# =============================================================================
+
+_spec_save_ngram_conf() {
+  local key="$1" val="$2" tmp
+  tmp="$(mktemp)"
+  {
+    echo "; spec-ngram.conf — spec-ngram-map-k-size-m retenu par modèle"
+    echo "; généré par ./setup-llm.sh --spec-ngram-tune ; édition manuelle OK ;"
+    echo "; supprimer une ligne = retour au défaut du script"
+    if [[ -f "$SPEC_NGRAM_CONF" ]]; then
+      grep -v '^;' "$SPEC_NGRAM_CONF" | grep -v "^${key}[[:space:]]*=" | grep -v '^[[:space:]]*$' || true
+    fi
+    echo "${key} = ${val}"
+  } > "$tmp"
+  mv "$tmp" "$SPEC_NGRAM_CONF"
+}
+
+# Modèles dont le spec-type contient une implémentation n-gram réglable par
+# size_m et dont le GGUF est présent.
+_spec_ngram_presets() {
+  SPEC_PRESETS=()
+  local p gguf
+  for p in "${PRESET_ORDER[@]}"; do
+    _preset_has_spec_type "$p" ngram-map-k || continue
+    gguf="$(echo "${MODEL_INI[$p]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
+    [[ -f "$gguf" ]] || continue
+    SPEC_PRESETS+=("$p")
+  done
+}
+
+# Un balayage llama-bench → jsonl brut sur stdout. $1 gguf, $2 device, $3 liste
+# de batches, $4 répétitions.
+_spec_ngram_sweep() {
+  llama-bench -m "$1" -p "$3" -n 0 -d 0 -r "$4" -fa auto -dev "$2" -o jsonl 2>/dev/null
+}
+
+cmd_spec_ngram_tune() {
+  local preset="${1:-}"
+  local passes="${2:-4}"
+  local prompt_file="${3:-}"
+
+  if [[ -z "$preset" ]]; then
+    _spec_ngram_presets
+    [[ ${#SPEC_PRESETS[@]} -gt 0 ]] \
+      || error "Aucun modèle avec ngram-map-k dans son spec-type et son GGUF présent."
+    if [[ ! -t 0 ]]; then
+      preset="${SPEC_PRESETS[0]}"
+      info "Entrée non interactive — modèle : $preset"
+    elif command -v gum >/dev/null 2>&1; then
+      preset="$(printf '%s\n' "${SPEC_PRESETS[@]}" | gum choose --header "Modèle à régler :" || true)"
+    else
+      local i n
+      for i in "${!SPEC_PRESETS[@]}"; do echo "  $((i+1))) ${SPEC_PRESETS[$i]}"; done
+      read -r -p "Numéro (vide = annuler) : " n
+      [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#SPEC_PRESETS[@]} )) \
+        && preset="${SPEC_PRESETS[$((n-1))]}"
+    fi
+    [[ -n "$preset" ]] || { info "Rien sélectionné — spec-ngram-tune annulé."; return; }
+  fi
+
+  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset' (voir --help)"
+  _preset_has_spec_type "$preset" ngram-map-k \
+    || error "'$preset' n'a pas de spéculation n-gram (ngram-map-k attendu dans spec-type)."
+  [[ "$passes" =~ ^[0-9]+$ && "$passes" -ge 2 ]] || error "Passes invalide : '$passes' (>= 2)"
+  command -v llama-bench >/dev/null || error "llama-bench introuvable (paquet llama-cpp)"
+  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
+    || error "Service $SERVICE_NAME non installé — l'arbitrage a besoin de le redémarrer (--install-service)."
+
+  if [[ -z "$prompt_file" ]]; then
+    prompt_file="$SCRIPT_DIR/prompts/spec-test.txt"
+    warn "Prompt par défaut (spec-test.txt) : génération neuve, sans répétition."
+    warn "  Les deux candidats y seront quasi indistinguables — l'arbitrage ne"
+    warn "  mesure rien d'utile. Passer un prompt de refactor en 3e argument."
+  fi
+  [[ -f "$prompt_file" ]] || error "Prompt introuvable : $prompt_file"
+
+  local gguf mkey mdev
+  gguf="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
+  [[ -f "$gguf" ]] || error "GGUF absent : $gguf — lancer --setup."
+  load_bench_conf
+  mkey="$(_preset_model_key "$preset" || true)"
+  mdev="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE}"
+
+  load_spec_ngram_conf
+  local avant
+  avant="$(_preset_ngram_m "$preset")"
+  info "spec-ngram-tune '$preset' — device $mdev, valeur actuelle : ${avant:-défaut script}"
+
+  # --- 1. Courbe -----------------------------------------------------------
+  # Service arrêté : il occupe le GPU et la mémoire unifiée, et fausserait les
+  # points hauts. Restauré quoi qu'il arrive (le trap couvre aussi le Ctrl-C).
+  # Globale et non locale : le trap EXIT peut se déclencher après le retour de
+  # la fonction, où une locale n'existerait plus (unbound sous set -u).
+  SPEC_NGRAM_SERVICE_ACTIF=0
+  if systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+    SPEC_NGRAM_SERVICE_ACTIF=1
+  fi
+  _spec_ngram_restore() {
+    unset SPEC_NGRAM_FORCE SPEC_NGRAM_FORCE_PRESET
+    regen_models_ini
+    if [[ "${SPEC_NGRAM_SERVICE_ACTIF:-0}" -eq 1 ]]; then
+      systemctl --user start "$SERVICE_NAME" >/dev/null 2>&1 || true
+    fi
+    return 0
+  }
+  trap _spec_ngram_restore EXIT
+
+  if [[ "$SPEC_NGRAM_SERVICE_ACTIF" -eq 1 ]]; then
+    info "Arrêt de $SERVICE_NAME le temps du balayage (contention GPU)."
+    systemctl --user stop "$SERVICE_NAME" || warn "Arrêt en échec — mesures potentiellement faussées."
+  fi
+  export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+
+  echo ""
+  info "════════ 1/2 — courbe t_forward(batch) ════════"
+  local jsonl rep lo hi
+  jsonl="$(_spec_ngram_sweep "$gguf" "$mdev" "1,8,16,32,48" 5)"
+  [[ -n "$jsonl" ]] || error "llama-bench n'a rien produit (RAM ? arch non supportée par $mdev ?)"
+  rep="$(printf '%s\n' "$jsonl" | python3 "$SCRIPT_DIR/py/batch_curve.py" \
+           "$(basename "$gguf")" "$mdev" 0 "" rec)"
+  lo="$(echo "$rep" | sed -n 's/^STEP_LO=//p')"
+  hi="$(echo "$rep" | sed -n 's/^STEP_HI=//p')"
+  # Raffinement : la marche localisée au batch près change le candidat « sûr »
+  # d'un cran, et c'est justement le cran qui compte.
+  if [[ "$lo" =~ ^[0-9]+$ && "$hi" =~ ^[0-9]+$ && $((hi - lo)) -gt 1 ]]; then
+    info "Marche entre les batches $lo et $hi — raffinement..."
+    jsonl="$jsonl"$'\n'"$(_spec_ngram_sweep "$gguf" "$mdev" "${lo}-${hi}" 5)"
+    rep="$(printf '%s\n' "$jsonl" | python3 "$SCRIPT_DIR/py/batch_curve.py" \
+             "$(basename "$gguf")" "$mdev" 0 "" rec)"
+  fi
+  echo "$rep" | grep -v '^SIZEM_\|^STEP_'
+
+  local m_safe m_large
+  m_safe="$(echo "$rep" | sed -n 's/^SIZEM_SAFE=//p')"
+  m_large="$(echo "$rep" | sed -n 's/^SIZEM_LARGE=//p')"
+
+  local -a cands=()
+  if [[ "$m_safe" =~ ^[0-9]+$ ]] && (( m_safe >= 1 )); then
+    cands+=("$m_safe")
+  fi
+  if [[ "$m_large" =~ ^[0-9]+$ ]] && (( m_large >= 1 )) && [[ "$m_large" != "$m_safe" ]]; then
+    cands+=("$m_large")
+  fi
+  if [[ ${#cands[@]} -eq 0 ]]; then
+    error "Aucun candidat exploitable — courbe trop pentue (voir ci-dessus)."
+  fi
+
+  # --- 2. Arbitrage --------------------------------------------------------
+  echo ""
+  info "════════ 2/2 — arbitrage sur mesure réelle ════════"
+  if [[ ${#cands[@]} -eq 1 ]]; then
+    info "Un seul candidat (${cands[0]}) : pas de marche à départager. La mesure"
+    info "  reste utile — elle valide la valeur de bout en bout avant de la figer."
+  else
+    info "Candidats : ${cands[*]} ($passes passes chacun, restart entre chaque)"
+  fi
+  local -a mesures=()
+  local m t
+  for m in "${cands[@]}"; do
+    echo ""
+    info "──── size_m = $m ────"
+    export SPEC_NGRAM_FORCE="$m" SPEC_NGRAM_FORCE_PRESET="$preset"
+    regen_models_ini
+    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
+    t=0
+    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
+      sleep 2; t=$((t+2))
+      if [[ $t -ge 120 ]]; then
+        error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
+      fi
+    done
+    cmd_spec_test "$preset" "$passes" "$prompt_file"
+    mesures+=("${SPEC_TEST_MED_GEN:-0}")
+  done
+  unset SPEC_NGRAM_FORCE SPEC_NGRAM_FORCE_PRESET
+  SPEC_NGRAM_SERVICE_ACTIF=1
+
+  # --- Bilan ---------------------------------------------------------------
+  echo ""
+  info "════════ Bilan ════════"
+  local i best_m="" best_g=""
+  for i in "${!cands[@]}"; do
+    echo "  size_m ${cands[$i]} : ${mesures[$i]} t/s"
+    # comparaison numérique en awk (convention du dépôt)
+    if [[ -z "$best_g" ]] || awk -v a="${mesures[$i]}" -v b="$best_g" 'BEGIN{exit !(a>b)}'; then
+      best_g="${mesures[$i]}"; best_m="${cands[$i]}"
+    fi
+  done
+  if [[ -z "$best_m" ]] || awk -v g="$best_g" 'BEGIN{exit !(g<=0)}'; then
+    warn "Aucune mesure exploitable — config remise à l'état initial."
+    _spec_ngram_restore; trap - EXIT; return
+  fi
+  # À moins de 2 % d'écart, préférer le plus PETIT size_m : son seuil de
+  # non-perte est plus bas, donc il tient mieux sur des répétitions plus
+  # courtes que celles du prompt de test (même règle que --spec-tune sur k).
+  for i in "${!cands[@]}"; do
+    if awk -v a="${mesures[$i]}" -v b="$best_g" 'BEGIN{exit !(a >= b*0.98)}' \
+       && (( cands[i] < best_m )); then
+      best_m="${cands[$i]}"; best_g="${mesures[$i]}"
+    fi
+  done
+
+  _spec_save_ngram_conf "$preset" "$best_m"
+  load_spec_ngram_conf
+  regen_models_ini
+  info "✅ $preset : spec-ngram-map-k-size-m = $best_m enregistré dans $SPEC_NGRAM_CONF (avant : ${avant:-défaut})"
+  info "Restart final sur la valeur retenue..."
+  systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec — systemctl --user restart $SERVICE_NAME"
   trap - EXIT
 }

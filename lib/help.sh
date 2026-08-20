@@ -37,7 +37,8 @@ Commandes :
                            ini régénéré, restart final. Restarts via systemctl --user
   --list-devices           Backends ggml installés + devices exposés par llama-bench,
                            croisés avec bench-devices.conf (alerte si device disparu)
-  --spec-test [modèle] [n] Mesure le décode réel via l'API (spéculation incluse) :
+  --spec-test [modèle] [n] [prompt]
+                           Mesure le décode réel via l'API (spéculation incluse) :
                            n passes du même prompt code, prompt/gen t/s, acceptance
                            MTP + médianes (seed fixe/passe, 4 passes par défaut).
                            Journalise (quarantaine auto des runs incohérents),
@@ -53,6 +54,16 @@ Commandes :
                            Sans modèle : choix interactif parmi les MTP présents.
                            4 passes par défaut. Sert à régler
                            spec-draft-n-max (éditer le script, --preload, re-tester)
+  --spec-ngram-tune [modèle] [n] [prompt]
+                           Règle spec-ngram-map-k-size-m (longueur de draft n-gram)
+                           en deux temps : llama-bench trace t_forward(batch) sur le
+                           device effectif du modèle et localise la marche de noyau
+                           ggml (deux candidats — sous la marche, ou assez large pour
+                           l'amortir), puis chaque candidat est mesuré pour de vrai
+                           (ini régénéré + restart + spec-test) et le meilleur est
+                           écrit dans spec-ngram.conf. À <2 %, le plus petit gagne.
+                           ⚠ passer un prompt de REFACTOR : le prompt par défaut
+                           génère du neuf, sans répétition, donc sans hit n-gram.
   --start                  Lance llama-server sur :$SERVER_PORT (défaut sans argument)
   --install-service        Installe/active le service systemd USER $SERVICE_NAME
                            (systemctl --user) + linger (démarrage au boot)
@@ -65,6 +76,7 @@ Fichiers (à côté du script, locaux, non versionnés) :
   preload.conf             modèles préchargés, un par ligne
   spec-tests.log           journal des --spec-test (TSV), base de l'analyse n-max
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
+  spec-ngram.conf          modèle = spec-ngram-map-k-size-m retenu par --spec-ngram-tune
 Fichiers ($CONFIG_DIR) :
   models.ini               généré — ne pas éditer à la main, relancer --preload/--setup
 
@@ -75,6 +87,7 @@ Workflow typique :
   ./setup-llm.sh --update qwen3.8-27b # après un re-upload unsloth
   ./setup-llm.sh --spec-test          # décode réel d'un modèle MTP (choix interactif)
   ./setup-llm.sh --spec-tune          # règle spec-draft-n-max tout seul (2,4,6)
+  ./setup-llm.sh --spec-ngram-tune qwen3.8-27b-mtp-nothink 4 prompts/spec-refactor.txt
 
 Modèles (models.ini, ${#PRESET_ORDER[@]}) :
 $(printf '  %s\n' "${PRESET_ORDER[@]}")

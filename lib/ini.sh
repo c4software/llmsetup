@@ -65,6 +65,34 @@ load_spec_conf() {
   return 0
 }
 
+declare -A SPEC_NGRAM_M
+load_spec_ngram_conf() {
+  SPEC_NGRAM_M=()
+  [[ -f "$SPEC_NGRAM_CONF" ]] || return 0
+  local line k v
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*($|\;|\#) ]] && continue
+    k="${line%%=*}"; k="${k// /}"
+    v="${line#*=}";  v="${v// /}"
+    [[ -n "${MODEL_INI[$k]:-}" && "$v" =~ ^[0-9]+$ ]] && SPEC_NGRAM_M[$k]="$v"
+  done < "$SPEC_NGRAM_CONF"
+  # même garde set -e que load_bench_conf (dernière ligne = modèle retiré)
+  return 0
+}
+
+# size_m effectif d'un modèle : surcharge conf sinon valeur MODEL_INI (vide si
+# le modèle n'a pas de spéculation n-gram). SPEC_NGRAM_FORCE (env) prime sur
+# tout — utilisé par --spec-ngram-tune pour tester une valeur sans l'écrire.
+_preset_ngram_m() {
+  local p="$1" v
+  v="$(echo "${MODEL_INI[$p]}" | sed -n 's/^spec-ngram-map-k-size-m[[:space:]]*=[[:space:]]*//p' | tr -d ' ')"
+  [[ -n "$v" ]] || { echo ""; return; }
+  if [[ -n "${SPEC_NGRAM_FORCE:-}" && "${SPEC_NGRAM_FORCE_PRESET:-}" == "$p" ]]; then
+    echo "$SPEC_NGRAM_FORCE"; return
+  fi
+  echo "${SPEC_NGRAM_M[$p]:-$v}"
+}
+
 # n-max effectif d'un modèle : surcharge conf sinon valeur MODEL_INI (vide si
 # modèle non spéculatif). SPEC_NMAX_FORCE (env) prime sur tout — utilisé par
 # --spec-tune pour tester une valeur sans l'écrire.
@@ -82,6 +110,7 @@ generate_models_ini() {
   load_bench_conf
   load_preload_conf
   load_spec_conf
+  load_spec_ngram_conf
 
   cat <<HEADER
 version = 1
@@ -139,11 +168,20 @@ HEADER
     # Corps du modèle + préchargement piloté par preload.conf
     # (pas de stop-timeout : l'éviction est gérée par le LRU de --models-max)
     # spec-draft-n-max : surcharge spec-nmax.conf / --spec-tune si présente
-    local eff_nmax
+    # spec-ngram-map-k-size-m : surcharge spec-ngram.conf / --spec-ngram-tune
+    local eff_nmax eff_ngram
     eff_nmax="$(_preset_nmax "$name")"
+    eff_ngram="$(_preset_ngram_m "$name")"
+    local -a subs=()
     if [[ -n "$eff_nmax" ]]; then
-      echo "${MODEL_INI[$name]}" | sed '/^$/d' \
-        | sed "s/^\(spec-draft-n-max[[:space:]]*=[[:space:]]*\)[0-9]*[[:space:]]*$/\1$eff_nmax/"
+      subs+=(-e "s/^\(spec-draft-n-max[[:space:]]*=[[:space:]]*\)[0-9]*[[:space:]]*$/\1$eff_nmax/")
+    fi
+    if [[ -n "$eff_ngram" ]]; then
+      subs+=(-e "s/^\(spec-ngram-map-k-size-m[[:space:]]*=[[:space:]]*\)[0-9]*[[:space:]]*$/\1$eff_ngram/")
+    fi
+    # jamais "${subs[@]}" sur un tableau vide : unbound sous set -u en bash 4.3
+    if [[ ${#subs[@]} -gt 0 ]]; then
+      echo "${MODEL_INI[$name]}" | sed '/^$/d' | sed "${subs[@]}"
     else
       echo "${MODEL_INI[$name]}" | sed '/^$/d'
     fi

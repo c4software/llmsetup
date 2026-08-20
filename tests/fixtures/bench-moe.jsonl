@@ -1,0 +1,5 @@
+{"n_prompt": 1, "n_gen": 0, "avg_ts": 53.96654074473826, "stddev_ts": 0.2912387519953495, "flash_attn": -1}
+{"n_prompt": 8, "n_gen": 0, "avg_ts": 206.50490449148165, "stddev_ts": 1.4925496452662588, "flash_attn": -1}
+{"n_prompt": 16, "n_gen": 0, "avg_ts": 172.13555675094136, "stddev_ts": 5.277959513073511, "flash_attn": -1}
+{"n_prompt": 32, "n_gen": 0, "avg_ts": 280.23469655836766, "stddev_ts": 12.687743070380602, "flash_attn": -1}
+{"n_prompt": 48, "n_gen": 0, "avg_ts": 311.95164749463834, "stddev_ts": 3.36543663378891, "flash_attn": -1}

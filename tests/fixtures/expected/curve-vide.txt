@@ -1,0 +1,5 @@
+  aucune mesure exploitable
+SIZEM_SAFE=
+SIZEM_LARGE=
+STEP_LO=
+STEP_HI=

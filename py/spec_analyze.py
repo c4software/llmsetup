@@ -20,9 +20,10 @@ import sys, math
 
 def load_runs(log, modèle, gguf, dev):
     """Lit le log TSV, filtre (modèle, gguf, device), écarte les runs en
-    spec-type mixte, met en quarantaine les runs incohérents (réécrit le log).
-    Retourne (runs valides, nombre de runs mixtes écartés)."""
-    runs, lines, bad_idx, n_mixte = [], [], [], 0
+    spec-type mixte ou sur un autre prompt, met en quarantaine les runs
+    incohérents (réécrit le log). Retourne (runs valides, nb mixtes écartés,
+    nb écartés pour cause de prompt)."""
+    runs, lines, bad_idx, n_mixte, n_autre_prompt = [], [], [], 0, 0
     try:
         lines = open(log, encoding="utf-8").read().splitlines()
     except FileNotFoundError:
@@ -46,6 +47,13 @@ def load_runs(log, modèle, gguf, dev):
         if spectype != "draft-mtp":
             n_mixte += 1
             continue
+        # 12e colonne = prompt du run. Deux prompts différents ne produisent pas
+        # la même acceptance : les mélanger fausserait α. Seul le prompt de
+        # référence calibre ; absent = ligne antérieure, c'était spec-test.txt.
+        prompt = f[11] if len(f) > 11 and f[11] else "spec-test.txt"
+        if prompt != "spec-test.txt":
+            n_autre_prompt += 1
+            continue
         try:
             r = dict(k=int(f[4]), gen=float(f[5]), dn=int(f[7]), da=int(f[8]), pn=int(f[9]))
         except ValueError:
@@ -65,7 +73,7 @@ def load_runs(log, modèle, gguf, dev):
             print(f"  ⚠ {len(bad_idx)} run(s) incohérent(s) mis en quarantaine dans {log} (lignes commentées) — ignorés.")
         except OSError:
             print(f"  ⚠ {len(bad_idx)} run(s) incohérent(s) ignorés (quarantaine impossible : {log} non inscriptible).")
-    return runs, n_mixte
+    return runs, n_mixte, n_autre_prompt
 
 
 def fit_alpha(cur):
@@ -111,10 +119,14 @@ def recommend(pred, pts):
 
 def main():
     log, modèle, gguf, dev, cur_k = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
-    runs, n_mixte = load_runs(log, modèle, gguf, dev)
+    runs, n_mixte, n_autre_prompt = load_runs(log, modèle, gguf, dev)
     if n_mixte:
         print(f"  {n_mixte} run(s) en spec-type mixte écarté(s) : k variable par forward,"
               " le modèle α ne s'applique pas (comparer les t/s bruts).")
+    if n_autre_prompt:
+        print(f"  {n_autre_prompt} run(s) sur un autre prompt écarté(s) :"
+              " l'acceptance dépend du texte généré, α ne se calibre que sur"
+              " spec-test.txt.")
     if not runs:
         print("  (aucun run exploitable journalisé)"); sys.exit(0)
 

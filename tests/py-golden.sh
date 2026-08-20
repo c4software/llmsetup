@@ -59,6 +59,17 @@ python3 "$PY/spec_server_nmax.py" inconnu                 < "$F/models.json" > "
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models-mixte.json" > "$TMP/o"; _ck spectype-found.txt "$TMP/o"
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models.json"       > "$TMP/o"; _ck spectype-absent.txt "$TMP/o"
 
+# --- batch_curve.py (stdout déterministe : l'horodatage ne va que dans le TSV)
+# marche  : vraie courbe Vulkan0 du 27B Q4, coupure de noyau entre 8 et 9
+# plat    : dense borné bande passante, aucune marche → un seul candidat
+# moe     : pente forte mais LISSE — ne doit PAS être prise pour une marche
+# inverse : palier ROCm0 reproductible (batch 8 plus lent que 16)
+# vide    : entrée illisible → pas de plantage, lignes machine vides
+for c in marche plat moe inverse vide; do
+  python3 "$PY/batch_curve.py" m.gguf Vulkan0 0 "" rec < "$F/bench-$c.jsonl" > "$TMP/o"
+  _ck "curve-$c.txt" "$TMP/o"
+done
+
 # --- spec_analyze.py (cwd = tmp, chemins de log relatifs → sorties stables ;
 #     copies des logs : la quarantaine réécrit le fichier) ---------------------
 cp "$F/spec-tests.log" "$F/spec-tests-quarantine.log" "$F/spec-tests-mixte.log" "$TMP/"

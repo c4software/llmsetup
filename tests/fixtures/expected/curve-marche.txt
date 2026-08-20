@@ -1,0 +1,31 @@
+  batch = size_m + 1 (le token échantillonné + les size_m draftés)
+   batch  size_m      t_forward  coût rel.  seuil non-perte     gain
+  ------------------------------------------------------------------
+       1       0     82.5±0.1  ms     1.00x    1.0 tok (100%)     1.0x
+       8       7    100.6±0.1  ms     1.22x    1.2 tok (15%)     6.6x
+       9       8    213.1±0.3  ms     2.58x    2.6 tok (29%)     3.5x
+      16      15    227.4±0.5  ms     2.76x    2.8 tok (17%)     5.8x
+      32      31    238.0±0.6  ms     2.89x    2.9 tok ( 9%)    11.1x
+      48      47    289.3±0.2  ms     3.51x    3.5 tok ( 7%)    13.7x
+
+  seuil non-perte = tokens à faire accepter pour ne pas être plus lent
+                    que le décodage normal ; (%) = part du draft.
+
+  MARCHE(S) — coût fixe franchi entre deux tailles :
+      entre batch 8 et 9 : x2.12 d'un coup
+
+  Tailles DOMINÉES (une plus courte fait mieux sur les deux axes) :
+      size_m 8 (batch 9) : size_m 7 fait mieux en gain ET en seuil
+      size_m 15 (batch 16) : size_m 7 fait mieux en gain ET en seuil
+
+  DEUX RÉGIMES à départager par la mesure :
+    size_m 7   (SÛR)   seuil 1.2 tok, gain plafonné x6.6
+    size_m 47  (LARGE) amortit le coût fixe, gain jusqu'à x13.7
+    Le choix dépend de la longueur des répétitions réellement
+    rencontrées — aucune courbe ne peut le dire.
+  Courbe pentue : ajouter --spec-ngram-map-k-min-hits 2 pour éviter
+  les faux départs, qui paient le batch sans être acceptés.
+SIZEM_SAFE=7
+SIZEM_LARGE=47
+STEP_LO=8
+STEP_HI=9
