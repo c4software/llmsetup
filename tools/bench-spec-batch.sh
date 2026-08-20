@@ -95,9 +95,25 @@ fi
 # ne mesurerait pas ce que fait réellement le service (cf. lib/service.sh).
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
-# En-tête TSV si le fichier n'existe pas encore (append ensuite).
-[[ -s "$TSV" ]] || printf 'date\tmodele\tdevice\tdepth\tfa\tbatch\tt_forward_ms\tcout_rel\tgain_max\n' > "$TSV"
-export TSV DEPTH FA
+# En-tête TSV. Si un fichier existe avec un autre jeu de colonnes (ancienne
+# version du script), on ré-écrit une ligne d'en-tête avant les nouvelles
+# lignes plutôt que d'écraser des mesures déjà collectées.
+TSV_HDR=$'date\tmodele\tdevice\tdepth\tfa_reel\tbatch\tt_forward_ms\tsd_ms\tcout_rel\tgain_max'
+if [[ ! -s "$TSV" ]]; then
+  printf '%s\n' "$TSV_HDR" > "$TSV"
+elif [[ "$(head -1 "$TSV")" != "$TSV_HDR" ]]; then
+  printf '\n%s\n' "$TSV_HDR" >> "$TSV"
+fi
+export TSV DEPTH
+
+# Le service occupe la mémoire unifiée et le GPU pendant la mesure : les
+# modèles préchargés faussent les points hauts (contention) et peuvent faire
+# échouer le chargement des géants. On prévient, on ne coupe rien tout seul.
+if systemctl --user is-active llama-server &>/dev/null; then
+  echo "⚠ llama-server tourne : contention GPU/mémoire pendant la mesure." >&2
+  echo "  Pour un run propre : systemctl --user stop llama-server" >&2
+  echo "" >&2
+fi
 
 # Tout ce qui suit est affiché ET ajouté à $OUT (append : un run ne détruit
 # pas les précédents, on peut comparer deux backends ou deux DEPTH).
@@ -125,6 +141,7 @@ for gguf in "${GGUFS[@]}"; do
   printf '%s\n' "$out" | python3 -c '
 import sys, json, os, datetime
 rows = []
+fa_seen = set()
 for line in sys.stdin:
     line = line.strip()
     if not line.startswith("{"):
@@ -133,49 +150,71 @@ for line in sys.stdin:
         r = json.loads(line)
     except ValueError:
         continue
-    n, ts = r.get("n_prompt", 0), r.get("avg_ts", 0.0)
-    if n and ts:
-        rows.append((n, n/ts))          # t_forward en secondes
+    n, ts, sd = r.get("n_prompt", 0), r.get("avg_ts", 0.0), r.get("stddev_ts", 0.0)
+    if not (n and ts):
+        continue
+    t = n / ts                                   # t_forward en secondes
+    # stddev_ts est en tokens/s : on le propage en secondes (|dt/dts| = t/ts)
+    tsd = (sd / ts) * t if ts else 0.0
+    rows.append((n, t, tsd))
+    fa_seen.add(str(r.get("flash_attn", "?")))
 rows.sort()
 if not rows:
     print("  aucune mesure exploitable"); sys.exit()
-t1 = dict(rows).get(1) or rows[0][1]
+t1 = dict((n, t) for n, t, _ in rows).get(1) or rows[0][1]
 stamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+fa_real = ",".join(sorted(fa_seen))
 tsv = []
 
-hdr = ("batch", "t_forward", "cout rel.", "seuil non-perte", "gain max")
-print("  %6s %12s %10s %18s %9s" % hdr)
-print("  " + "-" * 60)
-best_m, best_gain = None, 0.0
-for n, t in rows:
-    rel  = t / t1                      # = nb mini de tokens a faire accepter
-    frac = rel / n                     # ... rapporte a la longueur du draft
-    gain = n / rel                     # debit max si TOUT est accepte
-    print("  %6d %9.1f ms %9.2fx %8.1f tok (%2.0f%%) %8.1fx"
-          % (n, t * 1000, rel, rel, 100 * frac, gain))
-    # size_m retenu : meilleur gain parmi les tailles ou le seuil reste sous
-    # 25%% du draft (au-dela, une acceptance partielle devient perdante)
-    if n > 1 and frac <= 0.25 and gain > best_gain:
-        best_m, best_gain = n, gain
-    tsv.append("%s\t%s\t%s\t%s\t%s\t%d\t%.2f\t%.4f\t%.3f" % (
+print("  %6s %14s %10s %18s %9s" % ("batch", "t_forward", "cout rel.", "seuil non-perte", "gain max"))
+print("  " + "-" * 64)
+noisy = []
+prev = None
+for n, t, tsd in rows:
+    rel  = t / t1
+    frac = rel / n
+    gain = n / rel
+    flag = ""
+    if prev is not None and t < prev[1]:
+        flag = "  <-- BAISSE"                    # non monotone : impossible physiquement
+        noisy.append((prev[0], n))
+    print("  %6d %8.1f+-%-4.1f ms %8.2fx %8.1f tok (%2.0f%%) %8.1fx%s"
+          % (n, t * 1000, tsd * 1000, rel, rel, 100 * frac, gain, flag))
+    tsv.append("%s\t%s\t%s\t%s\t%s\t%d\t%.2f\t%.2f\t%.4f\t%.3f" % (
         stamp, os.environ.get("MODEL_NAME", "?"), os.environ.get("DEV_NAME", "?"),
-        os.environ.get("DEPTH", "?"), os.environ.get("FA", "?"),
-        n, t * 1000, rel, gain))
+        os.environ.get("DEPTH", "?"), fa_real, n, t * 1000, tsd * 1000, rel, gain))
+    prev = (n, t)
 print()
 print("  seuil non-perte = tokens a faire accepter pour ne pas etre plus lent")
 print("                    que le decodage normal ; (%) = part du draft.")
 print()
+
+if noisy:
+    print("  ⚠ courbe NON MONOTONE (t_forward baisse quand le batch grossit) :")
+    for a, b in noisy:
+        print("      entre batch %d et %d" % (a, b))
+    print("    -> soit du bruit (relancer avec REPS=5, service arrete), soit un")
+    print("       changement de noyau ggml a ce palier. Verdict peu fiable en letat.")
+    print()
+
+# Enveloppe monotone : un point anormalement bas ne doit pas gonfler le verdict.
+env, run_max = [], 0.0
+for n, t, _ in rows:
+    run_max = max(run_max, t)
+    env.append((n, run_max))
+
+best_m, best_gain = None, 0.0
+for n, t in env:
+    if n > 1 and (t / t1) / n <= 0.25 and n / (t / t1) > best_gain:
+        best_m, best_gain = n, n / (t / t1)
+
 if best_m is None:
     print("  VERDICT : aucune taille de draft viable — courbe trop pentue,")
     print("            ne pas activer de spec-type n-gram sur ce modele.")
 else:
-    n_last, t_last = rows[-1]
-    rel_last = t_last / t1
+    rel_last = env[-1][1] / t1
     print("  VERDICT : --spec-ngram-map-k-size-m %d  (gain max x%.1f si tout accepte)"
           % (best_m, best_gain))
-    if rel_last / n_last > 0.25:
-        print("            NB : au-dela de %d la courbe se degrade (seuil %.0f%% a batch %d)"
-              % (best_m, 100 * rel_last / n_last, n_last))
     if rel_last < 1.5:
         print("            courbe PLATE (dense, borne bande passante) : aucun risque de perte.")
     else:
