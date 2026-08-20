@@ -106,14 +106,11 @@ elif [[ "$(head -1 "$TSV")" != "$TSV_HDR" ]]; then
 fi
 export TSV DEPTH
 
-# Le service occupe la mémoire unifiée et le GPU pendant la mesure : les
-# modèles préchargés faussent les points hauts (contention) et peuvent faire
-# échouer le chargement des géants. On prévient, on ne coupe rien tout seul.
-if systemctl --user is-active llama-server &>/dev/null; then
-  echo "⚠ llama-server tourne : contention GPU/mémoire pendant la mesure." >&2
-  echo "  Pour un run propre : systemctl --user stop llama-server" >&2
-  echo "" >&2
-fi
+# Le service occupe la mémoire unifiée et le GPU pendant la mesure. L'état est
+# relevé ici mais journalisé DANS le bloc tee (plus bas) : une mesure dont on
+# ignore si le service tournait n'est pas comparable à une autre.
+SERVICE_STATE="arrêté"
+systemctl --user is-active llama-server &>/dev/null && SERVICE_STATE="EN MARCHE"
 
 # Tout ce qui suit est affiché ET ajouté à $OUT (append : un run ne détruit
 # pas les précédents, on peut comparer deux backends ou deux DEPTH).
@@ -121,6 +118,15 @@ fi
 echo "# bench-spec-batch — $(date '+%F %T')"
 echo "# host=$(hostname)  devices=${DEVS[*]}  depth=$DEPTH  batches=$BATCHES  reps=$REPS  fa=$FA"
 echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)"
+echo "# service llama-server : $SERVICE_STATE"
+if [[ "$SERVICE_STATE" == "EN MARCHE" ]]; then
+  echo "#   ⚠ contention GPU/mémoire — pour un run propre :"
+  echo "#     systemctl --user stop llama-server"
+fi
+echo
+echo "# NB : les points à gros batch sont bornés compute et donc sensibles à"
+echo "#      l'état thermique. Un balayage enchaîné juste après un autre mesure"
+echo "#      une puce chaude : c'est le régime soutenu, pas le pic à froid."
 echo
 
 for gguf in "${GGUFS[@]}"; do
@@ -176,14 +182,20 @@ for n, t, tsd in rows:
     gain = n / rel
     flag = ""
     if prev is not None and t < prev[1]:
-        flag = "  <-- BAISSE"                    # non monotone : impossible physiquement
-        noisy.append((prev[0], n))
+        # Une baisse dans le bruit combine des deux points = plateau, pas une
+        # inversion. On ne signale que ce qui la depasse nettement (3 sigma).
+        sigma = (prev[2] ** 2 + tsd ** 2) ** 0.5
+        if prev[1] - t > 3 * sigma:
+            flag = "  <-- BAISSE"
+            noisy.append((prev[0], n))
+        else:
+            flag = "  (plateau)"
     print("  %6d %8.1f+-%-4.1f ms %8.2fx %8.1f tok (%2.0f%%) %8.1fx%s"
           % (n, t * 1000, tsd * 1000, rel, rel, 100 * frac, gain, flag))
     tsv.append("%s\t%s\t%s\t%s\t%s\t%d\t%.2f\t%.2f\t%.4f\t%.3f" % (
         stamp, os.environ.get("MODEL_NAME", "?"), os.environ.get("DEV_NAME", "?"),
         os.environ.get("DEPTH", "?"), fa_real, n, t * 1000, tsd * 1000, rel, gain))
-    prev = (n, t)
+    prev = (n, t, tsd)
 print()
 print("  seuil non-perte = tokens a faire accepter pour ne pas etre plus lent")
 print("                    que le decodage normal ; (%) = part du draft.")
@@ -193,8 +205,11 @@ if noisy:
     print("  ⚠ courbe NON MONOTONE (t_forward baisse quand le batch grossit) :")
     for a, b in noisy:
         print("      entre batch %d et %d" % (a, b))
-    print("    -> soit du bruit (relancer avec REPS=5, service arrete), soit un")
-    print("       changement de noyau ggml a ce palier. Verdict peu fiable en letat.")
+    print("    Le filtre a 3 sigma est deja passe : ce nest pas de la gigue de")
+    print("    mesure, mais un palier de noyau ggml — le batch du haut emprunte")
+    print("    un chemin plus rapide que celui du bas. La taille du bas est donc")
+    print("    a EVITER comme size_m. Rejouer le balayage tranche : un palier se")
+    print("    reproduit a lidentique, un artefact non.")
     print()
 
 # Enveloppe monotone : un point anormalement bas ne doit pas gonfler le verdict.
@@ -207,6 +222,21 @@ best_m, best_gain = None, 0.0
 for n, t in env:
     if n > 1 and (t / t1) / n <= 0.25 and n / (t / t1) > best_gain:
         best_m, best_gain = n, n / (t / t1)
+
+dominated = []
+for i, (n, t, _) in enumerate(rows):
+    if n <= 1:
+        continue
+    g_n, s_n = n / (t / t1), (t / t1)
+    for m2, t2, _ in rows[:i]:
+        if m2 > 1 and m2 / (t2 / t1) >= g_n and (t2 / t1) <= s_n:
+            dominated.append((n, m2)); break
+if dominated:
+    print("  Tailles DOMINEES (un draft plus court fait mieux sur les deux axes,")
+    print("  typiquement un palier de noyau ggml juste en dessous) :")
+    for n, m2 in dominated:
+        print("      size_m %d : batch %d est meilleur en gain ET en seuil" % (n, m2))
+    print()
 
 if best_m is None:
     print("  VERDICT : aucune taille de draft viable — courbe trop pentue,")
