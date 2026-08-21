@@ -18,7 +18,7 @@
 #
 # Les deux branches sont les copies exactes des heredocs d'origine : sys.argv
 # est décalé d'un cran (pop du mode) pour ne pas toucher aux indices.
-import json, sys
+import json, sys, zlib
 
 mode = sys.argv.pop(1) if len(sys.argv) > 1 else ""
 
@@ -26,9 +26,15 @@ mode = sys.argv.pop(1) if len(sys.argv) > 1 else ""
 # rien dire ("Nous dev dev dev dev…" à 500 t/s sur DeepSeek V4 / ROCm0, b10433,
 # 21/08/2026 : des opérateurs fusionnés renvoyés sur CPU, aucune erreur loggée).
 # Les timings sont alors excellents et parfaitement faux : --bench-devices a
-# couronné ce device. Test : sur >= 40 mots générés, moins de 15 % de mots
-# distincts. Du code réel est bien au-dessus (> 30 %), une boucle de charabia
-# bien en dessous (~2 %). Signalé par DEGEN=1, à l'appelant d'exclure la passe.
+# couronné ce device. Trois signaux sur >= 40 mots générés, un seul suffit :
+#   - le mot le plus fréquent fait > 40 % des mots (« dev » = 80 % dans le cas
+#     réel ; dans du texte ou du code, le mot dominant reste < 10 %) ;
+#   - moins de 15 % de mots distincts (code réel : > 30 %) — seul, ce critère
+#     a laissé passer un run où le charabia était ponctué de tokens collés
+#     (« devisoire,ual., ») qui gonflaient les distincts à 17 % ;
+#   - le texte se compresse à moins de 10 % (zlib) : une boucle quelconque, même
+#     de phrases longues, y tombe ; du texte réel reste vers 30 à 50 %.
+# Signalé par DEGEN=1, à l'appelant d'exclure la passe.
 def degenere(d):
     try:
         m = d["choices"][0]["message"]
@@ -36,7 +42,17 @@ def degenere(d):
         return False
     texte = (m.get("reasoning_content") or "") + " " + (m.get("content") or "")
     mots = texte.split()
-    return len(mots) >= 40 and len(set(mots)) / len(mots) < 0.15
+    if len(mots) < 40:
+        return False
+    freq = {}
+    for w in mots:
+        freq[w] = freq.get(w, 0) + 1
+    if max(freq.values()) / len(mots) > 0.40:
+        return True
+    if len(freq) / len(mots) < 0.15:
+        return True
+    brut = texte.encode("utf-8")
+    return len(zlib.compress(brut)) / len(brut) < 0.10
 
 
 if mode == "--bench":

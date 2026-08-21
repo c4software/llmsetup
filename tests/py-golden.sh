@@ -45,6 +45,9 @@ python3 "$PY/timings.py" --bench "$(cat "$F/chat-error.json")" 1 > "$TMP/o" || t
 # la ligne doit le signaler et émettre DEGEN=1, en bench comme en spec
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen.json")" 2 > "$TMP/o" || true; _ck bench-degen-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --spec  "$(cat "$F/chat-degen.json")" 2 "" > "$TMP/o" || true; _ck spec-degen-p2.txt "$TMP/o"
+# degen-mix : même charabia ponctué de tokens collés (17 % de mots distincts,
+# au-dessus du seuil) — c'est la part du mot dominant (80 %) qui doit le prendre
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen-mix.json")" 2 > "$TMP/o" || true; _ck bench-degen-mix-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 1 spec  > "$TMP/o" || true; _ck spec-p1.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 2 spec  > "$TMP/o" || true; _ck spec-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-plain.json")" 2 ""   > "$TMP/o" || true; _ck spec-plain-p2.txt "$TMP/o"

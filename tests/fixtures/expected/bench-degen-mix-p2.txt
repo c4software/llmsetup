@@ -1,0 +1,3 @@
+  passe 2 : prefill=31 t/s (n=4, cache=1470)  décode=512.70 t/s (n=300)  (prompt cache)  ⚠ SORTIE DÉGÉNÉRÉE (charabia répétitif) : mesure invalide
+DEGEN=1
+G=512.70
