@@ -8,6 +8,7 @@ lib/models.sh (déclarations : download_hf/llama_model/groupe → MODEL_INI, dé
         ▼                    surcharges
 generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
    (lib/ini.sh)      ◄──  spec-nmax.conf       (spec-draft-n-max par modèle)
+        │            ◄──  spec-ngram.conf      (spec-ngram-map-k-size-m par modèle)
         │            ◄──  preload.conf         (load-on-startup)
         ▼
 ~/models/models.ini  ──►  llama-server --models-preset (router mode)
@@ -33,7 +34,7 @@ common → models → ini → preload → setup → bench → spec → service �
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
   `_dl`, `_dl_shard`, `_maybe_restart_service`) et **toutes les variables
   globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `BENCH_CONF`,
-  `PRELOAD_CONF`, `SPEC_TEST_URL`, `SPEC_LOG`, `SPEC_CONF`, `SERVICE_NAME`,
+  `PRELOAD_CONF`, `SPEC_TEST_URL`, `SPEC_LOG`, `SPEC_CONF`, `SPEC_NGRAM_CONF`, `SERVICE_NAME`,
   `SERVICE_FILE`, `REFRESH`/`ONLY`. Elles vivent ici parce que plusieurs modules les
   consomment (`_maybe_restart_service` utilise `SERVICE_NAME`, `cmd_bench`
   utilise `SPEC_TEST_URL`) — définies **avant** toute fonction qui les utilise.
@@ -47,10 +48,13 @@ common → models → ini → preload → setup → bench → spec → service �
   et `PRESET_ORDER` = ordre de déclaration = ordre d'émission — `declare -A`
   ne préserve pas l'ordre d'insertion). Un `download_hf` peut servir
   plusieurs sections (même GGUF) et porter plusieurs fichiers (drafter externe).
-- `ini.sh` : loaders des trois confs (`load_bench_conf`, `load_preload_conf`,
-  `load_spec_conf`), `_preset_model_key`, `_preset_nmax` (surcharge
-  conf > défaut script, `SPEC_NMAX_FORCE` prime — utilisé par `--spec-tune`),
-  `generate_models_ini`.
+- `ini.sh` : loaders des quatre confs (`load_bench_conf`, `load_preload_conf`,
+  `load_spec_conf`, `load_spec_ngram_conf`), `_preset_model_key`,
+  `_preset_nmax` et `_preset_ngram_m` (surcharge conf > défaut script ;
+  `SPEC_NMAX_FORCE` / `SPEC_NGRAM_FORCE` + `*_PRESET` priment, posés par les
+  tuners pour tester une valeur sans l'écrire), `generate_models_ini`
+  (applique aussi `SPEC_MTP_ONLY_PRESET` : spec-type réduit à `draft-mtp`
+  le temps d'un `--spec-tune` sur un modèle à spec-type en liste).
 - `preload.sh` : sélection interactive (`select_preload_models`, gum ou
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
@@ -65,8 +69,15 @@ common → models → ini → preload → setup → bench → spec → service �
   (profil `BENCH_PROFILE_PP`/`BENCH_PROFILE_GEN`, défaut 2000/3000 ; à <2 %
   d'écart le device par défaut est préféré), vainqueur écrit dans
   `bench-devices.conf` via `_bench_save_device`), `cmd_list_devices`.
-- `spec.sh` : `cmd_spec_test`, `cmd_spec_tune`, `_spec_save_conf`, sélection
-  des modèles MTP ; l'analyse est déléguée à `py/spec_analyze.py`.
+- `spec.sh` : `cmd_spec_test` (3e argument = prompt, journalisé),
+  `cmd_spec_tune`, `cmd_spec_ngram_tune` (courbe `llama-bench` service
+  arrêté, raffinement en boucle bornée sur les `STEP_LO/HI` de
+  `batch_curve.py`, puis arbitrage par `cmd_spec_test` sur
+  `spec-refactor.txt` ; médianes exposées via `SPEC_TEST_MED_GEN/ACC`),
+  `_spec_save_conf`, `_spec_save_ngram_conf`, `_preset_spec_types` /
+  `_preset_has_spec_type` (un `spec-type` peut être une liste : ne jamais
+  ancrer un grep sur `= draft-mtp`), sélection des modèles MTP et n-gram ;
+  l'analyse est déléguée à `py/spec_analyze.py` et `py/batch_curve.py`.
 - `service.sh` : `cmd_start` (`--models-max` = préchargés + 1, min 2),
   `cmd_install_service` (service **user** piloté par `systemctl --user`, linger
   activé pour le démarrage au boot, `ExecStart` via `realpath` du
@@ -87,9 +98,10 @@ près — voir `tests/py-golden.sh`.
 | Script | Entrées | Sorties | Appelé par |
 |---|---|---|---|
 | `timings.py --bench <json> <passe>` | réponse `/v1/chat/completions` en argv | ligne d'affichage + `PP=`/`G=`/`A=` (+ `PPCACHED=1` si `cache_n` > 0 en passe 1 → prefill marqué `*` au récap) | `_bench_one` (bench.sh) |
-| `timings.py --spec <json> <passe> <flag>` | idem + `spec` si modèle spéculatif | ligne + `GEN=`/`ACC=`/`DN= DA= PN=` | `cmd_spec_test` (spec.sh) |
+| `timings.py --spec <json> <passe> <flag>` | idem + `spec` si modèle spéculatif, `specmix` si spec-type en liste (acceptance agrégée sur les implémentations, stats au niveau slot côté serveur) | ligne + `GEN=`/`ACC=`/`DN= DA= PN=` | `cmd_spec_test` (spec.sh) |
 | `build_body.py <modèle> <max_tokens> <seed> <fichier prompt> [fichier...]` (contenus joints par une ligne vide) | fichiers de `prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
-| `spec_server_nmax.py <modèle>` | JSON de `/v1/models` sur stdin | n-max réel du serveur (vide si absent) | `cmd_spec_test` |
+| `spec_server_nmax.py <modèle> [flag]` | JSON de `/v1/models` sur stdin | valeur réelle du flag (défaut `--spec-draft-n-max` ; aussi `--spec-type`, `--spec-ngram-map-k-size-m`), vide si absent | `cmd_spec_test` |
+| `batch_curve.py <modèle> <device> <depth> [tsv] [rec]` | jsonl de `llama-bench -o jsonl` sur stdin (plusieurs balayages concaténés, le plus récent fait foi) | tableau batch/size_m/coût/seuil/gain, marches, baisses au-delà du bruit, tailles dominées, verdict ; `SIZEM_SAFE=`/`SIZEM_LARGE=`/`STEP_LO=`/`STEP_HI=` si `rec` ; append TSV si fichier donné | `cmd_spec_ngram_tune`, `tools/bench-spec-batch.sh` |
 | `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
 
 ## Prompts de mesure (`prompts/`)
@@ -99,7 +111,8 @@ fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
 
 | Fichier | Consommé par | Contenu |
 |---|---|---|
-| `spec-test.txt` | `cmd_spec_test` | prompt de référence (module `inventory.py` + tests pytest — code structuré = meilleur cas MTP) |
+| `spec-test.txt` | `cmd_spec_test` | prompt de référence (module `inventory.py` + tests pytest — code structuré = meilleur cas MTP) ; seul prompt qui alimente la calibration α |
+| `spec-refactor.txt` | `cmd_spec_ngram_tune` (via `cmd_spec_test`) | le même module fourni dans le contexte, avec des blocs à recopier exactement puis à remplacer (forme oldString/newString d'opencode) : le seul cas où un n-gram a des hits, donc le seul qui départage deux `size_m` |
 | `bench-context.txt` | `_bench_one` | contexte réaliste du bench : cahier des charges du système que la tâche demande d'implémenter (long prefill varié ; taille réelle = `n=` de la passe 1) |
 | `bench-task.txt` | `_bench_one` | tâche de génération posée après le contexte (référence les sections du cahier des charges) |
 
@@ -140,6 +153,37 @@ incohérent (ini changé sans restart) → quarantaine automatique dans le log
 (ligne commentée `;`). Limites : α supposé constant par position et par type
 de texte ; t(k) affine ; le modèle sert à suggérer le prochain k à mesurer,
 pas à remplacer la mesure.
+
+Journal `spec-tests.log` (TSV) : `date modèle gguf device nmax gen acc
+drafted accepted predicted spectype prompt`. Les colonnes 11 et 12 datent du
+support des listes et du prompt paramétrable ; absentes = `draft-mtp` seul
+sur `spec-test.txt`. `spec_analyze.py` écarte (sans quarantaine : ils sont
+valides, juste hors modèle) les runs en spec-type mixte, dont le k varie
+par forward, et ceux d'un autre prompt ; sans ce filtre le garde-fou
+tokens/forward > k+1 les commenterait tous. C'est pourquoi `--spec-tune`
+mesure en `draft-mtp` seul (`SPEC_MTP_ONLY_PRESET`).
+
+## Réglage n-gram (`batch_curve.py`, `--spec-ngram-tune`)
+
+Un draft de `size_m` tokens est vérifié dans un forward de batch
+`size_m + 1`. Le gain ne dépend que de la forme de `t_forward(batch)`, qui
+a des marches : ggml change de noyau selon la taille du batch (Vulkan :
+`mul_mat_vec_max_cols = 8`, x2 entre batch 8 et 9, mesuré sur un dense et
+un MoE). Deux régimes seulement ont du sens, le script sort les deux :
+**sûr** = plus grande taille sous la première marche (seuil de non-perte
+minimal), **large** = taille qui maximise `gain = batch / coût relatif` sous
+`PART_SEUIL_MAX` (25 % du draft). Une marche est un saut de coût **par unité
+de batch** > `FACTEUR_MARCHE` (1,5) : normaliser est indispensable, la pente
+d'un MoE double aussi le coût entre 1 et 8 sans changer de noyau. Mais un
+balayage grossier ne peut pas voir une marche entre deux de ses points (x2,13
+entre 8 et 9 se dilue en x1,11 par unité entre 8 et 16) : les sauts bruts
+suspects entre batches non consécutifs sont renvoyés en `STEP_LO/HI` et le
+bash les raffine batch par batch, en boucle bornée, jusqu'à ce qu'il n'en
+reste plus. Les baisses de `t_forward` ne sont signalées qu'au-delà de
+3 sigma (bruit combiné). L'arbitrage final est une mesure réelle : la
+courbe ne connaît pas la longueur des répétitions rencontrées. `min-hits`
+n'est pas réglé (second ordre, restarts multipliés), il vit dans
+`lib/models.sh`.
 
 ## Verdict de --bench-devices (temps de tour simulé)
 
@@ -184,6 +228,15 @@ de ROCm (+16 %) ne compense pas son décode plus lent (-27 %) : sur ce
 profil, le décode domine dès que GEN/décode dépasse largement
 PP/prefill, ce qui est le cas de tous les modèles denses de ce parc.
 
+## Outils hors service (`tools/`)
+
+`bench-spec-batch.sh` : balayage `llama-bench` brut d'un ou plusieurs GGUF
+sur un ou plusieurs devices, sans passer par le service (à arrêter soi-même
+pour une mesure propre, l'état est journalisé). Journal lisible
+`spec-batch.log` et TSV `spec-batch.tsv` à côté du point d'entrée. Sert à
+explorer ; pour régler, `--spec-ngram-tune`. Les autres fichiers de `tools/`
+(sync opencode, extension pi) sont décrits dans le README.
+
 ## Invariants (à ne pas casser)
 
 - `models.ini` **byte-identique** à confs égales : `generate_models_ini` est
@@ -194,5 +247,9 @@ PP/prefill, ce qui est le cas de tous les modèles denses de ce parc.
 - `--cleanup` piloté uniquement par `KNOWN_FILES`.
 - Restart requis après toute régénération du ini (routeur = lecture au boot).
 - Mesures spec : l'état réel vient de `/v1/models`, jamais du script/ini.
+- `spec-type` peut être une liste : tester l'appartenance
+  (`_preset_has_spec_type`), jamais un grep ancré sur `= draft-mtp`.
+- Les lignes existantes de `spec-tests.log` restent lisibles : toute colonne
+  nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 - Entrée non interactive (`! -t 0`) gérée partout : jamais de question, jamais
   de restart automatique.

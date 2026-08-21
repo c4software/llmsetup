@@ -12,7 +12,9 @@ Ce qu'il gère :
 - préchargement always-on ou chargement à la demande (LRU) ;
 - mesure des perfs par l'API du serveur (`--bench`, `--bench-devices`,
   `--spec-test`) ;
-- réglage de la spéculation MTP (`spec-draft-n-max`) par mesure et calibration ;
+- réglage de la spéculation par mesure : MTP (`spec-draft-n-max`, calibration
+  α) et n-gram (`spec-ngram-map-k-size-m`, courbe de coût du batch puis
+  arbitrage réel) ;
 - service systemd user.
 
 Les backends ggml (Vulkan par défaut, ROCm/HIP optionnel) sont des paquets
@@ -48,7 +50,7 @@ systemctl --user start llama-server
 | `--bench [modèle\|all] [n]` | Mesure le serveur tel qu'il tourne : prefill, décode médian, acceptance MTP, tableau récapitulatif. N'écrit rien |
 | `--bench-devices [modèle] [devices] [n]` | Compare les devices d'un modèle (défaut Vulkan0,ROCm0) : bench avec restart par device, verdict par temps de tour simulé, vainqueur écrit dans `bench-devices.conf` (détail dans ARCHITECTURE.md) |
 | `--list-devices` | Backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
-| `--spec-test [modèle] [n]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées |
+| `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--spec-ngram-tune [modèle] [n] [prompt]` | Règle la longueur de draft n-gram (`spec-ngram-map-k-size-m`) : courbe `t_forward(batch)` pour localiser la marche de noyau ggml, puis arbitrage des candidats sur mesure réelle (prompt de refactor par défaut) |
 | `--start` | Lance llama-server sur le port 8009 (commande du service) |
@@ -135,6 +137,40 @@ et le service redémarre sur la config retenue. Le fichier reste éditable à
 la main pour forcer un choix. Formule, garde-fous et limites : section
 dédiée dans ARCHITECTURE.md.
 
+## Spéculation n-gram (--spec-ngram-tune)
+
+Un `spec-type` peut être une liste (`ngram-map-k,draft-mtp`) : llama.cpp
+essaie les implémentations dans son ordre de priorité (draftless d'abord) et
+la première qui produit un draft gagne le pas de décode. `ngram-map-k`
+construit sa table à partir du prompt entier : en édition agentic, où le
+modèle recopie des blocs du fichier lu, un hit drafte jusqu'à `size_m`
+tokens d'un coup, vérifiés dans un seul forward de batch `size_m + 1`.
+
+Le bon `size_m` dépend donc de la forme de `t_forward(batch)` sur le device,
+qui n'est pas une pente lisse : ggml change de noyau selon la taille du
+batch (sur Vulkan, x2 entre batch 8 et 9, denses comme MoE). Les tailles
+juste au-dessus d'une marche sont les pires. `--spec-ngram-tune` fait le
+travail en deux temps :
+
+1. courbe par `llama-bench`, service arrêté, balayage grossier puis
+   raffinement automatique autour des sauts suspects ; sortie : un candidat
+   « sûr » (sous la marche, ne peut pas perdre) et un « large » (amortit le
+   coût fixe, gagne si les répétitions sont longues) ;
+2. arbitrage réel : chaque candidat est écrit, le service redémarré, et
+   `--spec-test` mesuré sur `prompts/spec-refactor.txt` (recopie de blocs
+   exacts puis remplacement, la forme du oldString/newString d'opencode ;
+   `spec-test.txt` écrit du neuf et ne produit aucun hit). Le gagnant va
+   dans `spec-ngram.conf` ; à moins de 2 % d'écart, le plus petit.
+
+Mesuré le 21/08/2026 sur Vulkan0 : 27B Q4 et Qwopus Q5 retiennent 47
+(+8 % et +16 % sur 7), le 35B-A3B MoE retient 7 (sa pente sous la marche
+est trop raide pour amortir un draft large). Un run en `spec-type` mixte est
+journalisé mais exclu de la calibration α (k variable par forward) ; pour la
+même raison `--spec-tune` mesure en `draft-mtp` seul le temps du réglage.
+
+Pour explorer sans régler (autre GGUF, comparer ROCm0 et Vulkan0, modèle
+sans MTP) : `tools/bench-spec-batch.sh` (voir Outils).
+
 ## Fichiers de configuration
 
 À côté du script, locaux et non versionnés (propres à la machine) :
@@ -204,6 +240,7 @@ la variante MTP avec le suffixe `-mtp` suffit, rien d'autre à maintenir.
 | Fichier | Rôle |
 |---|---|
 | `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
+| `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices (`DEV=Vulkan0,ROCm0`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
 | `llm-setup.ts` | Extension pi : découvre les modèles sur `/v1/models` (ctx, n-predict, reasoning depuis `status.args`) et enregistre le provider `llamaswap`. A copier dans `~/.pi/agent/extensions/`. Variable : `LLAMASWAP_ENDPOINT` |
 
 Les deux pointent sur `http://bigchuck:8009` par défaut (surchargeable par variable d'environnement).
