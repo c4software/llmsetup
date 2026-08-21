@@ -95,11 +95,16 @@ if mode == "--bench":
     dn, da = t.get("draft_n"), t.get("draft_n_accepted")
     acc = f"  acceptance={da/dn:.2f}" if dn else ""
     note = "" if sys.argv[2] == "1" else "  (prompt cache)"
-    # cache_n > 0 en passe 1 : le prefill est partiellement servi depuis un état
+    # cache_n en passe 1 : le prefill est partiellement servi depuis un état
     # antérieur (slot-prompt-similarity + cache-ram/checkpoints) → chiffre gonflé.
+    # Seuil relatif (> 10 % du prompt) : un préambule de template partagé avec
+    # la requête de contrôle de --bench-sanity (60 tokens sur 1368 sur gpt-oss,
+    # template harmony) ne change pas le t/s et ne doit pas marquer la mesure.
     # Signalé (ligne + PPCACHED= pour le "*" du récap), jamais corrigé ici :
     # --bench reste une mesure passive du serveur tel qu'il tourne.
-    warn = "  ⚠ prefill partiellement servi par le cache" if sys.argv[2] == "1" and cached else ""
+    part_cache = cached / (pn + cached) if (pn + cached) else 0.0
+    contamine = sys.argv[2] == "1" and part_cache > 0.10
+    warn = "  ⚠ prefill partiellement servi par le cache (%.0f %%)" % (100 * part_cache) if contamine else ""
     degen = degenere(d)
     if degen:
         warn += "  ⚠ SORTIE DÉGÉNÉRÉE (charabia répétitif) : mesure invalide"
@@ -108,7 +113,7 @@ if mode == "--bench":
         print("DEGEN=1")
     if sys.argv[2] == "1":
         print(f"PP={pp:.2f}")
-        if cached:
+        if contamine:
             print("PPCACHED=1")
     else:
         print(f"G={tg:.2f}")
