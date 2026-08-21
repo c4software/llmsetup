@@ -1,0 +1,10 @@
+Voici un programme Python :
+
+```python
+total = 0
+for i in range(10):
+    total += i
+print(total * 2 + 3)
+```
+
+Qu'affiche-t-il ? Réponds uniquement par le nombre, sans explication.

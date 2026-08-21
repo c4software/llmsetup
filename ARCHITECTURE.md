@@ -68,7 +68,10 @@ common → models → ini → preload → setup → bench → spec → service �
   (salves de 1 puis n requêtes simultanées, `parallel` réel lu sur
   `/v1/models`, agrégat par `py/parallel_agg.py`), `cmd_bench_cache` (quatre
   requêtes froid / suite / édition au milieu / identique, part servie du cache
-  par `py/cache_stats.py`), `_bench_one`,
+  par `py/cache_stats.py`), `cmd_bench_sanity` / `_bench_sanity_one`
+  (justesse, `py/check_answer.py`, appliquée par `cmd_bench_devices` avant
+  chaque device), `cmd_bench_load` (restart + première requête chronométrée,
+  TTFT à chaud), `_bench_one`,
   sélections, `cmd_bench_devices` (comparaison automatique des devices d'un
   modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré + restart par
   device, verdict = temps d'un tour d'usage simulé `PP/prefill + GEN/décode`
@@ -109,6 +112,7 @@ près — voir `tests/py-golden.sh`.
 | `spec_server_nmax.py <modèle> [flag]` | JSON de `/v1/models` sur stdin | valeur réelle du flag (défaut `--spec-draft-n-max` ; aussi `--spec-type`, `--spec-ngram-map-k-size-m`), vide si absent | `cmd_spec_test` |
 | `batch_curve.py <modèle> <device> <depth> [tsv] [rec]` | jsonl de `llama-bench -o jsonl` sur stdin (plusieurs balayages concaténés, le plus récent fait foi) | tableau batch/size_m/coût/seuil/gain, marches, baisses au-delà du bruit, tailles dominées, verdict ; `SIZEM_SAFE=`/`SIZEM_LARGE=`/`STEP_LO=`/`STEP_HI=` si `rec` ; append TSV si fichier donné | `cmd_spec_ngram_tune`, `tools/bench-spec-batch.sh` |
 | `depth_curve.py <modèle> <device> <pp> <gen> [tsv] [rec]` | jsonl de `llama-bench -d` sur stdin | tableau prefill/décode/tour simulé par profondeur, dégradation de 0 à la profondeur max, `TOUR_<depth>=` si `rec` ; append TSV | `tools/bench-depth.sh` |
+| `check_answer.py <json> <attendu>` | réponse `/v1/chat/completions` | ligne lisible ; code 0 si la valeur attendue est dans la réponse (ou le raisonnement), 1 sinon | `_bench_sanity_one` (bench.sh, aussi appelé par `cmd_bench_devices`) |
 | `cache_stats.py <json> <étiquette>` | réponse `/v1/chat/completions` | ligne lisible + `PN=` (tokens du prompt) `CN=` (servis du cache) `PMS=` (prefill ms) | `cmd_bench_cache` |
 | `parallel_agg.py <temps_mur_s> <réponse.json>...` | réponses d'une salve de requêtes simultanées | ligne lisible + `AGG=` (tokens / temps mur) `MED=` (décode médian par requête) `TOK=` `ERR=` | `_bench_parallel_salve` (bench.sh) |
 | `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device, build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
@@ -124,6 +128,7 @@ fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
 | `spec-test.txt` | `cmd_spec_test` | prompt de référence (module `inventory.py` + tests pytest — code structuré = meilleur cas MTP) ; seul prompt qui alimente la calibration α |
 | `spec-refactor.txt` | `cmd_spec_ngram_tune` (via `cmd_spec_test`) | le même module fourni dans le contexte, avec des blocs à recopier exactement puis à remplacer (forme oldString/newString d'opencode) : le seul cas où un n-gram a des hits, donc le seul qui départage deux `size_m` |
 | `bench-context.txt` | `_bench_one` | contexte réaliste du bench : cahier des charges du système que la tâche demande d'implémenter (long prefill varié ; taille réelle = `n=` de la passe 1) |
+| `bench-sanity.txt` | `_bench_sanity_one` | petit programme Python à réponse connue (93) : contrôle de justesse d'un device |
 | `bench-task.txt` | `_bench_one` | tâche de génération posée après le contexte (référence les sections du cahier des charges) |
 
 **⚠ Comparabilité.** Modifier un de ces fichiers invalide les comparaisons

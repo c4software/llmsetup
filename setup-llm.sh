@@ -52,6 +52,8 @@ case "${1:-}" in
   --bench-devices)     cmd_bench_devices "${2:-}" "${3:-}" "${4:-}" ;;
   --bench-parallel)    cmd_bench_parallel "${2:-}" "${3:-}" "${4:-}" ;;
   --bench-cache)       cmd_bench_cache "${2:-}" ;;
+  --bench-sanity)      cmd_bench_sanity "${2:-}" ;;
+  --bench-load)        cmd_bench_load "${2:-}" ;;
   --preload)           cmd_preload ;;
   --list-devices)      cmd_list_devices ;;
   --spec-test)         cmd_spec_test "${2:-}" "${3:-}" "${4:-}" ;;

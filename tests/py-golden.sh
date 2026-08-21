@@ -70,6 +70,12 @@ python3 "$PY/spec_server_nmax.py" inconnu                 < "$F/models.json" > "
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models-mixte.json" > "$TMP/o"; _ck spectype-found.txt "$TMP/o"
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models.json"       > "$TMP/o"; _ck spectype-absent.txt "$TMP/o"
 
+# --- check_answer.py : réponse directe, dans le raisonnement seulement, fausse (1093 ≠ 93)
+for c in ok think bad; do
+  code=0; python3 "$PY/check_answer.py" "$(cat "$F/chat-answer-$c.json")" 93 > "$TMP/o" || code=$?
+  echo "rc=$code" >> "$TMP/o"; _ck "answer-$c.txt" "$TMP/o"
+done
+
 # --- cache_stats.py : 1350 tokens servis du cache sur 1470 (92 %), erreur, illisible
 python3 "$PY/cache_stats.py" "$(cat "$F/chat-cached.json")" "2. suite" > "$TMP/o" || true; _ck cache-suite.txt "$TMP/o"
 python3 "$PY/cache_stats.py" "$(cat "$F/chat-error.json")" "1. froid" > "$TMP/o" || true; _ck cache-error.txt "$TMP/o"

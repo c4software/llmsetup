@@ -495,6 +495,126 @@ PY
     >> "$BENCH_CACHE_LOG" 2>/dev/null || true
 }
 
+# =============================================================================
+# bench-sanity — le modèle répond-il JUSTE sur ce device ?
+#
+# Usage : ./setup-llm.sh --bench-sanity [modèle|all]
+#
+# Une question à réponse connue (prompts/bench-sanity.txt : un petit programme
+# Python, réponse 93). Le garde-fou « sortie dégénérée » de timings.py attrape
+# le charabia ; celui-ci attrape un texte propre et faux. Appelé par
+# --bench-devices avant chaque mesure : un device qui répond faux est exclu.
+# =============================================================================
+BENCH_SANITY_ATTENDU=93
+
+_bench_sanity_one() {
+  # $1 modèle → 0 si juste, 1 sinon (ligne lisible affichée)
+  local preset="$1" body out
+  body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 800 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
+  out="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body")" \
+    || { warn "  justesse : échec curl"; return 1; }
+  if python3 "$SCRIPT_DIR/py/check_answer.py" "$out" "$BENCH_SANITY_ATTENDU"; then
+    return 0
+  fi
+  return 1
+}
+
+cmd_bench_sanity() {
+  local target="${1:-}"
+  curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
+  local -a cibles=()
+  if [[ "$target" == "all" ]]; then
+    _bench_presets; cibles=("${BENCH_PRESETS[@]}")
+  elif [[ -n "$target" ]]; then
+    [[ -n "${MODEL_INI[$target]:-}" ]] || error "Modèle inconnu : '$target' (voir --help)"
+    cibles=("$target")
+  else
+    _bench_select_one
+    [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné."; return; }
+    cibles=("$BENCH_DEV_CHOICE")
+  fi
+  local p rc=0
+  for p in "${cibles[@]}"; do
+    info "── $p ──"
+    _bench_sanity_one "$p" || rc=1
+  done
+  return $rc
+}
+
+# =============================================================================
+# bench-load — temps de chargement d'un modèle et premier token
+#
+# Usage : ./setup-llm.sh --bench-load [modèle|all]
+#
+# Pour chaque modèle : restart du service (tout est évincé), puis une requête
+# d'un token chronométrée de bout en bout = chargement des poids + premier
+# token ; puis la même requête à chaud = temps de premier token (TTFT) seul.
+# Base objective pour preload.conf (ce que coûte un modèle à la demande) et
+# pour --models-max (une bascule LRU = ce temps-là). « Froid » s'entend pour
+# le processus : le fichier peut rester dans le cache de pages du noyau (124 Go
+# de RAM), le disque n'est pas forcément relu — le chiffre reflète l'usage réel
+# (bascule entre modèles), pas un démarrage machine.
+# Journal : logs/bench-load.log (TSV, avec build).
+# =============================================================================
+BENCH_LOAD_LOG="$LOG_DIR/bench-load.log"
+
+cmd_bench_load() {
+  local target="${1:-}"
+  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
+    || error "Service $SERVICE_NAME non installé — --bench-load redémarre le service entre deux modèles (--install-service)."
+  local -a cibles=()
+  if [[ "$target" == "all" ]]; then
+    _bench_presets; cibles=("${BENCH_PRESETS[@]}")
+  elif [[ -n "$target" ]]; then
+    [[ -n "${MODEL_INI[$target]:-}" ]] || error "Modèle inconnu : '$target' (voir --help)"
+    cibles=("$target")
+  else
+    _bench_select_one
+    [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné."; return; }
+    cibles=("$BENCH_DEV_CHOICE")
+  fi
+  warn "Chaque modèle = restart de $SERVICE_NAME (les modèles préchargés se rechargent ensuite)."
+  local p body t0 t1 froid chaud gguf taille dev t
+  local -a rows=()
+  for p in "${cibles[@]}"; do
+    echo ""
+    info "── $p ──"
+    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
+    t=0
+    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
+      sleep 1; t=$((t+1))
+      if [[ $t -ge 120 ]]; then error "llama-server ne répond pas après 120 s"; fi
+    done
+    body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$p" 1 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
+    t0="$(date +%s.%N)"
+    curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body" -o /dev/null || true
+    t1="$(date +%s.%N)"
+    froid="$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.1f", b-a}')"
+    t0="$(date +%s.%N)"
+    curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body" -o /dev/null || true
+    t1="$(date +%s.%N)"
+    chaud="$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.0f", (b-a)*1000}')"
+    gguf="$(echo "${MODEL_INI[$p]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
+    # taille = tous les shards du dossier de quant (du sur le dossier du shard 00001)
+    taille="$(du -shL "$(dirname "$gguf")" 2>/dev/null | cut -f1 || echo '?')"
+    dev="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
+      | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$p" --device 2>/dev/null || true)"
+    info "  chargement + 1er token : $froid s ($taille, ${dev:-$DEFAULT_DEVICE}) ; à chaud : $chaud ms"
+    rows+=("$p|$taille|${dev:-$DEFAULT_DEVICE}|$froid|$chaud")
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%F %T')" "$p" "$(basename "$gguf")" "${dev:-$DEFAULT_DEVICE}" \
+      "$(_llama_build)" "$taille" "$froid" "$chaud" >> "$BENCH_LOAD_LOG" 2>/dev/null || true
+  done
+  echo ""
+  info "════════ Chargement ($(date '+%F %T')) ════════"
+  {
+    echo "modèle|taille|device|chargement + 1er token (s)|TTFT à chaud (ms)"
+    printf '%s\n' "${rows[@]}"
+  } | column -t -s'|'
+  info "Restart final de $SERVICE_NAME (retour aux modèles préchargés)..."
+  systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec : systemctl --user restart $SERVICE_NAME"
+}
+
 cmd_bench_devices() {
   local preset="${1:-}"
   local devlist="${2:-Vulkan0,ROCm0}"
@@ -572,6 +692,12 @@ cmd_bench_devices() {
         error "llama-server ne répond pas après 120 s : journalctl --user -u $SERVICE_NAME -e"
       fi
     done
+    # Justesse d'abord : un device qui répond faux (texte propre mais dérive
+    # numérique) ne doit pas entrer dans la comparaison, ses t/s sont sans objet.
+    if ! _bench_sanity_one "$preset"; then
+      warn "  $d : réponse fausse à la question de contrôle — device exclu."
+      continue
+    fi
     if _bench_one "$preset" "$passes"; then
       # BENCH_ROW = "modèle|prefill|décode|acceptance" : le modèle est le même
       # partout, la ligne du récap porte le device

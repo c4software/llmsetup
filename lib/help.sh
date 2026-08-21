@@ -44,6 +44,14 @@ Commandes :
                            contexte froid, tour suivant, édition au milieu,
                            requête identique — part servie du cache et prefill
                            à chaque fois. Journal logs/bench-cache.log
+  --bench-sanity [modèle|all]
+                           Le modèle répond-il juste (question à réponse connue) ?
+                           Complète le garde-fou anti-charabia ; --bench-devices
+                           l'applique avant chaque device
+  --bench-load [modèle|all]
+                           Temps de chargement + 1er token après restart, puis TTFT
+                           à chaud — ce que coûte un modèle à la demande (preload,
+                           bascule LRU). Journal logs/bench-load.log
   --list-devices           Backends ggml installés + devices exposés par llama-bench,
                            croisés avec bench-devices.conf (alerte si device disparu)
   --spec-test [modèle] [n] [prompt]
@@ -88,6 +96,7 @@ Fichiers (à côté du script, locaux, non versionnés) :
                            comparé automatiquement au run précédent
   logs/bench-parallel.log  journal des --bench-parallel
   logs/bench-cache.log     journal des --bench-cache
+  logs/bench-load.log      journal des --bench-load
   logs/spec-batch.log/.tsv journal des balayages tools/bench-spec-batch.sh
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
   spec-ngram.conf          modèle = spec-ngram-map-k-size-m retenu par --spec-ngram-tune

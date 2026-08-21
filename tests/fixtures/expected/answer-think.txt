@@ -1,0 +1,2 @@
+  justesse : OK dans le raisonnement seulement (93 ; réponse : '')
+rc=0
