@@ -171,6 +171,50 @@ même raison `--spec-tune` mesure en `draft-mtp` seul le temps du réglage.
 Pour explorer sans régler (autre GGUF, comparer ROCm0 et Vulkan0, modèle
 sans MTP) : `tools/bench-spec-batch.sh` (voir Outils).
 
+## Résultats mesurés (bigchuck, 21/08/2026)
+
+Machine : AMD Ryzen AI MAX+ 395 (Radeon 8060S, 124 Go de mémoire unifiée),
+CachyOS noyau 7.1.8, llama-cpp b10433 / ggml 0.20.0. Médianes hors première
+passe, 4 passes sauf mention. Les lignes `spec-test.txt` (écriture d'un module
+de zéro, meilleur cas MTP) et `spec-refactor.txt` (recopie de blocs exacts,
+le cas n-gram) ne se comparent pas entre elles.
+
+| Modèle | GGUF | Device | Configuration | Gen t/s | Acceptance | Prompt |
+|---|---|---|---|---|---|---|
+| qwen3.8-27b-mtp-nothink | UD-Q4_K_XL (17 Go) | Vulkan0 | draft-mtp n-max 2 | 26,8 | 0,95 | spec-test |
+| | | | draft-mtp n-max 4 | 31,8 | 0,85 | spec-test |
+| | | | **draft-mtp n-max 6** (retenu) | **33,1** | 0,75 | spec-test |
+| | | | ngram-map-k 7 + mtp 4 | 44,0 | 0,94 | spec-refactor |
+| | | | **ngram-map-k 47 + mtp 4** (retenu) | **47,4** | 0,73 | spec-refactor |
+| | | ROCm0 (15/08) | draft-mtp n-max 2 / 4 / 6 | 22,2 / 25,5 / 26,0 | | spec-test |
+| qwopus3.6-27b-coder-mtp-nothink | Q5_K_M | Vulkan0 | ngram-map-k 7 + mtp 4 | 43,9 | 0,95 | spec-refactor |
+| | | | **ngram-map-k 47 + mtp 4** (retenu) | **50,7** | 0,78 | spec-refactor |
+| qwen3.6-35b-a3b-mtp-nothink | UD-Q4_K_XL (MoE) | Vulkan0 | **ngram-map-k 7 + mtp 4** (retenu) | **110,3** | 0,93 | spec-refactor |
+| | | | ngram-map-k 47 + mtp 4 | 105,3 | 0,71 | spec-refactor |
+| deepseek-v4-flash | UD-IQ3_XXS (104 Go, MoE) | Vulkan0 | sans spéculation | 11,3 | | spec-refactor |
+| | | | **ngram-map-k 7** (retenu) | **12,3** | 0,9 sur les hits | spec-refactor |
+| | | | ngram-map-k 31 | 11,8 | 0,27 à 0,66 | spec-refactor |
+| | | ROCm0 | sans spéculation | ~550 (**charabia**, exclu) | | bench |
+
+Prefill (passe 1, cache froid) : 27B ~220 t/s sur spec-test, ~275 t/s sur
+spec-refactor ; 35B-A3B ~865 t/s ; DeepSeek 108 à 120 t/s (Vulkan0).
+
+Courbes `t_forward(batch)` sur Vulkan0 (`tools/bench-spec-batch.sh`, reps=5) :
+
+| GGUF | batch 1 | batch 8 | batch 9 | batch 48 | Lecture |
+|---|---|---|---|---|---|
+| Qwen3.8-27B Q4 | 83 ms | 101 ms | 215 ms | 283 ms | marche x2,13 entre 8 et 9, plateau jusqu'à 16 |
+| Qwopus3.6-27B Q5 | 89 ms | 106 ms | 257 ms | 310 ms | marche x2,42 |
+| Qwen3.6-35B-A3B Q4 (MoE) | 17 ms | 33 ms | 68 ms | 136 ms | marche x2,06, mais pente raide sous la marche (batch 8 = 1,9x) |
+| DeepSeek-V4-Flash IQ3 (MoE) | 83 ms | 302 ms | | 1087 ms | pas de marche, x3,6 dès le batch 8 : la courbe disait « non », la mesure a dit +9 % |
+
+Enseignements : la marche Vulkan 8→9 (`mul_mat_vec_max_cols = 8`) vaut pour
+les denses comme pour les MoE ; le régime large (47) gagne sur les denses,
+le régime sûr (7) sur les MoE ; l'optimum du n-max MTP dépend du device
+(4 sur ROCm0, 6 sur Vulkan0 pour le même GGUF) ; ROCm0 est inutilisable sur
+DeepSeek V4 avec ce build (sortie dégénérée silencieuse, détectée depuis par
+le garde-fou de `timings.py`).
+
 ## Fichiers de configuration
 
 À côté du script, locaux et non versionnés (propres à la machine) :
