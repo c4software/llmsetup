@@ -516,13 +516,21 @@ cmd_spec_ngram_tune() {
   systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
     || error "Service $SERVICE_NAME non installé — l'arbitrage a besoin de le redémarrer (--install-service)."
 
+  # Défaut spec-refactor.txt et non spec-test.txt : ce dernier écrit un module
+  # de zéro, sans une répétition à retrouver, donc sans un seul hit n-gram — les
+  # candidats y seraient indistinguables et l'arbitrage aveugle. spec-refactor
+  # fournit un module dans le contexte et demande d'en recopier des blocs exacts
+  # avant de les remplacer : c'est la forme du oldString/newString d'opencode,
+  # et c'est là que les longueurs de match se jouent.
   if [[ -z "$prompt_file" ]]; then
-    prompt_file="$SCRIPT_DIR/prompts/spec-test.txt"
-    warn "Prompt par défaut (spec-test.txt) : génération neuve, sans répétition."
-    warn "  Les deux candidats y seront quasi indistinguables — l'arbitrage ne"
-    warn "  mesure rien d'utile. Passer un prompt de refactor en 3e argument."
+    prompt_file="$SCRIPT_DIR/prompts/spec-refactor.txt"
   fi
   [[ -f "$prompt_file" ]] || error "Prompt introuvable : $prompt_file"
+  info "Prompt d'arbitrage : $(basename "$prompt_file")"
+  if [[ "$(basename "$prompt_file")" == "spec-test.txt" ]]; then
+    warn "spec-test.txt génère du neuf, sans répétition : aucun hit n-gram,"
+    warn "  donc des candidats indistinguables. Préférer spec-refactor.txt."
+  fi
 
   local gguf mkey mdev
   gguf="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"

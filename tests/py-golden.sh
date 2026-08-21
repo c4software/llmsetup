@@ -97,7 +97,11 @@ _ck analyze-mixte-log.txt "$TMP/spec-tests-mixte.log"
 # --- build_body.py : équivalence json.loads avec les bodies de référence -----
 python3 "$PY/build_body.py" qwen3.8-27b-mtp-nothink 1500 43 "$PROMPTS/spec-test.txt" > "$TMP/body-spec.json"
 python3 "$PY/build_body.py" qwen3.6-35b-a3b-nothink 1000 43 "$PROMPTS/bench-context.txt" "$PROMPTS/bench-task.txt" > "$TMP/body-bench.json"
-for b in body-spec body-bench; do
+# spec-refactor : prompt de l'arbitrage --spec-ngram-tune. La référence fige le
+# prompt autant que le body — le modifier invalide les comparaisons avec les
+# runs antérieurs de spec-tests.log (cf. AGENTS.md).
+python3 "$PY/build_body.py" qwen3.8-27b-mtp-nothink 1500 43 "$PROMPTS/spec-refactor.txt" > "$TMP/body-refactor.json"
+for b in body-spec body-bench body-refactor; do
   if python3 -c '
 import json, sys
 a, b = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))

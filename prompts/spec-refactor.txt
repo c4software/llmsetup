@@ -1,0 +1,172 @@
+Voici le contenu actuel de `inventory.py` :
+
+```python
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from typing import Iterable
+
+
+class ItemNotFound(KeyError):
+    """SKU absent de l'inventaire."""
+
+
+class InsufficientStock(ValueError):
+    """Retrait supérieur à la quantité disponible."""
+
+
+@dataclass
+class Item:
+    sku: str
+    name: str
+    qty: int
+    unit_price: float
+    threshold: int = 5
+
+    def __post_init__(self) -> None:
+        if not self.sku or not self.sku.strip():
+            raise ValueError("sku ne peut pas être vide")
+        self.sku = self.sku.strip().upper()
+        if self.qty < 0:
+            raise ValueError(f"qty négative pour {self.sku} : {self.qty}")
+        if self.unit_price <= 0:
+            raise ValueError(f"unit_price doit être > 0 pour {self.sku}")
+        if self.threshold < 0:
+            raise ValueError(f"threshold négatif pour {self.sku}")
+
+    @property
+    def line_value(self) -> float:
+        return round(self.qty * self.unit_price, 2)
+
+    def is_low(self) -> bool:
+        return self.qty <= self.threshold
+
+
+@dataclass
+class Movement:
+    sku: str
+    delta: int
+    reason: str
+    operator: str
+    at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    REASONS = ("vente", "reception", "inventaire", "casse", "transfert", "retour")
+
+    def __post_init__(self) -> None:
+        if self.reason not in self.REASONS:
+            raise ValueError(f"motif inconnu : {self.reason}")
+        if self.delta == 0:
+            raise ValueError("un mouvement de quantité nulle n'a pas de sens")
+
+
+class Inventory:
+    def __init__(self) -> None:
+        self._items: dict[str, Item] = {}
+        self._log: list[Movement] = []
+
+    def add(self, item: Item) -> None:
+        key = item.sku
+        if key in self._items:
+            raise ValueError(f"sku déjà présent : {key}")
+        self._items[key] = item
+        self._log.append(Movement(key, item.qty, "reception", "system"))
+
+    def get(self, sku: str) -> Item:
+        key = sku.strip().upper()
+        if key not in self._items:
+            raise ItemNotFound(key)
+        return self._items[key]
+
+    def remove(self, sku: str, qty: int, operator: str = "system") -> Item:
+        if qty <= 0:
+            raise ValueError("qty doit être strictement positive")
+        item = self.get(sku)
+        if item.qty < qty:
+            raise InsufficientStock(
+                f"{item.sku} : {qty} demandés, {item.qty} disponibles"
+            )
+        item.qty -= qty
+        self._log.append(Movement(item.sku, -qty, "vente", operator))
+        return item
+
+    def restock(self, sku: str, qty: int, operator: str = "system") -> Item:
+        if qty <= 0:
+            raise ValueError("qty doit être strictement positive")
+        item = self.get(sku)
+        item.qty += qty
+        self._log.append(Movement(item.sku, qty, "reception", operator))
+        return item
+
+    def total_value(self) -> float:
+        return round(sum(i.line_value for i in self._items.values()), 2)
+
+    def low_stock(self, threshold: int | None = None) -> list[Item]:
+        if threshold is None:
+            candidates = [i for i in self._items.values() if i.is_low()]
+        else:
+            candidates = [i for i in self._items.values() if i.qty <= threshold]
+        return sorted(candidates, key=lambda i: (i.qty, i.sku))
+
+    def by_category(self, category: str) -> list[Item]:
+        return sorted(
+            (i for i in self._items.values() if getattr(i, "category", None) == category),
+            key=lambda i: i.sku,
+        )
+
+    def history(self, sku: str | None = None) -> list[Movement]:
+        if sku is None:
+            return list(self._log)
+        key = sku.strip().upper()
+        return [m for m in self._log if m.sku == key]
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "items": [asdict(i) for i in self._items.values()],
+                "log": [asdict(m) for m in self._log],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    @classmethod
+    def from_json(cls, payload: str) -> "Inventory":
+        data = json.loads(payload)
+        inv = cls()
+        for raw in data.get("items", []):
+            inv._items[raw["sku"]] = Item(**raw)
+        for raw in data.get("log", []):
+            inv._log.append(Movement(**raw))
+        return inv
+
+    def bulk_add(self, items: Iterable[Item]) -> int:
+        count = 0
+        for item in items:
+            self.add(item)
+            count += 1
+        return count
+```
+
+Applique exactement les quatre modifications suivantes, et rien d'autre.
+
+1. `Item` doit porter une catégorie et un code TVA : ajouter les champs
+   `category: str = "divers"` et `vat_code: str = "STD"`, et valider dans
+   `__post_init__` que `vat_code` fait partie de `("STD", "RED", "ZERO")`.
+
+2. `Item` doit pouvoir être marqué dormant : ajouter le champ
+   `dormant: bool = False`, et faire échouer `remove` et `restock` avec
+   `ValueError` quand l'article est dormant.
+
+3. `line_value` doit tenir compte de la TVA : ajouter une méthode
+   `line_value_ttc()` appliquant 20 % pour `STD`, 5,5 % pour `RED` et 0 %
+   pour `ZERO`, et une méthode `total_value_ttc()` sur `Inventory`.
+
+4. `by_category` utilise `getattr` parce que le champ n'existait pas :
+   maintenant qu'il existe, le remplacer par un accès direct `i.category`.
+
+Pour chaque modification, réponds en deux blocs de code Python : d'abord le
+bloc EXACT tel qu'il figure ci-dessus (recopié au caractère près, sans
+reformater ni abréger), puis le bloc de remplacement. N'écris aucun autre
+commentaire que ces blocs et leur numéro.

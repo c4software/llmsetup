@@ -62,8 +62,8 @@ Commandes :
                            l'amortir), puis chaque candidat est mesuré pour de vrai
                            (ini régénéré + restart + spec-test) et le meilleur est
                            écrit dans spec-ngram.conf. À <2 %, le plus petit gagne.
-                           ⚠ passer un prompt de REFACTOR : le prompt par défaut
-                           génère du neuf, sans répétition, donc sans hit n-gram.
+                           Prompt par défaut : spec-refactor.txt (blocs à recopier
+                           puis remplacer) — c'est là que les n-grams tapent.
   --start                  Lance llama-server sur :$SERVER_PORT (défaut sans argument)
   --install-service        Installe/active le service systemd USER $SERVICE_NAME
                            (systemctl --user) + linger (démarrage au boot)
@@ -87,7 +87,7 @@ Workflow typique :
   ./setup-llm.sh --update qwen3.8-27b # après un re-upload unsloth
   ./setup-llm.sh --spec-test          # décode réel d'un modèle MTP (choix interactif)
   ./setup-llm.sh --spec-tune          # règle spec-draft-n-max tout seul (2,4,6)
-  ./setup-llm.sh --spec-ngram-tune qwen3.8-27b-mtp-nothink 4 prompts/spec-refactor.txt
+  ./setup-llm.sh --spec-ngram-tune    # règle la longueur de draft n-gram
 
 Modèles (models.ini, ${#PRESET_ORDER[@]}) :
 $(printf '  %s\n' "${PRESET_ORDER[@]}")
