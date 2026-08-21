@@ -101,7 +101,23 @@ dépend du backend).
 
 ## 4. spec-ngram-tune (longueur de draft n-gram)
 
-Seulement si `ngram-map-k` est dans le `spec-type`.
+Seulement si `ngram-map-k` est dans le `spec-type`. Pour un modèle **sans
+MTP** (ou avant d'ajouter n-gram à un modèle MTP déjà réglé), commencer
+par la courbe seule, hors service :
+
+```bash
+systemctl --user stop llama-server
+DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh ~/models/<dossier>/<gguf>
+systemctl --user start llama-server
+```
+
+Sortie dans `spec-batch.log` (lisible) et `spec-batch.tsv`. Si le verdict
+est « aucune taille viable » sur le device retenu, ne pas ajouter n-gram.
+Sinon ajouter `ngram-map-k` au `spec-type` (+ `size-m`, `min-hits 2`) et
+lancer le tune ci-dessous. Limite connue : sans MTP, `--spec-test` affiche
+la mesure mais ne l'écrit pas dans `spec-tests.log` (pas de n-max), le
+tune fonctionne mais sans historique, noter les chiffres dans le
+commentaire du bloc.
 
 ```bash
 ./setup-llm.sh --spec-ngram-tune <modèle> 4

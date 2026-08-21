@@ -86,9 +86,14 @@ ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
    `spec-nmax.conf`.
 4. **`--spec-ngram-tune`** (si `ngram-map-k` dans le `spec-type`) : courbe
    `t_forward(batch)` puis arbitrage réel, écrit dans `spec-ngram.conf`.
+   Modèle sans MTP : d'abord la courbe seule, service arrêté,
+   `DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh <gguf>` ; on
+   n'ajoute `ngram-map-k` au `spec-type` que si elle donne une taille viable
+   (sinon « aucune taille viable », comme gpt-oss sur Vulkan0).
 5. **`--bench-devices`** puis **`--bench`** : ROCm0 ou Vulkan0, écrit dans
    `bench-devices.conf`. Si le device change, refaire 3 et 4 (les seuils
-   dépendent du backend).
+   dépendent du backend). Un modèle absent de `bench-devices.conf` tourne
+   sur le défaut (Vulkan0) sans avoir été mesuré : ce n'est pas un choix.
 6. **Récap de performance** : un tableau partageable (configuration,
    device, prompt t/s, gen t/s, acceptance, source et prompt de mesure),
    avec machine, build llama.cpp, quant et date ; les chiffres résumés vont
