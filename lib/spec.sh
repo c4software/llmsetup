@@ -167,6 +167,11 @@ cmd_spec_test() {
   stype_srv="$(printf '%s' "$models_json" \
     | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --spec-type 2>/dev/null || true)"
   stype="${stype_srv:-$stype_cfg}"
+  # size_m n-gram réel (même logique) : affiché à la place de la valeur du
+  # script, qui ne reflète ni spec-ngram.conf ni un forçage --spec-ngram-tune.
+  local ngram_srv
+  ngram_srv="$(printf '%s' "$models_json" \
+    | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --spec-ngram-map-k-size-m 2>/dev/null || true)"
   spec_flag="${nmax:+spec}"
   if [[ -n "$spec_flag" && "$stype" == *,* ]]; then
     spec_flag="specmix"
@@ -174,6 +179,10 @@ cmd_spec_test() {
   if [[ -n "$nmax_srv" && -n "$nmax_cfg" && "$nmax_srv" != "$nmax_cfg" ]]; then
     warn "Désaccord n-max : serveur=$nmax_srv, script/conf=$nmax_cfg → le ini a changé sans restart."
     warn "  Ce run mesure et journalise n-max $nmax_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
+  fi
+  if [[ -n "$stype_srv" && -n "$stype_cfg" && "$stype_srv" != "$stype_cfg" ]]; then
+    warn "Désaccord spec-type : serveur=$stype_srv, script=$stype_cfg → le ini a changé sans restart."
+    warn "  Ce run mesure et journalise spec-type $stype_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
   fi
 
   # --- En-tête : contexte complet du run, à coller tel quel dans un échange ---
@@ -214,7 +223,9 @@ cmd_spec_test() {
   echo "--- modèle ($preset) ---"
   if [[ -n "$nmax" ]]; then
     echo "${MODEL_INI[$preset]}" | sed '/^$/d' \
-      | sed "s/^\(spec-draft-n-max[[:space:]]*=[[:space:]]*\)[0-9]*[[:space:]]*$/\1$nmax/;s/^/  /"
+      | sed "s/^\(spec-draft-n-max[[:space:]]*=[[:space:]]*\)[0-9]*[[:space:]]*$/\1$nmax/;s/^\(spec-ngram-map-k-size-m[[:space:]]*=[[:space:]]*\)[0-9]*[[:space:]]*$/\1${ngram_srv:-&}/;s/^/  /"
+    [[ -n "$ngram_srv" && -n "${SPEC_NGRAM_FORCE:-}" && "${SPEC_NGRAM_FORCE_PRESET:-}" == "$preset" ]] \
+      && echo "  (spec-ngram-map-k-size-m = valeur SERVEUR, forcée par --spec-ngram-tune, non persistante)"
     [[ -n "$nmax_srv" && "$nmax_srv" != "$nmax_cfg" ]] \
       && echo "  (spec-draft-n-max ci-dessus = valeur SERVEUR ; le script/conf dit $nmax_cfg)"
     [[ -n "${SPEC_NMAX_FORCE:-}" && "${SPEC_NMAX_FORCE_PRESET:-}" == "$preset" ]] \
@@ -285,6 +296,14 @@ cmd_spec_test() {
       "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" "${stype:-draft-mtp}" \
       "$(basename "$prompt_file")" >> "$SPEC_LOG"
     echo "--- analyse n-max ---"
+    if [[ "$stype" == *,* || "$(basename "$prompt_file")" != "spec-test.txt" ]]; then
+      # Le run courant est hors modèle α (k variable, ou acceptance d'un autre
+      # prompt) : spec_analyze l'écarterait et commenterait le DERNIER run
+      # valide comme s'il était courant. Le journal, lui, est bien écrit.
+      echo "  sans objet pour ce run (spec-type mixte ou prompt hors référence) :"
+      echo "  α ne se calibre que sur draft-mtp seul et spec-test.txt — comparer les t/s bruts."
+      return 0
+    fi
     local report rec
     report="$(_spec_analyze "$preset" "$(basename "$gguf")" "$mdev" "$nmax" rec)"
     echo "$report" | grep -v '^REC='
@@ -579,13 +598,22 @@ cmd_spec_ngram_tune() {
   lo="$(echo "$rep" | sed -n 's/^STEP_LO=//p')"
   hi="$(echo "$rep" | sed -n 's/^STEP_HI=//p')"
   # Raffinement : la marche localisée au batch près change le candidat « sûr »
-  # d'un cran, et c'est justement le cran qui compte.
-  if [[ "$lo" =~ ^[0-9]+$ && "$hi" =~ ^[0-9]+$ && $((hi - lo)) -gt 1 ]]; then
-    info "Marche entre les batches $lo et $hi — raffinement..."
+  # d'un cran, et c'est justement le cran qui compte. Le balayage grossier ne
+  # PEUT PAS la voir seul : x2,12 entre 8 et 9 se dilue en x1,11 par unité
+  # entre 8 et 16 (mesuré le 21/08/2026 — 47 retenu sans jamais être comparé
+  # à 7). batch_curve.py signale donc les sauts bruts suspects entre deux
+  # points non consécutifs, raffinés ici un par un ; une fois un intervalle
+  # mesuré batch par batch il ne peut plus être suspect, la boucle termine.
+  local tour=0
+  while [[ "$lo" =~ ^[0-9]+$ && "$hi" =~ ^[0-9]+$ && $((hi - lo)) -gt 1 && $tour -lt 4 ]]; do
+    tour=$((tour + 1))
+    info "Saut entre les batches $lo et $hi — raffinement batch par batch ($tour)..."
     jsonl="$jsonl"$'\n'"$(_spec_ngram_sweep "$gguf" "$mdev" "${lo}-${hi}" 5)"
     rep="$(printf '%s\n' "$jsonl" | python3 "$SCRIPT_DIR/py/batch_curve.py" \
              "$(basename "$gguf")" "$mdev" 0 "" rec)"
-  fi
+    lo="$(echo "$rep" | sed -n 's/^STEP_LO=//p')"
+    hi="$(echo "$rep" | sed -n 's/^STEP_HI=//p')"
+  done
   echo "$rep" | grep -v '^SIZEM_\|^STEP_'
 
   local m_safe m_large

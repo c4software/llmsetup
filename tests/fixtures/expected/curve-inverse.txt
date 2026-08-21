@@ -15,10 +15,13 @@
     Un palier de noyau : le batch du haut emprunte un chemin plus
     rapide que celui du bas. La taille du bas est à ÉVITER.
 
+  SAUT(S) sans point intermédiaire — une marche peut s'y cacher :
+      entre batch 1 et 8 : x1.84 (à raffiner batch par batch)
+
   VERDICT : --spec-ngram-map-k-size-m 47 (gain max x23.8 si tout accepté)
   Courbe pentue : ajouter --spec-ngram-map-k-min-hits 2 pour éviter
   les faux départs, qui paient le batch sans être acceptés.
 SIZEM_SAFE=47
 SIZEM_LARGE=47
-STEP_LO=
-STEP_HI=
+STEP_LO=1
+STEP_HI=8

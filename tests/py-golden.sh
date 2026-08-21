@@ -65,7 +65,11 @@ python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/mode
 # moe     : pente forte mais LISSE — ne doit PAS être prise pour une marche
 # inverse : palier ROCm0 reproductible (batch 8 plus lent que 16)
 # vide    : entrée illisible → pas de plantage, lignes machine vides
-for c in marche plat moe inverse vide; do
+# grossiere : même courbe Vulkan0 que « marche » mais SANS le batch 9 (balayage
+#           grossier 1,8,16,32,48) — la marche est invisible au test par unité,
+#           le script doit rendre STEP_LO=8/STEP_HI=16 à raffiner, et non
+#           conclure à un seul candidat (défaut mesuré le 21/08/2026)
+for c in marche plat moe inverse vide grossiere; do
   python3 "$PY/batch_curve.py" m.gguf Vulkan0 0 "" rec < "$F/bench-$c.jsonl" > "$TMP/o"
   _ck "curve-$c.txt" "$TMP/o"
 done

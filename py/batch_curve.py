@@ -29,8 +29,9 @@
 #     tsv : fichier où ajouter les mesures en colonnes ("" pour ne rien écrire)
 #     rec : émet en plus les lignes machine consommées par le bash —
 #           SIZEM_SAFE=, SIZEM_LARGE=, STEP_LO=, STEP_HI= (vides si non
-#           déterminés). STEP_LO/HI encadrent la première marche : c'est
-#           l'intervalle à raffiner pour la localiser au batch près.
+#           déterminés). STEP_LO/HI encadrent la première marche, ou à défaut
+#           le premier saut brut suspect entre deux batches non consécutifs :
+#           c'est l'intervalle à raffiner pour la localiser au batch près.
 import json, sys, datetime
 
 # Marche = saut de coût par UNITÉ de batch. Normaliser est indispensable : entre
@@ -82,6 +83,25 @@ def marches(pts, facteur=FACTEUR_MARCHE):
             continue
         brut = t1 / t0
         if brut ** (1.0 / (b1 - b0)) > facteur:
+            out.append((b0, b1, brut))
+    return out
+
+
+def suspects(pts, facteur=FACTEUR_MARCHE):
+    """Sauts bruts > facteur entre deux batches NON consécutifs, qui ne passent
+    pas le test par unité → [(bas, haut, facteur brut)]. Une marche cachée
+    entre deux points d'un balayage grossier (1,8,16,...) ressemble exactement
+    à ça : x2,12 entre 8 et 9 noyé dans x2,33 entre 8 et 16, soit x1,11 par
+    unité. Impossible de trancher sans point intermédiaire — c'est l'intervalle
+    à raffiner. Une pente MoE lisse y passe aussi : le raffinement coûte un
+    balayage et conclut alors « pas de marche », ce qui est le bon verdict."""
+    out = []
+    for i in range(1, len(pts)):
+        (b0, t0, _), (b1, t1, _) = pts[i-1], pts[i]
+        if t0 <= 0 or b1 - b0 <= 1:
+            continue
+        brut = t1 / t0
+        if brut > facteur and brut ** (1.0 / (b1 - b0)) <= facteur:
             out.append((b0, b1, brut))
     return out
 
@@ -198,6 +218,13 @@ def main():
             print("      entre batch %d et %d : x%.2f d'un coup" % (a, b, f))
         print()
 
+    susp = suspects(pts)
+    if susp:
+        print("  SAUT(S) sans point intermédiaire — une marche peut s'y cacher :")
+        for a, b, f in susp:
+            print("      entre batch %d et %d : x%.2f (à raffiner batch par batch)" % (a, b, f))
+        print()
+
     dom = dominees(pts, t1)
     if dom:
         print("  Tailles DOMINÉES (une plus courte fait mieux sur les deux axes) :")
@@ -236,8 +263,11 @@ def main():
     if rec:
         print("SIZEM_SAFE=%s" % ("" if sur is None else sur))
         print("SIZEM_LARGE=%s" % ("" if large is None else large))
-        print("STEP_LO=%s" % (ms[0][0] if ms else ""))
-        print("STEP_HI=%s" % (ms[0][1] if ms else ""))
+        # intervalle à raffiner : la première marche si elle n'est pas encore
+        # localisée au batch près, sinon le premier saut suspect
+        etape = ms[0] if ms else (susp[0] if susp else None)
+        print("STEP_LO=%s" % (etape[0] if etape else ""))
+        print("STEP_HI=%s" % (etape[1] if etape else ""))
 
 
 if __name__ == "__main__":
