@@ -436,7 +436,10 @@ ctx-checkpoints      = 128"
 #   0,94), 47 = 47,4 t/s (acceptance 0,73) — les répétitions réelles sont assez
 #   longues pour que le régime large l'emporte de +8 %, au-delà des 2 % de
 #   tolérance qui feraient préférer le plus petit. Référence sans n-gram
-#   (draft-mtp seul, spec-test.txt) : 31,4 t/s.
+#   (draft-mtp seul, spec-test.txt) : 31,4 t/s. Avec n-max 6 (réglé ensuite) :
+#   56,1 t/s sur le même prompt. --spec-ab du même jour : min-hits 1 équivalent
+#   (55,8), ngram-map-k4v 47 nettement moins bon (44,9, -20 % : il drafte moins
+#   souvent malgré une acceptance de 0,91) — map-k gardé.
 #   ⚠ Seuil du BACKEND, pas du modèle : la constante est figée à la
 #   compilation, et la courbe ROCm0 n'a pas cette marche 8→9 (balayage du
 #   21/08 à reps=2, bruité à ±10 ms — à re-mesurer avant d'en tirer un size_m).

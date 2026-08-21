@@ -1,0 +1,5 @@
+passe 1 : prompt=264 t/s (n=1575, cache=0)  gen=41.84 t/s  n=1500  acceptance=0.88 (1309/1485) agrégée — détail par implémentation : journalctl  (cache froid, à ignorer)  ⚠ SORTIE DÉGÉNÉRÉE (charabia répétitif) : mesure invalide
+DEGEN=1
+GEN=41.84
+ACC=0.881
+DN=1485 DA=1309 PN=1500

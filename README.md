@@ -231,6 +231,14 @@ Concurrence (`--bench-parallel`, spec-test.txt, 400 tokens, 2 salves) :
 |---|---|---|---|---|
 | qwen3.5-9b | 4 | 25,7 t/s | 78,6 t/s agrégés (x3,06), 20,1 t/s par requête | le `parallel 4` des tâches auxiliaires est justifié |
 
+Réglages n-gram alternatifs (`--spec-ab`, 27B, n-max 6, spec-refactor.txt, 4 passes) :
+
+| Variante | Gen t/s | Acceptance | Lecture |
+|---|---|---|---|
+| base (ngram-map-k 47, min-hits 2, draft-mtp 6) | **56,1** | 0,80 | +18 % sur le même réglage n-gram avec n-max 4 (47,4) : le n-max 6 profite aussi au mode mixte |
+| min-hits 1 | 55,8 | 0,80 | équivalent, 2 gardé |
+| ngram-map-k4v 47, min-hits 2 | 44,9 | 0,91 | -20 % : drafte moins souvent malgré une meilleure acceptance |
+
 Cache de prompt (`--bench-cache`, bench-context.txt ~1370 tokens) :
 
 | Modèle | Tour suivant | Édition au milieu | Requête identique |

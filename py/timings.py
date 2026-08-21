@@ -29,9 +29,12 @@ mode = sys.argv.pop(1) if len(sys.argv) > 1 else ""
 # couronné ce device. Trois signaux sur >= 40 mots générés, un seul suffit :
 #   - le mot le plus fréquent fait > 40 % des mots (« dev » = 80 % dans le cas
 #     réel ; dans du texte ou du code, le mot dominant reste < 10 %) ;
-#   - moins de 15 % de mots distincts (code réel : > 30 %) — seul, ce critère
-#     a laissé passer un run où le charabia était ponctué de tokens collés
-#     (« devisoire,ual., ») qui gonflaient les distincts à 17 % ;
+#   - moins de 8 % de mots distincts. Seuil abaissé de 15 à 8 % le 21/08 :
+#     une vraie réponse de refactor (la même classe recopiée plusieurs fois,
+#     ce que le prompt demande — fixture chat-refactor-legit.json) tombe à
+#     14 % sans être dégénérée, et le charabia réel n'est de toute façon pas
+#     attrapé par ce critère (16 à 17 % à cause des tokens collés) mais par
+#     la répétition périodique ci-dessous ;
 #   - le texte se compresse à moins de 10 % (zlib) : une boucle quelconque, même
 #     de phrases longues, y tombe ; du texte réel reste vers 30 à 50 % ;
 #   - plus de 40 % des caractères sont couverts par une répétition immédiate de
@@ -70,7 +73,7 @@ def degenere(d):
         freq[w] = freq.get(w, 0) + 1
     if max(freq.values()) / len(mots) > 0.40:
         return True
-    if len(freq) / len(mots) < 0.15:
+    if len(freq) / len(mots) < 0.08:
         return True
     brut = texte.encode("utf-8")
     if len(zlib.compress(brut)) / len(brut) < 0.10:

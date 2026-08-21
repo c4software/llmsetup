@@ -52,6 +52,10 @@ python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen-mix.json")" 2 > "$TMP/o" 
 # 21/08/2026) — les critères par mots n'y voient rien, seule la répétition
 # périodique au niveau caractères (0,64) la prend
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen-rocm.json")" 1 > "$TMP/o" || true; _ck bench-degen-rocm-p1.txt "$TMP/o"
+# refactor-legit : vraie réponse du 27B (k4v, seed 43) — code qui recopie la
+# même classe plusieurs fois, 14 % de mots distincts, périodicité 0,21 : NE
+# DOIT PAS être signalée (faux positif du 21/08 corrigé)
+python3 "$PY/timings.py" --spec "$(cat "$F/chat-refactor-legit.json")" 1 specmix > "$TMP/o" || true; _ck spec-refactor-legit.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 1 spec  > "$TMP/o" || true; _ck spec-p1.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 2 spec  > "$TMP/o" || true; _ck spec-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-plain.json")" 2 ""   > "$TMP/o" || true; _ck spec-plain-p2.txt "$TMP/o"
