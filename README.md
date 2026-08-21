@@ -306,23 +306,26 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 
 `--bench-cache`, bench-context.txt ~1370 tokens :
 
-| Modèle | Architecture | Tour suivant | Requête identique |
-|---|---|---|---|
-| qwen3.5-9b | hybride SWA/GDN | 62 % (847 tok) | 63 % (861 tok) |
-| qwen3.6-35b-a3b-nothink | GDN, MoE | 62 % (847 tok) | 63 % (861 tok) |
-| qwopus3.6-27b | GDN | 62 % (847 tok) | 63 % (861 tok) |
-| lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 63 % (876 tok) |
-| qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 66 % (978 tok) |
-| **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **100 %** |
+| Modèle | Architecture | Tour suivant | Édition au 1er tiers | Requête identique |
+|---|---|---|---|---|
+| qwen3.5-9b | hybride SWA/GDN | 62 % (847 tok) | 0 % | 63 % (861 tok) |
+| qwen3.6-35b-a3b-nothink | GDN, MoE | 62 % (847 tok) | 0 % | 63 % (861 tok) |
+| qwopus3.6-27b | GDN | 62 % (847 tok) | 0 % | 63 % (861 tok) |
+| lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 0 % | 63 % (876 tok) |
+| qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 0 % | 66 % (978 tok) |
+| **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **0 %** | **100 %** |
 
-Le témoin DeepSeek tranche : les architectures à état récurrent (GDN, conv)
-ne restaurent leur état qu'à un checkpoint, pas au token près, et repaient
-~37 % du prompt même sur une requête identique ; l'attention pure est servie
-en entier. C'est le coût de ces architectures en boucle agentic, à mettre en
-face de leur débit. (L'« édition au milieu » de la première version donnait
-0 % partout, DeepSeek compris : le préfixe commun de ~45 % passait sous le
-seuil `slot-prompt-similarity 0.5` du serveur ; l'outil édite désormais au
-premier tiers, mesure à refaire.)
+Deux enseignements. Le témoin DeepSeek tranche le premier : les
+architectures à état récurrent (GDN, conv) ne restaurent leur état qu'à un
+checkpoint, pas au token près, et repaient ~37 % du prompt même sur une
+requête identique ; l'attention pure est servie en entier. Le second vaut
+pour tous : une édition en amont du prompt, même avec 2/3 de préfixe commun
+(au-dessus du seuil `slot-prompt-similarity 0.5`), donne **0 %** partout,
+attention pure comprise. Le cache de prompt du serveur ne sert que les
+**continuations** (le prompt en cache doit être un préfixe exact du nouveau) ;
+toute modification en amont repaie tout le contexte. En boucle agentic, cela
+signifie : ne jamais réécrire l'historique (compaction, tronquage de
+résultats d'outils) si on tient au cache.
 
 `--bench-load`, restart puis première requête. Le chiffre dépend d'abord de
 l'état du cache de pages du noyau : fichier chaud (benché à l'instant) ou

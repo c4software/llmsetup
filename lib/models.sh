@@ -47,7 +47,10 @@ DEFAULT_DEVICE="Vulkan0"
 #     Qwopus, coder-next, lfm2.5 conv) : tour suivant 62 à 66 % servi du
 #     cache, requête identique 63 à 66 %, tokenizers différents compris ;
 #     témoin DeepSeek (attention pure) : 99 % et 100 %. C'est le coût de ces
-#     architectures en boucle agentic, à mettre en face de leur débit.
+#     architectures en boucle agentic, à mettre en face de leur débit. Et pour
+#     TOUS, DeepSeek compris : une édition en amont du prompt (2/3 de préfixe
+#     commun) = 0 % réutilisé, le cache ne sert que les continuations — ne
+#     jamais réécrire l'historique (compaction, tronquage) si on tient au cache.
 #   - cache-type-v = q8_0 en surcharge locale pour les modèles à usage
 #     agentic/tool calling (le KV V q4_0 dégrade le tool calling, cf. doc
 #     llama.cpp function-calling)

@@ -493,7 +493,11 @@ PY
   # checkpoint est repayé. C'est le coût de ces architectures en boucle
   # agentic, à mettre en face de leur débit.
   [[ "${parts[1]}" != "-" ]] && { if (( parts[1] >= 80 )); then info "  suite : ${parts[1]} % servi du cache — le tour suivant d'une conversation ne repaie pas le contexte."; else warn "  suite : ${parts[1]} % seulement — arch à état récurrent : restauration au dernier checkpoint, le reste est repayé (62-66 % mesuré sur GDN/conv, 99 % sur attention pure)."; fi; }
-  [[ "${parts[2]}" != "-" ]] && { if (( parts[2] > 70 )); then info "  édition : ${parts[2]} % — au-delà du préfixe, cache-reuse récupère la suite après l'édition."; elif (( parts[2] > 0 )); then info "  édition : ${parts[2]} % — le préfixe avant l'édition est réutilisé (au checkpoint près), pas la suite (pas de décalage de KV)."; else warn "  édition : 0 % — rien de réutilisé malgré un préfixe commun de ~2/3 (seuil slot-prompt-similarity ? aucun checkpoint avant l'édition ?)."; fi; }
+  # Édition : 0 % mesuré PARTOUT le 21/08/2026, DeepSeek (attention pure)
+  # compris, avec 2/3 de préfixe commun : le cache de prompt du serveur ne sert
+  # que les continuations (prompt en cache = préfixe exact du nouveau). Un
+  # résultat non nul ici serait une nouveauté côté llama-server.
+  [[ "${parts[2]}" != "-" ]] && { if (( parts[2] > 70 )); then info "  édition : ${parts[2]} % — au-delà du préfixe, cache-reuse récupère la suite après l'édition."; elif (( parts[2] > 0 )); then info "  édition : ${parts[2]} % — le préfixe avant l'édition est réutilisé, pas la suite."; else info "  édition : 0 % — toute modification en amont repaie tout le contexte (le cache ne sert que les continuations ; mesuré ainsi sur toutes les archs, attention pure comprise)."; fi; }
   [[ "${parts[3]}" != "-" ]] && { if (( parts[3] >= 95 )); then info "  identique : ${parts[3]} % — cache complet."; else warn "  identique : ${parts[3]} % — même une requête identique n'est pas entièrement servie : arch à état récurrent, le cache s'arrête au dernier checkpoint."; fi; }
 
   local dev
