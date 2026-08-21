@@ -106,8 +106,9 @@ ROCm0 (b10433) répondait un charabia répétitif à ~550 t/s, réponse vide,
 sans une erreur dans le journal, et a été couronné deux fois avant qu'un
 garde-fou n'existe. `timings.py` détecte maintenant les sorties dégénérées
 (mot dominant, mots distincts, répétition périodique de caractères) et
-`--bench-devices` exclut le device ; si un device semble « trop beau »,
-vérifier quand même à la main :
+`--bench-devices` exclut le device, et pose d'abord une question de
+contrôle (`--bench-sanity`, recopie exacte d'un code) ; si un device semble
+« trop beau », vérifier quand même à la main :
 
 ```bash
 curl -s localhost:8009/v1/chat/completions -H 'Content-Type: application/json' \

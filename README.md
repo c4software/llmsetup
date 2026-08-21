@@ -70,7 +70,12 @@ systemctl --user start llama-server
 ./setup-llm.sh --bench-devices        # Vulkan ou ROCm pour un modèle ?
 ./setup-llm.sh --spec-tune            # règle spec-draft-n-max d'un modèle MTP
 ./setup-llm.sh --spec-ngram-tune      # règle la longueur de draft n-gram
+./setup-llm.sh --spec-ab <m> 4 - base "spec-ngram-map-k-min-hits=1"   # compare des réglages
+./setup-llm.sh --bench-parallel <m>   # ce que vaut parallel = N
+./setup-llm.sh --bench-cache <m>      # part du prompt repayée à chaque tour (agentic)
+./setup-llm.sh --bench-load <m>       # coût d'une bascule LRU
 ./setup-llm.sh --update qwen3.8-27b   # après un re-upload unsloth
+./setup-llm.sh --bench all            # après chaque mise à jour de llama-cpp : régressions
 ```
 
 ## Mesures de perfs (--bench)
@@ -100,6 +105,29 @@ signalé comme non comparable, jamais corrigé.
 Comparabilité : les chiffres dépendent des prompts de `prompts/`. Modifier
 `bench-context.txt` ou `bench-task.txt` invalide la comparaison avec les
 tableaux antérieurs ; ne jamais les toucher au détour d'un autre changement.
+
+Chaque `--bench` est journalisé dans `logs/bench.log` avec le build de
+llama.cpp et comparé au run précédent du même modèle, GGUF et device : un
+écart de plus de 5 % sur le prefill ou le décode est signalé, le changement
+de build rappelé. `./setup-llm.sh --bench all` après chaque mise à jour du
+paquet suffit donc à voir une régression (b10433 a cassé DeepSeek sur ROCm0
+en silence : rien ne l'aurait vu sans mesure).
+
+## Mesures complémentaires
+
+Chacune écrit son journal TSV dans `logs/` (avec le build) et se lit seule ;
+la procédure d'ajout d'un modèle (`AGENTS.md`, skill `ajout-modele`) dit
+laquelle lancer selon le rôle du modèle.
+
+| Commande | Question à laquelle elle répond | Méthode |
+|---|---|---|
+| `--bench-sanity [modèle\|all]` | Le backend produit-il un texte juste ? | recopie exacte d'un code (`prompts/bench-sanity.txt`), trivial pour ne tester que le backend ; `--bench-devices` l'applique avant chaque device, en plus du garde-fou anti-charabia de `timings.py` (mot dominant, mots distincts, répétition périodique de caractères) |
+| `--bench-parallel [modèle] [n] [passes]` | Que vaut `parallel = N` ? | salves de 1 puis n requêtes simultanées (spec-test.txt, 400 tokens), débit agrégé et décode médian par requête ; `parallel` réel lu sur `/v1/models`, au-delà les requêtes font la queue |
+| `--bench-cache [modèle]` | Combien du prompt est repayé à chaque tour ? | quatre requêtes : contexte froid, tour suivant, édition au milieu, requête identique ; part servie du cache (`cache_n`) et prefill |
+| `--bench-load [modèle\|all]` | Que coûte un modèle à la demande ? | restart du service, première requête chronométrée (chargement + premier token), puis TTFT à chaud |
+| `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | Ce réglage vaut-il mieux que celui-là ? | chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée au ini, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
+| `tools/bench-depth.sh <gguf>` | Et à 32k de contexte ? | `llama-bench -d`, hors service, prefill et décode à 0 / 16k / 32k par device, tour simulé par profondeur |
+| `tools/bench-spec-batch.sh <gguf>` | Quelle longueur de draft n-gram le device amortit-il ? | `llama-bench -p`, courbe `t_forward(batch)`, marches de noyau, candidats sûr et large |
 
 ## Choix du device (--bench-devices)
 

@@ -117,6 +117,15 @@ là-bas, lancer, ne rien commiter sur place.
   procédure ci-dessus. L'ordre de déclaration est l'ordre d'émission du ini.
   Les garde-fous de `_preload_sanity` sont dérivés (même GGUF, suffixe
   `-mtp`) : nommer la variante MTP `<clé>-mtp`, rien à coder.
+- **Une mesure** : `cmd_bench_*` ou `cmd_spec_*` dans `lib/bench.sh` /
+  `lib/spec.sh`, l'analyse dans un `py/*.py` à sorties contractuelles
+  (lignes `CLÉ=` consommées par le bash, fixture + référence dans
+  `tests/py-golden.sh`), un journal TSV dans `logs/` avec le build
+  (`_llama_build`) et son device réel, puis la doc : table des commandes du
+  README, `cmd_help`, tableau des scripts et des journaux d'ARCHITECTURE.md.
+  Tout verdict automatique a son garde-fou contre les mesures fausses
+  (sortie dégénérée, réponse fausse) : un backend cassé produit des t/s
+  superbes.
 - **Une sous-commande** : la fonction `cmd_*` dans le module `lib/` adapté
   (ou un nouveau module sourcé depuis le point d'entrée), une entrée dans le
   `case` de `setup-llm.sh`, une ligne dans `cmd_help` (`lib/help.sh`).

@@ -32,9 +32,11 @@ common → models → ini → preload → setup → bench → spec → service �
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
-  `_dl`, `_dl_shard`, `_maybe_restart_service`) et **toutes les variables
+  `_dl`, `_dl_shard`, `_maybe_restart_service`, `_llama_build` : version
+  courte de llama.cpp, journalisée partout) et **toutes les variables
   globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `BENCH_CONF`,
-  `PRELOAD_CONF`, `SPEC_TEST_URL`, `SPEC_LOG`, `SPEC_CONF`, `SPEC_NGRAM_CONF`, `SERVICE_NAME`,
+  `PRELOAD_CONF`, `SPEC_TEST_URL`, `LOG_DIR` (+ migration des journaux de la
+  racine), `SPEC_LOG`, `BENCH_LOG`, `SPEC_CONF`, `SPEC_NGRAM_CONF`, `SERVICE_NAME`,
   `SERVICE_FILE`, `REFRESH`/`ONLY`. Elles vivent ici parce que plusieurs modules les
   consomment (`_maybe_restart_service` utilise `SERVICE_NAME`, `cmd_bench`
   utilise `SPEC_TEST_URL`) — définies **avant** toute fonction qui les utilise.
@@ -254,6 +256,25 @@ donne 106,7 s ; ROCm0 356 pp / 21,8 tg donne 143,3 s. Le gain de prefill
 de ROCm (+16 %) ne compense pas son décode plus lent (-27 %) : sur ce
 profil, le décode domine dès que GEN/décode dépasse largement
 PP/prefill, ce qui est le cas de tous les modèles denses de ce parc.
+
+## Journaux de mesure (`logs/`)
+
+Tous locaux (.gitignore), TSV en append, une ligne par mesure, toujours avec
+le build de llama.cpp : un chiffre sans son build ne se compare pas. Une
+colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
+
+| Fichier | Écrit par | Colonnes |
+|---|---|---|
+| `spec-tests.log` | `cmd_spec_test` | `date modèle gguf device nmax gen acc drafted accepted predicted spectype prompt build` |
+| `bench.log` | `_bench_one` | `date modèle gguf device build prefill décode acceptance passes prefill_cache` ; lu par `bench_compare.py` |
+| `bench-parallel.log` | `cmd_bench_parallel` | `date modèle device build parallel_srv n agrégé décode_par_requête passes` |
+| `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
+| `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
+| `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
+| `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
+
+`device` est l'état réel du serveur (`/v1/models`, flag `--device`) partout
+où le serveur est en cause, le device demandé pour les outils `llama-bench`.
 
 ## Outils hors service (`tools/`)
 

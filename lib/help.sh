@@ -118,6 +118,11 @@ Workflow typique :
   ./setup-llm.sh --spec-test          # décode réel d'un modèle MTP (choix interactif)
   ./setup-llm.sh --spec-tune          # règle spec-draft-n-max tout seul (2,4,6)
   ./setup-llm.sh --spec-ngram-tune    # règle la longueur de draft n-gram
+  ./setup-llm.sh --spec-ab <m> 4 - base "clé=val"   # compare des réglages, sans rien écrire
+  ./setup-llm.sh --bench-parallel <m> # ce que vaut parallel = N
+  ./setup-llm.sh --bench-cache <m>    # part du prompt repayée à chaque tour (agentic)
+  ./setup-llm.sh --bench-load <m>     # coût d'une bascule LRU
+  ./setup-llm.sh --bench all          # après chaque mise à jour de llama-cpp : régressions
 
 Modèles (models.ini, ${#PRESET_ORDER[@]}) :
 $(printf '  %s\n' "${PRESET_ORDER[@]}")
