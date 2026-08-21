@@ -610,6 +610,10 @@ download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
 #   « trop beau » peut être un charabia, et qu'une courbe défavorable ne
 #   tranche rien : procédure complète à dérouler avec les garde-fous
 #   (--bench-devices puis --spec-ngram-tune avec référence).
+# Spéculation n-gram (ngram-map-k, À L'ESSAI, 21/08/2026) : pas de tête MTP,
+#   attention classique (pas d'état récurrent, donc pas le surcoût par pas de
+#   Qwen3-Next). size_m 7 de départ, --spec-ngram-tune (référence sans
+#   spéculation incluse) décide ; bloc à retirer si rien ne bat la référence.
 llama_model gpt-oss "
 model            = $GPTOSS_PATH
 ctx-size         = 131072
@@ -618,6 +622,9 @@ temp             = 1.0
 top-k            = 0
 top-p            = 1.0
 min-p            = 0.0
+spec-type        = ngram-map-k
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
 parallel         = 1"
 
 # DeepSeek-V4-Flash-0731 — MoE 284B (13B actifs), 1M ctx natif, shards UD-IQ3_XXS
