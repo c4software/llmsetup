@@ -385,12 +385,23 @@ cmd_spec_tune() {
   mkey="$(_preset_model_key "$preset" || true)"
   mdev="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE}"
 
+  # spec-type en liste (n-gram + MTP) : le n-max ne concerne que la tête MTP,
+  # et le modèle α ne tient que si k est constant — on mesure donc en
+  # draft-mtp seul (SPEC_MTP_ONLY_PRESET, lu par generate_models_ini), la
+  # liste complète revient au restart final. La valeur retenue vaut pour le
+  # chemin MTP quel que soit le reste de la liste.
+  if [[ "$(_preset_spec_types "$preset")" == *,* ]]; then
+    export SPEC_MTP_ONLY_PRESET="$preset"
+    info "spec-type en liste ($(_preset_spec_types "$preset")) : mesuré en draft-mtp seul"
+    info "  le temps du réglage (n-max = paramètre MTP, calibration α à k constant)."
+  fi
+
   # Restore garanti (Ctrl-C en plein tune : on remet la config non forcée)
   SPEC_TUNE_DIRTY=0
   _spec_tune_restore() {
     if [[ "$SPEC_TUNE_DIRTY" -eq 1 ]]; then
       warn "spec-tune interrompu — régénération du ini sans valeur forcée + restart."
-      unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET
+      unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_MTP_ONLY_PRESET
       regen_models_ini
       systemctl --user restart "$SERVICE_NAME" || true
       SPEC_TUNE_DIRTY=0
@@ -417,7 +428,7 @@ cmd_spec_tune() {
     done
     cmd_spec_test "$preset" "$passes"
   done
-  unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET
+  unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_MTP_ONLY_PRESET
 
   echo ""
   info "════════ Bilan ════════"

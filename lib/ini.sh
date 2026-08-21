@@ -179,6 +179,14 @@ HEADER
     if [[ -n "$eff_ngram" ]]; then
       subs+=(-e "s/^\(spec-ngram-map-k-size-m[[:space:]]*=[[:space:]]*\)[0-9]*[[:space:]]*$/\1$eff_ngram/")
     fi
+    # SPEC_MTP_ONLY_PRESET (env, posé par --spec-tune) : spec-type réduit à
+    # draft-mtp le temps du réglage du n-max. Le n-max est un paramètre MTP
+    # pur et la calibration α (spec_analyze.py) exige un k constant par
+    # forward, ce qu'une liste avec n-gram ne garantit pas — ses runs seraient
+    # tous écartés et le tune finirait sans recommandation.
+    if [[ "${SPEC_MTP_ONLY_PRESET:-}" == "$name" ]]; then
+      subs+=(-e "s/^\(spec-type[[:space:]]*=[[:space:]]*\).*$/\1draft-mtp/")
+    fi
     # jamais "${subs[@]}" sur un tableau vide : unbound sous set -u en bash 4.3
     if [[ ${#subs[@]} -gt 0 ]]; then
       echo "${MODEL_INI[$name]}" | sed '/^$/d' | sed "${subs[@]}"
