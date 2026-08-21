@@ -158,10 +158,12 @@ download_hf qwen3.6-35b-a3b "unsloth/Qwen3.6-35B-A3B-GGUF" \
 
 # Qwen3.6-35B-A3B nothink — DEFAULT AGENTIC, always-on
 #   Sert opencode (usage principal) et les autres clients agentic.
-# Repassé devant la variante MTP pour l'agentic : le rollback de l'état
-#   récurrent GDN lors des rejets de draft MTP est encore instable côté
-#   llama.cpp (partial seq_rm, PR #22400/#22673) → checkpoints/prompt-cache
-#   fiables ici, et c'est ce qui compte en boucle de tool calls.
+# Repassé devant la variante MTP pour l'agentic : le rollback partiel de
+#   l'état récurrent GDN sur rejet de draft est livré en mainline (PR #22673,
+#   mai 2026 — #22400 fermé en sa faveur), mais il n'a pas été validé ici sur
+#   Vulkan en boucle de tool calls → checkpoints/prompt-cache sans spéculation,
+#   c'est ce qui compte en agentic. Réserve à lever par un test, plus un fait
+#   upstream.
 # parallel 2 : subagents opencode / requêtes concurrentes sans sérialisation
 # cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
 # cache-reuse 0 : ignoré de toute façon sur GDN (état récurrent) — la
@@ -265,6 +267,9 @@ download_hf qwen3.6-35b-a3b-mtp "unsloth/Qwen3.6-35B-A3B-MTP-GGUF" \
 # cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
 # cache-reuse 0 : ignoré sur GDN — nothink via chat-template-kwargs (pas --reasoning off)
 # parallel 1 : contrainte MTP (np > 1 non supporté)
+# spec-type ngram-map-k,draft-mtp : même montage que qwen3.8-27b-mtp-nothink
+#   (voir ce bloc pour le fond ; MoE : pas de marche Vulkan mesurée, pente lisse). size_m : valeur de départ 7 — le réglage
+#   mesuré par ./setup-llm.sh --spec-ngram-tune vit dans spec-ngram.conf.
 llama_model qwen3.6-35b-a3b-mtp-nothink "
 model                = $QWEN36_35B_A3B_MTP_PATH
 ctx-size             = 131072
@@ -277,8 +282,10 @@ presence-penalty     = 1.5
 chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v         = q8_0
 cache-reuse          = 0
-spec-type            = draft-mtp
+spec-type            = ngram-map-k,draft-mtp
 spec-draft-n-max     = 4
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
 jinja                = true
 parallel             = 1
 swa-full             = true
@@ -466,6 +473,9 @@ download_hf qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
 # spec-draft-n-max 4 : mesuré 15/08/2026 (valeur historique 2)
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : incompatible MTP
+# spec-type ngram-map-k,draft-mtp : même montage que qwen3.8-27b-mtp-nothink
+#   (voir ce bloc pour le fond). size_m : valeur de départ 7 — le réglage
+#   mesuré par ./setup-llm.sh --spec-ngram-tune vit dans spec-ngram.conf.
 llama_model qwopus3.6-27b-coder-mtp-nothink "
 model                = $QWOPUS_CODER_MTP_PATH
 ctx-size             = 131072
@@ -478,8 +488,10 @@ presence-penalty     = 1.5
 chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v         = q8_0
 cache-reuse          = 0
-spec-type            = draft-mtp
+spec-type            = ngram-map-k,draft-mtp
 spec-draft-n-max     = 4
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
 jinja                = true
 parallel             = 1
 swa-full             = true
@@ -533,9 +545,11 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 # jinja : template unsloth amélioré (reasoning_effort + reasoning_content
 #   conservé dans les tool calls) — indispensable en agentic.
 # cache-reuse 0 : MoE incompatible — pas de swa-full (MLA/DSA, non SWA).
-# Module DSpark (spéculation) : port llama.cpp soumis upstream (#25683),
-#   pas encore mergé mainline — à activer ici le jour du merge
-#   (spec-type = draft-dspark + drafter GGUF). Gain modeste attendu sur APU.
+# Module DSpark (spéculation) : en mainline depuis le 02/08/2026 (PR #25784
+#   « DeepseekV4 MTP + DSpark », sidecar drafter via #26458 ; le port #25683
+#   a été fermé sans merge). b10433 expose draft-dspark et draft-mtp. Pas
+#   activé : drafter GGUF à identifier et tête MTP du checkpoint à vérifier.
+#   Gain modeste attendu sur APU.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
@@ -579,8 +593,8 @@ download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
 #   thinking côté client) — pour un modèle nothink, ajouter :
 #     chat-template-kwargs = {"enable_thinking":false}
 # Spéculation DFlash (drafter laguna-s-2.1-DFlash-BF16.gguf, 2,2 Go) :
-#   draft-dflash est en mainline (PR #22105), le fork poolside/llama.cpp
-#   branche `laguna` n'est plus nécessaire.
+#   draft-dflash est en mainline (PR #22105, mergée le 28/06/2026), le fork
+#   poolside/llama.cpp branche `laguna` n'est plus nécessaire.
 #   Reste à vérifier que ce drafter-là est bien reconnu par le mainline avant
 #   d'ajouter --spec-type draft-dflash --spec-draft-n-max 15 (clampé à la
 #   taille de bloc d'entraînement du drafter).
