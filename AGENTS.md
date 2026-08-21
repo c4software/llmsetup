@@ -72,10 +72,11 @@ Détail, commandes et critères de passage dans la skill locale
 ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
 (un seul GPU) :
 
-1. **Fiche du modèle** : valider les informations de base à partir de la
-   model card (repo et fichier GGUF, quant, architecture et support
-   llama.cpp, contexte, sampling officiel, thinking, état récurrent ou SWA,
-   vision). Livrable : le bloc `lib/models.sh` avec son commentaire métier,
+1. **Fiche du modèle** : valider les informations de base à partir du
+   guide unsloth (`https://unsloth.ai/docs/models/<modèle>` : sampling
+   officiel, quant conseillée, contexte, commande llama.cpp, note MTP) croisé
+   avec la model card HF (repo et fichier GGUF, architecture et support
+   llama.cpp, thinking, état récurrent ou SWA, vision, date d'upload). Livrable : le bloc `lib/models.sh` avec son commentaire métier,
    ini généré inchangé ailleurs.
 2. **MTP ou pas MTP** : tête MTP présente dans le GGUF ? spéculation voulue
    sur ce modèle (parallel 1, cache-reuse 0, pas de mmproj, réserve sur le

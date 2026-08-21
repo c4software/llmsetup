@@ -17,16 +17,27 @@ quant) qui justifient chaque réglage.
 
 ## 1. Valider les informations de base (fiche du modèle)
 
-Demander ou récupérer la fiche du modèle (model card HF du repo GGUF, et
-celle du checkpoint d'origine si différente). En extraire et vérifier :
+Demander ou récupérer la fiche du modèle. Deux sources, à croiser :
+
+- le guide unsloth du modèle, `https://unsloth.ai/docs/models/<modèle>`
+  (index : `https://unsloth.ai/docs/models`). C'est la source la plus
+  directement exploitable : sampling officiel par mode (thinking et
+  instruct), quant conseillée et VRAM, contexte maximum et YaRN, commande
+  llama.cpp de référence, note MTP, mises en garde sur le template chat.
+  Vérifié le 21/08/2026 sur le guide Qwen3.8 : toutes ces rubriques y sont ;
+- la model card HF du repo GGUF (onglet Files pour les fichiers et les
+  shards, commits pour la date du dernier upload), et celle du checkpoint
+  d'origine quand le repo GGUF n'est qu'un miroir.
+
+En extraire et vérifier :
 
 | Donnée | Où la trouver | Ce qu'on en fait |
 |---|---|---|
 | Repo GGUF et fichier (ou shard 00001) | page HF, onglet Files | `download_hf` ou `download_hf_shards` |
-| Quant retenue et taille | tableau des quants | commentaire du bloc (pourquoi cette quant) |
+| Quant retenue et taille | guide unsloth (reco et VRAM), tableau des quants HF | commentaire du bloc (pourquoi cette quant) |
 | Architecture llama.cpp (`general.architecture`) | metadata GGUF, ou `gguf-dump` | support mainline, version minimale de llama.cpp |
-| Contexte natif, YaRN | model card | `ctx-size` |
-| Sampling officiel (temp, top-k, top-p, min-p, presence) | model card, doc unsloth | corps ini |
+| Contexte natif, YaRN | guide unsloth, model card | `ctx-size` |
+| Sampling officiel (temp, top-k, top-p, min-p, presence) | guide unsloth, model card | corps ini |
 | Thinking : défaut, kwargs de désactivation | template chat | `chat-template-kwargs`, `reasoning` |
 | État récurrent (GDN, conv, Mamba) ou SWA | architecture | `cache-reuse 0`, `swa-full`, `ctx-checkpoints` |
 | Vision (mmproj) | Files | texte seul sauf besoin, incompatible MTP |
