@@ -1,0 +1,4 @@
+  2. suite                           prompt  1470 tok, cache  1350 tok ( 92 %), prefill     400 ms
+PN=1470
+CN=1350
+PMS=400

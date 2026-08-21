@@ -40,6 +40,10 @@ Commandes :
                            du modèle) : agrégé et décode par requête, comparés à
                            1 requête. Montre ce que vaut parallel = N, et la file
                            d'attente au-delà. Journal logs/bench-parallel.log
+  --bench-cache [modèle]   Efficacité du cache de prompt sur le pattern agentic :
+                           contexte froid, tour suivant, édition au milieu,
+                           requête identique — part servie du cache et prefill
+                           à chaque fois. Journal logs/bench-cache.log
   --list-devices           Backends ggml installés + devices exposés par llama-bench,
                            croisés avec bench-devices.conf (alerte si device disparu)
   --spec-test [modèle] [n] [prompt]
@@ -83,6 +87,7 @@ Fichiers (à côté du script, locaux, non versionnés) :
   logs/bench.log           journal des --bench (TSV, avec le build llama.cpp),
                            comparé automatiquement au run précédent
   logs/bench-parallel.log  journal des --bench-parallel
+  logs/bench-cache.log     journal des --bench-cache
   logs/spec-batch.log/.tsv journal des balayages tools/bench-spec-batch.sh
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
   spec-ngram.conf          modèle = spec-ngram-map-k-size-m retenu par --spec-ngram-tune

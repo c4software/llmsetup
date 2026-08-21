@@ -1,0 +1,1 @@
+{"id": "chatcmpl-spec1", "object": "chat.completion", "model": "qwen3.8-27b-mtp-nothink", "choices": [{"index": 0, "message": {"role": "assistant", "content": "```python\n# inventory.py\n```"}, "finish_reason": "stop"}], "timings": {"prompt_n": 120, "prompt_per_second": 300.0, "cache_n": 1350, "prompt_ms": 400.0, "predicted_n": 48, "predicted_per_second": 30.0}}

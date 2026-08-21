@@ -70,6 +70,10 @@ python3 "$PY/spec_server_nmax.py" inconnu                 < "$F/models.json" > "
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models-mixte.json" > "$TMP/o"; _ck spectype-found.txt "$TMP/o"
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models.json"       > "$TMP/o"; _ck spectype-absent.txt "$TMP/o"
 
+# --- cache_stats.py : 1350 tokens servis du cache sur 1470 (92 %), erreur, illisible
+python3 "$PY/cache_stats.py" "$(cat "$F/chat-cached.json")" "2. suite" > "$TMP/o" || true; _ck cache-suite.txt "$TMP/o"
+python3 "$PY/cache_stats.py" "$(cat "$F/chat-error.json")" "1. froid" > "$TMP/o" || true; _ck cache-error.txt "$TMP/o"
+
 # --- parallel_agg.py : 2 réponses valides + 1 erreur serveur, temps mur 60 s
 python3 "$PY/parallel_agg.py" 60 "$F/chat-spec.json" "$F/chat-plain.json" "$F/chat-error.json" > "$TMP/o"; _ck parallel-agg.txt "$TMP/o"
 
