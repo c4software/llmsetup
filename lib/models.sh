@@ -384,6 +384,38 @@ ctx-checkpoints      = 128"
 #   Re-régler avec ./setup-llm.sh --spec-tune après changement de quant/build/device.
 # cache-reuse 0 : incompatible MTP
 # parallel 1 : contrainte MTP (np > 1 non supporté)
+#
+# spec-type ngram-map-k,draft-mtp — la liste est essayée dans l'ordre de
+#   priorité de llama.cpp (les draftless d'abord) et la première implémentation
+#   qui produit un draft non vide gagne le pas de décode ; un miss n-gram coûte
+#   une sonde de hash et le MTP reprend la main. Gratuit en VRAM (une table de
+#   2^18 entrées, ~1 Mio par séquence) et sans perte, comme le MTP.
+#   Intérêt en agentic : l'outil d'édition d'opencode fait ré-émettre le
+#   oldString mot pour mot depuis le fichier lu, et ngram-map-k construit sa
+#   map à partir du PROMPT entier, pas seulement du texte généré.
+#   ngram-map-k plutôt que ngram-mod (le défaut de --spec-default d'upstream) :
+#   le pool partagé de ngram-mod n'apporte rien à parallel 1, et map-k
+#   s'auto-limite par clé (n_draft_tokens = min(m, values[0].n_accepted) dans
+#   common/ngram-map.cpp), donc le plein tarif d'un draft raté n'est payé
+#   qu'une fois par n-gram.
+# spec-ngram-map-k-size-m 7 : le batch de vérification vaut size_m + 1, et
+#   ggml-vulkan.cpp déclare mul_mat_vec_max_cols = 8 — au-delà de 8 colonnes il
+#   quitte le noyau vectoriel pour le matmul général et son coût de mise en
+#   place. Mesuré sur ce GGUF (Q4/Vulkan0, 21/08/2026, reps=5) : batch 8 =
+#   100,6 ms, batch 9 = 213,1 ms, soit x2,12 d'un coup, puis un plateau jusqu'à
+#   32. 7 est donc la dernière taille du chemin rapide : son seuil de non-perte
+#   est de 1,2 token sur 7 — ce réglage ne peut pas être perdant.
+#   L'autre régime défendable est un draft large (47) qui amortit ce coût fixe
+#   et plafonne à x13,7 au lieu de x6,6, mais devient perdant sur les matchs de
+#   moins de 3,5 tokens. Départager demande de connaître la longueur des
+#   répétitions réelles : ./setup-llm.sh --spec-ngram-tune le mesure et écrit
+#   le gagnant dans spec-ngram.conf (qui surcharge la valeur ci-dessous).
+#   ⚠ Seuil du BACKEND, pas du modèle : à re-régler après un changement de
+#   device (ROCm0 n'a pas de marche dans cette plage) ou de build llama.cpp,
+#   la constante étant figée à la compilation.
+# spec-ngram-map-k-min-hits 2 : n'accepter de drafter qu'à partir de deux
+#   occurrences du n-gram, pour éviter les faux départs qui paient le batch
+#   sans être acceptés.
 llama_model qwen3.8-27b-mtp-nothink "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
@@ -396,8 +428,10 @@ presence-penalty     = 1.5
 chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v         = q8_0
 cache-reuse          = 0
-spec-type            = draft-mtp
+spec-type            = ngram-map-k,draft-mtp
 spec-draft-n-max     = 4
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
 jinja                = true
 parallel             = 1
 swa-full             = true
@@ -530,10 +564,13 @@ download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
 # thinking activé par défaut (recommandé en agentic coding, avec preserved
 #   thinking côté client) — pour un modèle nothink, ajouter :
 #     chat-template-kwargs = {"enable_thinking":false}
-# Spéculation DFlash (drafter laguna-s-2.1-DFlash-BF16.gguf, 2,2 Go) : disponible
-#   uniquement via le fork poolside/llama.cpp branche `laguna`
-#   (--spec-type draft-dflash --spec-draft-n-max 15), pas dans le mainline —
-#   retours communauté : jusqu'à +30 tok/s de décode selon les tâches.
+# Spéculation DFlash (drafter laguna-s-2.1-DFlash-BF16.gguf, 2,2 Go) :
+#   draft-dflash est passé en mainline (PR #22105), le fork poolside/llama.cpp
+#   branche `laguna` n'est plus nécessaire — la note précédente est périmée.
+#   Reste à vérifier que ce drafter-là est bien reconnu par le mainline avant
+#   d'ajouter --spec-type draft-dflash --spec-draft-n-max 15 (clampé à la
+#   taille de bloc d'entraînement du drafter).
+#   Retours communauté : jusqu'à +30 tok/s de décode selon les tâches.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
 llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
