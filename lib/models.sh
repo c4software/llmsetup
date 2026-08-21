@@ -387,17 +387,18 @@ parallel             = 1
 swa-full             = true
 ctx-checkpoints      = 128"
 
-# Qwen3.8-27B-MTP nothink — spéculation MTP, n-max 4 (mesuré --spec-test
-#   Q4/ROCm0 15/08/2026 : k2=22,2 / k4=25,5 / k6=26,0 t/s → 4 = plateau,
-#   le plus petit à <2 % du max ; reco unsloth de départ était 2).
-#   ⚠ Le GGUF est passé sur Vulkan0 depuis (bench-devices.conf) : 31,4 t/s à
-#   n-max 4 le 21/08/2026 (draft-mtp seul, spec-test.txt), mais la courbe k2/k4/k6
-#   n'a pas été refaite sur ce device — ./setup-llm.sh --spec-tune à relancer.
+# Qwen3.8-27B-MTP nothink — spéculation MTP, n-max 6 (mesuré --spec-tune
+#   Q4/Vulkan0 21/08/2026, draft-mtp seul, spec-test.txt, 4 passes :
+#   k2=26,8 / k4=31,8 / k6=33,1 t/s, acceptance 0,95 / 0,85 / 0,75 ; le modèle
+#   α prédit 33,8 à k8, <2 % → 6 est l'optimum. 4 est à 4 % en dessous, hors
+#   tolérance). Sur ROCm0 le 15/08 c'était k2=22,2 / k4=25,5 / k6=26,0 → 4 :
+#   l'optimum dépend du device, re-régler après chaque bascule.
 #   Bascule manuelle : /model qwen3.8-27b-mtp-nothink
 # Même GGUF que le modèle thinking ci-dessus (tête MTP embarquée) — ne PAS
 #   précharger les deux en même temps (~16 Go chargés deux fois).
 # Historique : Q6/n-max 2 = 16 t/s ; Q4/n-max 2 = 22 ; Q4/n-max 4 = 25,5 (ROCm0) ;
-#   Q4/n-max 4 = 31,4 (Vulkan0) ; + ngram-map-k size_m 47 = 47,4 (refactor).
+#   Q4/n-max 4 = 31,8 et n-max 6 = 33,1 (Vulkan0) ; + ngram-map-k size_m 47 =
+#   47,4 sur refactor (mesuré avec n-max 4, avant ce réglage).
 #   Re-régler avec ./setup-llm.sh --spec-tune après changement de quant/build/device.
 # cache-reuse 0 : incompatible MTP
 # parallel 1 : contrainte MTP (np > 1 non supporté)
@@ -412,7 +413,7 @@ ctx-checkpoints      = 128"
 #   map à partir du PROMPT entier, pas seulement du texte généré.
 #   ngram-map-k plutôt que ngram-mod (le défaut de --spec-default d'upstream) :
 #   le pool partagé de ngram-mod n'apporte rien à parallel 1, et map-k
-#   s'auto-limite par clé (n_draft_tokens = min(m, values[0].n_accepted) dans
+#   s'auto-limite par clé (n_draft_tokens = min(m, values[slot_max].n_accepted) dans
 #   common/ngram-map.cpp), donc le plein tarif d'un draft raté n'est payé
 #   qu'une fois par n-gram.
 # spec-ngram-map-k-size-m 47 : retenu par ./setup-llm.sh --spec-ngram-tune
@@ -455,7 +456,7 @@ chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v         = q8_0
 cache-reuse          = 0
 spec-type            = ngram-map-k,draft-mtp
-spec-draft-n-max     = 4
+spec-draft-n-max     = 6
 spec-ngram-map-k-size-m   = 47
 spec-ngram-map-k-min-hits = 2
 jinja                = true
