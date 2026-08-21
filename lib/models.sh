@@ -321,8 +321,15 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : MoE hybrid-attention incompatible
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
-# JAMAIS MESURÉ sur cette machine (au 21/08/2026) : tourne sur le défaut Vulkan0
-#   sans comparaison ; procédure complète à dérouler (AGENTS.md).
+# Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433) : prefill 470 t/s,
+#   décode 46,7 t/s. ⚠ ROCm0 INUTILISABLE sur cette arch avec ce build : répond
+#   « LAMPAMPAMPAMP… » à la recopie de contrôle (exclu par --bench-sanity avant
+#   toute mesure). Deuxième arch MoE à opérateurs fusionnés cassée sur ROCm0
+#   après DeepSeek V4 ; les denses et le 35B-A3B passent.
+# Spéculation n-gram (ngram-map-k, À L'ESSAI) : pas de tête MTP. Courbe
+#   t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 21 ms, 8 = 46 (x2,16),
+#   16 = 106, 32 = 146, 48 = 199 ms — entre le 35B-A3B et DeepSeek. size_m 7
+#   de départ, --spec-ngram-tune (référence sans spéculation incluse) décide.
 llama_model qwen3-coder-next "
 model            = $QWEN3_CODER_NEXT_PATH
 ctx-size         = 131072
@@ -333,6 +340,9 @@ top-p            = 0.95
 min-p            = 0.01
 cache-type-v     = q8_0
 cache-reuse      = 0
+spec-type        = ngram-map-k
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
 parallel         = 1"
 
 # =============================================================================
