@@ -95,20 +95,26 @@ _preset_ngram_m() {
 
 # _apply_overrides <corps ini> <"clé=val;clé=val"> → corps modifié sur stdout.
 # Clé présente (même sans espaces autour du =) : ligne remplacée ; absente :
-# ajoutée en fin. Les valeurs peuvent contenir des virgules (listes spec-type),
-# pas de ";" ni de "/".
+# ajoutée en fin. Les valeurs peuvent contenir virgules (listes spec-type) et
+# "/" (chemins de drafter), pas de ";". Pur bash, pas de sed : aucun caractère
+# de la valeur n'est interprété.
 _apply_overrides() {
-  local corps="$1" liste="$2" paire k v
-  local IFS=';'
-  for paire in $liste; do
+  local corps="$1" liste="$2" paire k v ligne trouve sortie
+  local -a paires=()
+  IFS=';' read -r -a paires <<< "$liste"
+  for paire in "${paires[@]}"; do
     [[ "$paire" == *=* ]] || continue
     k="${paire%%=*}"; v="${paire#*=}"
     k="${k// /}"; v="${v# }"
-    if echo "$corps" | grep -q "^${k}[[:space:]]*="; then
-      corps="$(echo "$corps" | sed "s/^\(${k}[[:space:]]*=[[:space:]]*\).*$/\1${v}/")"
-    else
-      corps+=$'\n'"${k} = ${v}"
-    fi
+    trouve=0; sortie=""
+    while IFS= read -r ligne; do
+      if [[ "$ligne" =~ ^${k}[[:space:]]*=[[:space:]]* ]]; then
+        ligne="${BASH_REMATCH[0]}${v}"; trouve=1
+      fi
+      sortie+="${sortie:+$'\n'}$ligne"
+    done <<< "$corps"
+    corps="$sortie"
+    [[ $trouve -eq 1 ]] || corps+=$'\n'"${k} = ${v}"
   done
   echo "$corps"
 }

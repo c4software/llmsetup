@@ -743,8 +743,9 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 #   spec-type=draft-dflash;spec-draft-model=…) : si le mainline refuse ou
 #   dégénère, le garde-fou le dira. Retours communauté : jusqu'à +30 tok/s.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
-# JAMAIS MESURÉ sur cette machine (au 21/08/2026) : Vulkan0 par défaut, pas de
-#   bench, pas de courbe, DFlash non essayé. Procédure complète à dérouler.
+# Spéculation n-gram (ngram-map-k, À L'ESSAI, 21/08/2026) : size_m 7 de
+#   départ, --spec-ngram-tune (référence sans spéculation incluse) décide ;
+#   bloc à retirer si rien ne bat la référence. DFlash mesuré à part (--spec-ab).
 llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
 ctx-size         = 262144
@@ -755,6 +756,9 @@ top-k            = 0
 min-p            = 0.0
 cache-type-v     = q8_0
 cache-reuse      = 0
+spec-type        = ngram-map-k
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
 jinja            = true
 parallel         = 1"
 
