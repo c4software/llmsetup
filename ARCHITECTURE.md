@@ -120,6 +120,7 @@ dans le message de commit.
    `bench-devices.conf` (ligne `device =` si le vainqueur du GGUF ≠ défaut ;
    clé = **dossier du GGUF**, donc partagée entre modèles d'un même fichier),
    `spec-nmax.conf` (substitution de `spec-draft-n-max`),
+   `spec-ngram.conf` (substitution de `spec-ngram-map-k-size-m`),
    `preload.conf` (ajout de `load-on-startup = true`).
 3. Émission dans l'ordre `PRESET_ORDER`, avec les séparateurs de groupe.
 4. Le routeur charge le ini au démarrage ; ce qui tourne se lit sur

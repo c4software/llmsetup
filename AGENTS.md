@@ -61,17 +61,45 @@ résumer ou la supprimer, non.
   
 - Ne pas éditer `~/models/models.ini` (généré).
 - Les fichiers `.conf` (`bench-devices.conf`, `preload.conf`,
-  `spec-nmax.conf`) sont des **choix utilisateur** : ne pas les régénérer ni
+  `spec-nmax.conf`, `spec-ngram.conf`) sont des **choix utilisateur** : ne pas les régénérer ni
   les « corriger » sans demande. Les .conf et spec-tests.log sont locaux,
   non versionnés (.gitignore).
+
+## Procédure d'ajout d'un modèle
+
+Détail, commandes et critères de passage dans la skill locale
+`.claude/skills/ajout-modele/SKILL.md` (à charger dès qu'on ajoute, remplace
+ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
+(un seul GPU) :
+
+1. **Fiche du modèle** : valider les informations de base à partir de la
+   model card (repo et fichier GGUF, quant, architecture et support
+   llama.cpp, contexte, sampling officiel, thinking, état récurrent ou SWA,
+   vision). Livrable : le bloc `lib/models.sh` avec son commentaire métier,
+   ini généré inchangé ailleurs.
+2. **MTP ou pas MTP** : tête MTP présente dans le GGUF ? spéculation voulue
+   sur ce modèle (parallel 1, cache-reuse 0, pas de mmproj, réserve sur le
+   rollback GDN en agentic) ? Livrable : `spec-type` choisi, acceptance
+   visible dans un premier `--spec-test`.
+3. **`--spec-tune`** : longueur de draft MTP mesurée, écrite dans
+   `spec-nmax.conf`.
+4. **`--spec-ngram-tune`** (si `ngram-map-k` dans le `spec-type`) : courbe
+   `t_forward(batch)` puis arbitrage réel, écrit dans `spec-ngram.conf`.
+5. **`--bench-devices`** puis **`--bench`** : ROCm0 ou Vulkan0, écrit dans
+   `bench-devices.conf`. Si le device change, refaire 3 et 4 (les seuils
+   dépendent du backend).
+6. **Récap de performance** : un tableau partageable (configuration,
+   device, prompt t/s, gen t/s, acceptance, source et prompt de mesure),
+   avec machine, build llama.cpp, quant et date ; les chiffres résumés vont
+   aussi dans le commentaire du bloc, seul endroit versionné.
 
 ## Où ajouter…
 
 - **Un modèle** : un bloc dans `lib/models.sh` (`download_hf` + `llama_model`,
-  `groupe` si nouvelle famille), voir README.md (« Ajouter un modèle »).
-  L'ordre de déclaration est l'ordre d'émission du ini. Les garde-fous de
-  `_preload_sanity` sont dérivés (même GGUF, suffixe `-mtp`) : nommer la
-  variante MTP `<clé>-mtp`, rien à coder.
+  `groupe` si nouvelle famille), voir README.md (« Ajouter un modèle ») et la
+  procédure ci-dessus. L'ordre de déclaration est l'ordre d'émission du ini.
+  Les garde-fous de `_preload_sanity` sont dérivés (même GGUF, suffixe
+  `-mtp`) : nommer la variante MTP `<clé>-mtp`, rien à coder.
 - **Une sous-commande** : la fonction `cmd_*` dans le module `lib/` adapté
   (ou un nouveau module sourcé depuis le point d'entrée), une entrée dans le
   `case` de `setup-llm.sh`, une ligne dans `cmd_help` (`lib/help.sh`).
