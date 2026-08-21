@@ -11,8 +11,10 @@
 # vectoriel que jusqu'à 8 colonnes ; au-delà il bascule sur le matmul général et
 # son coût de mise en place (mesuré x2,12 sur un 27B dense, 21/08/2026). La
 # dernière taille dans le chemin rapide est donc size_m = 7. C'est un seuil du
-# BACKEND, pas du modèle. Les MoE passent par mul_mat_id (dispatch distinct) et
-# ROCm/HIP a le sien — d'où la mesure, qui reste la référence.
+# BACKEND, pas du modèle : mesuré au même endroit sur un 27B dense et sur un
+# 35B-A3B MoE (21/08/2026), seule la pente sous la marche change (raide sur le
+# MoE, dont le trafic mémoire croît avec l'union des experts routés). ROCm/HIP
+# a ses propres seuils — d'où la mesure, qui reste la référence.
 #
 # Conséquence contre-intuitive : les tailles juste AU-DESSUS d'une marche sont
 # les pires du lot, puisqu'elles paient le coût fixe sans l'amortir. Deux

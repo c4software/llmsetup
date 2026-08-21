@@ -268,8 +268,13 @@ download_hf qwen3.6-35b-a3b-mtp "unsloth/Qwen3.6-35B-A3B-MTP-GGUF" \
 # cache-reuse 0 : ignoré sur GDN — nothink via chat-template-kwargs (pas --reasoning off)
 # parallel 1 : contrainte MTP (np > 1 non supporté)
 # spec-type ngram-map-k,draft-mtp : même montage que qwen3.8-27b-mtp-nothink
-#   (voir ce bloc pour le fond ; MoE : pas de marche Vulkan mesurée, pente lisse). size_m : valeur de départ 7 — le réglage
-#   mesuré par ./setup-llm.sh --spec-ngram-tune vit dans spec-ngram.conf.
+#   (voir ce bloc pour le fond). Le MoE a la même marche Vulkan 8→9 (x2,06,
+#   batch 8 = 33 ms, batch 9 = 68 ms) mais sur une pente bien plus raide :
+#   batch 8 coûte déjà 1,94x le batch 1 (trafic mémoire de l'union des experts
+#   routés), donc seuil de non-perte 1,9 token sur 7 et gain plafonné x4.
+#   --spec-ngram-tune du 21/08/2026 (Vulkan0, spec-refactor.txt, 4 passes) :
+#   size_m 7 = 110,3 t/s (acceptance 0,93), 47 = 105,3 t/s (0,71) → 7, le
+#   régime large ne s'amortit pas ici. spec-ngram.conf prime.
 llama_model qwen3.6-35b-a3b-mtp-nothink "
 model                = $QWEN36_35B_A3B_MTP_PATH
 ctx-size             = 131072
@@ -474,8 +479,10 @@ download_hf qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : incompatible MTP
 # spec-type ngram-map-k,draft-mtp : même montage que qwen3.8-27b-mtp-nothink
-#   (voir ce bloc pour le fond). size_m : valeur de départ 7 — le réglage
-#   mesuré par ./setup-llm.sh --spec-ngram-tune vit dans spec-ngram.conf.
+#   (voir ce bloc pour le fond). Même marche Vulkan 8→9 sur ce Q5_K_M (x2,42,
+#   batch 8 = 106 ms, batch 9 = 257 ms). --spec-ngram-tune du 21/08/2026
+#   (Vulkan0, spec-refactor.txt, 4 passes) : size_m 7 = 43,9 t/s (acceptance
+#   0,95), 47 = 50,7 t/s (0,78) → 47, +16 %. spec-ngram.conf prime.
 llama_model qwopus3.6-27b-coder-mtp-nothink "
 model                = $QWOPUS_CODER_MTP_PATH
 ctx-size             = 131072
@@ -490,7 +497,7 @@ cache-type-v         = q8_0
 cache-reuse          = 0
 spec-type            = ngram-map-k,draft-mtp
 spec-draft-n-max     = 4
-spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-size-m   = 47
 spec-ngram-map-k-min-hits = 2
 jinja                = true
 parallel             = 1

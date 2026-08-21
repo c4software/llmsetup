@@ -113,10 +113,15 @@ la marche, large qui amortit le coût fixe), puis arbitrage des candidats
 sur mesure réelle avec `prompts/spec-refactor.txt` (le seul prompt où les
 n-grams ont des hits). Gagnant écrit dans `spec-ngram.conf`.
 
-Lire la courbe : sur Vulkan les denses ont une marche x2 entre batch 8 et
-9 (`mul_mat_vec_max_cols = 8`) ; les MoE ont une pente lisse sans marche.
-Un verdict « aucune taille viable » signifie qu'il ne faut pas activer
-n-gram sur ce modèle.
+Lire la courbe : sur Vulkan, denses comme MoE ont une marche x2 entre
+batch 8 et 9 (`mul_mat_vec_max_cols = 8`), mesurée le 21/08/2026 sur le 27B
+dense et le 35B-A3B. La différence est la pente sous la marche : quasi
+plate sur un dense (batch 8 = 1,2x le batch 1), raide sur un MoE (1,9x, le
+trafic mémoire croît avec l'union des experts routés), donc un gain n-gram
+bien plus faible. Un balayage grossier ne voit pas la marche, c'est le
+raffinement automatique qui la trouve : ne pas conclure sur la première
+table affichée. Un verdict « aucune taille viable » signifie qu'il ne faut
+pas activer n-gram sur ce modèle.
 
 Critère de passage : `spec-ngram.conf` contient la ligne du modèle, le
 commentaire du bloc cite les deux candidats, leurs t/s et acceptances.
