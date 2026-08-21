@@ -1,0 +1,3 @@
+passe 2 : prompt=148 t/s (n=1474, cache=0)  gen=536.00 t/s  n=1000  ⚠ SORTIE DÉGÉNÉRÉE (charabia répétitif) : mesure invalide
+DEGEN=1
+GEN=536.00

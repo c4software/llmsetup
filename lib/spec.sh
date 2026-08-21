@@ -255,7 +255,12 @@ cmd_spec_test() {
       || { warn "Passe $i : échec curl"; continue; }
     local line
     line="$(python3 "$SCRIPT_DIR/py/timings.py" --spec "$out" "$i" "$spec_flag")" || true
-    echo "$line" | grep -v '^GEN=\|^ACC=\|^DN=' | sed 's/^/  /'
+    echo "$line" | grep -v '^GEN=\|^ACC=\|^DN=\|^DEGEN=' | sed 's/^/  /'
+    # Sortie dégénérée (cf. timings.py) : passe ignorée, elle fausserait gen et acceptance
+    if echo "$line" | grep -q '^DEGEN=1$'; then
+      warn "Passe $i : sortie dégénérée, ignorée (backend ou modèle en défaut sur ce device)."
+      continue
+    fi
     local g a dn da pn
     g="$(echo "$line" | sed -n 's/^GEN=//p')"
     a="$(echo "$line" | sed -n 's/^ACC=//p')"

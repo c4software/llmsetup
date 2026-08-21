@@ -41,6 +41,10 @@ python3 "$PY/timings.py" --bench "$(cat "$F/chat-spec.json")" 2  > "$TMP/o" || t
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-plain.json")" 1 > "$TMP/o" || true; _ck bench-plain-p1.txt "$TMP/o"
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-plain.json")" 2 > "$TMP/o" || true; _ck bench-plain-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-error.json")" 1 > "$TMP/o" || true; _ck bench-error.txt "$TMP/o"
+# degen : charabia répétitif à 536 t/s (DeepSeek V4 sur ROCm0, 21/08/2026) —
+# la ligne doit le signaler et émettre DEGEN=1, en bench comme en spec
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen.json")" 2 > "$TMP/o" || true; _ck bench-degen-p2.txt "$TMP/o"
+python3 "$PY/timings.py" --spec  "$(cat "$F/chat-degen.json")" 2 "" > "$TMP/o" || true; _ck spec-degen-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 1 spec  > "$TMP/o" || true; _ck spec-p1.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 2 spec  > "$TMP/o" || true; _ck spec-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-plain.json")" 2 ""   > "$TMP/o" || true; _ck spec-plain-p2.txt "$TMP/o"

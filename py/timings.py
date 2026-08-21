@@ -22,6 +22,23 @@ import json, sys
 
 mode = sys.argv.pop(1) if len(sys.argv) > 1 else ""
 
+# Sortie dégénérée : un backend peut produire des tokens à toute vitesse sans
+# rien dire ("Nous dev dev dev dev…" à 500 t/s sur DeepSeek V4 / ROCm0, b10433,
+# 21/08/2026 : des opérateurs fusionnés renvoyés sur CPU, aucune erreur loggée).
+# Les timings sont alors excellents et parfaitement faux : --bench-devices a
+# couronné ce device. Test : sur >= 40 mots générés, moins de 15 % de mots
+# distincts. Du code réel est bien au-dessus (> 30 %), une boucle de charabia
+# bien en dessous (~2 %). Signalé par DEGEN=1, à l'appelant d'exclure la passe.
+def degenere(d):
+    try:
+        m = d["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError):
+        return False
+    texte = (m.get("reasoning_content") or "") + " " + (m.get("content") or "")
+    mots = texte.split()
+    return len(mots) >= 40 and len(set(mots)) / len(mots) < 0.15
+
+
 if mode == "--bench":
     try:
         d = json.loads(sys.argv[1])
@@ -43,7 +60,12 @@ if mode == "--bench":
     # Signalé (ligne + PPCACHED= pour le "*" du récap), jamais corrigé ici :
     # --bench reste une mesure passive du serveur tel qu'il tourne.
     warn = "  ⚠ prefill partiellement servi par le cache" if sys.argv[2] == "1" and cached else ""
+    degen = degenere(d)
+    if degen:
+        warn += "  ⚠ SORTIE DÉGÉNÉRÉE (charabia répétitif) : mesure invalide"
     print(f"  passe {sys.argv[2]} : prefill={pp:.0f} t/s (n={pn}, cache={cached})  décode={tg:.2f} t/s (n={n}){acc}{note}{warn}")
+    if degen:
+        print("DEGEN=1")
     if sys.argv[2] == "1":
         print(f"PP={pp:.2f}")
         if cached:
@@ -75,7 +97,12 @@ elif mode == "--spec":
     tag = "  (cache froid, à ignorer)" if sys.argv[2] == "1" else ""
     # prompt_n petit = prompt cache actif → prompt t/s non significatif (résidu + overhead)
     pptxt = f"prompt={pp:.0f} t/s (n={pn}, cache={cached})" if pn else f"prompt={pp:.0f} t/s"
+    degen = degenere(d)
+    if degen:
+        tag += "  ⚠ SORTIE DÉGÉNÉRÉE (charabia répétitif) : mesure invalide"
     print(f"passe {sys.argv[2]} : {pptxt}  gen={tg:.2f} t/s  n={n}{acc}{tag}")
+    if degen:
+        print("DEGEN=1")
     print(f"GEN={tg:.2f}")
     if dn: print(f"ACC={da/dn:.3f}"); print(f"DN={dn} DA={da} PN={n}")
 else:

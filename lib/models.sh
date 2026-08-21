@@ -558,7 +558,13 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   a été fermé sans merge). b10433 expose draft-dspark et draft-mtp. Pas
 #   activé : drafter GGUF à identifier et tête MTP du checkpoint à vérifier.
 #   Gain modeste attendu sur APU.
-# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
+# Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433) — prefill 120 t/s,
+#   décode 11,2 t/s. ⚠ ROCm0 INUTILISABLE sur cette arch avec ce build : le
+#   serveur répond à ~500 t/s un charabia répétitif (« Nous dev dev dev… »),
+#   réponse finale vide, sans erreur loggée — seulement des opérateurs fusionnés
+#   DeepSeek V4 (Lightning Indexer, HC pre/comb/post) renvoyés sur CPU. C'est
+#   ce cas qui a motivé le garde-fou « sortie dégénérée » de timings.py.
+#   À re-tester après un bump de llama-cpp/ggml-hip.
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072

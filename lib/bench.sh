@@ -59,8 +59,15 @@ _bench_one() {
       || { warn "  passe $i : échec curl"; continue; }
     local line
     line="$(python3 "$SCRIPT_DIR/py/timings.py" --bench "$out" "$i")" \
-      || { echo "$line" | grep -v '^PP=\|^G=\|^A=\|^PPCACHED='; continue; }
-    echo "$line" | grep -v '^PP=\|^G=\|^A=\|^PPCACHED='
+      || { echo "$line" | grep -v '^PP=\|^G=\|^A=\|^PPCACHED=\|^DEGEN='; continue; }
+    echo "$line" | grep -v '^PP=\|^G=\|^A=\|^PPCACHED=\|^DEGEN='
+    # Sortie dégénérée (cf. timings.py) : la mesure entière est invalide, pas
+    # seulement la passe — le backend ne calcule pas ce modèle correctement.
+    if echo "$line" | grep -q '^DEGEN=1$'; then
+      warn "  '$preset' : sortie dégénérée, le serveur ne génère pas de texte valide sur ce device — mesure invalide."
+      BENCH_ROW=""
+      return 1
+    fi
     if [[ "$i" -eq 1 ]]; then
       pp="$(echo "$line" | sed -n 's/^PP=//p')"
       # cache_n > 0 en passe 1 : prefill contaminé → "*" dans le récap
@@ -362,10 +369,17 @@ cmd_bench_devices() {
   done
   unset BENCH_DEVICE_FORCE BENCH_DEVICE_FORCE_PRESET
 
-  if [[ ${#rows[@]} -lt 2 ]]; then
+  if [[ ${#rows[@]} -eq 0 ]]; then
     _bench_devices_restore
     trap - EXIT
-    error "Moins de 2 devices mesurés, pas de comparaison possible."
+    error "Aucun device mesuré, pas de comparaison possible."
+  fi
+  if [[ ${#rows[@]} -eq 1 && ${#devs[@]} -ge 2 ]]; then
+    # Un seul device a produit une mesure valide (l'autre : échec ou sortie
+    # dégénérée) : ce n'est pas une comparaison, mais c'est une décision — le
+    # seul device qui fonctionne est retenu, et écrit pour que le ini ne
+    # retombe pas sur un défaut qui ne marche pas.
+    warn "Un seul device mesuré valide (${rows[0]%%|*}) : retenu d'office, les autres ont échoué ou dégénéré."
   fi
 
   # Temps simulé par device : t = PP_froid/prefill + GEN/décode (le "*" d'un
