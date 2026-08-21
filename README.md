@@ -226,7 +226,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M (19 Go) | Vulkan0 (mesuré : ROCm0 328 / 21,6) | ngram-map-k 47 + draft-mtp 4 (confirmé, k2/4/6 = 24,6 / **30,2** / 30,2) | 245 | 26,4 (bench, acc. 0,65) ; **50,7** (refactor) | cache 62 % ; chargement 4,5 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
-| gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache identique 63 % (SWA, checkpoints) ; chargement 91 s depuis le disque |
+| gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go) | Vulkan0 (défaut) | | | | **jamais mesuré** ; DFlash à essayer |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
@@ -319,11 +319,13 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 | lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 0 % | 63 % (876 tok) |
 | qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 0 % | 66 % (978 tok) |
 | **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **0 %** | **100 %** |
+| **gpt-oss** | **attention + SWA, MoE** | **99 %** | **4 %** | **100 %** |
 
-Deux enseignements. Le témoin DeepSeek tranche le premier : les
+Deux enseignements. DeepSeek et gpt-oss tranchent le premier : les
 architectures à état récurrent (GDN, conv) ne restaurent leur état qu'à un
 checkpoint, pas au token près, et repaient ~37 % du prompt même sur une
-requête identique ; l'attention pure est servie en entier. Le second vaut
+requête identique ; sans état récurrent (attention pure, SWA comprise) tout
+est servi. Le second vaut
 pour tous : une édition en amont du prompt, même avec 2/3 de préfixe commun
 (au-dessus du seuil `slot-prompt-similarity 0.5`), donne **0 %** partout,
 attention pure comprise. Le cache de prompt du serveur ne sert que les

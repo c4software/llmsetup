@@ -610,8 +610,10 @@ download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
 #   les deux passent le contrôle de justesse, ROCm0 est juste lent ici. La
 #   courbe ROCm0 « bien meilleure » du 20/08 (reps=2) ne voulait rien dire.
 #   --bench (bench-task) : 333 pp / 51,9 tg. --bench-load : 91 s (59 Go depuis
-#   le disque), TTFT à chaud 86 ms. --bench-cache : requête identique 63 % —
-#   le plafond des archs à checkpoints (ici SWA sans swa-full), comme les GDN.
+#   le disque), TTFT à chaud 86 ms. --bench-cache : tour suivant 99 %, requête
+#   identique 100 % — comme DeepSeek : sans état récurrent, le cache de prompt
+#   sert tout (la SWA n'y change rien). Un premier run donnait 63 % : requête
+#   « froide » déjà en cache après le --bench, outil corrigé depuis.
 # Courbe t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 17 ms, 8 = 57
 #   (x3,4), 16 = 130, 32 = 168, 48 = 246 ms (x14,7) — la plus raide de toutes.
 # Spéculation n-gram : ngram-map-k size_m 7, RETENU par --spec-ngram-tune
