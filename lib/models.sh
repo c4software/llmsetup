@@ -770,6 +770,10 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 #   débit : MoE à 8B actifs, le forward de batch 8 coûte peu en absolu (95 ms)
 #   et le décode de base est lent (33 ms/token), les hits rapportent gros. Pas
 #   d'état récurrent (SWA + global), donc pas de surcoût fixe par pas.
+# --bench (bench-task, peu de répétitions) avec n-gram 7 : 30,3 t/s contre 28,6
+#   sans (+6 %) — pas de revers hors refactor, contrairement à Qwen3-Coder-Next.
+#   --bench-cache : 99 % au tour suivant, 100 % à l'identique (pas d'état
+#   récurrent). --bench-load : 67 s (69 Go depuis le disque), TTFT à chaud 173 ms.
 llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
 ctx-size         = 262144

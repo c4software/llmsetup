@@ -230,7 +230,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
-| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** ; DFlash refusé par le mainline (`wrong number of tensors; expected 76, got 69`, fork Poolside requis) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) | b10548 |
+| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** ; DFlash refusé par le mainline (`wrong number of tensors; expected 76, got 69`, fork Poolside requis) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
 pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
@@ -328,6 +328,7 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 | qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 0 % | 66 % (978 tok) |
 | **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **0 %** | **100 %** |
 | **gpt-oss** | **attention + SWA, MoE** | **99 %** | **4 %** | **100 %** |
+| **laguna-s-2.1** | **attention SWA + globale, MoE** | **99 %** | **2 %** | **100 %** |
 
 Deux enseignements. DeepSeek et gpt-oss tranchent le premier : les
 architectures à état récurrent (GDN, conv) ne restaurent leur état qu'à un
@@ -355,6 +356,7 @@ relu depuis le disque.
 | qwen3.6-35b-a3b-mtp | 22 Go | 36 s | 54 ms | disque (~0,6 Go/s) |
 | qwen3-coder-next | 47 Go | 72 s | 406 ms | disque |
 | gpt-oss | 59 Go | 91 s | 86 ms | disque |
+| laguna-s-2.1 | 69 Go | 67 s | 173 ms | disque |
 
 Une bascule LRU entre modèles moyens coûte quelques secondes si le fichier
 est encore en cache de pages, une minute et plus s'il a été évincé (les
