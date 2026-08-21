@@ -743,18 +743,28 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 #   thinking côté client) — pour un modèle nothink, ajouter :
 #     chat-template-kwargs = {"enable_thinking":false}
 # Spéculation DFlash (drafter $LAGUNA_DFLASH_PATH, déclaré ci-dessus) :
-#   draft-dflash est en mainline (PR #22105, mergée le 28/06/2026). La model
-#   card poolside (lue le 21/08/2026) donne les flags : -md <drafter>
-#   --spec-type draft-dflash --spec-draft-n-max 7 (plafonné à la taille de
-#   bloc entraînée, 15 + 1), et affirme que le mainline « ships the generic
-#   DFlash framework » mais pas le contrat spécifique Laguna, fork poolside
-#   branche `laguna` requis. À VÉRIFIER PAR LA MESURE (--spec-ab avec
-#   spec-type=draft-dflash;spec-draft-model=…) : si le mainline refuse ou
-#   dégénère, le garde-fou le dira. Retours communauté : jusqu'à +30 tok/s.
+#   draft-dflash est en mainline (PR #22105, mergée le 28/06/2026), MAIS LE
+#   MAINLINE REFUSE CE DRAFTER. Mesuré 21/08/2026 (llama-cpp b10548, --spec-ab
+#   spec-type=draft-dflash;spec-draft-model=…;spec-draft-n-max=15 et 7) :
+#   « llama_model_load: error loading model: done_getting_tensors: wrong
+#   number of tensors; expected 76, got 69 », le serveur sort, le modèle ne
+#   charge pas. La model card poolside avait raison : le mainline « ships the
+#   generic DFlash framework » mais pas le contrat spécifique Laguna (7
+#   tenseurs d'écart), fork poolside/llama.cpp branche `laguna` requis — hors
+#   périmètre ici (paquet Arch). Flags à réutiliser le jour où le mainline
+#   suit : --spec-type draft-dflash -md <drafter> --spec-draft-n-max 7 (bloc
+#   entraîné 16). Le drafter reste déclaré (2,2 Go) pour ce jour-là.
+#   Retours communauté (sur le fork) : jusqu'à +30 tok/s.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
+# Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10548, sans
+#   spéculation, 3 passes) : 247 pp / 28,6 tg contre ROCm0 320 / 23,6 (tour
+#   simulé 113 s contre 134), les deux justes — le schéma des denses.
+# Courbe t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 33 ms, 8 = 95
+#   (x2,9), 16 = 282, 32 = 384, 48 = 540 ms (x16,5). Référence sans
+#   spéculation sur spec-refactor : 28,7 t/s.
 # Spéculation n-gram (ngram-map-k, À L'ESSAI, 21/08/2026) : size_m 7 de
 #   départ, --spec-ngram-tune (référence sans spéculation incluse) décide ;
-#   bloc à retirer si rien ne bat la référence. DFlash mesuré à part (--spec-ab).
+#   bloc à retirer si rien ne bat la référence.
 llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
 ctx-size         = 262144

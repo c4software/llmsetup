@@ -207,8 +207,11 @@ sans MTP) : `tools/bench-spec-batch.sh` (voir Outils).
 ## Résultats mesurés (bigchuck, 21/08/2026)
 
 Machine : AMD Ryzen AI MAX+ 395 (Radeon 8060S, 124 Go de mémoire unifiée),
-CachyOS noyau 7.1.8, llama-cpp b10433 / ggml 0.20.0. Médianes hors première
-passe, 4 passes sauf mention. Les lignes `spec-test.txt` (écriture d'un module
+CachyOS noyau 7.1.8, llama-cpp **b10433 / ggml 0.20.0** jusqu'à 16:20, puis
+**b10548 / ggml 0.20.2** (mise à jour système pendant la campagne : gpt-oss à
+partir de son `--bench`, et tout Laguna, sont sur b10548 ; la colonne build
+des journaux `logs/` fait foi). Médianes hors première passe, 4 passes sauf
+mention. Les lignes `spec-test.txt` (écriture d'un module
 de zéro, meilleur cas MTP) et `spec-refactor.txt` (recopie de blocs exacts,
 le cas n-gram) ne se comparent pas entre elles.
 
@@ -227,7 +230,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
-| laguna-s-2.1 | UD-Q4_K_XL (73 Go) | Vulkan0 (défaut) | | | | **jamais mesuré** ; DFlash à essayer |
+| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | n-gram : tune en cours ; **DFlash refusé par le mainline** (`wrong number of tensors; expected 76, got 69`, fork Poolside requis) | 247 | 28,6 (28,7 sans spéculation sur refactor) | b10548 |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
 pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
