@@ -216,15 +216,16 @@ le cas n-gram) ne se comparent pas entre elles.
 
 | Modèle | GGUF | Device | Réglage retenu | Prefill t/s | Gen t/s | État |
 |---|---|---|---|---|---|---|
-| qwen3.5-9b | UD-Q6_K_XL (8,2 Go) | Vulkan0 (mesuré) | parallel 4 | 753 | 25,7 (78,6 agrégés à 4 requêtes) | cache : 62 % / 0 % / 63 % ; chargement 1,9 s |
-| qwen3.6-35b-a3b-nothink | UD-Q6_K_XL | Vulkan0 (mesuré) | parallel 2, sans spéculation | | | cache : 62 % / 0 % / 63 % ; débit non re-mesuré le 21/08 |
-| qwen3.6-35b-a3b-mtp-nothink | UD-Q4_K_XL | Vulkan0 | ngram-map-k 7 + draft-mtp 4 | ~865 | **110,3** | n-max 4 du 15/08 à re-régler sur Vulkan0 |
-| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation | 289 (183 à 32k) | 12,3 brut (11,5 à 32k) | mesure llama-bench, pas de bench API |
-| qwen3.8-27b-mtp-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + draft-mtp 6 | ~275 | **56,1** (refactor), 33,1 (spec-test, MTP seul) | chargement 4,4 s |
-| qwopus3.6-27b-coder-mtp-nothink | Q5_K_M | Vulkan0 (défaut) | ngram-map-k 47 + draft-mtp 4 | ~250 | **50,7** | device jamais comparé ; n-max 4 du 15/08 à re-régler |
-| deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) |
-| lfm2.5-2.6b | Q8_0 (2,9 Go) | Vulkan0 (mesuré) | parallel 4 | | | justesse OK, pas de bench le 21/08 |
-| qwen3-coder-next | UD-Q4_K_XL | Vulkan0 (défaut) | | | | **jamais mesuré** |
+| lfm2.5-2.6b | Q8_0 (2,7 Go) | Vulkan0 (mesuré) | parallel 4 | 2279 | 67,7 (205 agrégés à 4 requêtes, x3,06) | cache tour suivant 62 % ; chargement 0,5 s, TTFT 27 ms |
+| qwen3.5-9b | UD-Q6_K_XL (8,2 Go) | Vulkan0 (mesuré) | parallel 4 | 837 | 25,7 (78,6 agrégés à 4, x3,06) | cache 62 % ; chargement 1,9 s |
+| qwen3.6-35b-a3b-nothink | UD-Q6_K_XL (29 Go) | Vulkan0 (mesuré) | parallel 2, sans spéculation | 640 | 53,1 (72,2 agrégés à 2, x1,43) | cache 62 % |
+| qwen3.6-35b-a3b (thinking) | idem | Vulkan0 (mesuré) | parallel 3 | 874 | 52,5 (90,7 agrégés à 3, x1,73) | |
+| qwen3.6-35b-a3b-mtp-nothink | UD-Q4_K_XL (22 Go) | Vulkan0 (mesuré : ROCm0 711 / 69,3) | ngram-map-k 7 + draft-mtp 4 (confirmé, k2/4/6 = 79,5 / **86,3** / 82,2) | 955 | 79,5 (bench, acc. 0,70) ; **110,3** (refactor) | chargement 36 s depuis le disque |
+| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation | 215 (289 → 183 à 32k en llama-bench) | 12,1 | |
+| qwen3.8-27b-mtp-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + draft-mtp 6 | 261 | 29,5 (bench, acc. 0,65) ; **56,1** (refactor) ; 33,1 (spec-test, MTP seul) | chargement 4,4 s |
+| qwopus3.6-27b-coder-mtp-nothink | Q5_K_M (19 Go) | Vulkan0 (mesuré : ROCm0 328 / 21,6) | ngram-map-k 47 + draft-mtp 4 (confirmé, k2/4/6 = 24,6 / **30,2** / 30,2) | 245 | 26,4 (bench, acc. 0,65) ; **50,7** (refactor) | cache 62 % ; chargement 4,5 s |
+| deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
+| qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k à l'essai (tune en cours) | 457 | 46,2 sans spéculation | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL | Vulkan0 (défaut) | | | | **jamais comparé** ; courbe n-gram du 20/08 très pentue sur Vulkan0, à refaire avec les garde-fous |
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go) | Vulkan0 (défaut) | | | | **jamais mesuré** ; DFlash à essayer |
 
@@ -285,6 +286,9 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 | Modèle | parallel | 1 requête | 4 requêtes | Lecture |
 |---|---|---|---|---|
 | qwen3.5-9b | 4 | 25,7 t/s | 78,6 t/s agrégés (x3,06), 20,1 t/s par requête | le `parallel 4` des tâches auxiliaires est justifié |
+| lfm2.5-2.6b | 4 | 67,4 t/s | 205 t/s agrégés (x3,06), 52 t/s par requête | idem |
+| qwen3.6-35b-a3b-nothink | 2 | 53,7 t/s | 72,2 t/s agrégés à 2 (x1,43), 40 t/s par requête | le MoE s'amortit moins bien : chaque requête route ses propres experts |
+| qwen3.6-35b-a3b (thinking) | 3 | 53,0 t/s | 90,7 t/s agrégés à 3 (x1,73), 31 t/s par requête | idem |
 
 ### Réglages n-gram alternatifs
 
@@ -298,19 +302,40 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 
 `--bench-cache`, bench-context.txt ~1370 tokens :
 
-| Modèle | Tour suivant | Édition au milieu | Requête identique |
+| Modèle | Architecture | Tour suivant | Requête identique |
 |---|---|---|---|
-| qwen3.5-9b (hybride SWA/GDN) | 62 % (847 tok) | 0 % | 63 % (861 tok) |
-| qwen3.6-35b-a3b-nothink (GDN) | 62 % (847 tok) | 0 % | 63 % (861 tok) |
+| qwen3.5-9b | hybride SWA/GDN | 62 % (847 tok) | 63 % (861 tok) |
+| qwen3.6-35b-a3b-nothink | GDN, MoE | 62 % (847 tok) | 63 % (861 tok) |
+| qwopus3.6-27b | GDN | 62 % (847 tok) | 63 % (861 tok) |
+| lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 63 % (876 tok) |
+| qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 66 % (978 tok) |
+| **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **100 %** |
 
-Même plafond sur les deux modèles : la restauration d'état ne se fait qu'au
-dernier checkpoint, pas au token près ; une édition au milieu repart de zéro
-et même une requête identique repaie ~37 % du prompt. C'est le coût de ces
-architectures en boucle agentic, à mettre en face de leur débit.
+Le témoin DeepSeek tranche : les architectures à état récurrent (GDN, conv)
+ne restaurent leur état qu'à un checkpoint, pas au token près, et repaient
+~37 % du prompt même sur une requête identique ; l'attention pure est servie
+en entier. C'est le coût de ces architectures en boucle agentic, à mettre en
+face de leur débit. (L'« édition au milieu » de la première version donnait
+0 % partout, DeepSeek compris : le préfixe commun de ~45 % passait sous le
+seuil `slot-prompt-similarity 0.5` du serveur ; l'outil édite désormais au
+premier tiers, mesure à refaire.)
 
-`--bench-load`, restart puis première requête, cache de pages chaud : qwen3.5-9b 1,9 s (8,2 Go, TTFT à chaud 65 ms), qwen3.8-27b 4,4 s
-(17 Go, 165 ms), soit ~4 Go/s : une bascule LRU entre modèles moyens coûte
-quelques secondes, pas des minutes.
+`--bench-load`, restart puis première requête. Le chiffre dépend d'abord de
+l'état du cache de pages du noyau : fichier chaud (benché à l'instant) ou
+relu depuis le disque.
+
+| Modèle | Taille | Chargement + 1er token | TTFT à chaud | État du cache de pages |
+|---|---|---|---|---|
+| lfm2.5-2.6b | 2,7 Go | 0,5 s | 27 ms | chaud |
+| qwen3.5-9b | 8,2 Go | 1,9 s | 65 ms | chaud |
+| qwen3.8-27b | 17 Go | 4,4 s | 165 ms | chaud (~4 Go/s) |
+| qwopus3.6-27b | 19 Go | 4,5 s | 147 ms | chaud |
+| qwen3.6-35b-a3b-mtp | 22 Go | 36 s | 54 ms | disque (~0,6 Go/s) |
+| qwen3-coder-next | 47 Go | 72 s | 406 ms | disque |
+
+Une bascule LRU entre modèles moyens coûte quelques secondes si le fichier
+est encore en cache de pages, une minute et plus s'il a été évincé (les
+104 Go de DeepSeek évincent tout le reste).
 
 ### Enseignements
 
