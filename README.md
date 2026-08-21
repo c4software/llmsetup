@@ -49,6 +49,7 @@ systemctl --user start llama-server
 | `--preload` | Re-sélectionne les modèles always-on et régénère le ini |
 | `--bench [modèle\|all] [n]` | Mesure le serveur tel qu'il tourne : prefill, décode médian, acceptance MTP, tableau récapitulatif. N'écrit rien |
 | `--bench-devices [modèle] [devices] [n]` | Compare les devices d'un modèle (défaut Vulkan0,ROCm0) : bench avec restart par device, verdict par temps de tour simulé, vainqueur écrit dans `bench-devices.conf` (détail dans ARCHITECTURE.md) |
+| `--bench-parallel [modèle] [n] [passes]` | Débit sous `n` requêtes simultanées (défaut : le `parallel` du modèle) : agrégé et décode par requête contre 1 requête ; montre ce que vaut `parallel = N` et la file d'attente au-delà |
 | `--list-devices` | Backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
@@ -227,6 +228,7 @@ le garde-fou de `timings.py`).
 | `spec-ngram.conf` | modèle = spec-ngram-map-k-size-m retenu par les mesures |
 | `logs/spec-tests.log` | journal TSV des runs `--spec-test` |
 | `logs/bench.log` | journal TSV des `--bench` (avec le build llama.cpp) ; chaque `--bench` se compare au run précédent du même modèle/GGUF/device et signale un écart de plus de 5 % |
+| `logs/bench-parallel.log` | journal TSV des `--bench-parallel` |
 | `logs/spec-batch.log` / `.tsv` | journal des balayages `tools/bench-spec-batch.sh` |
 
 Côté `~/models/` : `models.ini`, généré. Ne jamais l'éditer : relancer

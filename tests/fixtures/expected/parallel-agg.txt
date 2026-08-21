@@ -1,0 +1,5 @@
+  3 requête(s) : 2500 tokens en 60.0 s → agrégé 41.67 t/s, décode médian par requête 28.62 t/s  (1 en erreur)
+AGG=41.67
+MED=28.62
+TOK=2500
+ERR=1

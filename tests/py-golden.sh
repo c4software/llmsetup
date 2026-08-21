@@ -70,6 +70,9 @@ python3 "$PY/spec_server_nmax.py" inconnu                 < "$F/models.json" > "
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models-mixte.json" > "$TMP/o"; _ck spectype-found.txt "$TMP/o"
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models.json"       > "$TMP/o"; _ck spectype-absent.txt "$TMP/o"
 
+# --- parallel_agg.py : 2 réponses valides + 1 erreur serveur, temps mur 60 s
+python3 "$PY/parallel_agg.py" 60 "$F/chat-spec.json" "$F/chat-plain.json" "$F/chat-error.json" > "$TMP/o"; _ck parallel-agg.txt "$TMP/o"
+
 # --- bench_compare.py : 9b = régression décode -6 % et build changé ; 27b =
 #     prefill contaminé (pas de drapeau) + acceptance ; lfm2.5 = 1re mesure ;
 #     inconnu = absent du journal ; ROCm0 du 9b ne doit pas servir de référence

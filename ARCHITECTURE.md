@@ -63,7 +63,10 @@ common → models → ini → preload → setup → bench → spec → service �
 - `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
-- `bench.sh` : `cmd_bench` (mesure API du serveur en l'état), `_bench_one`,
+- `bench.sh` : `cmd_bench` (mesure API du serveur en l'état, journal
+  `logs/bench.log` + comparaison au run précédent), `cmd_bench_parallel`
+  (salves de 1 puis n requêtes simultanées, `parallel` réel lu sur
+  `/v1/models`, agrégat par `py/parallel_agg.py`), `_bench_one`,
   sélections, `cmd_bench_devices` (comparaison automatique des devices d'un
   modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré + restart par
   device, verdict = temps d'un tour d'usage simulé `PP/prefill + GEN/décode`
@@ -104,6 +107,7 @@ près — voir `tests/py-golden.sh`.
 | `spec_server_nmax.py <modèle> [flag]` | JSON de `/v1/models` sur stdin | valeur réelle du flag (défaut `--spec-draft-n-max` ; aussi `--spec-type`, `--spec-ngram-map-k-size-m`), vide si absent | `cmd_spec_test` |
 | `batch_curve.py <modèle> <device> <depth> [tsv] [rec]` | jsonl de `llama-bench -o jsonl` sur stdin (plusieurs balayages concaténés, le plus récent fait foi) | tableau batch/size_m/coût/seuil/gain, marches, baisses au-delà du bruit, tailles dominées, verdict ; `SIZEM_SAFE=`/`SIZEM_LARGE=`/`STEP_LO=`/`STEP_HI=` si `rec` ; append TSV si fichier donné | `cmd_spec_ngram_tune`, `tools/bench-spec-batch.sh` |
 | `depth_curve.py <modèle> <device> <pp> <gen> [tsv] [rec]` | jsonl de `llama-bench -d` sur stdin | tableau prefill/décode/tour simulé par profondeur, dégradation de 0 à la profondeur max, `TOUR_<depth>=` si `rec` ; append TSV | `tools/bench-depth.sh` |
+| `parallel_agg.py <temps_mur_s> <réponse.json>...` | réponses d'une salve de requêtes simultanées | ligne lisible + `AGG=` (tokens / temps mur) `MED=` (décode médian par requête) `TOK=` `ERR=` | `_bench_parallel_salve` (bench.sh) |
 | `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device, build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
 | `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `logs/spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
 
