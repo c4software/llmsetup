@@ -414,9 +414,10 @@ ctx-checkpoints      = 128"
 #     - 47 (LARGE) : amortit le coût fixe, gain jusqu'à x14, mais perdant sur
 #                    les matchs de moins de 3,4 tokens
 #   Mesuré sur spec-refactor (recopie de blocs exacts, la forme du
-#   oldString/newString d'opencode) : 7 = 46,5 t/s (acceptance 0,94),
-#   47 = 52,2 t/s (acceptance 0,73) — les répétitions réelles sont assez longues
-#   pour que le régime large l'emporte de +12 %. Référence sans n-gram
+#   oldString/newString d'opencode, 4 passes) : 7 = 44,0 t/s (acceptance
+#   0,94), 47 = 47,4 t/s (acceptance 0,73) — les répétitions réelles sont assez
+#   longues pour que le régime large l'emporte de +8 %, au-delà des 2 % de
+#   tolérance qui feraient préférer le plus petit. Référence sans n-gram
 #   (draft-mtp seul, spec-test.txt) : 31,4 t/s.
 #   ⚠ Seuil du BACKEND, pas du modèle : ROCm0 n'a pas de marche dans cette
 #   plage, et la constante est figée à la compilation.
