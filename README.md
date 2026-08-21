@@ -212,13 +212,35 @@ passe, 4 passes sauf mention. Les lignes `spec-test.txt` (écriture d'un module
 de zéro, meilleur cas MTP) et `spec-refactor.txt` (recopie de blocs exacts,
 le cas n-gram) ne se comparent pas entre elles.
 
+### Récapitulatif par modèle
+
+| Modèle | GGUF | Device | Réglage retenu | Prefill t/s | Gen t/s | État |
+|---|---|---|---|---|---|---|
+| qwen3.5-9b | UD-Q6_K_XL (8,2 Go) | Vulkan0 (mesuré) | parallel 4 | 753 | 25,7 (78,6 agrégés à 4 requêtes) | cache : 62 % / 0 % / 63 % ; chargement 1,9 s |
+| qwen3.6-35b-a3b-nothink | UD-Q6_K_XL | Vulkan0 (mesuré) | parallel 2, sans spéculation | | | cache : 62 % / 0 % / 63 % ; débit non re-mesuré le 21/08 |
+| qwen3.6-35b-a3b-mtp-nothink | UD-Q4_K_XL | Vulkan0 | ngram-map-k 7 + draft-mtp 4 | ~865 | **110,3** | n-max 4 du 15/08 à re-régler sur Vulkan0 |
+| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation | 289 (183 à 32k) | 12,3 brut (11,5 à 32k) | mesure llama-bench, pas de bench API |
+| qwen3.8-27b-mtp-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + draft-mtp 6 | ~275 | **56,1** (refactor), 33,1 (spec-test, MTP seul) | chargement 4,4 s |
+| qwopus3.6-27b-coder-mtp-nothink | Q5_K_M | Vulkan0 (défaut) | ngram-map-k 47 + draft-mtp 4 | ~250 | **50,7** | device jamais comparé ; n-max 4 du 15/08 à re-régler |
+| deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) |
+| lfm2.5-2.6b | Q8_0 (2,9 Go) | Vulkan0 (mesuré) | parallel 4 | | | justesse OK, pas de bench le 21/08 |
+| qwen3-coder-next | UD-Q4_K_XL | Vulkan0 (défaut) | | | | **jamais mesuré** |
+| gpt-oss | UD-Q4_K_XL | Vulkan0 (défaut) | | | | **jamais comparé** ; courbe n-gram du 20/08 très pentue sur Vulkan0, à refaire avec les garde-fous |
+| laguna-s-2.1 | UD-Q4_K_XL (73 Go) | Vulkan0 (défaut) | | | | **jamais mesuré** ; DFlash à essayer |
+
+Médianes hors première passe ; « cache » = part du prompt servie du cache
+pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
+
+### Spéculation
+
 | Modèle | GGUF | Device | Configuration | Gen t/s | Acceptance | Prompt |
 |---|---|---|---|---|---|---|
 | qwen3.8-27b-mtp-nothink | UD-Q4_K_XL (17 Go) | Vulkan0 | draft-mtp n-max 2 | 26,8 | 0,95 | spec-test |
 | | | | draft-mtp n-max 4 | 31,8 | 0,85 | spec-test |
 | | | | **draft-mtp n-max 6** (retenu) | **33,1** | 0,75 | spec-test |
 | | | | ngram-map-k 7 + mtp 4 | 44,0 | 0,94 | spec-refactor |
-| | | | **ngram-map-k 47 + mtp 4** (retenu) | **47,4** | 0,73 | spec-refactor |
+| | | | ngram-map-k 47 + mtp 4 | 47,4 | 0,73 | spec-refactor |
+| | | | **ngram-map-k 47 + mtp 6** (retenu) | **56,1** | 0,80 | spec-refactor |
 | | | ROCm0 (15/08) | draft-mtp n-max 2 / 4 / 6 | 22,2 / 25,5 / 26,0 | | spec-test |
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M | Vulkan0 | ngram-map-k 7 + mtp 4 | 43,9 | 0,95 | spec-refactor |
 | | | | **ngram-map-k 47 + mtp 4** (retenu) | **50,7** | 0,78 | spec-refactor |
@@ -232,7 +254,9 @@ le cas n-gram) ne se comparent pas entre elles.
 Prefill (passe 1, cache froid) : 27B ~220 t/s sur spec-test, ~275 t/s sur
 spec-refactor ; 35B-A3B ~865 t/s ; DeepSeek 108 à 120 t/s (Vulkan0).
 
-Courbes `t_forward(batch)` sur Vulkan0 (`tools/bench-spec-batch.sh`, reps=5) :
+### Courbes de batch
+
+Sur Vulkan0 (`tools/bench-spec-batch.sh`, reps=5) :
 
 | GGUF | batch 1 | batch 8 | batch 9 | batch 48 | Lecture |
 |---|---|---|---|---|---|
@@ -241,8 +265,9 @@ Courbes `t_forward(batch)` sur Vulkan0 (`tools/bench-spec-batch.sh`, reps=5) :
 | Qwen3.6-35B-A3B Q4 (MoE) | 17 ms | 33 ms | 68 ms | 136 ms | marche x2,06, mais pente raide sous la marche (batch 8 = 1,9x) |
 | DeepSeek-V4-Flash IQ3 (MoE) | 83 ms | 302 ms | | 1087 ms | pas de marche, x3,6 dès le batch 8 : la courbe disait « non », la mesure a dit +9 % |
 
-Profondeur de contexte (`tools/bench-depth.sh`, 27B Q4, KV q8_0, sans
-spéculation, reps=2) :
+### Profondeur de contexte
+
+`tools/bench-depth.sh`, 27B Q4, KV q8_0, sans spéculation, reps=2 :
 
 | Device | depth 0 | depth 16k | depth 32k | Tour simulé 0 → 32k |
 |---|---|---|---|---|
@@ -253,13 +278,17 @@ ROCm0 prefill plus vite à vide mais décode moins bien, et se dégrade deux
 fois plus vite en profondeur : Vulkan0 gagne à toutes les profondeurs sur ce
 GGUF, et l'écart se creuse en contexte long (le régime agentic).
 
-Concurrence (`--bench-parallel`, spec-test.txt, 400 tokens, 2 salves) :
+### Concurrence, cache de prompt, chargement
+
+`--bench-parallel`, spec-test.txt, 400 tokens, 2 salves :
 
 | Modèle | parallel | 1 requête | 4 requêtes | Lecture |
 |---|---|---|---|---|
 | qwen3.5-9b | 4 | 25,7 t/s | 78,6 t/s agrégés (x3,06), 20,1 t/s par requête | le `parallel 4` des tâches auxiliaires est justifié |
 
-Réglages n-gram alternatifs (`--spec-ab`, 27B, n-max 6, spec-refactor.txt, 4 passes) :
+### Réglages n-gram alternatifs
+
+`--spec-ab`, 27B, n-max 6, spec-refactor.txt, 4 passes :
 
 | Variante | Gen t/s | Acceptance | Lecture |
 |---|---|---|---|
@@ -267,7 +296,7 @@ Réglages n-gram alternatifs (`--spec-ab`, 27B, n-max 6, spec-refactor.txt, 4 pa
 | min-hits 1 | 55,8 | 0,80 | équivalent, 2 gardé |
 | ngram-map-k4v 47, min-hits 2 | 44,9 | 0,91 | -20 % : drafte moins souvent malgré une meilleure acceptance |
 
-Cache de prompt (`--bench-cache`, bench-context.txt ~1370 tokens) :
+`--bench-cache`, bench-context.txt ~1370 tokens :
 
 | Modèle | Tour suivant | Édition au milieu | Requête identique |
 |---|---|---|---|
@@ -279,12 +308,13 @@ dernier checkpoint, pas au token près ; une édition au milieu repart de zéro
 et même une requête identique repaie ~37 % du prompt. C'est le coût de ces
 architectures en boucle agentic, à mettre en face de leur débit.
 
-Chargement (`--bench-load`, restart puis première requête, cache de pages
-chaud) : qwen3.5-9b 1,9 s (8,2 Go, TTFT à chaud 65 ms), qwen3.8-27b 4,4 s
+`--bench-load`, restart puis première requête, cache de pages chaud : qwen3.5-9b 1,9 s (8,2 Go, TTFT à chaud 65 ms), qwen3.8-27b 4,4 s
 (17 Go, 165 ms), soit ~4 Go/s : une bascule LRU entre modèles moyens coûte
 quelques secondes, pas des minutes.
 
-Enseignements : la marche Vulkan 8→9 (`mul_mat_vec_max_cols = 8`) vaut pour
+### Enseignements
+
+La marche Vulkan 8→9 (`mul_mat_vec_max_cols = 8`) vaut pour
 les denses comme pour les MoE ; le régime large (47) gagne sur les denses,
 le régime sûr (7) sur les MoE ; l'optimum du n-max MTP dépend du device
 (4 sur ROCm0, 6 sur Vulkan0 pour le même GGUF) ; ROCm0 est inutilisable sur

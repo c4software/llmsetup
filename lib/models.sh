@@ -41,7 +41,12 @@ DEFAULT_DEVICE="Vulkan0"
 #   - cache-reuse = 0 : explicite sur les 35B A3B — le cache-reuse est de toute
 #     façon ignoré sur les architectures à état récurrent (GDN), llama-server
 #     log "cache reuse is not supported by this context". La vraie restauration
-#     de préfixe passe par cache-ram + ctx-checkpoints.
+#     de préfixe passe par cache-ram + ctx-checkpoints — et elle ne se fait
+#     qu'AU DERNIER CHECKPOINT, pas au token près : mesuré --bench-cache le
+#     21/08/2026 (b10433) sur le 9b et le 35B-A3B, prompt de ~1370 tokens :
+#     tour suivant 62 % servi du cache, requête identique 63 %, édition au
+#     milieu 0 % (tout repayé). C'est le coût de ces architectures en boucle
+#     agentic, à mettre en face de leur débit.
 #   - cache-type-v = q8_0 en surcharge locale pour les modèles à usage
 #     agentic/tool calling (le KV V q4_0 dégrade le tool calling, cf. doc
 #     llama.cpp function-calling)
@@ -139,6 +144,12 @@ download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
 #   plus jamais de génération qui court jusqu'au plafond de contexte
 # Pas de variante MTP : MTP imposerait parallel=1, incompatible avec les
 #   4 slots de tâches auxiliaires concurrentes qui font tout l'intérêt du 9b.
+# Mesuré 21/08/2026 (Vulkan0, b10433) : prefill 753 t/s, décode 25,7 t/s ;
+#   --bench-parallel : 4 requêtes = 78,6 t/s agrégés (x3,06), 20 t/s par
+#   requête — le parallel 4 est justifié ; --bench-load : 1,9 s de chargement
+#   (8,2 Go), TTFT à chaud 65 ms ; --bench-cache : 62 % / 0 % / 63 % (cf.
+#   en-tête). Justesse OK (recopie) ; un calcul mental simple, lui, est raté
+#   (93 → 33) : tâches auxiliaires, pas de raisonnement.
 llama_model qwen3.5-9b "
 model                = $QWEN35_9B_PATH
 ctx-size             = 32768
@@ -167,7 +178,10 @@ download_hf qwen3.6-35b-a3b "unsloth/Qwen3.6-35B-A3B-GGUF" \
 # parallel 2 : subagents opencode / requêtes concurrentes sans sérialisation
 # cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
 # cache-reuse 0 : ignoré de toute façon sur GDN (état récurrent) — la
-#   restauration de préfixe passe par cache-ram + ctx-checkpoints
+#   restauration de préfixe passe par cache-ram + ctx-checkpoints, au dernier
+#   checkpoint seulement : --bench-cache 21/08/2026 = 62 % au tour suivant,
+#   0 % après une édition au milieu, 63 % à l'identique (cf. en-tête). Débit
+#   non re-mesuré le 21/08 (bench-devices.conf = Vulkan0, mesure antérieure).
 # NB : la variante thinking (même GGUF, $QWEN36_35B_A3B_PATH) est déclarée
 #   plus bas, dans le groupe « famille 35B A3B ».
 llama_model qwen3.6-35b-a3b-nothink "
@@ -215,6 +229,8 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-GGUF" \
 # cache-reuse 0 : état récurrent (conv) — même logique que GDN, non supporté.
 # Pas de swa-full ni ctx-checkpoints : pas une arch hybride SWA Qwen.
 # jinja : template chat requis pour le tool calling.
+# Mesuré 21/08/2026 : justesse OK (b10433, Vulkan0) ; pas de bench de débit ce
+#   jour-là (device Vulkan0 mesuré antérieurement, bench-devices.conf).
 llama_model lfm2.5-2.6b "
 model            = $LFM25_26B_PATH
 ctx-size         = 131072
@@ -274,7 +290,9 @@ download_hf qwen3.6-35b-a3b-mtp "unsloth/Qwen3.6-35B-A3B-MTP-GGUF" \
 #   routés), donc seuil de non-perte 1,9 token sur 7 et gain plafonné x4.
 #   --spec-ngram-tune du 21/08/2026 (Vulkan0, spec-refactor.txt, 4 passes) :
 #   size_m 7 = 110,3 t/s (acceptance 0,93), 47 = 105,3 t/s (0,71) → 7, le
-#   régime large ne s'amortit pas ici. spec-ngram.conf prime.
+#   régime large ne s'amortit pas ici. spec-ngram.conf prime. Prefill ~865 t/s
+#   (passe 1, spec-refactor). ⚠ Le n-max 4 date du 15/08 : à re-régler sur
+#   Vulkan0 par --spec-tune, comme le 27B (passé de 4 à 6 en changeant de device).
 llama_model qwen3.6-35b-a3b-mtp-nothink "
 model                = $QWEN36_35B_A3B_MTP_PATH
 ctx-size             = 131072
@@ -303,6 +321,8 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : MoE hybrid-attention incompatible
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
+# JAMAIS MESURÉ sur cette machine (au 21/08/2026) : tourne sur le défaut Vulkan0
+#   sans comparaison ; procédure complète à dérouler (AGENTS.md).
 llama_model qwen3-coder-next "
 model            = $QWEN3_CODER_NEXT_PATH
 ctx-size         = 131072
@@ -366,12 +386,22 @@ groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée — + 
 #   Coût : ~1-2 pts de top-1 vs Q6 (analyse Dynamic V3 : l'IQ2_XXS de 9 Go
 #   garde déjà 82,5 %, la courbe Q4→Q6 est écrasée en haut). Repasser en
 #   UD-Q6_K_XL ici + --update qwen3.8-27b si le thinking long en pâtit.
+# Profondeur de contexte (tools/bench-depth.sh 21/08/2026, KV q8_0, sans
+#   spéculation, reps=2) : Vulkan0 prefill 289 → 222 → 183 t/s et décode
+#   12,25 → 11,83 → 11,50 t/s à 0 / 16k / 32k ; ROCm0 352 → 263 → 214 et
+#   11,97 → 10,73 → 9,54. ROCm0 prefill plus vite à vide mais décode moins bien
+#   et se dégrade deux fois plus vite en profondeur : Vulkan0 gagne à toutes
+#   les profondeurs (tour simulé 252 → 272 s contre 256 → 324 s), et l'écart
+#   se creuse en contexte long, le régime agentic. Chargement : 4,4 s (17 Go,
+#   cache de pages chaud), TTFT à chaud 165 ms.
 # ⚠ Repo day-zero (mi-août 2026) — template chat et quants encore mouvants,
 #   prévoir un --update qwen3.8-27b d'ici quelques jours.
 download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
   QWEN38_27B_PATH="Qwen3.8-27B-UD-Q4_K_XL.gguf"
 
 # Qwen3.8-27B thinking — reasoning_effort medium (défaut modèle = xhigh), tool-calling jinja
+# Débit : celui du GGUF sans spéculation (12,3 t/s brut, cf. profondeur
+#   ci-dessus) ; pas de --bench API sur cette section le 21/08.
 llama_model qwen3.8-27b "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
@@ -479,14 +509,18 @@ download_hf qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
 # Qwopus3.6-27B-Coder-MTP nothink — fine-tune coder SFT, SWE-bench 67.0%
 #   (score confirmé : run Q5_K_M, 335/500 Verified, thinking-off)
 # Bascule manuelle : /model qwopus3.6-27b-coder-mtp-nothink
-# spec-draft-n-max 4 : mesuré 15/08/2026 (valeur historique 2)
+# spec-draft-n-max 4 : mesuré 15/08/2026 (valeur historique 2) — device de
+#   l'époque non consigné ; à re-régler sur Vulkan0 par --spec-tune, comme le
+#   27B (passé de 4 à 6 en changeant de device).
+# Device : Vulkan0 par défaut, jamais comparé à ROCm0 (--bench-devices à faire).
 # cache-type-v q8_0 : précision V critique pour les diffs de code
 # cache-reuse 0 : incompatible MTP
 # spec-type ngram-map-k,draft-mtp : même montage que qwen3.8-27b-mtp-nothink
 #   (voir ce bloc pour le fond). Même marche Vulkan 8→9 sur ce Q5_K_M (x2,42,
 #   batch 8 = 106 ms, batch 9 = 257 ms). --spec-ngram-tune du 21/08/2026
 #   (Vulkan0, spec-refactor.txt, 4 passes) : size_m 7 = 43,9 t/s (acceptance
-#   0,95), 47 = 50,7 t/s (0,78) → 47, +16 %. spec-ngram.conf prime.
+#   0,95), 47 = 50,7 t/s (0,78) → 47, +16 %. spec-ngram.conf prime. Prefill
+#   ~250 t/s (passe 1, spec-refactor).
 llama_model qwopus3.6-27b-coder-mtp-nothink "
 model                = $QWOPUS_CODER_MTP_PATH
 ctx-size             = 131072
@@ -519,6 +553,12 @@ download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
   GPTOSS_PATH="UD-Q4_K_XL/gpt-oss-120b-UD-Q4_K_XL-00001-of-00002.gguf"
 
 # GPT-OSS 120B — shards UD-Q4_K_XL
+# JAMAIS COMPARÉ (au 21/08/2026) : Vulkan0 par défaut. Seule mesure : courbe
+#   t_forward(batch) du 20/08 (bench-spec-batch, reps=2) très pentue sur
+#   Vulkan0 et bien meilleure sur ROCm0 — mais DeepSeek a montré qu'un ROCm0
+#   « trop beau » peut être un charabia, et qu'une courbe défavorable ne
+#   tranche rien : procédure complète à dérouler avec les garde-fous
+#   (--bench-devices puis --spec-ngram-tune avec référence).
 llama_model gpt-oss "
 model            = $GPTOSS_PATH
 ctx-size         = 131072
@@ -536,7 +576,8 @@ parallel         = 1"
 # ⚠ Repo tout frais (squashé le 01/08) — les quants bougent encore, prévoir un
 #   --update deepseek-v4-flash d'ici quelques jours.
 # Décode ~12,5 t/s sur Strix Halo Vulkan avec ce quant : c'est la baseline
-#   communautaire mesurée, bornée bande passante — normal, pas un bug de config.
+#   communautaire, bornée bande passante — mesuré ici 11,3 t/s sans spéculation
+#   (21/08/2026, b10433), 12,3 avec n-gram : normal, pas un bug de config.
 download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
   DSV4_FLASH_PATH="UD-IQ3_XXS/DeepSeek-V4-Flash-0731-UD-IQ3_XXS-00001-of-00004.gguf"
 
@@ -634,6 +675,8 @@ download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
 #   taille de bloc d'entraînement du drafter).
 #   Retours communauté : jusqu'à +30 tok/s de décode selon les tâches.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
+# JAMAIS MESURÉ sur cette machine (au 21/08/2026) : Vulkan0 par défaut, pas de
+#   bench, pas de courbe, DFlash non essayé. Procédure complète à dérouler.
 llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
 ctx-size         = 262144
