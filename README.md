@@ -226,7 +226,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M (19 Go) | Vulkan0 (mesuré : ROCm0 328 / 21,6) | ngram-map-k 47 + draft-mtp 4 (confirmé, k2/4/6 = 24,6 / **30,2** / 30,2) | 245 | 26,4 (bench, acc. 0,65) ; **50,7** (refactor) | cache 62 % ; chargement 4,5 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
-| gpt-oss | UD-Q4_K_XL | Vulkan0 (défaut) | | | | **jamais comparé** ; courbe n-gram du 20/08 très pentue sur Vulkan0, à refaire avec les garde-fous |
+| gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | n-gram : tune en cours | 333 (413 en bench-devices) | 51,9 | cache identique 63 % (SWA, checkpoints) ; chargement 91 s depuis le disque |
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go) | Vulkan0 (défaut) | | | | **jamais mesuré** ; DFlash à essayer |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
@@ -269,6 +269,8 @@ Sur Vulkan0 (`tools/bench-spec-batch.sh`, reps=5) :
 | Qwopus3.6-27B Q5 | 89 ms | 106 ms | 257 ms | 310 ms | marche x2,42 |
 | Qwen3.6-35B-A3B Q4 (MoE) | 17 ms | 33 ms | 68 ms | 136 ms | marche x2,06, mais pente raide sous la marche (batch 8 = 1,9x) |
 | DeepSeek-V4-Flash IQ3 (MoE) | 83 ms | 302 ms | | 1087 ms | pas de marche, x3,6 dès le batch 8 : la courbe disait « non », la mesure a dit +9 % |
+| Qwen3-Coder-Next Q4 (MoE, GDN) | 21 ms | 46 ms | marche | 199 ms | x2,16 au batch 8 ; en réel, surcoût fixe par pas spéculatif, seul 47 gagne |
+| gpt-oss-120b Q4 (MoE, SWA) | 17 ms | 57 ms | | 246 ms | x3,4 au batch 8, x14,7 au batch 48 : la plus raide |
 
 ### Profondeur de contexte
 
@@ -339,6 +341,7 @@ relu depuis le disque.
 | qwopus3.6-27b | 19 Go | 4,5 s | 147 ms | chaud |
 | qwen3.6-35b-a3b-mtp | 22 Go | 36 s | 54 ms | disque (~0,6 Go/s) |
 | qwen3-coder-next | 47 Go | 72 s | 406 ms | disque |
+| gpt-oss | 59 Go | 91 s | 86 ms | disque |
 
 Une bascule LRU entre modèles moyens coûte quelques secondes si le fichier
 est encore en cache de pages, une minute et plus s'il a été évincé (les
