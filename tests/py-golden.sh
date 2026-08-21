@@ -48,6 +48,10 @@ python3 "$PY/timings.py" --spec  "$(cat "$F/chat-degen.json")" 2 "" > "$TMP/o" |
 # degen-mix : même charabia ponctué de tokens collés (17 % de mots distincts,
 # au-dessus du seuil) — c'est la part du mot dominant (80 %) qui doit le prendre
 python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen-mix.json")" 2 > "$TMP/o" || true; _ck bench-degen-mix-p2.txt "$TMP/o"
+# degen-rocm : la VRAIE réponse de 1000 tokens (DeepSeek V4 / ROCm0, b10433,
+# 21/08/2026) — les critères par mots n'y voient rien, seule la répétition
+# périodique au niveau caractères (0,64) la prend
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen-rocm.json")" 1 > "$TMP/o" || true; _ck bench-degen-rocm-p1.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 1 spec  > "$TMP/o" || true; _ck spec-p1.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 2 spec  > "$TMP/o" || true; _ck spec-p2.txt "$TMP/o"
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-plain.json")" 2 ""   > "$TMP/o" || true; _ck spec-plain-p2.txt "$TMP/o"

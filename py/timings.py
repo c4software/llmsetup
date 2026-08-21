@@ -33,8 +33,29 @@ mode = sys.argv.pop(1) if len(sys.argv) > 1 else ""
 #     a laissé passer un run où le charabia était ponctué de tokens collés
 #     (« devisoire,ual., ») qui gonflaient les distincts à 17 % ;
 #   - le texte se compresse à moins de 10 % (zlib) : une boucle quelconque, même
-#     de phrases longues, y tombe ; du texte réel reste vers 30 à 50 %.
+#     de phrases longues, y tombe ; du texte réel reste vers 30 à 50 % ;
+#   - plus de 40 % des caractères sont couverts par une répétition immédiate de
+#     période 1 à 12 (« dev dev dev », « ponseponseponse », « èteèteète »,
+#     « le le le ») — c'est le seul signal qui tient sur les 1000 tokens réels
+#     (fixture chat-degen-rocm.json : 0,64, quand les critères par mots donnent
+#     11 % de mot dominant et 16 % de distincts, dans la zone du texte normal).
+#     Texte réel : 0,02 à 0,27, le pire étant un tableau ASCII indenté.
 # Signalé par DEGEN=1, à l'appelant d'exclure la passe.
+def periodique(t, kmax=12):
+    """Part des caractères couverts par une répétition immédiate de période 1..kmax."""
+    n = len(t)
+    couvert = bytearray(n)
+    for k in range(1, kmax + 1):
+        i = 0
+        while i + 2 * k <= n:
+            if t[i:i + k] == t[i + k:i + 2 * k]:
+                couvert[i:i + 2 * k] = b"\x01" * (2 * k)
+                i += k
+            else:
+                i += 1
+    return sum(couvert) / max(1, n)
+
+
 def degenere(d):
     try:
         m = d["choices"][0]["message"]
@@ -52,7 +73,9 @@ def degenere(d):
     if len(freq) / len(mots) < 0.15:
         return True
     brut = texte.encode("utf-8")
-    return len(zlib.compress(brut)) / len(brut) < 0.10
+    if len(zlib.compress(brut)) / len(brut) < 0.10:
+        return True
+    return periodique(texte) > 0.40
 
 
 if mode == "--bench":
