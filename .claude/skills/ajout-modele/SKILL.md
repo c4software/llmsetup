@@ -5,7 +5,8 @@ description: Procédure complète d'ajout d'un modèle dans ce dépôt (lib/mode
 
 # Ajouter un modèle, de la fiche HF au tableau de perfs
 
-Six étapes, dans l'ordre. Chacune a un livrable et un critère de passage ;
+Six étapes, dans l'ordre (device avant spéculation : les seuils dépendent du
+backend). Chacune a un livrable et un critère de passage ;
 on ne passe pas à la suivante sans lui. Les commandes se lancent sur la
 machine qui héberge le service (`./setup-llm.sh`, service systemd user
 `llama-server`), jamais en parallèle les unes des autres : un seul GPU.
@@ -76,14 +77,51 @@ Si MTP : `spec-type = draft-mtp`, `spec-draft-n-max = 4` en valeur de
 départ. Si on veut aussi les n-grams (modèle utilisé en édition de code,
 où le prompt se ré-émet) : `spec-type = ngram-map-k,draft-mtp`,
 `spec-ngram-map-k-size-m = 7`, `spec-ngram-map-k-min-hits = 2`, à régler à
-l'étape 4.
+l'étape 5.
 
 Critère de passage : après restart, `curl localhost:8009/v1/models` montre
 le `--spec-type` attendu dans `status.args`, et un premier
 `./setup-llm.sh --spec-test <modèle> 2` affiche une acceptance (pas
 « n/a ») : la tête MTP est bien chargée.
 
-## 3. spec-tune (longueur de draft MTP)
+## 3. Device : ROCm0 ou Vulkan0 (--bench-devices)
+
+Avant toute mesure de spéculation : les seuils de noyau ggml (marches de
+`t_forward(batch)`, optimum du n-max) dépendent du backend, régler la
+spéculation puis changer de device obligerait à tout refaire. (Le premier
+jet de cette procédure mettait le bench en dernier ; DeepSeek, le 21/08/2026,
+a montré que le device se décide d'abord.)
+
+```bash
+./setup-llm.sh --bench-devices <modèle>        # Vulkan0,ROCm0, 3 passes
+```
+
+`--bench-devices` régénère le ini et redémarre par device, mesure un tour
+d'usage simulé (prefill froid + génération) et écrit le vainqueur dans
+`bench-devices.conf`, clé = dossier du GGUF (donc partagée par toutes les
+sections qui utilisent ce fichier).
+
+Regarder ce que le serveur GÉNÈRE, pas seulement ses t/s : DeepSeek V4 sur
+ROCm0 (b10433) répondait un charabia répétitif à ~550 t/s, réponse vide,
+sans une erreur dans le journal, et a été couronné deux fois avant qu'un
+garde-fou n'existe. `timings.py` détecte maintenant les sorties dégénérées
+(mot dominant, mots distincts, répétition périodique de caractères) et
+`--bench-devices` exclut le device ; si un device semble « trop beau »,
+vérifier quand même à la main :
+
+```bash
+curl -s localhost:8009/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"<modèle>","messages":[{"role":"user","content":"Écris une fonction Python qui inverse une liste chaînée."}],"max_tokens":200}' \
+  | python3 -c 'import json,sys; m=json.load(sys.stdin)["choices"][0]["message"]; print(repr((m.get("reasoning_content") or "")[:300])); print(repr(m["content"][:300]))'
+journalctl --user -u llama-server --since "-10 min" --no-pager | grep -i "warn\|error\|cpu"
+```
+
+Critère de passage : une ligne dans `bench-devices.conf` (écrite par la
+commande, y compris quand un seul device est valide), un texte généré
+lisible sur ce device, et la raison notée dans le bloc si l'autre device
+est inutilisable (version du build, symptôme).
+
+## 4. spec-tune (longueur de draft MTP)
 
 ```bash
 ./setup-llm.sh --spec-tune <modèle>            # k = 2,4,6 par défaut, 4 passes
@@ -94,12 +132,16 @@ Restart entre chaque k, mesure réelle via l'API sur `prompts/spec-test.txt`,
 calibration du modèle alpha, écriture du gagnant dans `spec-nmax.conf`.
 À moins de 2 % d'écart, le plus petit k gagne.
 
+Sur un `spec-type` en liste (n-gram + MTP) la commande mesure en
+`draft-mtp` seul le temps du réglage (`SPEC_TYPE_FORCE`), la liste revient
+au restart final.
+
 Critère de passage : `spec-nmax.conf` contient la ligne du modèle, et le
 commentaire du bloc cite les t/s par k, la date et le device. Relancer
 après tout changement de quant, de build llama.cpp ou de device (la courbe
-dépend du backend).
+dépend du backend : 27B Q4, optimum 4 sur ROCm0 et 6 sur Vulkan0).
 
-## 4. spec-ngram-tune (longueur de draft n-gram)
+## 5. spec-ngram-tune (longueur de draft n-gram)
 
 Seulement si `ngram-map-k` est dans le `spec-type`. Pour un modèle **sans
 MTP** (ou avant d'ajouter n-gram à un modèle MTP déjà réglé), commencer
@@ -144,31 +186,39 @@ raffinement automatique qui la trouve : ne pas conclure sur la première
 table affichée. Une courbe défavorable n'interdit rien : elle abaisse
 l'attente, et la mesure tranche.
 
-Critère de passage : `spec-ngram.conf` contient la ligne du modèle, le
-commentaire du bloc cite les deux candidats, leurs t/s et acceptances.
-
-## 5. bench (ROCm ou Vulkan)
+Voie manuelle, quand il faut une configuration que le tune ne propose pas
+(c'est ainsi que l'A/B DeepSeek a été fait avant que le tune ne sache le
+faire) : une mesure par configuration, ini régénéré et service redémarré
+entre deux, toujours le même prompt et le même nombre de passes.
 
 ```bash
-./setup-llm.sh --bench-devices <modèle>        # Vulkan0,ROCm0, 3 passes
-./setup-llm.sh --bench <modèle> 3              # perfs telles que servies
+./setup-llm.sh --spec-test <modèle> 4 prompts/spec-refactor.txt        # état courant
+SPEC_NGRAM_FORCE=31 SPEC_NGRAM_FORCE_PRESET=<modèle> ./setup-llm.sh --preload < /dev/null
+systemctl --user restart llama-server        # --preload sans terminal ne redémarre pas
+./setup-llm.sh --spec-test <modèle> 4 prompts/spec-refactor.txt        # size_m 31
+./setup-llm.sh --preload < /dev/null && systemctl --user restart llama-server   # retour au défaut
 ```
 
-`--bench-devices` régénère le ini et redémarre par device, mesure un tour
-d'usage simulé (prefill froid + génération) et écrit le vainqueur dans
-`bench-devices.conf`, clé = dossier du GGUF (donc partagée par toutes les
-sections qui utilisent ce fichier). Le bench ne mesure pas le chemin
-spéculatif : après une bascule de device sur un modèle MTP, refaire les
-étapes 3 et 4 (les seuils de noyau changent de backend) et vérifier
-l'acceptance dans `--spec-test`.
+(`SPEC_TYPE_FORCE=none SPEC_TYPE_FORCE_PRESET=<modèle>` pour une référence
+sans spéculation.) Pour un modèle sans MTP, `--spec-test` affiche la mesure
+mais ne l'écrit pas dans `spec-tests.log` : noter les chiffres tout de
+suite dans le tableau de l'étape 6.
 
-Critère de passage : une ligne dans `bench-devices.conf` (ou la décision
-explicite de rester sur le défaut), et les étapes 3 et 4 refaites si le
-device a changé.
+Critère de passage : `spec-ngram.conf` contient la ligne du modèle (ou le
+bloc n-gram a été retiré parce que rien ne bat la référence), le
+commentaire du bloc cite la référence, les candidats, leurs t/s et
+acceptances.
 
-## 6. Récap de performance (tableau partageable)
+## 6. bench final et récap de performance (tableau partageable)
 
-Rassembler les chiffres dans un tableau unique, à coller dans le message
+Une dernière mesure telle que servie, avec tous les réglages retenus et le
+service dans son état normal :
+
+```bash
+./setup-llm.sh --bench <modèle> 3
+```
+
+Puis rassembler les chiffres dans un tableau unique, à coller dans le message
 de commit, le README ou un artefact partagé. Toujours préciser machine,
 build llama.cpp, quant, device et date : un chiffre sans ces cinq colonnes
 n'est pas comparable.
@@ -203,6 +253,17 @@ Règles du tableau :
 Sources des chiffres : `spec-tests.log` (TSV, colonnes spec-type et
 prompt), `spec-batch.log` / `.tsv` (courbes), sortie de `--bench` et
 `--bench-devices`.
+
+## Déroulé quand la machine de mesure n'est pas celle du dépôt
+
+Le dépôt est aussi cloné sur la machine qui héberge le service : pousser la
+branche, puis là-bas `git pull --ff-only` avant chaque série de commandes,
+lancer les commandes du projet, ne rien commiter ni éditer sur place (les
+`.conf` et journaux y sont écrits par les commandes, c'est leur place).
+Vérifier `git status` propre et `bash tests/py-golden.sh` après le pull.
+Une mesure à la fois ; les longues (rechargement de 100 Go, 4 passes) se
+lancent en arrière-plan avec leur sortie dans un fichier, et on lit la
+sortie complète avant de conclure, pas seulement la dernière ligne.
 
 ## Clôture
 

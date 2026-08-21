@@ -70,7 +70,8 @@ résumer ou la supprimer, non.
 Détail, commandes et critères de passage dans la skill locale
 `.claude/skills/ajout-modele/SKILL.md` (à charger dès qu'on ajoute, remplace
 ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
-(un seul GPU) :
+(un seul GPU). Machine de mesure distante : pousser, `git pull --ff-only`
+là-bas, lancer, ne rien commiter sur place.
 
 1. **Fiche du modèle** : valider les informations de base à partir du
    guide unsloth (`https://unsloth.ai/docs/models/<modèle>` : sampling
@@ -82,9 +83,16 @@ ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
    sur ce modèle (parallel 1, cache-reuse 0, pas de mmproj, réserve sur le
    rollback GDN en agentic) ? Livrable : `spec-type` choisi, acceptance
    visible dans un premier `--spec-test`.
-3. **`--spec-tune`** : longueur de draft MTP mesurée, écrite dans
-   `spec-nmax.conf`.
-4. **`--spec-ngram-tune`** (si `ngram-map-k` dans le `spec-type`) : courbe
+3. **Device d'abord** (`--bench-devices`) : ROCm0 ou Vulkan0, écrit dans
+   `bench-devices.conf` ; les seuils de noyau qui règlent la spéculation
+   dépendent du backend, donc avant les étapes 4 et 5. Regarder le texte
+   généré, pas seulement les t/s (DeepSeek V4 / ROCm0 : charabia à 550 t/s,
+   maintenant détecté par `timings.py`, à vérifier à la main si « trop beau »).
+   Un modèle absent de `bench-devices.conf` tourne sur le défaut (Vulkan0)
+   sans avoir été mesuré : ce n'est pas un choix.
+4. **`--spec-tune`** : longueur de draft MTP mesurée (en `draft-mtp` seul
+   si le `spec-type` est une liste), écrite dans `spec-nmax.conf`.
+5. **`--spec-ngram-tune`** (si `ngram-map-k` dans le `spec-type`) : courbe
    `t_forward(batch)` puis arbitrage réel, écrit dans `spec-ngram.conf`.
    Modèle sans MTP : la courbe seule d'abord, service arrêté,
    `DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh <gguf>`, pour
@@ -92,11 +100,9 @@ ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
    `spec-type` et le tune, qui mesure une référence sans spéculation et
    n'écrit rien si aucun `size_m` ne la bat. La courbe ne décide jamais
    seule (DeepSeek V4 : +9 % réels malgré une courbe « défavorable »).
-5. **`--bench-devices`** puis **`--bench`** : ROCm0 ou Vulkan0, écrit dans
-   `bench-devices.conf`. Si le device change, refaire 3 et 4 (les seuils
-   dépendent du backend). Un modèle absent de `bench-devices.conf` tourne
-   sur le défaut (Vulkan0) sans avoir été mesuré : ce n'est pas un choix.
-6. **Récap de performance** : un tableau partageable (configuration,
+   Voie manuelle (`--spec-test` + `SPEC_NGRAM_FORCE`/`SPEC_TYPE_FORCE` +
+   `--preload` + restart) décrite dans la skill.
+6. **`--bench` final et récap de performance** : un tableau partageable (configuration,
    device, prompt t/s, gen t/s, acceptance, source et prompt de mesure),
    avec machine, build llama.cpp, quant et date ; les chiffres résumés vont
    aussi dans le commentaire du bloc, seul endroit versionné.
