@@ -482,9 +482,16 @@ PY
   echo ""
   info "──── lecture ────"
   # 2 : préfixe réutilisé ? 3 : au-delà du préfixe (cache-reuse) ? 4 : tout ?
-  [[ "${parts[1]}" != "-" ]] && { if (( parts[1] >= 80 )); then info "  suite : ${parts[1]} % servi du cache — le tour suivant d'une conversation ne repaie pas le contexte."; else warn "  suite : ${parts[1]} % seulement — le préfixe n'est pas retrouvé (cache-ram / ctx-checkpoints / similarité de slot ?)."; fi; }
-  [[ "${parts[2]}" != "-" ]] && { if (( parts[2] > 55 )); then info "  édition : ${parts[2]} % — au-delà du préfixe, cache-reuse récupère la suite après l'édition."; else info "  édition : ${parts[2]} % — seul le préfixe avant l'édition est réutilisé (attendu sur GDN/état récurrent : pas de décalage de KV, restauration par checkpoint uniquement)."; fi; }
-  [[ "${parts[3]}" != "-" ]] && { if (( parts[3] >= 95 )); then info "  identique : ${parts[3]} % — cache complet."; else warn "  identique : ${parts[3]} % — une requête identique n'est pas entièrement servie du cache."; fi; }
+  # Mesuré le 21/08/2026 (b10433) sur le 9b et le 35B-A3B, tous deux hybrides
+  # SWA/GDN : suite 62 %, édition 0 %, identique 63 %, avec le MÊME plafond de
+  # ~850 tokens réutilisés sur un prompt de ~1370. La restauration d'état ne se
+  # fait qu'à un checkpoint, pas au token près : tout ce qui suit le dernier
+  # checkpoint avant la divergence (ou avant la fin, pour une requête identique)
+  # est repayé, et une édition au milieu repart de zéro. C'est le coût de ces
+  # architectures en boucle agentic, à mettre en face de leur débit.
+  [[ "${parts[1]}" != "-" ]] && { if (( parts[1] >= 80 )); then info "  suite : ${parts[1]} % servi du cache — le tour suivant d'une conversation ne repaie pas le contexte."; else warn "  suite : ${parts[1]} % seulement — restauration au dernier checkpoint avant la divergence, le reste est repayé (hybride SWA/GDN : ~60 % mesuré)."; fi; }
+  [[ "${parts[2]}" != "-" ]] && { if (( parts[2] > 55 )); then info "  édition : ${parts[2]} % — au-delà du préfixe, cache-reuse récupère la suite après l'édition."; elif (( parts[2] > 0 )); then info "  édition : ${parts[2]} % — seul le préfixe avant l'édition est réutilisé (pas de décalage de KV)."; else warn "  édition : 0 % — une édition au milieu du contexte repart de zéro (aucun checkpoint restaurable avant le point d'édition)."; fi; }
+  [[ "${parts[3]}" != "-" ]] && { if (( parts[3] >= 95 )); then info "  identique : ${parts[3]} % — cache complet."; else warn "  identique : ${parts[3]} % — même une requête identique n'est pas entièrement servie : le cache s'arrête au dernier checkpoint, pas à la fin du prompt."; fi; }
 
   local dev
   dev="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
@@ -602,8 +609,13 @@ cmd_bench_load() {
     t1="$(date +%s.%N)"
     chaud="$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.0f", (b-a)*1000}')"
     gguf="$(echo "${MODEL_INI[$p]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
-    # taille = tous les shards du dossier de quant (du sur le dossier du shard 00001)
-    taille="$(du -shL "$(dirname "$gguf")" 2>/dev/null | cut -f1 || echo '?')"
+    # taille = le GGUF déclaré, ou ses shards (pas le dossier : il peut contenir
+    # une autre quant, orpheline ou non)
+    if [[ "$gguf" =~ ^(.*)-00001-of-([0-9]+)\.gguf$ ]]; then
+      taille="$(du -shLc "${BASH_REMATCH[1]}"-*-of-"${BASH_REMATCH[2]}".gguf 2>/dev/null | tail -1 | cut -f1 || echo '?')"
+    else
+      taille="$(du -shL "$gguf" 2>/dev/null | cut -f1 || echo '?')"
+    fi
     dev="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
       | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$p" --device 2>/dev/null || true)"
     info "  chargement + 1er token : $froid s ($taille, ${dev:-$DEFAULT_DEVICE}) ; à chaud : $chaud ms"
