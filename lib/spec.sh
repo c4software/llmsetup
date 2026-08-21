@@ -180,7 +180,10 @@ cmd_spec_test() {
     warn "Désaccord n-max : serveur=$nmax_srv, script/conf=$nmax_cfg → le ini a changé sans restart."
     warn "  Ce run mesure et journalise n-max $nmax_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
   fi
-  if [[ -n "$stype_srv" && -n "$stype_cfg" && "$stype_srv" != "$stype_cfg" ]]; then
+  if [[ "${SPEC_MTP_ONLY_PRESET:-}" == "$preset" ]]; then
+    # forçage voulu par --spec-tune, pas un ini oublié
+    [[ -n "$stype_srv" ]] && echo "  (spec-type réduit à $stype_srv par --spec-tune le temps du réglage ; liste du script : $stype_cfg)"
+  elif [[ -n "$stype_srv" && -n "$stype_cfg" && "$stype_srv" != "$stype_cfg" ]]; then
     warn "Désaccord spec-type : serveur=$stype_srv, script=$stype_cfg → le ini a changé sans restart."
     warn "  Ce run mesure et journalise spec-type $stype_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
   fi
