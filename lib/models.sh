@@ -341,10 +341,23 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 #   « LAMPAMPAMPAMP… » à la recopie de contrôle (exclu par --bench-sanity avant
 #   toute mesure). Deuxième arch MoE à opérateurs fusionnés cassée sur ROCm0
 #   après DeepSeek V4 ; les denses et le 35B-A3B passent.
-# Spéculation n-gram (ngram-map-k, À L'ESSAI) : pas de tête MTP. Courbe
-#   t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 21 ms, 8 = 46 (x2,16),
-#   16 = 106, 32 = 146, 48 = 199 ms — entre le 35B-A3B et DeepSeek. size_m 7
-#   de départ, --spec-ngram-tune (référence sans spéculation incluse) décide.
+# Spéculation n-gram : ngram-map-k size_m 47, RETENU sur mesure réelle, avec
+#   un compromis à connaître. Pas de tête MTP. Courbe t_forward(batch) Vulkan0
+#   (21/08, reps=5) : batch 1 = 21 ms, 8 = 46 (x2,16), 9 = marche, 16 = 106,
+#   32 = 146, 48 = 199 ms. --spec-ngram-tune 21/08/2026 (spec-refactor.txt,
+#   4 passes) : sans spéculation 46,8 t/s ; size_m 7 = 20,8 t/s (!) malgré une
+#   acceptance de 0,98 ; size_m 47 = 68,7 t/s (+47 %). Lecture : sur cette arch
+#   (GDN + MoE 512 experts) chaque PAS spéculatif porte un surcoût fixe énorme
+#   (~330 ms à size 7, ~480 ms à 47, contre 46 et 199 ms de forward pur :
+#   sauvegarde/restauration de l'état récurrent), que seuls les grands drafts
+#   amortissent — un petit draft est une catastrophe, pas un réglage sûr.
+#   Revers : en génération sans répétition (bench-task, spec-test.txt) les
+#   hits partiels paient ce surcoût : -5,5 % (43,7 contre 46,2 ; 44,5 contre
+#   47,1), acceptance 0,23 à 0,29, et min-hits 4 n'y change rien (--spec-ab :
+#   44,8, même acceptance — ce ne sont pas des faux départs mais les
+#   répétitions du modèle lui-même). Gardé parce qu'en agentic l'édition
+#   domine ; retirer spec-type/size-m/min-hits ci-dessous (et la ligne de
+#   spec-ngram.conf) si la génération générique prime.
 # --bench 21/08 (bench-task, sans spéculation) : 457 pp / 46,2 tg. --bench-cache :
 #   64 % / 66 % (état récurrent). --bench-load : 72 s (47 Go relus depuis le
 #   disque), TTFT à chaud 406 ms — à la demande, ce modèle coûte plus d'une
@@ -360,7 +373,7 @@ min-p            = 0.01
 cache-type-v     = q8_0
 cache-reuse      = 0
 spec-type        = ngram-map-k
-spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-size-m   = 47
 spec-ngram-map-k-min-hits = 2
 parallel         = 1"
 

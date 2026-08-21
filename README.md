@@ -225,7 +225,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | qwen3.8-27b-mtp-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + draft-mtp 6 | 261 | 29,5 (bench, acc. 0,65) ; **56,1** (refactor) ; 33,1 (spec-test, MTP seul) | chargement 4,4 s |
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M (19 Go) | Vulkan0 (mesuré : ROCm0 328 / 21,6) | ngram-map-k 47 + draft-mtp 4 (confirmé, k2/4/6 = 24,6 / **30,2** / 30,2) | 245 | 26,4 (bench, acc. 0,65) ; **50,7** (refactor) | cache 62 % ; chargement 4,5 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
-| qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k à l'essai (tune en cours) | 457 | 46,2 sans spéculation | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
+| qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL | Vulkan0 (défaut) | | | | **jamais comparé** ; courbe n-gram du 20/08 très pentue sur Vulkan0, à refaire avec les garde-fous |
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go) | Vulkan0 (défaut) | | | | **jamais mesuré** ; DFlash à essayer |
 
@@ -247,6 +247,10 @@ pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
 | | | | **ngram-map-k 47 + mtp 4** (retenu) | **50,7** | 0,78 | spec-refactor |
 | qwen3.6-35b-a3b-mtp-nothink | UD-Q4_K_XL (MoE) | Vulkan0 | **ngram-map-k 7 + mtp 4** (retenu) | **110,3** | 0,93 | spec-refactor |
 | | | | ngram-map-k 47 + mtp 4 | 105,3 | 0,71 | spec-refactor |
+| qwen3-coder-next | UD-Q4_K_XL (MoE, GDN) | Vulkan0 | sans spéculation | 46,8 | | spec-refactor |
+| | | | ngram-map-k 7 | 20,8 | 0,98 | spec-refactor : surcoût fixe par pas spéculatif, un petit draft ne l'amortit pas |
+| | | | **ngram-map-k 47** (retenu) | **68,7** | | spec-refactor |
+| | | | ngram-map-k 47 | 44,5 (min-hits 4 : 44,8) | 0,23 | spec-test : -5 % sans répétitions |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go, MoE) | Vulkan0 | sans spéculation | 11,3 | | spec-refactor |
 | | | | **ngram-map-k 7** (retenu) | **12,3** | 0,9 sur les hits | spec-refactor |
 | | | | ngram-map-k 31 | 11,8 | 0,27 à 0,66 | spec-refactor |
@@ -338,6 +342,12 @@ est encore en cache de pages, une minute et plus s'il a été évincé (les
 104 Go de DeepSeek évincent tout le reste).
 
 ### Enseignements
+
+Sur Qwen3-Coder-Next (GDN + MoE), chaque pas spéculatif porte un surcoût
+fixe de plusieurs centaines de millisecondes (état récurrent à sauvegarder et
+restaurer) : un petit draft divise le débit par deux malgré 98 % d'acceptance,
+seul un grand draft l'amortit, et le gain en refactor (+47 %) se paie en
+génération générique (-5 %). Le « régime sûr » n'existe pas sur cette arch.
 
 La marche Vulkan 8→9 (`mul_mat_vec_max_cols = 8`) vaut pour
 les denses comme pour les MoE ; le régime large (47) gagne sur les denses,
