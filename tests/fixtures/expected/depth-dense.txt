@@ -1,0 +1,11 @@
+  KV q8_0/q8_0 fa=-1 ; tour simulé = 2000 tokens de prefill froid + 3000 générés, à cette profondeur
+      depth    prefill t/s     décode t/s    tour (s)      vs 0
+  --------------------------------------------------------------
+          0      250±2       33.00±0.33       98.9         
+      16384      200±2       28.50±0.29      115.3    x1.17
+      32768      160±2       24.00±0.24      137.5    x1.39
+
+  De 0 à 32768 tokens de contexte : prefill 250 → 160 t/s (-36 %), décode 33.00 → 24.00 t/s (-27 %).
+TOUR_0=98.9
+TOUR_16384=115.3
+TOUR_32768=137.5

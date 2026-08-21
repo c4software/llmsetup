@@ -77,6 +77,10 @@ python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/mode
 python3 "$PY/bench_compare.py" "$F/bench.log" qwen3.5-9b qwen3.8-27b-mtp-nothink lfm2.5-2.6b inconnu > "$TMP/o"; _ck bench-compare.txt "$TMP/o"
 python3 "$PY/bench_compare.py" "$F/absent.log" qwen3.5-9b > "$TMP/o"; _ck bench-compare-absent.txt "$TMP/o"
 
+# --- depth_curve.py : courbe synthétique 0/16k/32k, tour simulé 2000/3000
+python3 "$PY/depth_curve.py" m.gguf Vulkan0 2000 3000 "" rec < "$F/depth-dense.jsonl" > "$TMP/o"; _ck depth-dense.txt "$TMP/o"
+python3 "$PY/depth_curve.py" m.gguf Vulkan0 2000 3000 "" rec < "$F/bench-vide.jsonl" > "$TMP/o"; _ck depth-vide.txt "$TMP/o"
+
 # --- batch_curve.py (stdout déterministe : l'horodatage ne va que dans le TSV)
 # marche  : vraie courbe Vulkan0 du 27B Q4, coupure de noyau entre 8 et 9
 # plat    : dense borné bande passante, aucune marche → un seul candidat

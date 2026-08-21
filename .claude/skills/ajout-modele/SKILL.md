@@ -116,6 +116,16 @@ curl -s localhost:8009/v1/chat/completions -H 'Content-Type: application/json' \
 journalctl --user -u llama-server --since "-10 min" --no-pager | grep -i "warn\|error\|cpu"
 ```
 
+Pour un modèle destiné à l'agentic long (gros dossiers en contexte), le
+bench à ~1500 tokens ne suffit pas : mesurer aussi en profondeur, hors
+service, et lire le verdict à 32k :
+
+```bash
+systemctl --user stop llama-server
+DEV=Vulkan0,ROCm0 tools/bench-depth.sh ~/models/<dossier>/<gguf>    # 0 / 16k / 32k
+systemctl --user start llama-server
+```
+
 Critère de passage : une ligne dans `bench-devices.conf` (écrite par la
 commande, y compris quand un seul device est valide), un texte généré
 lisible sur ce device, et la raison notée dans le bloc si l'autre device

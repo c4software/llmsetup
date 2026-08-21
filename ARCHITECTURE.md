@@ -103,6 +103,7 @@ près — voir `tests/py-golden.sh`.
 | `build_body.py <modèle> <max_tokens> <seed> <fichier prompt> [fichier...]` (contenus joints par une ligne vide) | fichiers de `prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
 | `spec_server_nmax.py <modèle> [flag]` | JSON de `/v1/models` sur stdin | valeur réelle du flag (défaut `--spec-draft-n-max` ; aussi `--spec-type`, `--spec-ngram-map-k-size-m`), vide si absent | `cmd_spec_test` |
 | `batch_curve.py <modèle> <device> <depth> [tsv] [rec]` | jsonl de `llama-bench -o jsonl` sur stdin (plusieurs balayages concaténés, le plus récent fait foi) | tableau batch/size_m/coût/seuil/gain, marches, baisses au-delà du bruit, tailles dominées, verdict ; `SIZEM_SAFE=`/`SIZEM_LARGE=`/`STEP_LO=`/`STEP_HI=` si `rec` ; append TSV si fichier donné | `cmd_spec_ngram_tune`, `tools/bench-spec-batch.sh` |
+| `depth_curve.py <modèle> <device> <pp> <gen> [tsv] [rec]` | jsonl de `llama-bench -d` sur stdin | tableau prefill/décode/tour simulé par profondeur, dégradation de 0 à la profondeur max, `TOUR_<depth>=` si `rec` ; append TSV | `tools/bench-depth.sh` |
 | `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device, build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
 | `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `logs/spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
 
@@ -245,6 +246,11 @@ pour une mesure propre, l'état est journalisé). Journal lisible
 `logs/spec-batch.log` et TSV `logs/spec-batch.tsv`. Sert à
 explorer ; pour régler, `--spec-ngram-tune`. Les autres fichiers de `tools/`
 (sync opencode, extension pi) sont décrits dans le README.
+
+`bench-depth.sh` : même principe avec `llama-bench -d` (profondeur de KV
+avant la mesure) : prefill et décode à 0 / 16k / 32k (64k sur demande), KV
+en q8_0 comme le service, tour simulé par profondeur et par device. Journal
+`logs/bench-depth.log` + `.tsv`.
 
 ## Invariants (à ne pas casser)
 
