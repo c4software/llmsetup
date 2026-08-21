@@ -103,7 +103,8 @@ près — voir `tests/py-golden.sh`.
 | `build_body.py <modèle> <max_tokens> <seed> <fichier prompt> [fichier...]` (contenus joints par une ligne vide) | fichiers de `prompts/` | body JSON (`json.dumps`) sur stdout | `_bench_one`, `cmd_spec_test` |
 | `spec_server_nmax.py <modèle> [flag]` | JSON de `/v1/models` sur stdin | valeur réelle du flag (défaut `--spec-draft-n-max` ; aussi `--spec-type`, `--spec-ngram-map-k-size-m`), vide si absent | `cmd_spec_test` |
 | `batch_curve.py <modèle> <device> <depth> [tsv] [rec]` | jsonl de `llama-bench -o jsonl` sur stdin (plusieurs balayages concaténés, le plus récent fait foi) | tableau batch/size_m/coût/seuil/gain, marches, baisses au-delà du bruit, tailles dominées, verdict ; `SIZEM_SAFE=`/`SIZEM_LARGE=`/`STEP_LO=`/`STEP_HI=` si `rec` ; append TSV si fichier donné | `cmd_spec_ngram_tune`, `tools/bench-spec-batch.sh` |
-| `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
+| `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device, build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
+| `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `logs/spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
 
 ## Prompts de mesure (`prompts/`)
 
@@ -155,10 +156,10 @@ incohérent (ini changé sans restart) → quarantaine automatique dans le log
 de texte ; t(k) affine ; le modèle sert à suggérer le prochain k à mesurer,
 pas à remplacer la mesure.
 
-Journal `spec-tests.log` (TSV) : `date modèle gguf device nmax gen acc
-drafted accepted predicted spectype prompt`. Les colonnes 11 et 12 datent du
-support des listes et du prompt paramétrable ; absentes = `draft-mtp` seul
-sur `spec-test.txt`. `spec_analyze.py` écarte (sans quarantaine : ils sont
+Journal `logs/spec-tests.log` (TSV) : `date modèle gguf device nmax gen acc
+drafted accepted predicted spectype prompt build`. Les colonnes 11 et 12
+datent du support des listes et du prompt paramétrable, la 13 du passage en
+`logs/` ; absentes = `draft-mtp` seul sur `spec-test.txt`, build inconnu. `spec_analyze.py` écarte (sans quarantaine : ils sont
 valides, juste hors modèle) les runs en spec-type mixte, dont le k varie
 par forward, et ceux d'un autre prompt ; sans ce filtre le garde-fou
 tokens/forward > k+1 les commenterait tous. C'est pourquoi `--spec-tune`
@@ -241,7 +242,7 @@ PP/prefill, ce qui est le cas de tous les modèles denses de ce parc.
 `bench-spec-batch.sh` : balayage `llama-bench` brut d'un ou plusieurs GGUF
 sur un ou plusieurs devices, sans passer par le service (à arrêter soi-même
 pour une mesure propre, l'état est journalisé). Journal lisible
-`spec-batch.log` et TSV `spec-batch.tsv` à côté du point d'entrée. Sert à
+`logs/spec-batch.log` et TSV `logs/spec-batch.tsv`. Sert à
 explorer ; pour régler, `--spec-ngram-tune`. Les autres fichiers de `tools/`
 (sync opencode, extension pi) sont décrits dans le README.
 
@@ -257,7 +258,9 @@ explorer ; pour régler, `--spec-ngram-tune`. Les autres fichiers de `tools/`
 - Mesures spec : l'état réel vient de `/v1/models`, jamais du script/ini.
 - `spec-type` peut être une liste : tester l'appartenance
   (`_preset_has_spec_type`), jamais un grep ancré sur `= draft-mtp`.
-- Les lignes existantes de `spec-tests.log` restent lisibles : toute colonne
-  nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
+- Les lignes existantes des journaux (`logs/*.log`) restent lisibles : toute
+  colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
+- Tout journal de mesure porte la version de llama.cpp (`_llama_build`) : un
+  chiffre sans son build ne se compare pas.
 - Entrée non interactive (`! -t 0`) gérée partout : jamais de question, jamais
   de restart automatique.

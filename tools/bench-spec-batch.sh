@@ -19,10 +19,10 @@
 #   DEV=Vulkan0,ROCm0  device(s) ggml, liste comme --bench-devices (défaut :
 #                    Vulkan0, le DEFAULT_DEVICE du models.ini) ; "auto" = ggml
 #                    choisit. Chaque modèle est mesuré sur chaque device.
-#   OUT=<fichier>    journal lisible, en APPEND (défaut : spec-batch.log à côté
-#                    de setup-llm.sh, comme spec-tests.log). La sortie reste
-#                    affichée à l'écran en même temps.
-#   TSV=<fichier>    mêmes mesures en TSV pour analyse (défaut : spec-batch.tsv)
+#   OUT=<fichier>    journal lisible, en APPEND (défaut : logs/spec-batch.log,
+#                    comme les autres journaux). La sortie reste affichée à
+#                    l'écran en même temps.
+#   TSV=<fichier>    mêmes mesures en TSV pour analyse (défaut : logs/spec-batch.tsv)
 #   DEPTH=0          tokens de contexte déjà en KV avant la mesure.
 #                    0 = rapide, isole le coût des poids (suffit à classer
 #                    dense/MoE). 32768 = réaliste agentic mais TRÈS lent
@@ -33,11 +33,12 @@
 # =============================================================================
 set -euo pipefail
 
-# Racine du dépôt = parent de tools/ ; les journaux vivent à côté de
-# setup-llm.sh comme spec-tests.log / bench-devices.conf (locaux, .gitignore).
+# Racine du dépôt = parent de tools/ ; les journaux vivent dans logs/ comme
+# ceux de setup-llm.sh (locaux, .gitignore).
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT="${OUT:-$ROOT_DIR/spec-batch.log}"
-TSV="${TSV:-$ROOT_DIR/spec-batch.tsv}"
+mkdir -p "$ROOT_DIR/logs"
+OUT="${OUT:-$ROOT_DIR/logs/spec-batch.log}"
+TSV="${TSV:-$ROOT_DIR/logs/spec-batch.tsv}"
 
 MODELS_BASE="${MODELS_BASE:-$HOME/models}"
 DEV="${DEV:-Vulkan0}"

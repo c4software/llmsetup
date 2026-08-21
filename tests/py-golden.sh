@@ -70,6 +70,13 @@ python3 "$PY/spec_server_nmax.py" inconnu                 < "$F/models.json" > "
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models-mixte.json" > "$TMP/o"; _ck spectype-found.txt "$TMP/o"
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models.json"       > "$TMP/o"; _ck spectype-absent.txt "$TMP/o"
 
+# --- bench_compare.py : 9b = régression décode -6 % et build changé ; 27b =
+#     prefill contaminé (pas de drapeau) + acceptance ; lfm2.5 = 1re mesure ;
+#     inconnu = absent du journal ; ROCm0 du 9b ne doit pas servir de référence
+#     au run Vulkan0
+python3 "$PY/bench_compare.py" "$F/bench.log" qwen3.5-9b qwen3.8-27b-mtp-nothink lfm2.5-2.6b inconnu > "$TMP/o"; _ck bench-compare.txt "$TMP/o"
+python3 "$PY/bench_compare.py" "$F/absent.log" qwen3.5-9b > "$TMP/o"; _ck bench-compare-absent.txt "$TMP/o"
+
 # --- batch_curve.py (stdout déterministe : l'horodatage ne va que dans le TSV)
 # marche  : vraie courbe Vulkan0 du 27B Q4, coupure de noyau entre 8 et 9
 # plat    : dense borné bande passante, aucune marche → un seul candidat

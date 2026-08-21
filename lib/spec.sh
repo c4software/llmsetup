@@ -295,14 +295,14 @@ cmd_spec_test() {
 
   # --- Journal + analyse n-max ---------------------------------------------
   if [[ -n "$nmax" && -n "$med_gen" && "$sum_dn" -gt 0 ]]; then
-    # date modèle gguf device nmax gen acc drafted accepted predicted spectype prompt
+    # date modèle gguf device nmax gen acc drafted accepted predicted spectype prompt build
     # (colonnes 11 et 12 ajoutées avec le support des listes et du prompt
-    #  paramétrable ; les lignes plus anciennes n'en ont pas et sont lues comme
-    #  "draft-mtp" seul sur spec-test.txt)
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    #  paramétrable, 13 = build llama.cpp ; les lignes plus anciennes n'en ont
+    #  pas et sont lues comme "draft-mtp" seul sur spec-test.txt, build inconnu)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$(date '+%F %T')" "$preset" "$(basename "$gguf")" "$mdev" "$nmax" \
       "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" "${stype:-draft-mtp}" \
-      "$(basename "$prompt_file")" >> "$SPEC_LOG"
+      "$(basename "$prompt_file")" "$(_llama_build)" >> "$SPEC_LOG"
     echo "--- analyse n-max ---"
     if [[ "$stype" == *,* || "$(basename "$prompt_file")" != "spec-test.txt" ]]; then
       # Le run courant est hors modèle α (k variable, ou acceptance d'un autre

@@ -225,8 +225,9 @@ le garde-fou de `timings.py`).
 | `preload.conf` | modèles préchargés, un par ligne |
 | `spec-nmax.conf` | modèle = spec-draft-n-max retenu par les mesures |
 | `spec-ngram.conf` | modèle = spec-ngram-map-k-size-m retenu par les mesures |
-| `spec-tests.log` | journal TSV des runs `--spec-test` |
-| `spec-batch.log` / `.tsv` | journal des balayages `tools/bench-spec-batch.sh` |
+| `logs/spec-tests.log` | journal TSV des runs `--spec-test` |
+| `logs/bench.log` | journal TSV des `--bench` (avec le build llama.cpp) ; chaque `--bench` se compare au run précédent du même modèle/GGUF/device et signale un écart de plus de 5 % |
+| `logs/spec-batch.log` / `.tsv` | journal des balayages `tools/bench-spec-batch.sh` |
 
 Côté `~/models/` : `models.ini`, généré. Ne jamais l'éditer : relancer
 `--preload` ou `--setup`. Le routeur ne le lit qu'au démarrage, toute

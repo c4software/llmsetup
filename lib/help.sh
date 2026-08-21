@@ -74,7 +74,10 @@ Fichiers (à côté du script, locaux, non versionnés) :
   bench-devices.conf       clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par
                            --bench-devices, édition manuelle OK
   preload.conf             modèles préchargés, un par ligne
-  spec-tests.log           journal des --spec-test (TSV), base de l'analyse n-max
+  logs/spec-tests.log      journal des --spec-test (TSV), base de l'analyse n-max
+  logs/bench.log           journal des --bench (TSV, avec le build llama.cpp),
+                           comparé automatiquement au run précédent
+  logs/spec-batch.log/.tsv journal des balayages tools/bench-spec-batch.sh
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
   spec-ngram.conf          modèle = spec-ngram-map-k-size-m retenu par --spec-ngram-tune
 Fichiers ($CONFIG_DIR) :

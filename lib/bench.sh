@@ -90,6 +90,19 @@ _bench_one() {
     && acc="$(printf '%s\n' "${accs[@]}" | sort -n | awk '{a[NR]=$1} END{print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}')"
   info "  → prefill $pp$pp_mark t/s, décode $med t/s (médianes hors passe 1)$( [[ "$acc" != "-" ]] && echo ", acceptance $acc" )"
   BENCH_ROW="$preset|$pp$pp_mark|$med|$acc"
+
+  # Journal logs/bench.log (TSV, append) :
+  #   date modèle gguf device build prefill décode acceptance passes prefill_cache
+  # device = état RÉEL du serveur (status.args), comme pour le n-max des spec-test ;
+  # prefill_cache = 1 si la passe 1 était contaminée (le "*" du récap).
+  local gguf dev
+  gguf="$(basename "$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)")"
+  dev="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
+    | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --device 2>/dev/null || true)"
+  [[ -n "$dev" ]] || dev="$DEFAULT_DEVICE"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(date '+%F %T')" "$preset" "$gguf" "$dev" "$(_llama_build)" \
+    "$pp" "$med" "$acc" "$passes" "${pp_mark:+1}" >> "$BENCH_LOG" 2>/dev/null || true
   return 0
 }
 
@@ -198,6 +211,15 @@ cmd_bench() {
   if printf '%s\n' "${rows[@]}" | grep -q '\*|'; then
     echo "* prefill contaminé par le cache — chiffre non comparable"
   fi
+  # Comparaison au run précédent du même (modèle, GGUF, device), toutes
+  # versions de llama.cpp confondues : c'est là que se voit une régression
+  # après une mise à jour du paquet.
+  echo ""
+  info "──── vs run précédent (logs/bench.log) ────"
+  local -a benched=()
+  local r
+  for r in "${rows[@]}"; do benched+=("${r%%|*}"); done
+  python3 "$SCRIPT_DIR/py/bench_compare.py" "$BENCH_LOG" "${benched[@]}" || true
 }
 
 # =============================================================================

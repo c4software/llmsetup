@@ -153,7 +153,7 @@ DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh ~/models/<dossier>/<gguf>
 systemctl --user start llama-server
 ```
 
-Sortie dans `spec-batch.log` (lisible) et `spec-batch.tsv`. La courbe ne
+Sortie dans `logs/spec-batch.log` (lisible) et `logs/spec-batch.tsv`. La courbe ne
 tranche jamais seule : même « défavorable » (seuil de non-perte au-dessus
 de 25 % du draft partout), elle propose deux tailles à mesurer, parce qu'un
 miss n-gram ne coûte qu'une sonde de hash et que seuls les hits paient le
@@ -162,7 +162,7 @@ Ajouter `ngram-map-k` au `spec-type` (+ `size-m`, `min-hits 2`) et lancer
 le tune ci-dessous : sur un modèle sans MTP il mesure d'abord une référence
 sans spéculation et n'écrit rien si aucun `size_m` ne la bat. C'est ce
 résultat, pas la courbe, qui décide de garder ou de retirer le bloc. Limite connue : sans MTP, `--spec-test` affiche
-la mesure mais ne l'écrit pas dans `spec-tests.log` (pas de n-max), le
+la mesure mais ne l'écrit pas dans `logs/spec-tests.log` (pas de n-max), le
 tune fonctionne mais sans historique, noter les chiffres dans le
 commentaire du bloc.
 
@@ -201,7 +201,7 @@ systemctl --user restart llama-server        # --preload sans terminal ne redém
 
 (`SPEC_TYPE_FORCE=none SPEC_TYPE_FORCE_PRESET=<modèle>` pour une référence
 sans spéculation.) Pour un modèle sans MTP, `--spec-test` affiche la mesure
-mais ne l'écrit pas dans `spec-tests.log` : noter les chiffres tout de
+mais ne l'écrit pas dans `logs/spec-tests.log` : noter les chiffres tout de
 suite dans le tableau de l'étape 6.
 
 Critère de passage : `spec-ngram.conf` contient la ligne du modèle (ou le
@@ -250,8 +250,8 @@ Règles du tableau :
   `lib/models.sh` (date, device, quant), c'est là que les lecteurs
   suivants les chercheront.
 
-Sources des chiffres : `spec-tests.log` (TSV, colonnes spec-type et
-prompt), `spec-batch.log` / `.tsv` (courbes), sortie de `--bench` et
+Sources des chiffres : `logs/spec-tests.log` (TSV, colonnes spec-type et
+prompt), `logs/spec-batch.log` / `.tsv` (courbes), sortie de `--bench` et
 `--bench-devices`.
 
 ## Déroulé quand la machine de mesure n'est pas celle du dépôt

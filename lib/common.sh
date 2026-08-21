@@ -112,10 +112,37 @@ BENCH_CONF="$SCRIPT_DIR/bench-devices.conf"
 PRELOAD_CONF="$SCRIPT_DIR/preload.conf"
 
 SPEC_TEST_URL="http://localhost:$SERVER_PORT"
-# Journal des runs (à côté du script) — sert à l'analyse n-max : dès 2 runs à
-# des n-max différents sur le même modèle/GGUF/device, le script calibre un
-# modèle simple et prédit la courbe t/s(n-max).
-SPEC_LOG="$SCRIPT_DIR/spec-tests.log"
+
+# Journaux de mesure : tous dans logs/ (local, non versionné), un fichier par
+# outil, TSV en append, toujours avec la version de llama.cpp (cf. _llama_build)
+# pour comparer d'un build à l'autre et voir les régressions.
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+# Migration du 21/08/2026 : les journaux vivaient à la racine. Déplacés une
+# fois, sans écraser ; à retirer quand les machines sont passées.
+for _f in spec-tests.log spec-batch.log spec-batch.tsv; do
+  if [[ -f "$SCRIPT_DIR/$_f" && ! -e "$LOG_DIR/$_f" ]]; then
+    mv "$SCRIPT_DIR/$_f" "$LOG_DIR/$_f"
+  fi
+done
+unset _f
+# Journal des --spec-test — sert à l'analyse n-max : dès 2 runs à des n-max
+# différents sur le même modèle/GGUF/device, le script calibre un modèle
+# simple et prédit la courbe t/s(n-max).
+SPEC_LOG="$LOG_DIR/spec-tests.log"
+# Journal des --bench (une ligne par modèle et par run, cf. _bench_one) : base
+# de la comparaison au run précédent (py/bench_compare.py).
+BENCH_LOG="$LOG_DIR/bench.log"
+
+# Version de llama.cpp en service, forme courte "b10433" (llama-server
+# --version : "version: 0.1.0-dev (build 10433, commit …)"), repli sur le
+# paquet. Toujours journalisée : un chiffre sans son build ne se compare pas.
+_llama_build() {
+  local b
+  b="$(llama-server --version 2>&1 | sed -n 's/.*build \([0-9][0-9]*\).*/b\1/p' | head -1)"
+  [[ -n "$b" ]] || b="$(paru -Q llama-cpp 2>/dev/null | awk '{print $2}')"
+  echo "${b:-?}"
+}
 # Surcharges spec-draft-n-max par modèle (à côté du script, comme
 # bench-devices.conf) — écrit par --spec-tune, appliqué par generate_models_ini
 # par-dessus la valeur de MODEL_INI (qui reste le défaut). Format "modèle = k".

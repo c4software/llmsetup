@@ -1,0 +1,9 @@
+  qwen3.5-9b (Vulkan0) vs 2026-08-20 10:00:00  (build b10420 → b10433)
+    prefill 413 → 430 t/s (+4.2 %)
+    décode  25.48 → 23.90 t/s (-6.2 %)  ⚠ RÉGRESSION
+  qwen3.8-27b-mtp-nothink (Vulkan0) vs 2026-08-20 10:05:00  (build b10420 → b10433)
+    prefill 220 → 240 t/s (+9.1 %) (prefill contaminé par le cache, écart non significatif)
+    décode  31.40 → 33.10 t/s (+5.4 %)  ▲ gain
+    acceptance 0.82 → 0.75
+  lfm2.5-2.6b (Vulkan0, b10433) : première mesure journalisée sur ce GGUF/device
+  inconnu : rien dans le journal (journal non inscriptible ?)

@@ -62,8 +62,9 @@ résumer ou la supprimer, non.
 - Ne pas éditer `~/models/models.ini` (généré).
 - Les fichiers `.conf` (`bench-devices.conf`, `preload.conf`,
   `spec-nmax.conf`, `spec-ngram.conf`) sont des **choix utilisateur** : ne pas les régénérer ni
-  les « corriger » sans demande. Les .conf et spec-tests.log sont locaux,
-  non versionnés (.gitignore).
+  les « corriger » sans demande. Les .conf et les journaux de `logs/` sont
+  locaux, non versionnés (.gitignore) ; tout nouveau journal va dans `logs/`
+  avec la version de llama.cpp en colonne.
 
 ## Procédure d'ajout d'un modèle
 
