@@ -228,7 +228,7 @@ service dans son état normal, puis selon le rôle du modèle :
 ```bash
 ./setup-llm.sh --bench <modèle> 3            # toujours : journalisé et comparé au run précédent
 ./setup-llm.sh --bench-parallel <modèle>     # si parallel > 1 : ce que vaut le N choisi
-./setup-llm.sh --bench-cache <modèle>        # si usage agentic : part du prompt repayée à chaque tour
+./setup-llm.sh --bench-cache <modèle>        # si usage agentic : part du prompt repayée à chaque tour (62 à 66 % sur les archs récurrentes, 99 % en attention pure)
 ./setup-llm.sh --bench-load <modèle>         # si chargé à la demande : coût d'une bascule LRU
 ```
 

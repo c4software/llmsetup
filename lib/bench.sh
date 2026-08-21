@@ -420,11 +420,14 @@ cmd_bench_parallel() {
 #   1. froid      : contexte + tâche, max_tokens 48 — remplit le cache
 #   2. suite      : même contexte, tâche allongée — le préfixe doit être servi
 #                   du cache (c'est le tour suivant d'une conversation)
-#   3. édition    : contexte modifié AU MILIEU, même tâche — seul le préfixe
-#                   avant l'édition est réutilisable par restauration d'état
-#                   (ctx-checkpoints) ; au-delà, seul cache-reuse (décalage de
-#                   KV) peut récupérer la suite — impossible sur GDN/état
-#                   récurrent, c'est la réserve notée dans models.sh, ici mesurée
+#   3. édition    : contexte modifié AU PREMIER TIERS, même tâche — le préfixe
+#                   commun (~2/3) reste au-dessus du seuil slot-prompt-similarity
+#                   (0.5 dans le [*]) ; seul ce préfixe est réutilisable par
+#                   restauration d'état ; au-delà, seul cache-reuse (décalage
+#                   de KV) peut récupérer la suite — impossible sur GDN/état
+#                   récurrent. (Première version : édition au milieu → préfixe
+#                   ~45 % < 0.5 → 0 % partout, DeepSeek compris : on mesurait
+#                   le seuil, pas la réutilisation. Corrigé le 21/08/2026.)
 #   4. identique  : requête 1 rejouée — cache complet attendu (moins 1 token)
 # Pour chaque requête : part du prompt servie par le cache et temps de
 # prefill. Journal : logs/bench-cache.log (TSV, avec build).
@@ -452,14 +455,14 @@ cmd_bench_cache() {
   python3 - "$ctx" "$tmp/ctx-edit.txt" <<'PY'
 import sys
 lignes = open(sys.argv[1], encoding="utf-8").read().split("\n")
-m = len(lignes) // 2
-lignes[m] = "(ligne modifiée par --bench-cache : édition au milieu du contexte)"
+m = len(lignes) // 3
+lignes[m] = "(ligne modifiée par --bench-cache : édition au premier tiers du contexte)"
 open(sys.argv[2], "w", encoding="utf-8").write("\n".join(lignes))
 PY
 
   info "bench-cache '$preset' — 4 requêtes sur bench-context.txt (froid, suite, édition au milieu, identique)"
   echo ""
-  local -a etiq=("1. froid" "2. suite (tour suivant)" "3. édition au milieu" "4. identique à la 1re")
+  local -a etiq=("1. froid" "2. suite (tour suivant)" "3. édition au 1er tiers" "4. identique à la 1re")
   local -a fichiers=("$ctx $task" "$ctx $tmp/task-suite.txt" "$tmp/ctx-edit.txt $task" "$ctx $task")
   local -a parts=() pms=()
   local i body out line pn cn ms
@@ -482,16 +485,16 @@ PY
   echo ""
   info "──── lecture ────"
   # 2 : préfixe réutilisé ? 3 : au-delà du préfixe (cache-reuse) ? 4 : tout ?
-  # Mesuré le 21/08/2026 (b10433) sur le 9b et le 35B-A3B, tous deux hybrides
-  # SWA/GDN : suite 62 %, édition 0 %, identique 63 %, avec le MÊME plafond de
-  # ~850 tokens réutilisés sur un prompt de ~1370. La restauration d'état ne se
+  # Mesuré le 21/08/2026 (b10433) : tous les modèles à état récurrent (GDN
+  # Qwen3.5/3.6/Next, conv LFM2) plafonnent à 62-66 % au tour suivant ET à
+  # l'identique, quel que soit le tokenizer ; DeepSeek (attention pure, MLA)
+  # fait 99 % et 100 %. La restauration d'état des archs récurrentes ne se
   # fait qu'à un checkpoint, pas au token près : tout ce qui suit le dernier
-  # checkpoint avant la divergence (ou avant la fin, pour une requête identique)
-  # est repayé, et une édition au milieu repart de zéro. C'est le coût de ces
-  # architectures en boucle agentic, à mettre en face de leur débit.
-  [[ "${parts[1]}" != "-" ]] && { if (( parts[1] >= 80 )); then info "  suite : ${parts[1]} % servi du cache — le tour suivant d'une conversation ne repaie pas le contexte."; else warn "  suite : ${parts[1]} % seulement — restauration au dernier checkpoint avant la divergence, le reste est repayé (hybride SWA/GDN : ~60 % mesuré)."; fi; }
-  [[ "${parts[2]}" != "-" ]] && { if (( parts[2] > 55 )); then info "  édition : ${parts[2]} % — au-delà du préfixe, cache-reuse récupère la suite après l'édition."; elif (( parts[2] > 0 )); then info "  édition : ${parts[2]} % — seul le préfixe avant l'édition est réutilisé (pas de décalage de KV)."; else warn "  édition : 0 % — une édition au milieu du contexte repart de zéro (aucun checkpoint restaurable avant le point d'édition)."; fi; }
-  [[ "${parts[3]}" != "-" ]] && { if (( parts[3] >= 95 )); then info "  identique : ${parts[3]} % — cache complet."; else warn "  identique : ${parts[3]} % — même une requête identique n'est pas entièrement servie : le cache s'arrête au dernier checkpoint, pas à la fin du prompt."; fi; }
+  # checkpoint est repayé. C'est le coût de ces architectures en boucle
+  # agentic, à mettre en face de leur débit.
+  [[ "${parts[1]}" != "-" ]] && { if (( parts[1] >= 80 )); then info "  suite : ${parts[1]} % servi du cache — le tour suivant d'une conversation ne repaie pas le contexte."; else warn "  suite : ${parts[1]} % seulement — arch à état récurrent : restauration au dernier checkpoint, le reste est repayé (62-66 % mesuré sur GDN/conv, 99 % sur attention pure)."; fi; }
+  [[ "${parts[2]}" != "-" ]] && { if (( parts[2] > 70 )); then info "  édition : ${parts[2]} % — au-delà du préfixe, cache-reuse récupère la suite après l'édition."; elif (( parts[2] > 0 )); then info "  édition : ${parts[2]} % — le préfixe avant l'édition est réutilisé (au checkpoint près), pas la suite (pas de décalage de KV)."; else warn "  édition : 0 % — rien de réutilisé malgré un préfixe commun de ~2/3 (seuil slot-prompt-similarity ? aucun checkpoint avant l'édition ?)."; fi; }
+  [[ "${parts[3]}" != "-" ]] && { if (( parts[3] >= 95 )); then info "  identique : ${parts[3]} % — cache complet."; else warn "  identique : ${parts[3]} % — même une requête identique n'est pas entièrement servie : arch à état récurrent, le cache s'arrête au dernier checkpoint."; fi; }
 
   local dev
   dev="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
