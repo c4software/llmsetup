@@ -188,6 +188,16 @@ cmd_spec_test() {
   kernel="$(uname -r)"
   cpu="$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
 
+  # Prompt de référence : prompts/spec-test.txt (texte brut multiligne,
+  # échappement JSON par build_body.py). ⚠ Le modifier invalide les
+  # comparaisons avec les runs antérieurs de spec-tests.log (cf. ARCHITECTURE.md).
+  # Un autre prompt peut être passé en 3e argument (--spec-ngram-tune s'en sert
+  # pour mesurer sur du refactor, seul cas où un n-gram a des hits) : il est
+  # alors journalisé, car deux runs sur des prompts différents ne se comparent
+  # pas et ne doivent pas alimenter la même calibration.
+  local prompt_file="${3:-$SCRIPT_DIR/prompts/spec-test.txt}"
+  [[ -f "$prompt_file" ]] || error "Prompt manquant : $prompt_file"
+
   echo "=== spec-test ==="
   echo "date       : $(date '+%F %T')"
   echo "host       : $(hostname) — $cpu — $kernel"
@@ -215,16 +225,6 @@ cmd_spec_test() {
     echo "${MODEL_INI[$preset]}" | sed '/^$/d;s/^/  /'
   fi
   echo "--- résultats ---"
-
-  # Prompt de référence : prompts/spec-test.txt (texte brut multiligne,
-  # échappement JSON par build_body.py). ⚠ Le modifier invalide les
-  # comparaisons avec les runs antérieurs de spec-tests.log (cf. ARCHITECTURE.md).
-  # Un autre prompt peut être passé en 3e argument (--spec-ngram-tune s'en sert
-  # pour mesurer sur du refactor, seul cas où un n-gram a des hits) : il est
-  # alors journalisé, car deux runs sur des prompts différents ne se comparent
-  # pas et ne doivent pas alimenter la même calibration.
-  local prompt_file="${3:-$SCRIPT_DIR/prompts/spec-test.txt}"
-  [[ -f "$prompt_file" ]] || error "Prompt manquant : $prompt_file"
 
   # seed fixe PAR PASSE (42+i) : chaque passe est reproductible d'un run à
   # l'autre (la spéculation étant sans perte, deux n-max produisent la même
