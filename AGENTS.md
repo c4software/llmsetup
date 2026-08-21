@@ -101,8 +101,8 @@ là-bas, lancer, ne rien commiter sur place.
    `spec-type` et le tune, qui mesure une référence sans spéculation et
    n'écrit rien si aucun `size_m` ne la bat. La courbe ne décide jamais
    seule (DeepSeek V4 : +9 % réels malgré une courbe « défavorable »).
-   Voie manuelle (`--spec-test` + `SPEC_NGRAM_FORCE`/`SPEC_TYPE_FORCE` +
-   `--preload` + restart) décrite dans la skill.
+   Toute autre comparaison (min-hits, size-n, k4v, taille hors tune) :
+   `--spec-ab <modèle> <n> - <variante>...`, rien d'écrit, bilan comparé.
 6. **`--bench` final et récap de performance** : un tableau partageable (configuration,
    device, prompt t/s, gen t/s, acceptance, source et prompt de mesure),
    avec machine, build llama.cpp, quant et date ; les chiffres résumés vont

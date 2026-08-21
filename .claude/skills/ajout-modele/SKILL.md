@@ -196,23 +196,23 @@ raffinement automatique qui la trouve : ne pas conclure sur la première
 table affichée. Une courbe défavorable n'interdit rien : elle abaisse
 l'attente, et la mesure tranche.
 
-Voie manuelle, quand il faut une configuration que le tune ne propose pas
-(c'est ainsi que l'A/B DeepSeek a été fait avant que le tune ne sache le
-faire) : une mesure par configuration, ini régénéré et service redémarré
-entre deux, toujours le même prompt et le même nombre de passes.
+Toute autre comparaison (min-hits, size-n, `ngram-map-k4v` contre
+`ngram-map-k`, une taille que le tune ne propose pas, une référence sans
+spéculation) passe par `--spec-ab` : une variante = des surcharges
+`clé=val;clé=val` du corps ini, le service redémarre entre deux, même prompt
+et même nombre de passes, bilan comparé, rien d'écrit dans les conf.
 
 ```bash
-./setup-llm.sh --spec-test <modèle> 4 prompts/spec-refactor.txt        # état courant
-SPEC_NGRAM_FORCE=31 SPEC_NGRAM_FORCE_PRESET=<modèle> ./setup-llm.sh --preload < /dev/null
-systemctl --user restart llama-server        # --preload sans terminal ne redémarre pas
-./setup-llm.sh --spec-test <modèle> 4 prompts/spec-refactor.txt        # size_m 31
-./setup-llm.sh --preload < /dev/null && systemctl --user restart llama-server   # retour au défaut
+./setup-llm.sh --spec-ab <modèle> 4 - base "spec-ngram-map-k-min-hits=1" "spec-ngram-map-k-min-hits=3"
+./setup-llm.sh --spec-ab <modèle> 4 - "spec-type=none" base "spec-ngram-map-k-size-m=15"
+./setup-llm.sh --spec-ab <modèle> 4 - base "spec-type=ngram-map-k4v,draft-mtp;spec-ngram-map-k4v-size-m=47"
 ```
 
-(`SPEC_TYPE_FORCE=none SPEC_TYPE_FORCE_PRESET=<modèle>` pour une référence
-sans spéculation.) Pour un modèle sans MTP, `--spec-test` affiche la mesure
-mais ne l'écrit pas dans `logs/spec-tests.log` : noter les chiffres tout de
-suite dans le tableau de l'étape 6.
+(C'est la forme outillée de ce qui a été fait à la main pour DeepSeek le
+21/08/2026 : `--spec-test` + `SPEC_NGRAM_FORCE` + `--preload < /dev/null` +
+restart.) Pour un modèle sans MTP, `--spec-test` affiche la mesure mais ne
+l'écrit pas dans `logs/spec-tests.log` : noter les chiffres tout de suite
+dans le tableau de l'étape 6.
 
 Critère de passage : `spec-ngram.conf` contient la ligne du modèle (ou le
 bloc n-gram a été retiré parce que rien ne bat la référence), le

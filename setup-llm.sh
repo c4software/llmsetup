@@ -59,6 +59,7 @@ case "${1:-}" in
   --spec-test)         cmd_spec_test "${2:-}" "${3:-}" "${4:-}" ;;
   --spec-tune)         cmd_spec_tune "${2:-}" "${3:-}" "${4:-}" ;;
   --spec-ngram-tune)   cmd_spec_ngram_tune "${2:-}" "${3:-}" "${4:-}" ;;
+  --spec-ab)           shift; cmd_spec_ab "$@" ;;
   --start | "")        cmd_start ;;
   --install-service)   cmd_install_service ;;
   --uninstall-service) cmd_uninstall_service ;;

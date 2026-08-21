@@ -55,7 +55,9 @@ common → models → ini → preload → setup → bench → spec → service �
   tuners pour tester une valeur sans l'écrire), `generate_models_ini`
   (applique aussi `SPEC_TYPE_FORCE` + `SPEC_TYPE_FORCE_PRESET` : spec-type
   remplacé le temps d'une mesure, `draft-mtp` pour `--spec-tune` sur une
-  liste, `none` pour la référence de `--spec-ngram-tune` sans MTP).
+  liste, `none` pour la référence de `--spec-ngram-tune` sans MTP ; et
+  `SPEC_AB_OVERRIDES` + `SPEC_AB_PRESET` : surcharges libres de `--spec-ab`,
+  via `_apply_overrides`).
 - `preload.sh` : sélection interactive (`select_preload_models`, gum ou
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
@@ -83,6 +85,9 @@ common → models → ini → preload → setup → bench → spec → service �
   arrêté, raffinement en boucle bornée sur les `STEP_LO/HI` de
   `batch_curve.py`, puis arbitrage par `cmd_spec_test` sur
   `spec-refactor.txt` ; médianes exposées via `SPEC_TEST_MED_GEN/ACC`),
+  `cmd_spec_ab` (variantes `clé=val;…` appliquées par `SPEC_AB_OVERRIDES` /
+  `_apply_overrides` dans `generate_models_ini`, restart + `cmd_spec_test`
+  par variante, bilan comparé, rien d'écrit),
   `_spec_save_conf`, `_spec_save_ngram_conf`, `_preset_spec_types` /
   `_preset_has_spec_type` (un `spec-type` peut être une liste : ne jamais
   ancrer un grep sur `= draft-mtp`), sélection des modèles MTP et n-gram ;

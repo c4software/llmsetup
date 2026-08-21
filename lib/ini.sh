@@ -93,6 +93,26 @@ _preset_ngram_m() {
   echo "${SPEC_NGRAM_M[$p]:-$v}"
 }
 
+# _apply_overrides <corps ini> <"clé=val;clé=val"> → corps modifié sur stdout.
+# Clé présente (même sans espaces autour du =) : ligne remplacée ; absente :
+# ajoutée en fin. Les valeurs peuvent contenir des virgules (listes spec-type),
+# pas de ";" ni de "/".
+_apply_overrides() {
+  local corps="$1" liste="$2" paire k v
+  local IFS=';'
+  for paire in $liste; do
+    [[ "$paire" == *=* ]] || continue
+    k="${paire%%=*}"; v="${paire#*=}"
+    k="${k// /}"; v="${v# }"
+    if echo "$corps" | grep -q "^${k}[[:space:]]*="; then
+      corps="$(echo "$corps" | sed "s/^\(${k}[[:space:]]*=[[:space:]]*\).*$/\1${v}/")"
+    else
+      corps+=$'\n'"${k} = ${v}"
+    fi
+  done
+  echo "$corps"
+}
+
 # n-max effectif d'un modèle : surcharge conf sinon valeur MODEL_INI (vide si
 # modèle non spéculatif). SPEC_NMAX_FORCE (env) prime sur tout — utilisé par
 # --spec-tune pour tester une valeur sans l'écrire.
@@ -189,11 +209,20 @@ HEADER
       subs+=(-e "s/^\(spec-type[[:space:]]*=[[:space:]]*\).*$/\1$SPEC_TYPE_FORCE/")
     fi
     # jamais "${subs[@]}" sur un tableau vide : unbound sous set -u en bash 4.3
+    local corps
     if [[ ${#subs[@]} -gt 0 ]]; then
-      echo "${MODEL_INI[$name]}" | sed '/^$/d' | sed "${subs[@]}"
+      corps="$(echo "${MODEL_INI[$name]}" | sed '/^$/d' | sed "${subs[@]}")"
     else
-      echo "${MODEL_INI[$name]}" | sed '/^$/d'
+      corps="$(echo "${MODEL_INI[$name]}" | sed '/^$/d')"
     fi
+    # SPEC_AB_OVERRIDES + SPEC_AB_PRESET (env, posés par --spec-ab) : surcharges
+    # libres "clé=val;clé=val" sur le corps du modèle — une clé présente est
+    # remplacée, une clé absente ajoutée. Sert à mesurer une variante sans
+    # toucher au script ni aux conf (min-hits, size-n, autre spec-type…).
+    if [[ -n "${SPEC_AB_OVERRIDES:-}" && "${SPEC_AB_PRESET:-}" == "$name" ]]; then
+      corps="$(_apply_overrides "$corps" "$SPEC_AB_OVERRIDES")"
+    fi
+    echo "$corps"
     [[ -n "${PRELOADED[$name]:-}" ]] && echo "load-on-startup  = true"
     echo ""
   done

@@ -743,3 +743,99 @@ cmd_spec_ngram_tune() {
   systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec — systemctl --user restart $SERVICE_NAME"
   trap - EXIT
 }
+
+# =============================================================================
+# spec-ab — A/B de réglages spéculatifs sur mesure réelle, sans rien écrire
+#
+# Usage : ./setup-llm.sh --spec-ab <modèle> <passes> <prompt|-> <variante>...
+#   variante = "clé=val;clé=val" appliquée au corps ini du modèle (clé présente
+#   remplacée, absente ajoutée), ou "base" pour la configuration courante.
+#   prompt : fichier de prompts/ ou "-" pour spec-refactor.txt.
+#
+# Exemples :
+#   --spec-ab qwen3.8-27b-mtp-nothink 4 - base "spec-ngram-map-k-min-hits=1" "spec-ngram-map-k-min-hits=3"
+#   --spec-ab qwen3.8-27b-mtp-nothink 4 - base "spec-type=ngram-map-k4v,draft-mtp;spec-ngram-map-k4v-size-m=47"
+#   --spec-ab deepseek-v4-flash 4 - "spec-type=none" base "spec-ngram-map-k-size-m=15"
+#
+# Chaque variante : ini régénéré avec la surcharge, restart, --spec-test, puis
+# bilan (gen t/s, acceptance) et retour à la configuration courante. Rien
+# n'est écrit dans les .conf : c'est un instrument d'exploration, le choix
+# final se reporte à la main dans lib/models.sh avec ses chiffres. C'est la
+# forme outillée de la « voie manuelle » de la procédure d'ajout (SPEC_*_FORCE
+# + --preload + restart à la main).
+# =============================================================================
+cmd_spec_ab() {
+  local preset="${1:-}" passes="${2:-4}" prompt_file="${3:--}"
+  shift 3 2>/dev/null || error "Usage : --spec-ab <modèle> <passes> <prompt|-> <variante>..."
+  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset' (voir --help)"
+  [[ "$passes" =~ ^[0-9]+$ && "$passes" -ge 2 ]] || error "Passes invalide : '$passes' (>= 2)"
+  [[ $# -ge 1 ]] || error "Au moins une variante (\"clé=val;clé=val\" ou base)."
+  if [[ "$prompt_file" == "-" ]]; then
+    prompt_file="$SCRIPT_DIR/prompts/spec-refactor.txt"
+  elif [[ ! -f "$prompt_file" && -f "$SCRIPT_DIR/prompts/$prompt_file" ]]; then
+    prompt_file="$SCRIPT_DIR/prompts/$prompt_file"
+  fi
+  [[ -f "$prompt_file" ]] || error "Prompt introuvable : $prompt_file"
+  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
+    || error "Service $SERVICE_NAME non installé — --spec-ab redémarre le service entre deux variantes."
+
+  local -a variantes=("$@")
+  local v
+  for v in "${variantes[@]}"; do
+    [[ "$v" == "base" || "$v" == *=* ]] || error "Variante invalide : '$v' (attendu clé=val[;clé=val] ou base)"
+  done
+  info "spec-ab '$preset' — ${#variantes[@]} variante(s), $passes passes chacune, prompt $(basename "$prompt_file")"
+  warn "Chaque variante = régénération du ini + restart de $SERVICE_NAME. Rien n'est écrit dans les .conf."
+
+  SPEC_AB_DIRTY=0
+  _spec_ab_restore() {
+    if [[ "${SPEC_AB_DIRTY:-0}" -eq 1 ]]; then
+      unset SPEC_AB_OVERRIDES SPEC_AB_PRESET
+      regen_models_ini
+      systemctl --user restart "$SERVICE_NAME" >/dev/null 2>&1 || true
+      SPEC_AB_DIRTY=0
+    fi
+    return 0
+  }
+  trap _spec_ab_restore EXIT
+
+  local -a gens=() accs=()
+  local t
+  for v in "${variantes[@]}"; do
+    echo ""
+    info "──── variante : $v ────"
+    if [[ "$v" == "base" ]]; then
+      unset SPEC_AB_OVERRIDES SPEC_AB_PRESET
+    else
+      export SPEC_AB_OVERRIDES="$v" SPEC_AB_PRESET="$preset"
+    fi
+    SPEC_AB_DIRTY=1
+    regen_models_ini
+    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
+    t=0
+    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
+      sleep 2; t=$((t+2))
+      if [[ $t -ge 120 ]]; then
+        error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
+      fi
+    done
+    cmd_spec_test "$preset" "$passes" "$prompt_file"
+    gens+=("${SPEC_TEST_MED_GEN:-0}"); accs+=("${SPEC_TEST_MED_ACC:--}")
+  done
+  unset SPEC_AB_OVERRIDES SPEC_AB_PRESET
+
+  echo ""
+  info "════════ Bilan spec-ab ($preset, $(basename "$prompt_file"), $passes passes) ════════"
+  local i ref=""
+  {
+    echo "variante|gen t/s|vs 1re|acceptance"
+    for i in "${!variantes[@]}"; do
+      [[ -n "$ref" ]] || ref="${gens[$i]}"
+      echo "${variantes[$i]}|${gens[$i]}|$(awk -v a="${gens[$i]}" -v r="$ref" 'BEGIN{ if (r>0) printf "%+.1f %%", (a-r)/r*100; else print "?" }')|${accs[$i]}"
+    done
+  } | column -t -s'|'
+  info "Rien d'écrit : reporter le choix dans lib/models.sh avec ces chiffres."
+  info "Retour à la configuration courante + restart..."
+  _spec_ab_restore
+  trap - EXIT
+}

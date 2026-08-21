@@ -81,6 +81,13 @@ Commandes :
                            écrit dans spec-ngram.conf. À <2 %, le plus petit gagne.
                            Prompt par défaut : spec-refactor.txt (blocs à recopier
                            puis remplacer) — c'est là que les n-grams tapent.
+  --spec-ab <modèle> <n> <prompt|-> <variante>...
+                           A/B de réglages spéculatifs sur mesure réelle : chaque
+                           variante ("clé=val;clé=val" sur le corps ini, ou base)
+                           est appliquée au ini, le service redémarré, --spec-test
+                           mesuré ; bilan comparé, rien d'écrit. Ex. :
+                           --spec-ab qwen3.8-27b-mtp-nothink 4 - base \
+                             "spec-ngram-map-k-min-hits=1" "spec-type=ngram-map-k4v,draft-mtp"
   --start                  Lance llama-server sur :$SERVER_PORT (défaut sans argument)
   --install-service        Installe/active le service systemd USER $SERVICE_NAME
                            (systemctl --user) + linger (démarrage au boot)
