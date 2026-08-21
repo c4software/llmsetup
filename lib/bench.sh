@@ -500,17 +500,23 @@ PY
 #
 # Usage : ./setup-llm.sh --bench-sanity [modèle|all]
 #
-# Une question à réponse connue (prompts/bench-sanity.txt : un petit programme
-# Python, réponse 93). Le garde-fou « sortie dégénérée » de timings.py attrape
-# le charabia ; celui-ci attrape un texte propre et faux. Appelé par
-# --bench-devices avant chaque mesure : un device qui répond faux est exclu.
+# Une tâche à réponse connue (prompts/bench-sanity.txt : recopier un code
+# exact). Volontairement triviale : la première version demandait un petit
+# calcul (93), que le 9b nothink a raté (33) sans que le device y soit pour
+# rien — une question qui teste le modèle exclurait des devices sains. La
+# recopie, tout modèle la réussit ; un backend qui dérive (noyau faux, tokens
+# corrompus) la rate forcément. Le garde-fou « sortie dégénérée » de
+# timings.py attrape le charabia ; celui-ci attrape un texte propre et faux.
+# Appelé par --bench-devices avant chaque mesure : un device qui répond faux
+# est exclu.
 # =============================================================================
-BENCH_SANITY_ATTENDU=93
+BENCH_SANITY_ATTENDU="LAMPADAIRE-2719"
 
 _bench_sanity_one() {
   # $1 modèle → 0 si juste, 1 sinon (ligne lisible affichée)
   local preset="$1" body out
-  body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 800 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
+  # 400 tokens : un modèle qui pense d'abord doit pouvoir finir
+  body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 400 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
   out="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body")" \
     || { warn "  justesse : échec curl"; return 1; }
   if python3 "$SCRIPT_DIR/py/check_answer.py" "$out" "$BENCH_SANITY_ATTENDU"; then

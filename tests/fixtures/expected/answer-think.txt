@@ -1,2 +1,2 @@
-  justesse : OK dans le raisonnement seulement (93 ; réponse : '')
+  justesse : OK dans le raisonnement seulement (LAMPADAIRE-2719 ; réponse : '')
 rc=0

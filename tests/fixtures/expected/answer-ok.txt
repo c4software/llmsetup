@@ -1,2 +1,2 @@
-  justesse : OK (93 dans la réponse : '93')
+  justesse : OK (LAMPADAIRE-2719 dans la réponse : 'LAMPADAIRE-2719')
 rc=0

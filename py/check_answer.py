@@ -19,8 +19,8 @@ def main():
         print("  justesse : réponse illisible"); sys.exit(2)
     contenu = (m.get("content") or "").strip()
     pensee = (m.get("reasoning_content") or "")
-    # le nombre doit apparaître comme un mot entier (93 mais pas 1093)
-    motif = r"(?<![0-9])%s(?![0-9])" % re.escape(attendu)
+    # la valeur doit apparaître entière (LAMPADAIRE-2719, pas LAMPADAIRE-27190)
+    motif = r"(?<![0-9A-Za-z])%s(?![0-9A-Za-z])" % re.escape(attendu)
     if re.search(motif, contenu):
         print("  justesse : OK (%s dans la réponse : %r)" % (attendu, contenu[:60])); sys.exit(0)
     if re.search(motif, pensee):

@@ -133,7 +133,7 @@ fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
 | `spec-test.txt` | `cmd_spec_test` | prompt de référence (module `inventory.py` + tests pytest — code structuré = meilleur cas MTP) ; seul prompt qui alimente la calibration α |
 | `spec-refactor.txt` | `cmd_spec_ngram_tune` (via `cmd_spec_test`) | le même module fourni dans le contexte, avec des blocs à recopier exactement puis à remplacer (forme oldString/newString d'opencode) : le seul cas où un n-gram a des hits, donc le seul qui départage deux `size_m` |
 | `bench-context.txt` | `_bench_one` | contexte réaliste du bench : cahier des charges du système que la tâche demande d'implémenter (long prefill varié ; taille réelle = `n=` de la passe 1) |
-| `bench-sanity.txt` | `_bench_sanity_one` | petit programme Python à réponse connue (93) : contrôle de justesse d'un device |
+| `bench-sanity.txt` | `_bench_sanity_one` | recopie exacte d'un code (`LAMPADAIRE-2719`) : contrôle de justesse d'un device, volontairement trivial pour ne tester que le backend, pas le modèle |
 | `bench-task.txt` | `_bench_one` | tâche de génération posée après le contexte (référence les sections du cahier des charges) |
 
 **⚠ Comparabilité.** Modifier un de ces fichiers invalide les comparaisons

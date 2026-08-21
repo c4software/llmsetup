@@ -1,2 +1,2 @@
-  justesse : ÉCHEC — attendu 93, réponse : '1093'
+  justesse : ÉCHEC — attendu LAMPADAIRE-2719, réponse : 'LAMPADAIRE-27190'
 rc=1
