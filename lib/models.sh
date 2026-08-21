@@ -310,8 +310,9 @@ parallel         = 1"
 # ferait doublon strict avec le mtp-nothink (même GGUF, mêmes réglages, juste
 # sans la spéculation). Le thinking reste non-MTP volontairement : c'est le
 # chemin checkpoints/prompt-cache fiable (rollback GDN sur rejet de draft
-# encore fragile en agentic, cf. 35B-A3B) — spec-type à ajouter si envie. (Le Qwopus, SFT coder de la 3.6-27B, est gardé
-# en modèle séparé plus bas — choix perso, pas un doublon strict.)
+# encore fragile en agentic, cf. 35B-A3B) — spec-type à ajouter si envie.
+# (Le Qwopus, SFT coder de la 3.6-27B, est gardé en modèle séparé plus bas —
+# choix perso, pas un doublon strict.)
 #
 # Sampling officiel Qwen3.8-27B (model card + doc unsloth) :
 #   thinking : temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 / presence 0.0
@@ -330,10 +331,9 @@ parallel         = 1"
 # Vision : mmproj non téléchargé (--include du seul GGUF texte) → pas de
 #   --mmproj, texte seul. Ajouter mmproj-F16.gguf + "mmproj =" si besoin un jour
 #   (attention : mmproj incompatible MTP, cf. contrainte np/mmproj plus haut).
-# ⚠ Hypothèse MTP embarqué à VALIDER au premier chargement du modèle MTP :
-#   llama-server doit logger le chargement de la tête MTP + acceptance ; s'il
-#   refuse (spec-type sans tête), c'est qu'unsloth a finalement publié un repo
-#   -MTP séparé → réintroduire un download_hf dédié.
+# Tête MTP embarquée VALIDÉE : llama-server charge draft-mtp sur ce GGUF et
+#   --spec-test mesure une acceptance de 0,82 à 0,94 (15/08 et 21/08/2026) —
+#   pas de repo -MTP séparé à réintroduire.
 # =============================================================================
 
 groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée — + Qwopus 3.6 coder) ---"
@@ -349,7 +349,8 @@ groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée — + 
 #   les modèles non-MTP ET MTP, fini le doublon Q6 + Q4 de la 3.6.
 # Quant UD-Q4_K_XL (~16 Go, quant par défaut du guide llama.cpp unsloth) :
 #   ~26 % de poids en moins que le Q6 à relire par token → décode ×1,3-1,5
-#   (mesuré Q6 : 8,5 t/s brut / 16 t/s MTP → attendu Q4 : ~12 / ~22-25).
+#   (Q6 : 8,5 t/s brut / 16 t/s MTP ; Q4 mesuré : 25,5 t/s MTP sur ROCm0 le
+#   15/08, 31,4 t/s MTP sur Vulkan0 le 21/08 — cf. modèle mtp-nothink).
 #   Coût : ~1-2 pts de top-1 vs Q6 (analyse Dynamic V3 : l'IQ2_XXS de 9 Go
 #   garde déjà 82,5 %, la courbe Q4→Q6 est écrasée en haut). Repasser en
 #   UD-Q6_K_XL ici + --update qwen3.8-27b si le thinking long en pâtit.
@@ -377,10 +378,14 @@ ctx-checkpoints      = 128"
 # Qwen3.8-27B-MTP nothink — spéculation MTP, n-max 4 (mesuré --spec-test
 #   Q4/ROCm0 15/08/2026 : k2=22,2 / k4=25,5 / k6=26,0 t/s → 4 = plateau,
 #   le plus petit à <2 % du max ; reco unsloth de départ était 2).
+#   ⚠ Le GGUF est passé sur Vulkan0 depuis (bench-devices.conf) : 31,4 t/s à
+#   n-max 4 le 21/08/2026 (draft-mtp seul, spec-test.txt), mais la courbe k2/k4/k6
+#   n'a pas été refaite sur ce device — ./setup-llm.sh --spec-tune à relancer.
 #   Bascule manuelle : /model qwen3.8-27b-mtp-nothink
 # Même GGUF que le modèle thinking ci-dessus (tête MTP embarquée) — ne PAS
 #   précharger les deux en même temps (~16 Go chargés deux fois).
-# Historique : Q6/n-max 2 = 16 t/s ; Q4/n-max 2 = 22 ; Q4/n-max 4 = 25,5.
+# Historique : Q6/n-max 2 = 16 t/s ; Q4/n-max 2 = 22 ; Q4/n-max 4 = 25,5 (ROCm0) ;
+#   Q4/n-max 4 = 31,4 (Vulkan0) ; + ngram-map-k size_m 47 = 47,4 (refactor).
 #   Re-régler avec ./setup-llm.sh --spec-tune après changement de quant/build/device.
 # cache-reuse 0 : incompatible MTP
 # parallel 1 : contrainte MTP (np > 1 non supporté)
@@ -419,8 +424,9 @@ ctx-checkpoints      = 128"
 #   longues pour que le régime large l'emporte de +8 %, au-delà des 2 % de
 #   tolérance qui feraient préférer le plus petit. Référence sans n-gram
 #   (draft-mtp seul, spec-test.txt) : 31,4 t/s.
-#   ⚠ Seuil du BACKEND, pas du modèle : ROCm0 n'a pas de marche dans cette
-#   plage, et la constante est figée à la compilation.
+#   ⚠ Seuil du BACKEND, pas du modèle : la constante est figée à la
+#   compilation, et la courbe ROCm0 n'a pas cette marche 8→9 (balayage du
+#   21/08 à reps=2, bruité à ±10 ms — à re-mesurer avant d'en tirer un size_m).
 # spec-ngram-map-k-min-hits 2 : n'accepter de drafter qu'à partir de deux
 #   occurrences du n-gram, pour éviter les faux départs qui paient le batch
 #   sans être acceptés.
@@ -573,8 +579,8 @@ download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
 #   thinking côté client) — pour un modèle nothink, ajouter :
 #     chat-template-kwargs = {"enable_thinking":false}
 # Spéculation DFlash (drafter laguna-s-2.1-DFlash-BF16.gguf, 2,2 Go) :
-#   draft-dflash est passé en mainline (PR #22105), le fork poolside/llama.cpp
-#   branche `laguna` n'est plus nécessaire — la note précédente est périmée.
+#   draft-dflash est en mainline (PR #22105), le fork poolside/llama.cpp
+#   branche `laguna` n'est plus nécessaire.
 #   Reste à vérifier que ce drafter-là est bien reconnu par le mainline avant
 #   d'ajouter --spec-type draft-dflash --spec-draft-n-max 15 (clampé à la
 #   taille de bloc d'entraînement du drafter).
