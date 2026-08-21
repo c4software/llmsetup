@@ -398,21 +398,28 @@ ctx-checkpoints      = 128"
 #   s'auto-limite par clé (n_draft_tokens = min(m, values[0].n_accepted) dans
 #   common/ngram-map.cpp), donc le plein tarif d'un draft raté n'est payé
 #   qu'une fois par n-gram.
-# spec-ngram-map-k-size-m 7 : le batch de vérification vaut size_m + 1, et
-#   ggml-vulkan.cpp déclare mul_mat_vec_max_cols = 8 — au-delà de 8 colonnes il
-#   quitte le noyau vectoriel pour le matmul général et son coût de mise en
-#   place. Mesuré sur ce GGUF (Q4/Vulkan0, 21/08/2026, reps=5) : batch 8 =
-#   100,6 ms, batch 9 = 213,1 ms, soit x2,12 d'un coup, puis un plateau jusqu'à
-#   32. 7 est donc la dernière taille du chemin rapide : son seuil de non-perte
-#   est de 1,2 token sur 7 — ce réglage ne peut pas être perdant.
-#   L'autre régime défendable est un draft large (47) qui amortit ce coût fixe
-#   et plafonne à x13,7 au lieu de x6,6, mais devient perdant sur les matchs de
-#   moins de 3,5 tokens. Départager demande de connaître la longueur des
-#   répétitions réelles : ./setup-llm.sh --spec-ngram-tune le mesure et écrit
-#   le gagnant dans spec-ngram.conf (qui surcharge la valeur ci-dessous).
-#   ⚠ Seuil du BACKEND, pas du modèle : à re-régler après un changement de
-#   device (ROCm0 n'a pas de marche dans cette plage) ou de build llama.cpp,
-#   la constante étant figée à la compilation.
+# spec-ngram-map-k-size-m 47 : retenu par ./setup-llm.sh --spec-ngram-tune
+#   (Q4/Vulkan0, 21/08/2026, prompt spec-refactor.txt) — re-régler avec la même
+#   commande après changement de device, de quant ou de build llama.cpp, le
+#   résultat va dans spec-ngram.conf (qui surcharge la valeur ci-dessous).
+#   Le batch de vérification vaut size_m + 1, et le coût d'un forward n'est pas
+#   une pente lisse : ggml-vulkan.cpp déclare mul_mat_vec_max_cols = 8 — au-delà
+#   de 8 colonnes il quitte le noyau vectoriel pour le matmul général et son
+#   coût de mise en place. Courbe mesurée (llama-bench, reps=5) :
+#     batch 8 = 100,9 ms, batch 9 = 215,0 ms (x2,13 d'un coup), plateau jusqu'à
+#     16, batch 32 = 230,7 ms, batch 48 = 283,3 ms.
+#   Deux régimes défendables, que seule une génération réelle départage :
+#     - 7  (SÛR)   : dernière taille du chemin rapide, seuil de non-perte de
+#                    1,2 token sur 7 — ne peut pas être perdant, gain plafonné x6,6
+#     - 47 (LARGE) : amortit le coût fixe, gain jusqu'à x14, mais perdant sur
+#                    les matchs de moins de 3,4 tokens
+#   Mesuré sur spec-refactor (recopie de blocs exacts, la forme du
+#   oldString/newString d'opencode) : 7 = 46,5 t/s (acceptance 0,94),
+#   47 = 52,2 t/s (acceptance 0,73) — les répétitions réelles sont assez longues
+#   pour que le régime large l'emporte de +12 %. Référence sans n-gram
+#   (draft-mtp seul, spec-test.txt) : 31,4 t/s.
+#   ⚠ Seuil du BACKEND, pas du modèle : ROCm0 n'a pas de marche dans cette
+#   plage, et la constante est figée à la compilation.
 # spec-ngram-map-k-min-hits 2 : n'accepter de drafter qu'à partir de deux
 #   occurrences du n-gram, pour éviter les faux départs qui paient le batch
 #   sans être acceptés.
@@ -430,7 +437,7 @@ cache-type-v         = q8_0
 cache-reuse          = 0
 spec-type            = ngram-map-k,draft-mtp
 spec-draft-n-max     = 4
-spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-size-m   = 47
 spec-ngram-map-k-min-hits = 2
 jinja                = true
 parallel             = 1
