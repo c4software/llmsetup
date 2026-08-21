@@ -18,7 +18,7 @@
 #
 # Les deux branches sont les copies exactes des heredocs d'origine : sys.argv
 # est décalé d'un cran (pop du mode) pour ne pas toucher aux indices.
-import json, sys, zlib
+import json, sys
 
 mode = sys.argv.pop(1) if len(sys.argv) > 1 else ""
 
@@ -35,14 +35,15 @@ mode = sys.argv.pop(1) if len(sys.argv) > 1 else ""
 #     14 % sans être dégénérée, et le charabia réel n'est de toute façon pas
 #     attrapé par ce critère (16 à 17 % à cause des tokens collés) mais par
 #     la répétition périodique ci-dessous ;
-#   - le texte se compresse à moins de 10 % (zlib) : une boucle quelconque, même
-#     de phrases longues, y tombe ; du texte réel reste vers 30 à 50 % ;
 #   - plus de 40 % des caractères sont couverts par une répétition immédiate de
 #     période 1 à 12 (« dev dev dev », « ponseponseponse », « èteèteète »,
 #     « le le le ») — c'est le seul signal qui tient sur les 1000 tokens réels
 #     (fixture chat-degen-rocm.json : 0,64, quand les critères par mots donnent
 #     11 % de mot dominant et 16 % de distincts, dans la zone du texte normal).
 #     Texte réel : 0,02 à 0,27, le pire étant un tableau ASCII indenté.
+# (Un critère de compression zlib < 10 % a été essayé puis retiré : il ne
+#  prenait aucun charabia réel que les autres ne prennent déjà, et il
+#  signalait le code de refactor légitime à 9,5 %.)
 # Signalé par DEGEN=1, à l'appelant d'exclure la passe.
 def periodique(t, kmax=12):
     """Part des caractères couverts par une répétition immédiate de période 1..kmax."""
@@ -74,9 +75,6 @@ def degenere(d):
     if max(freq.values()) / len(mots) > 0.40:
         return True
     if len(freq) / len(mots) < 0.08:
-        return True
-    brut = texte.encode("utf-8")
-    if len(zlib.compress(brut)) / len(brut) < 0.10:
         return True
     return periodique(texte) > 0.40
 
