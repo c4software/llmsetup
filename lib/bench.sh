@@ -448,9 +448,15 @@ cmd_bench_cache() {
   local ctx="$SCRIPT_DIR/prompts/bench-context.txt" task="$SCRIPT_DIR/prompts/bench-task.txt"
   [[ -f "$ctx" && -f "$task" ]] || error "Prompts manquants : $ctx / $task"
 
-  # Variantes écrites dans un dossier temporaire : tâche allongée, contexte
-  # modifié au milieu (une ligne remplacée à mi-fichier, le reste intact).
+  # Variantes écrites dans un dossier temporaire. Le contexte de base reçoit
+  # une ligne d'horodatage en tête, commune aux quatre requêtes : sans elle,
+  # un --bench-cache lancé juste après un --bench (même bench-context.txt)
+  # trouve sa requête « froide » déjà en cache (100 % mesuré sur gpt-oss le
+  # 21/08/2026). Puis : tâche allongée, contexte modifié au premier tiers (une
+  # ligne remplacée, le reste intact).
   local tmp; tmp="$(mktemp -d)"
+  { echo "(run --bench-cache $(date '+%F %T.%N'))"; cat "$ctx"; } > "$tmp/ctx.txt"
+  ctx="$tmp/ctx.txt"
   { cat "$task"; echo ""; echo "Ajoute ensuite un paragraphe sur les limites de cette conception."; } > "$tmp/task-suite.txt"
   python3 - "$ctx" "$tmp/ctx-edit.txt" <<'PY'
 import sys
