@@ -707,6 +707,11 @@ groupe "; --- Laguna S 2.1 — nécessite llama.cpp >= b10087 (arch 'laguna', co
 #   UD-Q5_K_XL.)
 download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
   LAGUNA_S_PATH="UD-Q4_K_XL/Laguna-S-2.1-UD-Q4_K_XL-00001-of-00003.gguf"
+# Drafter DFlash officiel (poolside, 1B, 6 couches, block_size 16, embeddings
+# partagés avec la cible) : GGUF BF16 de 2,2 Go dans le repo poolside, pas
+# dans celui d'unsloth. Même dossier que le modèle, autre repo.
+download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
+  LAGUNA_DFLASH_PATH="laguna-s-2.1-DFlash-BF16.gguf"
 
 # Laguna S 2.1 — MoE 118B-A8B (poolside), agentic coding / long-horizon
 # 48 couches en ratio 1:3 global/SWA (fenêtre 512) + softplus gating :
@@ -721,13 +726,15 @@ download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
 # thinking activé par défaut (recommandé en agentic coding, avec preserved
 #   thinking côté client) — pour un modèle nothink, ajouter :
 #     chat-template-kwargs = {"enable_thinking":false}
-# Spéculation DFlash (drafter laguna-s-2.1-DFlash-BF16.gguf, 2,2 Go) :
-#   draft-dflash est en mainline (PR #22105, mergée le 28/06/2026), le fork
-#   poolside/llama.cpp branche `laguna` n'est plus nécessaire.
-#   Reste à vérifier que ce drafter-là est bien reconnu par le mainline avant
-#   d'ajouter --spec-type draft-dflash --spec-draft-n-max 15 (clampé à la
-#   taille de bloc d'entraînement du drafter).
-#   Retours communauté : jusqu'à +30 tok/s de décode selon les tâches.
+# Spéculation DFlash (drafter $LAGUNA_DFLASH_PATH, déclaré ci-dessus) :
+#   draft-dflash est en mainline (PR #22105, mergée le 28/06/2026). La model
+#   card poolside (lue le 21/08/2026) donne les flags : -md <drafter>
+#   --spec-type draft-dflash --spec-draft-n-max 7 (plafonné à la taille de
+#   bloc entraînée, 15 + 1), et affirme que le mainline « ships the generic
+#   DFlash framework » mais pas le contrat spécifique Laguna, fork poolside
+#   branche `laguna` requis. À VÉRIFIER PAR LA MESURE (--spec-ab avec
+#   spec-type=draft-dflash;spec-draft-model=…) : si le mainline refuse ou
+#   dégénère, le garde-fou le dira. Retours communauté : jusqu'à +30 tok/s.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
 # JAMAIS MESURÉ sur cette machine (au 21/08/2026) : Vulkan0 par défaut, pas de
 #   bench, pas de courbe, DFlash non essayé. Procédure complète à dérouler.
