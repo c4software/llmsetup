@@ -614,10 +614,13 @@ download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
 #   le plafond des archs à checkpoints (ici SWA sans swa-full), comme les GDN.
 # Courbe t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 17 ms, 8 = 57
 #   (x3,4), 16 = 130, 32 = 168, 48 = 246 ms (x14,7) — la plus raide de toutes.
-# Spéculation n-gram (ngram-map-k, À L'ESSAI, 21/08/2026) : pas de tête MTP,
-#   attention classique (pas d'état récurrent, donc pas le surcoût par pas de
-#   Qwen3-Next). size_m 7 de départ, --spec-ngram-tune (référence sans
-#   spéculation incluse) décide ; bloc à retirer si rien ne bat la référence.
+# Spéculation n-gram : ngram-map-k size_m 7, RETENU par --spec-ngram-tune
+#   21/08/2026 (Vulkan0, spec-refactor.txt, 4 passes) : sans spéculation
+#   51,7 t/s ; size_m 7 = 59,8 t/s (+16 %) ; size_m 47 = 52,7 t/s (+2 %). La
+#   courbe la plus raide de toutes (x3,4 au batch 8) n'a pas empêché le petit
+#   draft de gagner : pas d'état récurrent, donc pas de surcoût fixe par pas
+#   (contraste avec Qwen3-Coder-Next), et les misses sont gratuits. Le grand
+#   draft, lui, paie son batch x14,7 à chaque hit partiel.
 llama_model gpt-oss "
 model            = $GPTOSS_PATH
 ctx-size         = 131072
