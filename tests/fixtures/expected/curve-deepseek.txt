@@ -1,0 +1,38 @@
+  batch = size_m + 1 (le token échantillonné + les size_m draftés)
+   batch  size_m      t_forward  coût rel.  seuil non-perte     gain
+  ------------------------------------------------------------------
+       1       0     83.3±0.1  ms     1.00x    1.0 tok (100%)     1.0x
+       8       7    302.0±2.0  ms     3.63x    3.6 tok (45%)     2.2x
+      16      15    550.9±16.8 ms     6.61x    6.6 tok (41%)     2.4x
+      32      31    718.4±14.4 ms     8.62x    8.6 tok (27%)     3.7x
+      48      47   1087.1±30.4 ms    13.05x   13.1 tok (27%)     3.7x
+
+  seuil non-perte = tokens à faire accepter pour ne pas être plus lent
+                    que le décodage normal ; (%) = part du draft.
+
+  SAUT(S) sans point intermédiaire — une marche peut s'y cacher :
+      entre batch 1 et 8 : x3.63 (à raffiner batch par batch)
+      entre batch 8 et 16 : x1.82 (à raffiner batch par batch)
+      entre batch 32 et 48 : x1.51 (à raffiner batch par batch)
+
+  Tailles DOMINÉES (une plus courte fait mieux sur les deux axes) :
+      size_m 47 (batch 48) : size_m 31 fait mieux en gain ET en seuil
+
+  Courbe DÉFAVORABLE : aucune taille ne garde son seuil de non-perte
+  sous 25 % du draft — gain improbable d'après la courbe seule.
+  Mais un miss n-gram ne coûte qu'une sonde de hash et seuls les hits
+  paient le batch, avec une acceptance que la courbe ignore : à trancher
+  par la mesure, pas par le modèle (DeepSeek V4, 21/08/2026 : +9 % réels
+  avec size_m 7 malgré un seuil de 45 %).
+
+  DEUX RÉGIMES à départager par la mesure :
+    size_m 7   (SÛR)   seuil 3.6 tok, gain plafonné x2.2
+    size_m 31  (LARGE) amortit le coût fixe, gain jusqu'à x3.7
+    Le choix dépend de la longueur des répétitions réellement
+    rencontrées — aucune courbe ne peut le dire.
+  Courbe pentue : ajouter --spec-ngram-map-k-min-hits 2 pour éviter
+  les faux départs, qui paient le batch sans être acceptés.
+SIZEM_SAFE=7
+SIZEM_LARGE=31
+STEP_LO=1
+STEP_HI=8

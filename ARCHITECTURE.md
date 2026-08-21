@@ -53,8 +53,9 @@ common → models → ini → preload → setup → bench → spec → service �
   `_preset_nmax` et `_preset_ngram_m` (surcharge conf > défaut script ;
   `SPEC_NMAX_FORCE` / `SPEC_NGRAM_FORCE` + `*_PRESET` priment, posés par les
   tuners pour tester une valeur sans l'écrire), `generate_models_ini`
-  (applique aussi `SPEC_MTP_ONLY_PRESET` : spec-type réduit à `draft-mtp`
-  le temps d'un `--spec-tune` sur un modèle à spec-type en liste).
+  (applique aussi `SPEC_TYPE_FORCE` + `SPEC_TYPE_FORCE_PRESET` : spec-type
+  remplacé le temps d'une mesure, `draft-mtp` pour `--spec-tune` sur une
+  liste, `none` pour la référence de `--spec-ngram-tune` sans MTP).
 - `preload.sh` : sélection interactive (`select_preload_models`, gum ou
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
@@ -161,7 +162,7 @@ sur `spec-test.txt`. `spec_analyze.py` écarte (sans quarantaine : ils sont
 valides, juste hors modèle) les runs en spec-type mixte, dont le k varie
 par forward, et ceux d'un autre prompt ; sans ce filtre le garde-fou
 tokens/forward > k+1 les commenterait tous. C'est pourquoi `--spec-tune`
-mesure en `draft-mtp` seul (`SPEC_MTP_ONLY_PRESET`).
+mesure en `draft-mtp` seul (`SPEC_TYPE_FORCE=draft-mtp`).
 
 ## Réglage n-gram (`batch_curve.py`, `--spec-ngram-tune`)
 
@@ -181,7 +182,14 @@ suspects entre batches non consécutifs sont renvoyés en `STEP_LO/HI` et le
 bash les raffine batch par batch, en boucle bornée, jusqu'à ce qu'il n'en
 reste plus. Les baisses de `t_forward` ne sont signalées qu'au-delà de
 3 sigma (bruit combiné). L'arbitrage final est une mesure réelle : la
-courbe ne connaît pas la longueur des répétitions rencontrées. `min-hits`
+courbe ne connaît ni la longueur des répétitions rencontrées, ni la
+fréquence des hits, ni leur acceptance, et un miss ne coûte qu'une sonde de
+hash. Quand aucune taille ne passe `PART_SEUIL_MAX`, `candidats()` se replie
+sur deux tailles à mesurer (la plus grande <= `SIZEM_REPLI` = 7, et le
+meilleur gain brut) au lieu de conclure (DeepSeek V4 : +9 % réels avec 7
+malgré un seuil de 45 %). Sur un modèle sans MTP le tune mesure d'abord une
+référence en `spec-type none` (`SPEC_TYPE_FORCE`) et n'écrit rien si aucun
+`size_m` ne la bat. `min-hits`
 n'est pas réglé (second ordre, restarts multipliés), il vit dans
 `lib/models.sh`.
 

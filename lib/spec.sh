@@ -180,9 +180,9 @@ cmd_spec_test() {
     warn "Désaccord n-max : serveur=$nmax_srv, script/conf=$nmax_cfg → le ini a changé sans restart."
     warn "  Ce run mesure et journalise n-max $nmax_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
   fi
-  if [[ "${SPEC_MTP_ONLY_PRESET:-}" == "$preset" ]]; then
-    # forçage voulu par --spec-tune, pas un ini oublié
-    [[ -n "$stype_srv" ]] && echo "  (spec-type réduit à $stype_srv par --spec-tune le temps du réglage ; liste du script : $stype_cfg)"
+  if [[ -n "${SPEC_TYPE_FORCE:-}" && "${SPEC_TYPE_FORCE_PRESET:-}" == "$preset" ]]; then
+    # forçage voulu par un tuner, pas un ini oublié
+    [[ -n "$stype_srv" ]] && echo "  (spec-type forcé à $stype_srv le temps du réglage ; script : $stype_cfg)"
   elif [[ -n "$stype_srv" && -n "$stype_cfg" && "$stype_srv" != "$stype_cfg" ]]; then
     warn "Désaccord spec-type : serveur=$stype_srv, script=$stype_cfg → le ini a changé sans restart."
     warn "  Ce run mesure et journalise spec-type $stype_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
@@ -395,11 +395,11 @@ cmd_spec_tune() {
 
   # spec-type en liste (n-gram + MTP) : le n-max ne concerne que la tête MTP,
   # et le modèle α ne tient que si k est constant — on mesure donc en
-  # draft-mtp seul (SPEC_MTP_ONLY_PRESET, lu par generate_models_ini), la
+  # draft-mtp seul (SPEC_TYPE_FORCE, lu par generate_models_ini), la
   # liste complète revient au restart final. La valeur retenue vaut pour le
   # chemin MTP quel que soit le reste de la liste.
   if [[ "$(_preset_spec_types "$preset")" == *,* ]]; then
-    export SPEC_MTP_ONLY_PRESET="$preset"
+    export SPEC_TYPE_FORCE="draft-mtp" SPEC_TYPE_FORCE_PRESET="$preset"
     info "spec-type en liste ($(_preset_spec_types "$preset")) : mesuré en draft-mtp seul"
     info "  le temps du réglage (n-max = paramètre MTP, calibration α à k constant)."
   fi
@@ -409,7 +409,7 @@ cmd_spec_tune() {
   _spec_tune_restore() {
     if [[ "$SPEC_TUNE_DIRTY" -eq 1 ]]; then
       warn "spec-tune interrompu — régénération du ini sans valeur forcée + restart."
-      unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_MTP_ONLY_PRESET
+      unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
       regen_models_ini
       systemctl --user restart "$SERVICE_NAME" || true
       SPEC_TUNE_DIRTY=0
@@ -436,7 +436,7 @@ cmd_spec_tune() {
     done
     cmd_spec_test "$preset" "$passes"
   done
-  unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_MTP_ONLY_PRESET
+  unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
 
   echo ""
   info "════════ Bilan ════════"
@@ -592,7 +592,7 @@ cmd_spec_ngram_tune() {
     SPEC_NGRAM_SERVICE_ACTIF=1
   fi
   _spec_ngram_restore() {
-    unset SPEC_NGRAM_FORCE SPEC_NGRAM_FORCE_PRESET
+    unset SPEC_NGRAM_FORCE SPEC_NGRAM_FORCE_PRESET SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
     regen_models_ini
     if [[ "${SPEC_NGRAM_SERVICE_ACTIF:-0}" -eq 1 ]]; then
       systemctl --user start "$SERVICE_NAME" >/dev/null 2>&1 || true
@@ -647,7 +647,7 @@ cmd_spec_ngram_tune() {
     cands+=("$m_large")
   fi
   if [[ ${#cands[@]} -eq 0 ]]; then
-    error "Aucun candidat exploitable — courbe trop pentue (voir ci-dessus)."
+    error "Aucun candidat exploitable (un seul point de courbe ?)."
   fi
 
   # --- 2. Arbitrage --------------------------------------------------------
@@ -659,6 +659,30 @@ cmd_spec_ngram_tune() {
   else
     info "Candidats : ${cands[*]} ($passes passes chacun, restart entre chaque)"
   fi
+  # Modèle sans tête MTP : le n-gram est sa seule spéculation, et rien ne dit
+  # encore s'il rapporte quoi que ce soit — une mesure de référence en
+  # spec-type none s'impose (sur un modèle MTP, la référence est le MTP seul,
+  # déjà connue par --spec-tune). Le bilan compare et refuse d'écrire un
+  # size_m qui ne bat pas la référence.
+  local ref_gen=""
+  if ! _preset_has_spec_type "$preset" draft-mtp; then
+    echo ""
+    info "──── référence : sans spéculation (spec-type none) ────"
+    export SPEC_TYPE_FORCE="none" SPEC_TYPE_FORCE_PRESET="$preset"
+    regen_models_ini
+    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
+    t=0
+    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
+      sleep 2; t=$((t+2))
+      if [[ $t -ge 120 ]]; then
+        error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
+      fi
+    done
+    cmd_spec_test "$preset" "$passes" "$prompt_file"
+    ref_gen="${SPEC_TEST_MED_GEN:-}"
+    unset SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
+  fi
+
   local -a mesures=()
   local m t
   for m in "${cands[@]}"; do
@@ -684,6 +708,7 @@ cmd_spec_ngram_tune() {
   echo ""
   info "════════ Bilan ════════"
   local i best_m="" best_g=""
+  [[ -n "$ref_gen" ]] && echo "  sans spéculation : $ref_gen t/s"
   for i in "${!cands[@]}"; do
     echo "  size_m ${cands[$i]} : ${mesures[$i]} t/s"
     # comparaison numérique en awk (convention du dépôt)
@@ -693,6 +718,11 @@ cmd_spec_ngram_tune() {
   done
   if [[ -z "$best_m" ]] || awk -v g="$best_g" 'BEGIN{exit !(g<=0)}'; then
     warn "Aucune mesure exploitable — config remise à l'état initial."
+    _spec_ngram_restore; trap - EXIT; return
+  fi
+  if [[ -n "$ref_gen" ]] && awk -v g="$best_g" -v r="$ref_gen" 'BEGIN{exit !(g <= r)}'; then
+    warn "Aucun size_m ne bat la référence sans spéculation ($ref_gen t/s) :"
+    warn "  rien d'écrit — retirer ngram-map-k du spec-type de $preset dans lib/models.sh."
     _spec_ngram_restore; trap - EXIT; return
   fi
   # À moins de 2 % d'écart, préférer le plus PETIT size_m : son seuil de

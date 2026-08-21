@@ -44,8 +44,18 @@ import json, sys, datetime
 # MoE. Le seuil sépare largement les deux.
 FACTEUR_MARCHE = 1.5
 # Au-delà de cette part du draft, un seuil de non-perte devient risqué : une
-# acceptance partielle passe sous la rentabilité.
+# acceptance partielle passe sous la rentabilité. Ce n'est qu'un a priori : la
+# courbe ne connaît ni la fréquence des hits ni leur acceptance, et un miss ne
+# coûte qu'une sonde de hash. Mesuré le 21/08/2026 sur DeepSeek V4 (seuil de
+# 45 % du draft dès size_m 7, donc « aucune taille viable » selon ce critère) :
+# +9 % réels avec size_m 7 sur le prompt refactor, acceptance 0,9 sur les hits.
+# D'où le repli de candidats() : quand rien ne passe, on propose quand même
+# deux tailles à mesurer au lieu de conclure — la mesure prime sur le modèle.
 PART_SEUIL_MAX = 0.25
+# Borne du candidat « sûr » de repli : la dernière taille du chemin rapide
+# Vulkan (cf. en-tête), et une longueur de draft que même un MoE raide amortit
+# dès que les hits sont acceptés aux deux tiers.
+SIZEM_REPLI = 7
 # Une baisse de t_forward est physiquement impossible : en deçà de ce nombre
 # d'écarts-types combinés c'est un plateau, au-delà un palier de noyau.
 SIGMA_BAISSE = 3.0
@@ -160,7 +170,20 @@ def candidats(pts, t1):
         seuil = t / t1
         if seuil / n <= PART_SEUIL_MAX and n / seuil > meilleur:
             large, meilleur = n - 1, n / seuil
-    return sur, large, meilleur, ms
+    repli = False
+    if large is None and len(pts) > 1:
+        # Courbe défavorable partout : repli sur deux tailles à départager par
+        # la mesure (cf. PART_SEUIL_MAX). Sûr = la plus grande taille mesurée
+        # <= SIZEM_REPLI (sinon la plus petite), large = le meilleur gain brut.
+        repli = True
+        petites = [n - 1 for n, _, _ in pts if 1 <= n - 1 <= SIZEM_REPLI]
+        sur = max(petites) if petites else min(n - 1 for n, _, _ in pts if n > 1)
+        for n, t in enveloppe(pts):
+            if n > 1 and n / (t / t1) > meilleur:
+                large, meilleur = n - 1, n / (t / t1)
+        if large == sur:
+            large = None
+    return sur, large, meilleur, ms, repli
 
 
 def main():
@@ -204,7 +227,7 @@ def main():
     print("                    que le décodage normal ; (%) = part du draft.")
     print()
 
-    sur, large, gain_large, ms = candidats(pts, t1)
+    sur, large, gain_large, ms, repli = candidats(pts, t1)
 
     if baisses(pts):
         print("  ⚠ courbe NON MONOTONE au-delà du bruit :")
@@ -235,6 +258,14 @@ def main():
                   % (n - 1, n, m - 1))
         print()
 
+    if repli:
+        print("  Courbe DÉFAVORABLE : aucune taille ne garde son seuil de non-perte")
+        print("  sous %.0f %% du draft — gain improbable d'après la courbe seule." % (100 * PART_SEUIL_MAX))
+        print("  Mais un miss n-gram ne coûte qu'une sonde de hash et seuls les hits")
+        print("  paient le batch, avec une acceptance que la courbe ignore : à trancher")
+        print("  par la mesure, pas par le modèle (DeepSeek V4, 21/08/2026 : +9 % réels")
+        print("  avec size_m 7 malgré un seuil de 45 %).")
+        print()
     if sur is not None and large is not None and sur != large:
         seuil_sur = dict((n, t) for n, t, _ in pts)[sur + 1] / t1
         print("  DEUX RÉGIMES à départager par la mesure :")
@@ -247,9 +278,10 @@ def main():
     elif large is not None:
         print("  VERDICT : --spec-ngram-map-k-size-m %d (gain max x%.1f si tout accepté)"
               % (large, gain_large))
+    elif sur is not None:
+        print("  VERDICT : un seul candidat à mesurer, --spec-ngram-map-k-size-m %d" % sur)
     else:
-        print("  VERDICT : aucune taille viable — courbe trop pentue,")
-        print("            ne pas activer de spec-type n-gram sur ce modèle.")
+        print("  VERDICT : aucune taille mesurable (un seul point ?).")
 
     if pts[-1][1] / t1 >= 1.5:
         print("  Courbe pentue : ajouter --spec-ngram-map-k-min-hits 2 pour éviter")

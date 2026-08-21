@@ -86,10 +86,12 @@ ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
    `spec-nmax.conf`.
 4. **`--spec-ngram-tune`** (si `ngram-map-k` dans le `spec-type`) : courbe
    `t_forward(batch)` puis arbitrage réel, écrit dans `spec-ngram.conf`.
-   Modèle sans MTP : d'abord la courbe seule, service arrêté,
-   `DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh <gguf>` ; on
-   n'ajoute `ngram-map-k` au `spec-type` que si elle donne une taille viable
-   (sinon « aucune taille viable », comme gpt-oss sur Vulkan0).
+   Modèle sans MTP : la courbe seule d'abord, service arrêté,
+   `DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh <gguf>`, pour
+   connaître les deux tailles à mesurer ; puis `ngram-map-k` dans le
+   `spec-type` et le tune, qui mesure une référence sans spéculation et
+   n'écrit rien si aucun `size_m` ne la bat. La courbe ne décide jamais
+   seule (DeepSeek V4 : +9 % réels malgré une courbe « défavorable »).
 5. **`--bench-devices`** puis **`--bench`** : ROCm0 ou Vulkan0, écrit dans
    `bench-devices.conf`. Si le device change, refaire 3 et 4 (les seuils
    dépendent du backend). Un modèle absent de `bench-devices.conf` tourne

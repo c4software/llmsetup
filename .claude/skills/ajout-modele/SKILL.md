@@ -111,10 +111,15 @@ DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh ~/models/<dossier>/<gguf>
 systemctl --user start llama-server
 ```
 
-Sortie dans `spec-batch.log` (lisible) et `spec-batch.tsv`. Si le verdict
-est « aucune taille viable » sur le device retenu, ne pas ajouter n-gram.
-Sinon ajouter `ngram-map-k` au `spec-type` (+ `size-m`, `min-hits 2`) et
-lancer le tune ci-dessous. Limite connue : sans MTP, `--spec-test` affiche
+Sortie dans `spec-batch.log` (lisible) et `spec-batch.tsv`. La courbe ne
+tranche jamais seule : même « défavorable » (seuil de non-perte au-dessus
+de 25 % du draft partout), elle propose deux tailles à mesurer, parce qu'un
+miss n-gram ne coûte qu'une sonde de hash et que seuls les hits paient le
+batch (DeepSeek V4, 21/08/2026 : +9 % réels malgré une courbe à 45 %).
+Ajouter `ngram-map-k` au `spec-type` (+ `size-m`, `min-hits 2`) et lancer
+le tune ci-dessous : sur un modèle sans MTP il mesure d'abord une référence
+sans spéculation et n'écrit rien si aucun `size_m` ne la bat. C'est ce
+résultat, pas la courbe, qui décide de garder ou de retirer le bloc. Limite connue : sans MTP, `--spec-test` affiche
 la mesure mais ne l'écrit pas dans `spec-tests.log` (pas de n-max), le
 tune fonctionne mais sans historique, noter les chiffres dans le
 commentaire du bloc.
@@ -136,8 +141,8 @@ plate sur un dense (batch 8 = 1,2x le batch 1), raide sur un MoE (1,9x, le
 trafic mémoire croît avec l'union des experts routés), donc un gain n-gram
 bien plus faible. Un balayage grossier ne voit pas la marche, c'est le
 raffinement automatique qui la trouve : ne pas conclure sur la première
-table affichée. Un verdict « aucune taille viable » signifie qu'il ne faut
-pas activer n-gram sur ce modèle.
+table affichée. Une courbe défavorable n'interdit rien : elle abaisse
+l'attente, et la mesure tranche.
 
 Critère de passage : `spec-ngram.conf` contient la ligne du modèle, le
 commentaire du bloc cite les deux candidats, leurs t/s et acceptances.

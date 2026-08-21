@@ -80,7 +80,11 @@ python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/mode
 #           grossier 1,8,16,32,48) — la marche est invisible au test par unité,
 #           le script doit rendre STEP_LO=8/STEP_HI=16 à raffiner, et non
 #           conclure à un seul candidat (défaut mesuré le 21/08/2026)
-for c in marche plat moe inverse vide grossiere; do
+# deepseek : courbe réelle du MoE 284B (21/08/2026), défavorable partout
+#           (45 % du draft dès size_m 7) — plus de « aucune taille viable »,
+#           repli sur deux candidats à mesurer (7 et 31), la mesure ayant
+#           donné +9 % avec 7
+for c in marche plat moe inverse vide grossiere deepseek; do
   python3 "$PY/batch_curve.py" m.gguf Vulkan0 0 "" rec < "$F/bench-$c.jsonl" > "$TMP/o"
   _ck "curve-$c.txt" "$TMP/o"
 done

@@ -565,15 +565,20 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   DeepSeek V4 (Lightning Indexer, HC pre/comb/post) renvoyés sur CPU. C'est
 #   ce cas qui a motivé le garde-fou « sortie dégénérée » de timings.py.
 #   À re-tester après un bump de llama-cpp/ggml-hip.
-# Spéculation n-gram (ngram-map-k, À L'ESSAI) : la courbe t_forward(batch)
-#   Vulkan0 (bench-spec-batch, reps=5, 21/08/2026 : batch 1 = 83 ms, 8 = 302 ms
-#   soit x3,6, 16 = 551, 32 = 718, 48 = 1087 ms) donne un seuil de non-perte de
-#   45 % du draft dès size_m 7 et conclut « aucune taille viable » — MoE à 13B
-#   actifs, l'union des experts routés croît avec le batch. Mais la mesure
-#   prime sur le modèle : sur le 27B les hits du prompt refactor acceptaient
-#   94 % du draft. A/B en cours (sans n-gram / 7 / 31 sur spec-refactor.txt),
-#   le bloc sera retiré si le gain réel n'est pas là.
-#   Si spéculation un jour sans ça, ce sera DSpark (drafter dédié, cf. ci-dessus).
+# Spéculation n-gram : ngram-map-k size_m 7, RETENU sur mesure réelle
+#   (21/08/2026, Vulkan0, spec-refactor.txt, 4 passes) : sans spéculation
+#   11,29 t/s ; size_m 7 = 12,30 t/s (+9 %, acceptance 0,89 à 0,93 sur les
+#   passes avec hits, -2 % au pire sur celles sans) ; size_m 31 = 11,78 t/s
+#   (une passe sous la référence, acceptance 0,27 à 0,66). La courbe
+#   t_forward(batch) (bench-spec-batch, reps=5 : batch 1 = 83 ms, 8 = 302 ms
+#   soit x3,6, 16 = 551, 32 = 718, 48 = 1087 ms) concluait « aucune taille
+#   viable » avec un seuil de non-perte de 45 % du draft dès size_m 7 — elle
+#   ignore que les misses sont quasi gratuits et que seuls les hits, bien
+#   acceptés, paient le batch. C'est ce cas qui a introduit le repli de
+#   candidats de batch_curve.py et la référence « sans spéculation » du tune.
+#   Gain modeste parce que le modèle pense longuement avant de recopier quoi
+#   que ce soit ; en édition agentic pure il devrait être plus net. DSpark
+#   (drafter dédié, cf. ci-dessus) reste l'autre piste.
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072
