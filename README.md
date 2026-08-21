@@ -213,6 +213,18 @@ Courbes `t_forward(batch)` sur Vulkan0 (`tools/bench-spec-batch.sh`, reps=5) :
 | Qwen3.6-35B-A3B Q4 (MoE) | 17 ms | 33 ms | 68 ms | 136 ms | marche x2,06, mais pente raide sous la marche (batch 8 = 1,9x) |
 | DeepSeek-V4-Flash IQ3 (MoE) | 83 ms | 302 ms | | 1087 ms | pas de marche, x3,6 dès le batch 8 : la courbe disait « non », la mesure a dit +9 % |
 
+Profondeur de contexte (`tools/bench-depth.sh`, 27B Q4, KV q8_0, sans
+spéculation, reps=2) :
+
+| Device | depth 0 | depth 16k | depth 32k | Tour simulé 0 → 32k |
+|---|---|---|---|---|
+| Vulkan0 | 289 pp / 12,25 tg | 222 / 11,83 | 183 / 11,50 | 252 s → 272 s (x1,08) |
+| ROCm0 | 352 pp / 11,97 tg | 263 / 10,73 | 214 / 9,54 | 256 s → 324 s (x1,26) |
+
+ROCm0 prefill plus vite à vide mais décode moins bien, et se dégrade deux
+fois plus vite en profondeur : Vulkan0 gagne à toutes les profondeurs sur ce
+GGUF, et l'écart se creuse en contexte long (le régime agentic).
+
 Enseignements : la marche Vulkan 8→9 (`mul_mat_vec_max_cols = 8`) vaut pour
 les denses comme pour les MoE ; le régime large (47) gagne sur les denses,
 le régime sûr (7) sur les MoE ; l'optimum du n-max MTP dépend du device
