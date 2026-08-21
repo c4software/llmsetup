@@ -344,24 +344,12 @@ modification demande un restart du service.
 
 ## Ajouter un modèle
 
-Un seul endroit : un bloc dans `lib/models.sh`, à la position voulue dans le
-ini (l'ordre de déclaration est l'ordre d'émission) :
-
-1. `download_hf <dossier> <repo> VAR_PATH=<fichier>` (ou
-   `download_hf_shards` avec le shard 00001 ; plusieurs `VAR=` pour un
-   drafter MTP externe) — définit le chemin, alimente `KNOWN_FILES`
-   (source unique de `--cleanup`) et les téléchargements de `--setup` ;
-2. `llama_model <section> "<corps ini>"` avec son commentaire métier (sampling,
-   cache, contraintes MTP) — un `download_hf` peut servir plusieurs
-   sections (même GGUF) ;
-3. `groupe "; --- titre ---"` avant le premier `llama_model` si nouvelle famille.
-
-Exemple complet (le corps ini reprend la variable définie par
-`download_hf`, qui doit donc être déclaré avant) :
+Tout se passe dans `lib/models.sh` : un bloc de deux appels, à la position
+voulue dans le ini (l'ordre de déclaration est l'ordre d'émission), puis
+`./setup-llm.sh --setup` télécharge le GGUF, régénère `models.ini` et propose
+le redémarrage. Rien d'autre à toucher.
 
 ```bash
-groupe "; --- Mon-Modele 7B (nouvelle famille) ---"
-
 # Mon-Modele 7B : pourquoi ce repo et ce quant (taille, reco amont, date)
 download_hf mon-modele-7b "org/Mon-Modele-7B-GGUF" \
   MON_MODELE_7B_PATH="Mon-Modele-7B-UD-Q4_K_XL.gguf"
@@ -379,15 +367,18 @@ min-p            = 0.0
 parallel         = 4"
 ```
 
-Variantes : `download_hf_shards` prend le shard 00001 avec son sous-dossier
-de quant (le glob de téléchargement en est dérivé) ; un appel `download_hf`
-peut porter plusieurs `VAR=fichier` (ex : modèle + drafter spéculatif externe) ;
-deux `llama_model` peuvent référencer le même `*_PATH` (même GGUF, cas Qwen3.8-27B).
+- `download_hf <dossier> <repo> VAR=<fichier>` déclare le fichier (chemin,
+  inventaire pour `--cleanup`, téléchargement) ; pour un modèle en shards,
+  `download_hf_shards` avec le shard 00001 et son sous-dossier de quant.
+- `llama_model <section> "<corps ini>"` déclare la section ; deux sections
+  peuvent partager le même `*_PATH` (cas Qwen3.8-27B, thinking et MTP).
+- `groupe "; --- titre ---"` avant le premier `llama_model` d'une nouvelle
+  famille, pour l'en-tête dans le ini.
+- Variante MTP : nommer la section `<clé>-mtp`, les garde-fous de
+  préchargement en dérivent.
 
-Puis `./setup-llm.sh --update <dossier>` pour télécharger et régénérer.
-Les garde-fous de préchargement (poids dupliqués) sont dérivés des
-déclarations : même GGUF partagé, ou dossiers `<clé>` et `<clé>-mtp` — nommer
-la variante MTP avec le suffixe `-mtp` suffit, rien d'autre à maintenir.
+Ensuite, pour choisir le device et régler la spéculation : la procédure
+d'`AGENTS.md` (skill `ajout-modele`).
 
 ## Outils (tools/)
 
