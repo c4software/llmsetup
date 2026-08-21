@@ -222,11 +222,18 @@ acceptances.
 ## 6. bench final et récap de performance (tableau partageable)
 
 Une dernière mesure telle que servie, avec tous les réglages retenus et le
-service dans son état normal :
+service dans son état normal, puis selon le rôle du modèle :
 
 ```bash
-./setup-llm.sh --bench <modèle> 3
+./setup-llm.sh --bench <modèle> 3            # toujours : journalisé et comparé au run précédent
+./setup-llm.sh --bench-parallel <modèle>     # si parallel > 1 : ce que vaut le N choisi
+./setup-llm.sh --bench-cache <modèle>        # si usage agentic : part du prompt repayée à chaque tour
+./setup-llm.sh --bench-load <modèle>         # si chargé à la demande : coût d'une bascule LRU
 ```
+
+`--bench` écrit dans `logs/bench.log` et signale tout écart de plus de 5 %
+avec le run précédent du même GGUF/device : à relancer après chaque mise à
+jour de llama-cpp.
 
 Puis rassembler les chiffres dans un tableau unique, à coller dans le message
 de commit, le README ou un artefact partagé. Toujours préciser machine,

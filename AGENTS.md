@@ -103,7 +103,9 @@ là-bas, lancer, ne rien commiter sur place.
    seule (DeepSeek V4 : +9 % réels malgré une courbe « défavorable »).
    Toute autre comparaison (min-hits, size-n, k4v, taille hors tune) :
    `--spec-ab <modèle> <n> - <variante>...`, rien d'écrit, bilan comparé.
-6. **`--bench` final et récap de performance** : un tableau partageable (configuration,
+6. **`--bench` final et récap de performance** (plus, selon le rôle :
+   `--bench-parallel` si `parallel > 1`, `--bench-cache` si agentic,
+   `--bench-load` si chargé à la demande) : un tableau partageable (configuration,
    device, prompt t/s, gen t/s, acceptance, source et prompt de mesure),
    avec machine, build llama.cpp, quant et date ; les chiffres résumés vont
    aussi dans le commentaire du bloc, seul endroit versionné.

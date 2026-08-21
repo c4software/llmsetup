@@ -225,6 +225,29 @@ ROCm0 prefill plus vite à vide mais décode moins bien, et se dégrade deux
 fois plus vite en profondeur : Vulkan0 gagne à toutes les profondeurs sur ce
 GGUF, et l'écart se creuse en contexte long (le régime agentic).
 
+Concurrence (`--bench-parallel`, spec-test.txt, 400 tokens, 2 salves) :
+
+| Modèle | parallel | 1 requête | 4 requêtes | Lecture |
+|---|---|---|---|---|
+| qwen3.5-9b | 4 | 25,7 t/s | 78,6 t/s agrégés (x3,06), 20,1 t/s par requête | le `parallel 4` des tâches auxiliaires est justifié |
+
+Cache de prompt (`--bench-cache`, bench-context.txt ~1370 tokens) :
+
+| Modèle | Tour suivant | Édition au milieu | Requête identique |
+|---|---|---|---|
+| qwen3.5-9b (hybride SWA/GDN) | 62 % (847 tok) | 0 % | 63 % (861 tok) |
+| qwen3.6-35b-a3b-nothink (GDN) | 62 % (847 tok) | 0 % | 63 % (861 tok) |
+
+Même plafond sur les deux modèles : la restauration d'état ne se fait qu'au
+dernier checkpoint, pas au token près ; une édition au milieu repart de zéro
+et même une requête identique repaie ~37 % du prompt. C'est le coût de ces
+architectures en boucle agentic, à mettre en face de leur débit.
+
+Chargement (`--bench-load`, restart puis première requête, cache de pages
+chaud) : qwen3.5-9b 1,9 s (8,2 Go, TTFT à chaud 65 ms), qwen3.8-27b 4,4 s
+(17 Go, 165 ms), soit ~4 Go/s : une bascule LRU entre modèles moyens coûte
+quelques secondes, pas des minutes.
+
 Enseignements : la marche Vulkan 8→9 (`mul_mat_vec_max_cols = 8`) vaut pour
 les denses comme pour les MoE ; le régime large (47) gagne sur les denses,
 le régime sûr (7) sur les MoE ; l'optimum du n-max MTP dépend du device
