@@ -565,6 +565,12 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   DeepSeek V4 (Lightning Indexer, HC pre/comb/post) renvoyés sur CPU. C'est
 #   ce cas qui a motivé le garde-fou « sortie dégénérée » de timings.py.
 #   À re-tester après un bump de llama-cpp/ggml-hip.
+# Spéculation n-gram : NON. Courbe t_forward(batch) Vulkan0 (bench-spec-batch,
+#   reps=5, 21/08/2026) : batch 1 = 83 ms, 8 = 302 ms (x3,6), 16 = 551 ms,
+#   32 = 718 ms, 48 = 1087 ms — seuil de non-perte de 45 % du draft dès
+#   size_m 7, verdict « aucune taille viable ». MoE à 13B actifs : l'union
+#   des experts routés croît avec le batch, le forward n'est jamais amorti.
+#   Si spéculation un jour, ce sera DSpark (drafter dédié, cf. ci-dessus).
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072
