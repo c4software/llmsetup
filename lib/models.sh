@@ -762,9 +762,14 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 # Courbe t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 33 ms, 8 = 95
 #   (x2,9), 16 = 282, 32 = 384, 48 = 540 ms (x16,5). Référence sans
 #   spéculation sur spec-refactor : 28,7 t/s.
-# Spéculation n-gram (ngram-map-k, À L'ESSAI, 21/08/2026) : size_m 7 de
-#   départ, --spec-ngram-tune (référence sans spéculation incluse) décide ;
-#   bloc à retirer si rien ne bat la référence.
+# Spéculation n-gram : ngram-map-k size_m 7, RETENU par --spec-ngram-tune
+#   21/08/2026 (b10548, Vulkan0, spec-refactor.txt, 4 passes) : sans
+#   spéculation 28,7 t/s ; size_m 7 = 53,0 t/s (+85 %, le plus gros gain
+#   n-gram mesuré ici) ; size_m 47 = 39,9 t/s (+39 %). Courbe raide (x2,9 au
+#   batch 8, x16,5 au batch 48) et pourtant le petit draft double presque le
+#   débit : MoE à 8B actifs, le forward de batch 8 coûte peu en absolu (95 ms)
+#   et le décode de base est lent (33 ms/token), les hits rapportent gros. Pas
+#   d'état récurrent (SWA + global), donc pas de surcoût fixe par pas.
 llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
 ctx-size         = 262144
