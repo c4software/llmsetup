@@ -523,10 +523,17 @@ ctx-checkpoints      = 128"
 # spec-ngram-map-k-min-hits 2 : n'accepter de drafter qu'à partir de deux
 #   occurrences du n-gram, pour éviter les faux départs qui paient le batch
 #   sans être acceptés.
+# cache-ram 12288 (était 4096) : session review omp du 25/08/2026, 4 agents
+#   en série sur le seul slot (parallel 1). L'état de l'orchestrateur à 60k de
+#   contexte pèse 9 Go (« prompt state size 9022 MiB exceeds cache size limit
+#   4096 MiB, skipping ») : jamais sauvegardé, donc prefill complet de 58k
+#   tokens (~325 s à 180 t/s) à chaque retour d'agent, au-delà du timeout
+#   premier token d'omp (300 s) → 4 prefills annulés, 22 min perdues. 12 Go
+#   gardent l'orchestrateur en RAM pendant qu'un agent occupe le slot.
 llama_model qwen3.8-27b-mtp-nothink "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
-cache-ram            = 4096
+cache-ram            = 12288
 temp                 = 0.7
 top-k                = 20
 top-p                = 0.8
