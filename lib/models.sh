@@ -797,6 +797,86 @@ spec-ngram-map-k-min-hits = 2
 jinja            = true
 parallel         = 1"
 
+groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27742, PAS ENCORE MERGÉE au 26/08/2026) ---"
+
+# Qwen3.8-Flash-Next (Qwen) : MoE 125B (6B actifs, 512 experts, 10 routés + 1
+# partagé) + 51B d'embeddings n-gram (bigrammes/trigrammes à la couche 2, table
+# de hash lue une fois par forward), arch GDN (3 couches sur 4) + Qwen Sparse
+# Attention (QSA, budget 2048, ratio 4) + hyper-connections, vision Qwen3-VL,
+# ctx natif 256K (1M via YaRN). Shards UD-IQ3_XXS.
+# BLOQUANT au 26/08/2026 : general.architecture = qwen4exp, inconnue du
+#   paquet Arch llama-cpp (b10566 sur bigchuck : qwen3next, qwen35moe... mais
+#   pas qwen4exp) ET du master upstream (b10636). Support = PR #27742 (unsloth,
+#   ouverte le 26/08 en draft : convertisseur, graphe texte, QSA avec un
+#   troisième cache dans llama_memory_hybrid_idx, vision, 3 correctifs de
+#   llama-quant). Ne rien télécharger ni mesurer avant qu'un paquet Arch la
+#   contienne : les étapes 2 à 6 de la skill sont en attente, et le GGUF sera
+#   probablement ré-uploadé après le merge (repo tout frais, 6 commits, dernier
+#   upload le 26/08 à 13:32 UTC) : prévoir un --update qwen3.8-flash-next.
+# Quant : au 26/08 le repo HF ne contient QUE UD-IQ1_S (3 shards, 72,5 Go :
+#   10,9 Mo + 50 Go + 22,5 Go). Le guide unsloth annonce UD-Q2_K_XL 78,9 Go,
+#   UD-IQ3_XXS 82 Go et UD-Q4_K_XL 111,3 Go. Retenu UD-IQ3_XXS : sur 124 Go de
+#   RAM le Q4 (111 Go) ne laisse rien pour le KV, la table n-gram et le système
+#   (DeepSeek V4 à 104 Go passe déjà juste) ; le 3-bit est le même compromis
+#   que DeepSeek V4. Alternative UD-Q4_K_XL : changer l'entrée, le glob suit.
+#   Nom du shard 00001 et nombre de shards À VÉRIFIER quand le dossier
+#   UD-IQ3_XXS sera en ligne (déduit du découpage de l'IQ1_S : 3 shards).
+# Sampling officiel (guide unsloth + model card) :
+#   thinking : temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 / presence 0.0
+#   instruct : temp 0.7 / top-p 0.80 / top-k 20 / min-p 0.0 / presence 1.5
+# Thinking ON par défaut (<think>), reasoning_effort xhigh (défaut) / medium /
+#   low, "high" est replié sur xhigh par le template ; enable_thinking false =
+#   nothink. preserve_thinking (garde les traces des tours précédents) : true
+#   par défaut, côté client. Le modèle ci-dessous est en NOTHINK avec le
+#   sampling instruct ; variante « low » si on veut un peu de raisonnement :
+#     chat-template-kwargs = {"reasoning_effort":"low"}  + sampling thinking
+#     (temp 1.0 / top-p 0.95, presence-penalty 0)
+# cache-type-v q8_0 : agentic/coding, précision V critique (tool calls, diffs)
+# cache-reuse 0 : état récurrent GDN + MTP (les deux l'interdisent)
+# Pas de swa-full ni ctx-checkpoints : pas de SWA (QSA n'est pas une fenêtre
+#   glissante) : à revoir si la PR expose des checkpoints pour l'état GDN.
+# jinja : template unsloth (developer role, systèmes fusionnés, tool calling
+#   au format <function=...><parameter=...>).
+# Vision : mmproj pas encore publié (repo image-text-to-text, dossier IQ1_S
+#   seul) et de toute façon incompatible MTP → texte seul.
+# MTP : la model card annonce une couche MTP (« MTP layer: 1, multi-step
+#   training ») ; la PR #27742 ne dit pas si elle est convertie (nextn). Section
+#   nommée -mtp-nothink pour les garde-fous de _preload_sanity, spec-type
+#   draft-mtp n-max 4 en valeur de départ : au premier restart vérifier
+#   « --spec-type » dans status.args et une acceptance (pas « n/a ») au
+#   --spec-test ; si la tête manque, retirer draft-mtp (garder ngram-map-k) et
+#   renommer la section. Sur cette arch (GDN + MoE 512 experts, la même
+#   famille que Qwen3-Coder-Next) attendre un gros surcoût fixe par pas
+#   spéculatif (sauvegarde/restauration de l'état récurrent) : les petits
+#   drafts n-gram peuvent être perdants, mesurer 7 ET 47 au --spec-ngram-tune.
+# parallel 1 : contrainte MTP.
+# Device : à mesurer (--bench-devices) ; les deux autres MoE à opérateurs
+#   fusionnés du parc (DeepSeek V4, Qwen3-Coder-Next) sont INUTILISABLES sur
+#   ROCm0 (charabia), s'attendre au même et lire le texte généré.
+download_hf_shards qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
+  QWEN38_FLASH_NEXT_PATH="UD-IQ3_XXS/Qwen3.8-Flash-Next-UD-IQ3_XXS-00001-of-00003.gguf"
+
+# Qwen3.8-Flash-Next-MTP nothink : spéculation MTP (à valider) + n-gram, sampling instruct
+# Aucune mesure encore (arch non supportée par le build, cf. ci-dessus).
+llama_model qwen3.8-flash-next-mtp-nothink "
+model            = $QWEN38_FLASH_NEXT_PATH
+ctx-size         = 131072
+cache-ram        = 8192
+temp             = 0.7
+top-k            = 20
+top-p            = 0.80
+min-p            = 0.0
+presence-penalty = 1.5
+chat-template-kwargs = {\"enable_thinking\":false}
+cache-type-v     = q8_0
+cache-reuse      = 0
+spec-type        = ngram-map-k,draft-mtp
+spec-draft-n-max = 4
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
+jinja            = true
+parallel         = 1"
+
 # Préchargement par défaut (sans preload.conf) : le léger agentic edge seul,
 # le reste en LRU — les always-on se choisissent via --preload.
 DEFAULT_PRELOAD=(lfm2.5-2.6b)
