@@ -797,30 +797,30 @@ spec-ngram-map-k-min-hits = 2
 jinja            = true
 parallel         = 1"
 
-groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27742, PAS ENCORE MERGÉE au 26/08/2026) ---"
+groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27742, mergée le 27/08/2026, paquet Arch >= b10661 requis) ---"
 
 # Qwen3.8-Flash-Next (Qwen) : MoE 125B (6B actifs, 512 experts, 10 routés + 1
 # partagé) + 51B d'embeddings n-gram (bigrammes/trigrammes à la couche 2, table
 # de hash lue une fois par forward), arch GDN (3 couches sur 4) + Qwen Sparse
 # Attention (QSA, budget 2048, ratio 4) + hyper-connections, vision Qwen3-VL,
-# ctx natif 256K (1M via YaRN). Shards UD-IQ3_XXS.
-# BLOQUANT au 26/08/2026 : general.architecture = qwen4exp, inconnue du
-#   paquet Arch llama-cpp (b10566 sur bigchuck : qwen3next, qwen35moe... mais
-#   pas qwen4exp) ET du master upstream (b10636). Support = PR #27742 (unsloth,
-#   ouverte le 26/08 en draft : convertisseur, graphe texte, QSA avec un
-#   troisième cache dans llama_memory_hybrid_idx, vision, 3 correctifs de
-#   llama-quant). Ne rien télécharger ni mesurer avant qu'un paquet Arch la
-#   contienne : les étapes 2 à 6 de la skill sont en attente, et le GGUF sera
-#   probablement ré-uploadé après le merge (repo tout frais, 6 commits, dernier
-#   upload le 26/08 à 13:32 UTC) : prévoir un --update qwen3.8-flash-next.
-# Quant : au 26/08 le repo HF ne contient QUE UD-IQ1_S (3 shards, 72,5 Go :
-#   10,9 Mo + 50 Go + 22,5 Go). Le guide unsloth annonce UD-Q2_K_XL 78,9 Go,
-#   UD-IQ3_XXS 82 Go et UD-Q4_K_XL 111,3 Go. Retenu UD-IQ3_XXS : sur 124 Go de
-#   RAM le Q4 (111 Go) ne laisse rien pour le KV, la table n-gram et le système
-#   (DeepSeek V4 à 104 Go passe déjà juste) ; le 3-bit est le même compromis
-#   que DeepSeek V4. Alternative UD-Q4_K_XL : changer l'entrée, le glob suit.
-#   Nom du shard 00001 et nombre de shards À VÉRIFIER quand le dossier
-#   UD-IQ3_XXS sera en ligne (déduit du découpage de l'IQ1_S : 3 shards).
+# ctx natif 256K (1M via YaRN). Shards UD-IQ4_XS (93,7 Go).
+# SUPPORT llama.cpp : general.architecture = qwen4exp, PR #27742 (unsloth,
+#   ouverte le 26/08, MERGÉE le 27/08 à 19:32 UTC, dans b10661 : convertisseur,
+#   graphe texte, QSA avec un troisième cache dans llama_memory_hybrid_idx,
+#   vision, 3 correctifs de llama-quant). Le paquet Arch llama-cpp est resté en
+#   0.2.0 (b10566 sur bigchuck, sans qwen4exp) : les étapes 2 à 6 de la skill
+#   attendent un paquet >= b10661. Vérifier :
+#   strings /usr/lib/libllama.so* | grep -x qwen4exp
+# Quant : grille HF complète depuis le 27/08 (uploads 15:01 à 15:16 UTC) :
+#   UD-IQ1_S 72,5 / UD-Q2_K_XL 78,9 / UD-IQ3_XXS 82,0 / UD-Q3_K_XL 90,0 /
+#   UD-IQ4_XS 93,7 / UD-Q4_K_XL 111,3 Go (3 shards jusqu'à l'IQ4_XS, 4 pour
+#   le Q4_K_XL). Retenu UD-IQ4_XS (validé le 27/08) : experts en 4 bits, et
+#   ~30 Go de marge sur 124 Go pour le KV à 128k, la table n-gram et le
+#   système, plus que DeepSeek V4 (104 Go) qui tourne. Le Q4_K_XL (111 Go)
+#   ne laisse rien. Repli si le chargement est trop juste : UD-IQ3_XXS
+#   (82 Go), changer l'entrée, le glob suit.
+#   Quants converties AVANT le merge de la PR (15:16 contre 19:32 UTC) :
+#   ré-upload probable, prévoir un --update qwen3.8-flash-next.
 # Sampling officiel (guide unsloth + model card) :
 #   thinking : temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 / presence 0.0
 #   instruct : temp 0.7 / top-p 0.80 / top-k 20 / min-p 0.0 / presence 1.5
@@ -837,8 +837,8 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27
 #   glissante) : à revoir si la PR expose des checkpoints pour l'état GDN.
 # jinja : template unsloth (developer role, systèmes fusionnés, tool calling
 #   au format <function=...><parameter=...>).
-# Vision : mmproj pas encore publié (repo image-text-to-text, dossier IQ1_S
-#   seul) et de toute façon incompatible MTP → texte seul.
+# Vision : mmproj-F16.gguf publié le 27/08 mais pas téléchargé, incompatible
+#   MTP de toute façon : texte seul.
 # MTP : la model card annonce une couche MTP (« MTP layer: 1, multi-step
 #   training ») ; la PR #27742 ne dit pas si elle est convertie (nextn). Section
 #   nommée -mtp-nothink pour les garde-fous de _preload_sanity, spec-type
@@ -854,7 +854,7 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27
 #   fusionnés du parc (DeepSeek V4, Qwen3-Coder-Next) sont INUTILISABLES sur
 #   ROCm0 (charabia), s'attendre au même et lire le texte généré.
 download_hf_shards qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
-  QWEN38_FLASH_NEXT_PATH="UD-IQ3_XXS/Qwen3.8-Flash-Next-UD-IQ3_XXS-00001-of-00003.gguf"
+  QWEN38_FLASH_NEXT_PATH="UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
 
 # Qwen3.8-Flash-Next-MTP nothink : spéculation MTP (à valider) + n-gram, sampling instruct
 # Aucune mesure encore (arch non supportée par le build, cf. ci-dessus).
