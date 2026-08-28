@@ -194,8 +194,13 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   le contexte natif entier pour chaque requête (au-delà : YaRN facteur 4,
 #   non activé).
 # parallel 4 : subagents des clients agentic (omp, opencode) sans
-#   sérialisation. Sur le Qwen3.6 35B-A3B (même arch) le MoE s'amortissait
-#   mal (2 requêtes = x1,43) : à mesurer --bench-parallel.
+#   sérialisation. --bench-parallel 28/08/2026 : 4 requêtes = 136,8 t/s
+#   agrégés (x1,93), 35,0 t/s par requête (le Qwen3.6 faisait x1,43 à 2).
+# Device : Vulkan0, --bench-devices 28/08/2026 (b10566, 3 passes) : 976 pp /
+#   70,9 tg contre ROCm0 931 / 57,6, justesse OK sur les deux, tour simulé
+#   44 s contre 54. --bench (bench-task) : 974 pp / 70,7 tg. --bench-cache :
+#   62 % au tour suivant, 64 % à l'identique, 0 % après édition (GDN, cf.
+#   en-tête). Sortie contrôlée à la main : réponse lisible, pas de warning.
 # cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
 # cache-reuse 0 : ignoré sur GDN (état récurrent) — la restauration de
 #   préfixe passe par cache-ram + ctx-checkpoints, au dernier checkpoint
