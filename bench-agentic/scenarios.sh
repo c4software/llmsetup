@@ -23,7 +23,19 @@ snap() {
     /^llamacpp:tokens_predicted_seconds_total /{gs=$2}
     END{printf "%s %s %s %s %s", pt+0, pc+0, gt+0, ps+0, gs+0}'
 }
-# mesure <nom> <verdict> <t0> <snap0> : imprime la ligne lisible et la ligne TSV
+# mesure <nom> <verdict> <t0> <snap0...> : imprime la ligne lisible et la ligne TSV
+#
+# Appel : mesure froid $v "$t0" $s0, avec $s0 NON quoté : les cinq compteurs
+# du snapshot de départ arrivent en cinq arguments séparés. Après le shift 3,
+# "$*" vaut donc exactement ces cinq champs (ne pas rajouter $s0 ici, il
+# serait compté deux fois et tous les deltas tomberaient à zéro).
+#
+# La ligne passée à awk est composée de 12 champs, dans cet ordre :
+#   $1..$5   snapshot de départ  (pt pc gt ps gs, cf. snap)
+#   $6..$10  snapshot d'arrivée  (mêmes compteurs, pris à l'instant)
+#   $11      t0   date +%s.%N au départ
+#   $12      t1   date +%s.%N à l'arrivée
+# Chaque delta arrivée - départ donne la consommation du scénario seul.
 mesure() {
   nom="$1" verdict="$2" t0="$3"; shift 3
   t1=$(date +%s.%N); s1=$(snap)
