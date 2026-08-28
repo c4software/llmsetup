@@ -28,7 +28,7 @@ régresser.
 ordre imposé :
 
 ```
-common → models → ini → preload → setup → bench → bench-agentic → spec → service → help
+common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
