@@ -70,7 +70,7 @@ résumer ou la supprimer, non.
 
 Détail, commandes et critères de passage dans la skill locale
 `.claude/skills/ajout-modele/SKILL.md` (à charger dès qu'on ajoute, remplace
-ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
+ou re-qualifie un modèle). Les sept étapes, dans l'ordre, une seule à la fois
 (un seul GPU). Machine de mesure distante : pousser, `git pull --ff-only`
 là-bas, lancer, ne rien commiter sur place.
 
@@ -109,6 +109,10 @@ là-bas, lancer, ne rien commiter sur place.
    device, prompt t/s, gen t/s, acceptance, source et prompt de mesure),
    avec machine, build llama.cpp, quant et date ; les chiffres résumés vont
    aussi dans le commentaire du bloc, seul endroit versionné.
+7. **`--bench-agentic <modèle> 3`** : le modèle en vraie boucle de tool
+   calls (pi en conteneur jetable, `bench-agentic/`, en direct sur `:8009`) :
+   appel froid à part, puis médianes par scénario (PASS, temps mur, part du
+   cache, prefill et décode réels). Ligne dans le README et le bloc.
 
 ## Où ajouter…
 

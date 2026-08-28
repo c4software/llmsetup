@@ -269,7 +269,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench.log` | `_bench_one` | `date modèle gguf device build prefill décode acceptance passes prefill_cache` ; lu par `bench_compare.py` |
 | `bench-parallel.log` | `cmd_bench_parallel` | `date modèle device build parallel_srv n agrégé décode_par_requête passes` |
 | `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
-| `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps` (une ligne par scénario) |
+| `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps` (une ligne par scénario et par passe, passe 0 = appel froid) |
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |

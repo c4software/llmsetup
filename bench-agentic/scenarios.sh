@@ -32,14 +32,28 @@ mesure() {
     part=(pt+pc)>0 ? 100*pc/(pt+pc) : 0
     pp=ps>0 ? pt/ps : 0; tg=gs>0 ? gt/gs : 0
     printf "  %.1f s mur, prompt %d tok (+%d du cache, %.0f %%), généré %d tok, prefill %.0f t/s, décode %.1f t/s\n", mur, pt, pc, part, gt, pp, tg
-    printf "TSV\t%s\t%s\t%.1f\t%d\t%d\t%d\t%.0f\t%.1f\n", nom, v, mur, pt, pc, gt, pp, tg }'
+    printf "TSV\t%s\t%s\t%s\t%.1f\t%d\t%d\t%d\t%.0f\t%.1f\n", ENVIRON["PASSE"], nom, v, mur, pt, pc, gt, pp, tg }'
 }
 run() { pi -p --no-session --provider local --model "$MODEL" "$@" 2>&1 | tail -n 20; }
 
 version=$(pi --version 2>/dev/null | head -1)
-echo "════ pi $version → $SERVER_URL | modèle $MODEL ════"
+PASSES="${PASSES:-1}"
+echo "════ pi $version → $SERVER_URL | modèle $MODEL | $PASSES passe(s) ════"
 rm -rf /work/* 2>/dev/null
 
+echo "0. Froid : première question de la conversation (prompt système de pi)"
+PASSE=0; export PASSE
+t0=$(date +%s.%N); s0=$(snap)
+out=$(run "Réponds en un seul mot : quelle est la capitale de la France ?")
+case "$out" in *Paris*) pass "$out"; v=PASS ;; *) fail "$out"; v=FAIL ;; esac
+mesure froid $v "$t0" $s0
+
+p=1
+while [ "$p" -le "$PASSES" ]; do
+PASSE=$p; export PASSE
+echo
+echo "──── passe $p/$PASSES ────"
+rm -rf /work/* 2>/dev/null
 echo "1. Réponse simple (sans outil)"
 t0=$(date +%s.%N); s0=$(snap)
 out=$(run "Réponds en un seul mot : quelle est la capitale de la France ?")
@@ -91,6 +105,9 @@ elif node slugify.test.js >/dev/null 2>&1; then pass "slugify.js corrigé — $(
 cd /work
 mesure bugfix $v "$t0" $s0
 
+p=$((p + 1))
+done
+
 echo
-echo "Résumé : $MODEL : $((5 - fails))/5"
+echo "Résumé : $MODEL : $((5 * PASSES + 1 - fails))/$((5 * PASSES + 1)) (froid compris)"
 [ "$fails" -eq 0 ] || exit 1

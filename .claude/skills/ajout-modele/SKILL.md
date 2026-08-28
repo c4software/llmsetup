@@ -5,7 +5,7 @@ description: Procédure complète d'ajout d'un modèle dans ce dépôt (lib/mode
 
 # Ajouter un modèle, de la fiche HF au tableau de perfs
 
-Six étapes, dans l'ordre (device avant spéculation : les seuils dépendent du
+Sept étapes, dans l'ordre (device avant spéculation : les seuils dépendent du
 backend). Chacune a un livrable et un critère de passage ;
 on ne passe pas à la suivante sans lui. Les commandes se lancent sur la
 machine qui héberge le service (`./setup-llm.sh`, service systemd user
@@ -272,6 +272,42 @@ Sources des chiffres : `logs/spec-tests.log` (TSV, colonnes spec-type et
 prompt), `logs/spec-batch.log` / `.tsv` (courbes), sortie de `--bench` et
 `--bench-devices`.
 
+## 7. bench-agentic : le modèle en vraie boucle de tool calls
+
+Le tableau de l'étape 6 mesure du débit sur des requêtes isolées ; il ne dit
+pas si le modèle tient une boucle agentic (tool calls bien formés, edit qui
+aboutit, test relancé jusqu'au vert) ni ce que coûte le cache au fil des
+tours. C'est l'objet de `--bench-agentic` : pi dans un conteneur jetable
+(`bench-agentic/`, docker requis sur la machine du service, réseau hôte),
+un appel froid mesuré à part (le prompt système de pi, ~17 k tokens, payé
+une fois par conversation) puis N passes de cinq scénarios (réponse simple,
+write+bash+read, edit, création d'un module + tests, correction d'un bug
+sans toucher au test), en direct sur `:8009`.
+
+```bash
+./setup-llm.sh --bench-agentic <modèle> 3
+```
+
+Par scénario : PASS/passes et médianes du temps mur, du prompt (et part
+servie du cache), des tokens générés, du prefill et du décode réels lus
+sur `/metrics?model=`. Trois passes, pas une : à temp > 0 le même bug se
+corrige en un tour ou en trois (Ornith, 28/08/2026 : 6,7 s contre 49 s
+sur le scénario 5, même jour, même build). Lire :
+
+- un scénario en échec = le modèle, pas le serveur : c'est le résultat,
+  à mettre en face de son débit ;
+- part du cache 89 à 98 % en continuation sur une arch récurrente (GDN),
+  et un décode qui chute avec le nombre de tours (les re-prefills au
+  dernier checkpoint sont comptés dedans) : c'est le coût du 62 % du
+  `--bench-cache`, vu du client ;
+- le décode médian des scénarios 2 à 5 doit rejoindre celui du `--bench` ;
+  s'il est nettement en dessous, le prefill mange le temps (prompt système
+  ou historique repayé), pas la génération.
+
+Critère de passage : 5/5 sur au moins une passe, une ligne dans le tableau
+de l'étape 6 (« Boucle agentic réelle » dans le README) avec pi, build,
+date, et le résumé dans le commentaire du bloc (verdict, part du cache).
+
 ## Déroulé quand la machine de mesure n'est pas celle du dépôt
 
 Le dépôt est aussi cloné sur la machine qui héberge le service : pousser la
@@ -286,7 +322,7 @@ sortie complète avant de conclure, pas seulement la dernière ligne.
 ## Clôture
 
 - `./tests/py-golden.sh` si un `py/*.py` a bougé, `bash -n` sur les
-  fichiers touchés.
+  fichiers touchés (`sh -n` sur `bench-agentic/*.sh`).
 - Commit par étape (bloc, puis réglages mesurés), message avec les
   chiffres. Les `.conf` et logs restent locaux (.gitignore) : ce qui doit
   survivre à la machine va dans le commentaire du bloc.

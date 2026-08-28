@@ -52,7 +52,7 @@ systemctl --user start llama-server
 | `--bench-parallel [modèle] [n] [passes]` | Débit sous `n` requêtes simultanées (défaut : le `parallel` du modèle) : agrégé et décode par requête contre 1 requête ; montre ce que vaut `parallel = N` et la file d'attente au-delà |
 | `--bench-cache [modèle]` | Efficacité du cache de prompt sur le pattern agentic (contexte froid, tour suivant, édition au premier tiers, requête identique) : part du prompt servie du cache et prefill à chaque fois ; c'est la mesure de `cache-ram` / `ctx-checkpoints` / `cache-reuse` |
 | `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : un device qui répond faux est exclu de `--bench-devices`, en plus du garde-fou anti-charabia |
-| `--bench-agentic [modèle]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue 5 scénarios en direct sur llama-server ; par scénario PASS/FAIL, temps mur, tokens de prompt (part du cache), générés, prefill et décode t/s réels |
+| `--bench-agentic [modèle] [passes]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels) |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
 | `--list-devices` | Backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
@@ -75,7 +75,7 @@ systemctl --user start llama-server
 ./setup-llm.sh --bench-parallel <m>   # ce que vaut parallel = N
 ./setup-llm.sh --bench-cache <m>      # part du prompt repayée à chaque tour (agentic)
 ./setup-llm.sh --bench-load <m>       # coût d'une bascule LRU
-./setup-llm.sh --bench-agentic <m>    # vraie boucle de tool calls (pi), PASS/FAIL et t/s réels
+./setup-llm.sh --bench-agentic <m> 3  # vraie boucle de tool calls (pi), PASS/FAIL et t/s réels
 ./setup-llm.sh --update qwen3.8-27b   # après un re-upload unsloth
 ./setup-llm.sh --bench all            # après chaque mise à jour de llama-cpp : régressions
 ```
@@ -126,7 +126,7 @@ laquelle lancer selon le rôle du modèle.
 | `--bench-sanity [modèle\|all]` | Le backend produit-il un texte juste ? | recopie exacte d'un code (`prompts/bench-sanity.txt`), trivial pour ne tester que le backend ; `--bench-devices` l'applique avant chaque device, en plus du garde-fou anti-charabia de `timings.py` (mot dominant, mots distincts, répétition périodique de caractères) |
 | `--bench-parallel [modèle] [n] [passes]` | Que vaut `parallel = N` ? | salves de 1 puis n requêtes simultanées (spec-test.txt, 400 tokens), débit agrégé et décode médian par requête ; `parallel` réel lu sur `/v1/models`, au-delà les requêtes font la queue |
 | `--bench-cache [modèle]` | Combien du prompt est repayé à chaque tour ? | quatre requêtes : contexte froid, tour suivant, édition au premier tiers (préfixe commun 2/3, au-dessus du seuil `slot-prompt-similarity 0.5`), requête identique ; part servie du cache (`cache_n`) et prefill |
-| `--bench-agentic [modèle]` | Que vaut le modèle en boucle agentic ? | pi dans un conteneur (`bench-agentic/`, réseau hôte) joue 5 scénarios de tool calls en direct sur `:8009` ; delta de `/metrics?model=` par scénario : prompt (part du cache), généré, prefill et décode t/s, plus PASS/FAIL et temps mur |
+| `--bench-agentic [modèle] [passes]` | Que vaut le modèle en boucle agentic ? | pi dans un conteneur (`bench-agentic/`, réseau hôte) joue un appel froid puis N passes de 5 scénarios de tool calls en direct sur `:8009` ; delta de `/metrics?model=` par scénario : prompt (part du cache), généré, prefill et décode t/s, plus PASS et temps mur, médianes sur les passes |
 | `--bench-load [modèle\|all]` | Que coûte un modèle à la demande ? | restart du service, première requête chronométrée (chargement + premier token), puis TTFT à chaud |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | Ce réglage vaut-il mieux que celui-là ? | chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée au ini, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
 | `tools/bench-depth.sh <gguf>` | Et à 32k de contexte ? | `llama-bench -d`, hors service, prefill et décode à 0 / 16k / 32k par device, tour simulé par profondeur |
