@@ -1,5 +1,5 @@
 # lib/service.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → bench → bench-agentic → spec → service → help
 
 # =============================================================================
 # start
