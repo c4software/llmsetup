@@ -6,7 +6,7 @@
 # /metrics?model= de llama-server (tokens de prompt, part servie du cache,
 # tokens générés, prefill et décode t/s). Tout se passe dans /work du
 # conteneur. Les lignes "TSV<tab>..." sont reprises par cmd_bench_agentic
-# (lib/bench.sh) pour le journal logs/bench-agentic.log.
+# (lib/bench/bench-agentic.sh) pour le journal logs/bench-agentic.log.
 set -u
 cd /work
 fails=0

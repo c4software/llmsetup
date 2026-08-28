@@ -67,12 +67,12 @@ common → models → ini → preload → setup → bench → bench-devices → 
 - `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
-- `bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`), les
+- `bench/bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`), les
   sélections (`_bench_presets`, `_bench_select_presets`, `_bench_select_one`)
   et `cmd_bench` (mesure du serveur en l'état, journal `logs/bench.log` +
-  comparaison au run précédent). Une mesure = un module `bench-*.sh` qui
+  comparaison au run précédent). Une mesure = un module `bench/bench-*.sh` qui
   réutilise ce noyau :
-- `bench-devices.sh` : `cmd_bench_devices` (comparaison automatique des
+- `bench/bench-devices.sh` : `cmd_bench_devices` (comparaison automatique des
   devices d'un modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré +
   restart par device, verdict = temps d'un tour d'usage simulé
   `PP/prefill + GEN/décode` (profil `BENCH_PROFILE_PP`/`BENCH_PROFILE_GEN`,
@@ -80,15 +80,15 @@ common → models → ini → preload → setup → bench → bench-devices → 
   vainqueur écrit dans `bench-devices.conf` via `_bench_save_device`),
   `cmd_bench_sanity` / `_bench_sanity_one` (justesse, `py/check_answer.py`,
   appliquée par `cmd_bench_devices` avant chaque device), `cmd_list_devices`.
-- `bench-parallel.sh` : `cmd_bench_parallel` (salves de 1 puis n requêtes
+- `bench/bench-parallel.sh` : `cmd_bench_parallel` (salves de 1 puis n requêtes
   simultanées, `parallel` réel lu sur `/v1/models`, agrégat par
   `py/parallel_agg.py`).
-- `bench-cache.sh` : `cmd_bench_cache` (quatre requêtes froid / suite /
+- `bench/bench-cache.sh` : `cmd_bench_cache` (quatre requêtes froid / suite /
   édition au premier tiers / identique, part servie du cache par
   `py/cache_stats.py`).
-- `bench-load.sh` : `cmd_bench_load` (restart + première requête
+- `bench/bench-load.sh` : `cmd_bench_load` (restart + première requête
   chronométrée, TTFT à chaud).
-- `bench-agentic.sh` : `cmd_bench_agentic` (un client réel, pi, en conteneur
+- `bench/bench-agentic.sh` : `cmd_bench_agentic` (un client réel, pi, en conteneur
   jetable `bench-agentic/`, appel froid puis N passes de cinq scénarios de
   tool calls en direct sur le serveur ; delta de `/metrics?model=` par
   scénario, médianes en awk, journal `logs/bench-agentic.log`).
