@@ -307,6 +307,20 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 | lfm2.5-2.6b | 4 | 67,4 t/s | 205 t/s agrégés (x3,06), 52 t/s par requête | idem |
 | ornith-1.5-35b-a3b | 4 | 70,7 t/s | 136,8 t/s agrégés à 4 (x1,93), 35 t/s par requête | le MoE s'amortit moins bien qu'un dense : chaque requête route ses propres experts (le Qwen3.6 qu'il remplace faisait x1,43 à 2) |
 
+### Boucle agentic réelle (--bench-agentic)
+
+pi 0.84.3 en conteneur, 5 scénarios de tool calls en direct sur `:8009`, bigchuck, b10566, 28/08/2026 :
+
+| Modèle | Verdict | Scénario | Mur | Prompt (part du cache) | Généré | Prefill | Décode |
+|---|---|---|---|---|---|---|---|
+| ornith-1.5-35b-a3b | 5/5 | simple | 7,8 s | 17 690 tok (0 %) | 2 | 607 t/s | n/s |
+| | | write+bash+read | 5,2 s | 6 498 tok (98 %) | 129 | 178 t/s | 31,7 t/s |
+| | | edit | 7,4 s | 6 623 tok (91 %) | 173 | 472 t/s | 31,2 t/s |
+| | | création module + tests | 15,4 s | 5 950 tok (89 %) | 1 282 | 501 t/s | 37,7 t/s |
+| | | bug sans toucher au test | 49,0 s | 64 916 tok (72 %) | 382 | 448 t/s | 8,2 t/s |
+
+Lecture : le premier appel paie le prompt système de pi (~17 k tokens) ; ensuite le cache sert 89 à 98 % tant que la conversation ne fait que s'allonger. Le scénario 5 (plusieurs tours, 65 k tokens de prompt cumulés) montre le coût GDN : 28 % repayés et un décode effectif à 8 t/s, la mesure inclut les re-prefills partiels au dernier checkpoint.
+
 ### Réglages n-gram alternatifs
 
 `--spec-ab`, 27B, n-max 6, spec-refactor.txt, 4 passes :

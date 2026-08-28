@@ -201,6 +201,8 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   44 s contre 54. --bench (bench-task) : 974 pp / 70,7 tg. --bench-cache :
 #   62 % au tour suivant, 64 % à l'identique, 0 % après édition (GDN, cf.
 #   en-tête). Sortie contrôlée à la main : réponse lisible, pas de warning.
+#   --bench-agentic 28/08/2026 (pi 0.84.3) : 5/5, cache 89 à 98 % en
+#   continuation, 72 % sur le scénario multi-tours (65 k tokens cumulés).
 # cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
 # cache-reuse 0 : ignoré sur GDN (état récurrent) — la restauration de
 #   préfixe passe par cache-ram + ctx-checkpoints, au dernier checkpoint
