@@ -858,13 +858,15 @@ cmd_list_devices() {
 # Scénarios repris d'envTest (llm-proxy), sans le proxy. Un scénario peut
 # échouer par la faute du modèle, pas du serveur : c'est le résultat, il se
 # lit avec les t/s. Un appel « froid » est mesuré à part avant les passes :
-# c'est le prompt système de pi (~17 k tokens, payé une fois par
-# conversation) ; mesuré le 28/08/2026 sur Ornith : 7,8 s et un décode
-# apparent à 31 t/s sur le scénario suivant quand il est mélangé, 70 t/s
-# une fois isolé. Puis N passes des cinq scénarios et les médianes par
-# scénario : à temp > 0 le modèle corrige un bug en un tour ou en trois
-# (49 s contre 6,7 s sur le même scénario, même jour), une passe seule ne
-# dit rien, 3 est un bon défaut de qualification. Journal :
+# la première question de la conversation, qui paie le prompt système de
+# pi (1,5 k tokens) si le serveur ne l'a pas déjà en cache-ram (mesuré
+# 28/08/2026 sur Ornith : 66 % servis du cache d'un conteneur à l'autre,
+# le serveur garde le préfixe ; le tout premier run avait payé 17,7 k
+# tokens, artefact de première exécution de pi, non reproduit). Puis N
+# passes des cinq scénarios et les médianes par scénario : à temp > 0 le
+# modèle corrige un bug en un tour ou en trois (49 s contre 6,7 s sur le
+# même scénario, même jour), une passe seule ne dit rien, 3 est un bon
+# défaut de qualification. Journal :
 # logs/bench-agentic.log (TSV, une ligne par scénario et par passe, build).
 # =============================================================================
 BENCH_AGENTIC_LOG="$LOG_DIR/bench-agentic.log"

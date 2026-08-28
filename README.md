@@ -309,17 +309,17 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 
 ### Boucle agentic réelle (--bench-agentic)
 
-pi 0.84.3 en conteneur, 5 scénarios de tool calls en direct sur `:8009`, bigchuck, b10566, 28/08/2026 :
+pi 0.84.3 en conteneur, appel froid puis 3 passes de 5 scénarios de tool calls en direct sur `:8009`, médianes, bigchuck, b10566, 28/08/2026 :
 
 | Modèle | Verdict | Scénario | Mur | Prompt (part du cache) | Généré | Prefill | Décode |
 |---|---|---|---|---|---|---|---|
-| ornith-1.5-35b-a3b | 5/5 | simple | 7,8 s | 17 690 tok (0 %) | 2 | 607 t/s | n/s |
-| | | write+bash+read | 5,2 s | 6 498 tok (98 %) | 129 | 178 t/s | 31,7 t/s |
-| | | edit | 7,4 s | 6 623 tok (91 %) | 173 | 472 t/s | 31,2 t/s |
-| | | création module + tests | 15,4 s | 5 950 tok (89 %) | 1 282 | 501 t/s | 37,7 t/s |
-| | | bug sans toucher au test | 49,0 s | 64 916 tok (72 %) | 382 | 448 t/s | 8,2 t/s |
+| ornith-1.5-35b-a3b | 16/16 | froid (prompt système de pi) | 1,5 s | 1 523 tok (66 %) | 2 | 820 t/s | n/s |
+| | 3/3 | write+bash+read | 2,8 s | 4 833 tok (98 %) | 133 | 228 t/s | 72,3 t/s |
+| | 3/3 | edit | 4,1 s | 6 605 tok (91 %) | 181 | 518 t/s | 71,0 t/s |
+| | 3/3 | création module + tests | 11,0 s | 5 876 tok (89 %) | 666 | 525 t/s | 70,9 t/s |
+| | 3/3 | bug sans toucher au test | 7,2 s | 9 447 tok (91 %) | 361 | 508 t/s | 71,0 t/s |
 
-Lecture : le premier appel paie le prompt système de pi (~17 k tokens) ; ensuite le cache sert 89 à 98 % tant que la conversation ne fait que s'allonger. Le scénario 5 (plusieurs tours, 65 k tokens de prompt cumulés) montre le coût GDN : 28 % repayés et un décode effectif à 8 t/s, la mesure inclut les re-prefills partiels au dernier checkpoint.
+Lecture : le décode en boucle d'outils (71 t/s) rejoint le `--bench` (70,7) ; le cache sert 89 à 98 % tant que la conversation ne fait que s'allonger, et le préfixe de pi survit d'un conteneur à l'autre (cache-ram). La variance est celle du modèle : le scénario 5 a pris 18 s (1 069 tokens, trois tours) sur une passe et 7 s sur les deux autres ; le tout premier run du jour l'avait fait en 49 s et 65 k tokens de prompt cumulés (28 % repayés, décode apparent 8 t/s : le coût GDN quand les tours s'enchaînent).
 
 ### Réglages n-gram alternatifs
 

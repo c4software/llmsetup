@@ -279,8 +279,9 @@ pas si le modèle tient une boucle agentic (tool calls bien formés, edit qui
 aboutit, test relancé jusqu'au vert) ni ce que coûte le cache au fil des
 tours. C'est l'objet de `--bench-agentic` : pi dans un conteneur jetable
 (`bench-agentic/`, docker requis sur la machine du service, réseau hôte),
-un appel froid mesuré à part (le prompt système de pi, ~17 k tokens, payé
-une fois par conversation) puis N passes de cinq scénarios (réponse simple,
+un appel froid mesuré à part (la première question de la conversation :
+prompt système de pi, 1,5 k tokens, payé une fois par conversation, sauf si
+le serveur l'a encore en cache-ram) puis N passes de cinq scénarios (réponse simple,
 write+bash+read, edit, création d'un module + tests, correction d'un bug
 sans toucher au test), en direct sur `:8009`.
 
@@ -300,9 +301,10 @@ sur le scénario 5, même jour, même build). Lire :
   et un décode qui chute avec le nombre de tours (les re-prefills au
   dernier checkpoint sont comptés dedans) : c'est le coût du 62 % du
   `--bench-cache`, vu du client ;
-- le décode médian des scénarios 2 à 5 doit rejoindre celui du `--bench` ;
-  s'il est nettement en dessous, le prefill mange le temps (prompt système
-  ou historique repayé), pas la génération.
+- le décode médian des scénarios 2 à 5 doit rejoindre celui du `--bench`
+  (Ornith, 28/08/2026 : 71 t/s partout contre 70,7 au `--bench`) ; s'il
+  est nettement en dessous, le prefill mange le temps (historique repayé),
+  pas la génération.
 
 Critère de passage : 5/5 sur au moins une passe, une ligne dans le tableau
 de l'étape 6 (« Boucle agentic réelle » dans le README) avec pi, build,
