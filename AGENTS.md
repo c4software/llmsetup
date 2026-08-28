@@ -121,7 +121,8 @@ là-bas, lancer, ne rien commiter sur place.
   procédure ci-dessus. L'ordre de déclaration est l'ordre d'émission du ini.
   Les garde-fous de `_preload_sanity` sont dérivés (même GGUF, suffixe
   `-mtp`) : nommer la variante MTP `<clé>-mtp`, rien à coder.
-- **Une mesure** : `cmd_bench_*` ou `cmd_spec_*` dans `lib/bench.sh` (`lib/bench-agentic.sh` pour le bench client) /
+- **Une mesure** : `cmd_bench_*` dans son propre `lib/bench-<mesure>.sh`
+  (noyau `_bench_one` et sélections dans `lib/bench.sh`) ou `cmd_spec_*` dans
   `lib/spec.sh`, l'analyse dans un `py/*.py` à sorties contractuelles
   (lignes `CLÉ=` consommées par le bash, fixture + référence dans
   `tests/py-golden.sh`), un journal TSV dans `logs/` avec le build

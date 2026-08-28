@@ -67,21 +67,31 @@ common → models → ini → preload → setup → bench → bench-devices → 
 - `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
-- `bench.sh` : `cmd_bench` (mesure API du serveur en l'état, journal
-  `logs/bench.log` + comparaison au run précédent), `cmd_bench_parallel`
-  (salves de 1 puis n requêtes simultanées, `parallel` réel lu sur
-  `/v1/models`, agrégat par `py/parallel_agg.py`), `cmd_bench_cache` (quatre
-  requêtes froid / suite / édition au milieu / identique, part servie du cache
-  par `py/cache_stats.py`), `cmd_bench_sanity` / `_bench_sanity_one`
-  (justesse, `py/check_answer.py`, appliquée par `cmd_bench_devices` avant
-  chaque device), `cmd_bench_load` (restart + première requête chronométrée,
-  TTFT à chaud), `_bench_one`,
-  sélections, `cmd_bench_devices` (comparaison automatique des devices d'un
-  modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré + restart par
-  device, verdict = temps d'un tour d'usage simulé `PP/prefill + GEN/décode`
-  (profil `BENCH_PROFILE_PP`/`BENCH_PROFILE_GEN`, défaut 2000/3000 ; à <2 %
-  d'écart le device par défaut est préféré), vainqueur écrit dans
-  `bench-devices.conf` via `_bench_save_device`), `cmd_list_devices`.
+- `bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`), les
+  sélections (`_bench_presets`, `_bench_select_presets`, `_bench_select_one`)
+  et `cmd_bench` (mesure du serveur en l'état, journal `logs/bench.log` +
+  comparaison au run précédent). Une mesure = un module `bench-*.sh` qui
+  réutilise ce noyau :
+- `bench-devices.sh` : `cmd_bench_devices` (comparaison automatique des
+  devices d'un modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré +
+  restart par device, verdict = temps d'un tour d'usage simulé
+  `PP/prefill + GEN/décode` (profil `BENCH_PROFILE_PP`/`BENCH_PROFILE_GEN`,
+  défaut 2000/3000 ; à <2 % d'écart le device par défaut est préféré),
+  vainqueur écrit dans `bench-devices.conf` via `_bench_save_device`),
+  `cmd_bench_sanity` / `_bench_sanity_one` (justesse, `py/check_answer.py`,
+  appliquée par `cmd_bench_devices` avant chaque device), `cmd_list_devices`.
+- `bench-parallel.sh` : `cmd_bench_parallel` (salves de 1 puis n requêtes
+  simultanées, `parallel` réel lu sur `/v1/models`, agrégat par
+  `py/parallel_agg.py`).
+- `bench-cache.sh` : `cmd_bench_cache` (quatre requêtes froid / suite /
+  édition au premier tiers / identique, part servie du cache par
+  `py/cache_stats.py`).
+- `bench-load.sh` : `cmd_bench_load` (restart + première requête
+  chronométrée, TTFT à chaud).
+- `bench-agentic.sh` : `cmd_bench_agentic` (un client réel, pi, en conteneur
+  jetable `bench-agentic/`, appel froid puis N passes de cinq scénarios de
+  tool calls en direct sur le serveur ; delta de `/metrics?model=` par
+  scénario, médianes en awk, journal `logs/bench-agentic.log`).
 - `spec.sh` : `cmd_spec_test` (3e argument = prompt, journalisé),
   `cmd_spec_tune`, `cmd_spec_ngram_tune` (courbe `llama-bench` service
   arrêté, raffinement en boucle bornée sur les `STEP_LO/HI` de
