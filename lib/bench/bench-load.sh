@@ -47,9 +47,18 @@ cmd_bench_load() {
       if [[ $t -ge 120 ]]; then error "llama-server ne répond pas après 120 s"; fi
     done
     body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$p" 1 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
+    local code
     t0="$(date +%s.%N)"
-    curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body" -o /dev/null || true
+    code="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body" \
+      -o /dev/null -w '%{http_code}' || echo 000)"
     t1="$(date +%s.%N)"
+    # Un modèle que le build ne sait pas charger (arch absente de libllama)
+    # répond une erreur en une fraction de seconde : ne pas journaliser ce
+    # temps comme un chargement. _bench_presets ne filtre que sur le GGUF.
+    if [[ "$code" != 200 ]]; then
+      warn "  '$p' : le routeur n'a pas chargé le modèle (HTTP $code), exclu du récap."
+      continue
+    fi
     froid="$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.1f", b-a}')"
     t0="$(date +%s.%N)"
     curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body" -o /dev/null || true

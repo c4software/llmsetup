@@ -84,7 +84,8 @@ KNOWN_FILES=()
 #   PRÉCÉDER le premier corps qui la référence), ajoute le chemin à KNOWN_FILES
 #   et enregistre un téléchargement (une ligne _dl par fichier).
 #   Plusieurs VAR= sur un appel = plusieurs fichiers du même repo/dossier
-#   (ex : modèle de base + drafter spéculatif externe).
+#   (ex : modèle de base + drafter spéculatif externe). <fichier> peut être en
+#   sous-dossier du repo (ex : MTP/x.gguf), il est recréé tel quel sous <dossier>.
 download_hf() {
   local dossier="$1" repo="$2" spec var fichier chemin
   shift 2
@@ -739,7 +740,7 @@ spec-ngram-map-k-min-hits = 2
 jinja            = true
 parallel         = 1"
 
-groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27742, mergée le 27/08/2026 dans b10661 ; absente du paquet Arch 0.3.0 = b10621, attend la prochaine coupe stable) ---"
+groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661 minimum, PR #27742) ---"
 
 # Qwen3.8-Flash-Next (Qwen) : MoE 125B (6B actifs, 512 experts, 10 routés + 1
 # partagé) + 51B d'embeddings n-gram (bigrammes/trigrammes à la couche 2, table
@@ -747,17 +748,13 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27
 # Attention (QSA, budget 2048, ratio 4) + hyper-connections, vision Qwen3-VL,
 # ctx natif 256K (1M via YaRN). Shards UD-IQ4_XS (93,7 Go).
 # SUPPORT llama.cpp : general.architecture = qwen4exp, PR #27742 (unsloth,
-#   ouverte le 26/08, MERGÉE le 27/08 à 19:32 UTC, dans b10661 : convertisseur,
-#   graphe texte, QSA avec un troisième cache dans llama_memory_hybrid_idx,
-#   vision, 3 correctifs de llama-quant). Le paquet Arch llama-cpp est passé en
-#   0.3.0-1 le 30/08 (b10621 sur bigchuck), TOUJOURS sans qwen4exp : v0.3.0 est
-#   taguée le 25/08 et le commit de merge 6c84c7d5d8 est 39 commits devant elle.
-#   Le PKGBUILD source '#tag=v${pkgver}', donc les tags stables semver et non
-#   les pre-releases bXXXXX : l'attente porte sur la prochaine coupe stable
-#   (aucune après v0.3.0 au 04/09, upstream à b10797), pas sur un rebuild.
-#   Ne PAS surveiller le changement de pkgver, il a déjà déclenché à tort sur
-#   0.3.0. Le seul contrôle fiable :
+#   mergée le 27/08/2026 dans b10661 : convertisseur, graphe texte, QSA avec un
+#   troisième cache dans llama_memory_hybrid_idx, vision, 3 correctifs de
+#   llama-quant). Le paquet Arch llama-cpp suit les tags stables semver
+#   ('#tag=v${pkgver}'), pas les pre-releases bXXXXX : un changement de pkgver
+#   ne prouve rien (0.3.0 = b10621, sans qwen4exp). Le seul contrôle fiable :
 #   strings /usr/lib/libllama.so* | grep -x qwen4exp
+#   Suivi de l'attente et des jalons : PLAN-qwen3.8-flash-next.md.
 # Quant : grille HF complète depuis le 27/08 (uploads 15:01 à 15:16 UTC) :
 #   UD-IQ1_S 72,5 / UD-Q2_K_XL 78,9 / UD-IQ3_XXS 82,0 / UD-Q3_K_XL 90,0 /
 #   UD-IQ4_XS 93,7 / UD-Q4_K_XL 111,3 Go (3 shards jusqu'à l'IQ4_XS, 4 pour
@@ -770,9 +767,8 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27
 #   ré-upload redouté : n'a PAS eu lieu, vérifié le 04/09 (tailles des 3 shards
 #   inchangées, 10 946 624 / 49 835 229 856 / 43 836 407 744 octets). Les
 #   commits HF du 01/09 n'ont ajouté que le dossier MTP/. Pas de --update.
-# Sampling officiel (guide unsloth + model card) :
-#   thinking : temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 / presence 0.0
-#   instruct : temp 0.7 / top-p 0.80 / top-k 20 / min-p 0.0 / presence 1.5
+# Sampling officiel (guide unsloth + model card) : même table que Qwen3.8-27B
+#   (cf. l'en-tête du bloc Qwen3.8-27B plus haut), thinking et instruct.
 # Thinking ON par défaut (<think>), reasoning_effort xhigh (défaut) / medium /
 #   low, "high" est replié sur xhigh par le template ; enable_thinking false =
 #   nothink. preserve_thinking (garde les traces des tours précédents) : true
@@ -789,23 +785,19 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27
 #   au format <function=...><parameter=...>).
 # Vision : mmproj-F16.gguf publié le 27/08 mais pas téléchargé, incompatible
 #   MTP de toute façon : texte seul.
-# MTP : tranché le 04/09, la tête n'est PAS dans le GGUF principal. Depuis le
-#   01/09 unsloth la publie en sidecar dans MTP/ du repo HF (recommandé
-#   mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf, 2,60 Go, annoncé 1,3x à 1,7x ;
-#   les variantes « shared- » empruntent embeddings et projection de sortie au
-#   modèle hôte, ~1,3 Go de moins que les autonomes). Leur README est explicite :
-#   un build ggml-org standard ne peut rien en faire, mainline n'a ni graphe MTP
-#   pour qwen4exp, ni emprunt de tenseurs entre modèles, ni --spec-type
-#   draft-mtp pour cette arch. C'est la PR #28243, encore en DRAFT au 04/09.
-#   Donc draft-mtp RETIRÉ du spec-type et section renommée -nothink (au lieu de
-#   -mtp-nothink), conformément au repli prévu ici le 27/08. Deux jalons
-#   distincts désormais : (1) tag stable avec qwen4exp = modèle qualifiable en
-#   n-gram seul, étapes 3 à 7 de la skill déroulables ; (2) merge de #28243 =
-#   remettre draft-mtp, re-nommer en -mtp-nothink, télécharger le sidecar et
-#   refaire l'étape 4. Sur cette arch (GDN + MoE 512 experts, la même
-#   famille que Qwen3-Coder-Next) attendre un gros surcoût fixe par pas
-#   spéculatif (sauvegarde/restauration de l'état récurrent) : les petits
-#   drafts n-gram peuvent être perdants, mesurer 7 ET 47 au --spec-ngram-tune.
+# MTP : la tête n'est PAS dans le GGUF principal (retirée par unsloth le
+#   01/09), elle est publiée en sidecar dans MTP/ du repo HF (recommandé
+#   mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf, 2,60 Go ; les variantes
+#   « shared- » empruntent embeddings et projection de sortie au modèle hôte).
+#   Mainline ne sait pas la charger : ni graphe MTP pour qwen4exp, ni emprunt de
+#   tenseurs entre modèles, ni --spec-type draft-mtp pour cette arch, c'est la
+#   PR #28243. Donc draft-mtp RETIRÉ et section -nothink ; le retour du MTP
+#   (sidecar + clé de drafter externe + -mtp-nothink) est le jalon 2 du PLAN.
+#   Sur cette arch (GDN + MoE 512 experts, la même famille que Qwen3-Coder-Next)
+#   attendre un gros surcoût fixe par pas spéculatif (sauvegarde/restauration de
+#   l'état récurrent) : les petits drafts n-gram peuvent être perdants. Le tune
+#   ne mesure que les deux candidats issus de la courbe, comparer 7 et 47 par
+#   --spec-ab avec spec-type=none en référence.
 # parallel 1 : c'était la contrainte MTP, tombée avec le retrait de draft-mtp.
 #   Gardé à 1 quand même : 93,7 Go de poids sur 124 Go, un deuxième slot de KV
 #   à 128k mangerait la marge. À rouvrir seulement si la mesure le réclame.

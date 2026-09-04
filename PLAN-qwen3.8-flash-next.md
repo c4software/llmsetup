@@ -15,8 +15,10 @@ révisé le 04/09/2026.
   le ré-upload redouté n'a pas eu lieu : pas de `--update` à prévoir.
   ATTENTION : `models.ini` de bigchuck contient encore la section sous son
   ANCIEN nom `qwen3.8-flash-next-mtp-nothink` ; il sera régénéré au prochain
-  `--preload`. Vérifier au passage `preload.conf` et `bench-devices.conf`, qui
-  peuvent référencer l'ancien nom.
+  `--preload`. `bench-devices.conf` n'est pas concerné (clé = dossier GGUF,
+  pas le nom de section). `preload.conf` : si l'ancien nom y figure, la ligne
+  est ignorée en silence puis supprimée au `--preload` ; re-cocher la section
+  `-nothink` à ce moment-là si on veut le modèle préchargé.
 - bigchuck est sur la branche `qwen3.8-flash-next`. La branche a été mise à
   jour depuis master par un MERGE (pas un rebase) le 04/09, précisément pour
   que le `git pull --ff-only` de bigchuck continue de fonctionner.
@@ -27,7 +29,7 @@ révisé le 04/09/2026.
 - Décisions prises : quant IQ4_XS (validée, pas le Q4_K_XL à 111 Go) ; pas de
   test DFlash2 ni DFlash v1 pour l'instant.
 - Surveillance du paquet : bot Hermes, source
-  https://archlinux.org/packages/extra/x86_64/llama-cpp/json/ — réglé le 27/08
+  https://archlinux.org/packages/extra/x86_64/llama-cpp/json/, réglé le 27/08
   sur « pkgver != 0.2.0 ». À RECONFIGURER : ce test a déclenché à tort le 30/08
   sur 0.3.0, qui ne contient pas `qwen4exp`. Une alerte reste utile comme
   déclencheur, mais elle ne vaut que comme invitation à lancer le `strings` de
@@ -68,14 +70,17 @@ Sur bigchuck, dans `~/llm/llmsetup` (branche `qwen3.8-flash-next`,
 2. Régénérer le ini sous le NOUVEAU nom de section :
    `cp ~/models/models.ini /tmp/models.ini.avant`, `./setup-llm.sh --preload`,
    `diff` : la section `-mtp-nothink` doit disparaître au profit de
-   `-nothink`. Corriger `preload.conf` / `bench-devices.conf` s'ils citent
-   l'ancien nom. Pas de `--update` : les shards HF sont inchangés.
-3. `systemctl --user restart llama-server`, charger le modèle, puis
-   `curl localhost:8009/v1/models` et vérifier `--spec-type ngram-map-k` dans
-   `status.args` (l'étape 2 de la skill, volet MTP, est sans objet à ce jalon).
-   Contrôle de justesse à la main (curl chat/completions, fonction Python
-   inverse une liste chaînée) et `journalctl --user -u llama-server` sans
-   warn/error/CPU fallback.
+   `-nothink`. Rien à corriger dans les .conf (voir « État ») : au plus
+   re-cocher `-nothink` dans le sélecteur de `--preload`. Pas de `--update` :
+   les shards HF sont inchangés.
+3. `systemctl --user restart llama-server`, puis une requête
+   chat/completions sur `qwen3.8-flash-next-nothink` (le routeur ne charge
+   qu'à la première requête, et `status.args` n'existe qu'une fois le modèle
+   chargé) : autant en faire le contrôle de justesse (fonction Python qui
+   inverse une liste chaînée). Ensuite `curl localhost:8009/v1/models` et
+   vérifier `--spec-type ngram-map-k` dans `status.args` (l'étape 2 de la
+   skill, volet MTP, est sans objet à ce jalon), et
+   `journalctl --user -u llama-server` sans warn/error/CPU fallback.
 4. Étape 3 (device) : `./setup-llm.sh --bench-devices qwen3.8-flash-next-nothink`.
    ROCm0 suspect (DeepSeek V4 et Qwen3-Coder-Next y sortent du charabia) :
    lire le texte généré, pas seulement les t/s. Optionnel pour l'agentic long :
@@ -85,8 +90,11 @@ Sur bigchuck, dans `~/llm/llmsetup` (branche `qwen3.8-flash-next`,
    Sans MTP, `--spec-test` affiche la mesure mais ne l'écrit pas dans
    `logs/spec-tests.log` (pas de n-max) : noter les chiffres à la main.
    Attendre un surcoût fixe par pas spéculatif (GDN + MoE 512 experts, comme
-   Qwen3-Coder-Next où size_m 7 a divisé le débit par 2) : mesurer 7 ET 47,
-   et `--spec-ab` avec `spec-type=none` en référence si le tune ne la fait pas.
+   Qwen3-Coder-Next où size_m 7 a divisé le débit par 2). Le tune ne mesure
+   que les deux candidats issus de la courbe (pas des valeurs au choix), donc
+   comparer explicitement 7, 47 et l'absence de spéculation :
+   `./setup-llm.sh --spec-ab qwen3.8-flash-next-nothink 4 - "spec-type=none" "spec-ngram-map-k-size-m=7" "spec-ngram-map-k-size-m=47"`
+   et ne garder `ngram-map-k` dans le bloc que s'il bat `none`.
 7. Étape 6 : `./setup-llm.sh --bench qwen3.8-flash-next-nothink 3`,
    `--bench-cache` (part du prompt repayée, état récurrent : attendre 62 à
    66 %), `--bench-load` (bascule LRU de 94 Go : attendre > 90 s).
@@ -106,11 +114,19 @@ apporte le graphe MTP `qwen4exp`, l'emprunt de tenseurs entre modèles et
 tag stable :
 
 1. Déclarer le sidecar dans le bloc (`download_hf` sur le même repo,
-   `MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`, 2,60 Go) et le télécharger.
-   La variante `shared-` emprunte embeddings et projection de sortie au modèle
-   hôte ; les fichiers autonomes ne servent qu'aux builds sans cet emprunt.
+   `QWEN38_FLASH_NEXT_MTP_PATH="MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"`,
+   2,60 Go ; `_dl` recrée le sous-dossier `MTP/` sous le dossier modèle depuis
+   le 04/09) et le télécharger par `--setup`. La variante `shared-` emprunte
+   embeddings et projection de sortie au modèle hôte ; les fichiers autonomes
+   ne servent qu'aux builds sans cet emprunt.
 2. Remettre `spec-type = ngram-map-k,draft-mtp` et `spec-draft-n-max = 4`,
-   renommer la section en `qwen3.8-flash-next-mtp-nothink`.
+   ET transmettre le sidecar à llama-server : les blocs MTP existants n'ont
+   pas de clé pour ça (tête embarquée dans leur GGUF). Clé attendue
+   `spec-draft-model = $QWEN38_FLASH_NEXT_MTP_PATH` (le seul précédent de
+   drafter externe, cf. commentaire laguna), À CONFIRMER sur la PR #28243
+   avant le restart : sans elle llama-server ne trouve pas de tête MTP et le
+   « n/a » de l'étape 3 arrive après un chargement de 94 Go sans en donner la
+   cause. Renommer la section en `qwen3.8-flash-next-mtp-nothink`.
 3. Vérifier l'acceptance (`--spec-test ... 2`, pas de « n/a »), puis refaire
    l'étape 4 de la skill (`--spec-tune 2,4,6,8 4`) et re-arbitrer l'étape 5,
    la courbe n-gram change quand le MTP occupe le batch.

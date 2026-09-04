@@ -55,16 +55,19 @@ _skip() {
   [[ -n "$ONLY" && "$(_key "$1")" != "$ONLY" ]]
 }
 
+# _dl <cible absolue> <repo> <chemin dans le repo>
+#   hf recrée sous --local-dir le chemin relatif au repo : local-dir est donc
+#   la cible amputée de ce chemin (= le dossier modèle), pas dirname, sinon une
+#   entrée en sous-dossier (ex : MTP/x.gguf) atterrit dans MTP/MTP/x.gguf.
 _dl() {
-  local target="$1" repo="$2"
-  shift 2
+  local target="$1" repo="$2" entry="$3"
   _skip "$target" && return 0
   if [[ -f "$target" && "$REFRESH" -eq 0 ]]; then
     info "$(basename "$target") déjà présent, skip."
     return
   fi
   info "Téléchargement $(basename "$target")..."
-  HF_XET_HIGH_PERFORMANCE=1 hf download "$repo" "$@" --local-dir "$(dirname "$target")"
+  HF_XET_HIGH_PERFORMANCE=1 hf download "$repo" "$entry" --local-dir "${target%/"$entry"}"
 }
 
 _dl_shard() {
