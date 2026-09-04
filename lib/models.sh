@@ -739,7 +739,7 @@ spec-ngram-map-k-min-hits = 2
 jinja            = true
 parallel         = 1"
 
-groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27742, mergée le 27/08/2026, paquet Arch >= b10661 requis) ---"
+groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27742, mergée le 27/08/2026 dans b10661 ; absente du paquet Arch 0.3.0 = b10621, attend la prochaine coupe stable) ---"
 
 # Qwen3.8-Flash-Next (Qwen) : MoE 125B (6B actifs, 512 experts, 10 routés + 1
 # partagé) + 51B d'embeddings n-gram (bigrammes/trigrammes à la couche 2, table
@@ -749,9 +749,14 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27
 # SUPPORT llama.cpp : general.architecture = qwen4exp, PR #27742 (unsloth,
 #   ouverte le 26/08, MERGÉE le 27/08 à 19:32 UTC, dans b10661 : convertisseur,
 #   graphe texte, QSA avec un troisième cache dans llama_memory_hybrid_idx,
-#   vision, 3 correctifs de llama-quant). Le paquet Arch llama-cpp est resté en
-#   0.2.0 (b10566 sur bigchuck, sans qwen4exp) : les étapes 2 à 6 de la skill
-#   attendent un paquet >= b10661. Vérifier :
+#   vision, 3 correctifs de llama-quant). Le paquet Arch llama-cpp est passé en
+#   0.3.0-1 le 30/08 (b10621 sur bigchuck), TOUJOURS sans qwen4exp : v0.3.0 est
+#   taguée le 25/08 et le commit de merge 6c84c7d5d8 est 39 commits devant elle.
+#   Le PKGBUILD source '#tag=v${pkgver}', donc les tags stables semver et non
+#   les pre-releases bXXXXX : l'attente porte sur la prochaine coupe stable
+#   (aucune après v0.3.0 au 04/09, upstream à b10797), pas sur un rebuild.
+#   Ne PAS surveiller le changement de pkgver, il a déjà déclenché à tort sur
+#   0.3.0. Le seul contrôle fiable :
 #   strings /usr/lib/libllama.so* | grep -x qwen4exp
 # Quant : grille HF complète depuis le 27/08 (uploads 15:01 à 15:16 UTC) :
 #   UD-IQ1_S 72,5 / UD-Q2_K_XL 78,9 / UD-IQ3_XXS 82,0 / UD-Q3_K_XL 90,0 /
@@ -761,8 +766,10 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27
 #   système, plus que DeepSeek V4 (104 Go) qui tourne. Le Q4_K_XL (111 Go)
 #   ne laisse rien. Repli si le chargement est trop juste : UD-IQ3_XXS
 #   (82 Go), changer l'entrée, le glob suit.
-#   Quants converties AVANT le merge de la PR (15:16 contre 19:32 UTC) :
-#   ré-upload probable, prévoir un --update qwen3.8-flash-next.
+#   Quants converties AVANT le merge de la PR (15:16 contre 19:32 UTC), donc
+#   ré-upload redouté : n'a PAS eu lieu, vérifié le 04/09 (tailles des 3 shards
+#   inchangées, 10 946 624 / 49 835 229 856 / 43 836 407 744 octets). Les
+#   commits HF du 01/09 n'ont ajouté que le dossier MTP/. Pas de --update.
 # Sampling officiel (guide unsloth + model card) :
 #   thinking : temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 / presence 0.0
 #   instruct : temp 0.7 / top-p 0.80 / top-k 20 / min-p 0.0 / presence 1.5
@@ -774,33 +781,45 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp PR #27
 #     chat-template-kwargs = {"reasoning_effort":"low"}  + sampling thinking
 #     (temp 1.0 / top-p 0.95, presence-penalty 0)
 # cache-type-v q8_0 : agentic/coding, précision V critique (tool calls, diffs)
-# cache-reuse 0 : état récurrent GDN + MTP (les deux l'interdisent)
+# cache-reuse 0 : état récurrent GDN (l'interdit à lui seul ; c'était aussi
+#   une contrainte MTP, sans objet tant que draft-mtp est retiré)
 # Pas de swa-full ni ctx-checkpoints : pas de SWA (QSA n'est pas une fenêtre
 #   glissante) : à revoir si la PR expose des checkpoints pour l'état GDN.
 # jinja : template unsloth (developer role, systèmes fusionnés, tool calling
 #   au format <function=...><parameter=...>).
 # Vision : mmproj-F16.gguf publié le 27/08 mais pas téléchargé, incompatible
 #   MTP de toute façon : texte seul.
-# MTP : la model card annonce une couche MTP (« MTP layer: 1, multi-step
-#   training ») ; la PR #27742 ne dit pas si elle est convertie (nextn). Section
-#   nommée -mtp-nothink pour les garde-fous de _preload_sanity, spec-type
-#   draft-mtp n-max 4 en valeur de départ : au premier restart vérifier
-#   « --spec-type » dans status.args et une acceptance (pas « n/a ») au
-#   --spec-test ; si la tête manque, retirer draft-mtp (garder ngram-map-k) et
-#   renommer la section. Sur cette arch (GDN + MoE 512 experts, la même
+# MTP : tranché le 04/09, la tête n'est PAS dans le GGUF principal. Depuis le
+#   01/09 unsloth la publie en sidecar dans MTP/ du repo HF (recommandé
+#   mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf, 2,60 Go, annoncé 1,3x à 1,7x ;
+#   les variantes « shared- » empruntent embeddings et projection de sortie au
+#   modèle hôte, ~1,3 Go de moins que les autonomes). Leur README est explicite :
+#   un build ggml-org standard ne peut rien en faire, mainline n'a ni graphe MTP
+#   pour qwen4exp, ni emprunt de tenseurs entre modèles, ni --spec-type
+#   draft-mtp pour cette arch. C'est la PR #28243, encore en DRAFT au 04/09.
+#   Donc draft-mtp RETIRÉ du spec-type et section renommée -nothink (au lieu de
+#   -mtp-nothink), conformément au repli prévu ici le 27/08. Deux jalons
+#   distincts désormais : (1) tag stable avec qwen4exp = modèle qualifiable en
+#   n-gram seul, étapes 3 à 7 de la skill déroulables ; (2) merge de #28243 =
+#   remettre draft-mtp, re-nommer en -mtp-nothink, télécharger le sidecar et
+#   refaire l'étape 4. Sur cette arch (GDN + MoE 512 experts, la même
 #   famille que Qwen3-Coder-Next) attendre un gros surcoût fixe par pas
 #   spéculatif (sauvegarde/restauration de l'état récurrent) : les petits
 #   drafts n-gram peuvent être perdants, mesurer 7 ET 47 au --spec-ngram-tune.
-# parallel 1 : contrainte MTP.
+# parallel 1 : c'était la contrainte MTP, tombée avec le retrait de draft-mtp.
+#   Gardé à 1 quand même : 93,7 Go de poids sur 124 Go, un deuxième slot de KV
+#   à 128k mangerait la marge. À rouvrir seulement si la mesure le réclame.
 # Device : à mesurer (--bench-devices) ; les deux autres MoE à opérateurs
 #   fusionnés du parc (DeepSeek V4, Qwen3-Coder-Next) sont INUTILISABLES sur
 #   ROCm0 (charabia), s'attendre au même et lire le texte généré.
 download_hf_shards qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
   QWEN38_FLASH_NEXT_PATH="UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
 
-# Qwen3.8-Flash-Next-MTP nothink : spéculation MTP (à valider) + n-gram, sampling instruct
+# Qwen3.8-Flash-Next nothink : spéculation n-gram seule, sampling instruct.
 # Aucune mesure encore (arch non supportée par le build, cf. ci-dessus).
-llama_model qwen3.8-flash-next-mtp-nothink "
+# Renommée -nothink le 04/09 : plus de draft-mtp, la tête est un sidecar que
+#   mainline ne sait pas charger (PR #28243 en draft).
+llama_model qwen3.8-flash-next-nothink "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 131072
 cache-ram        = 8192
@@ -812,8 +831,7 @@ presence-penalty = 1.5
 chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v     = q8_0
 cache-reuse      = 0
-spec-type        = ngram-map-k,draft-mtp
-spec-draft-n-max = 4
+spec-type        = ngram-map-k
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
 jinja            = true
