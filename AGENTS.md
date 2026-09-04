@@ -70,7 +70,7 @@ résumer ou la supprimer, non.
 
 Détail, commandes et critères de passage dans la skill locale
 `.claude/skills/ajout-modele/SKILL.md` (à charger dès qu'on ajoute, remplace
-ou re-qualifie un modèle). Les six étapes, dans l'ordre, une seule à la fois
+ou re-qualifie un modèle). Les sept étapes, dans l'ordre, une seule à la fois
 (un seul GPU). Machine de mesure distante : pousser, `git pull --ff-only`
 là-bas, lancer, ne rien commiter sur place.
 
@@ -109,6 +109,10 @@ là-bas, lancer, ne rien commiter sur place.
    device, prompt t/s, gen t/s, acceptance, source et prompt de mesure),
    avec machine, build llama.cpp, quant et date ; les chiffres résumés vont
    aussi dans le commentaire du bloc, seul endroit versionné.
+7. **`--bench-agentic <modèle> 3`** : le modèle en vraie boucle de tool
+   calls (pi en conteneur jetable, `bench-agentic/`, en direct sur `:8009`) :
+   appel froid à part, puis médianes par scénario (PASS, temps mur, part du
+   cache, prefill et décode réels). Ligne dans le README et le bloc.
 
 ## Où ajouter…
 
@@ -117,7 +121,8 @@ là-bas, lancer, ne rien commiter sur place.
   procédure ci-dessus. L'ordre de déclaration est l'ordre d'émission du ini.
   Les garde-fous de `_preload_sanity` sont dérivés (même GGUF, suffixe
   `-mtp`) : nommer la variante MTP `<clé>-mtp`, rien à coder.
-- **Une mesure** : `cmd_bench_*` ou `cmd_spec_*` dans `lib/bench.sh` /
+- **Une mesure** : `cmd_bench_*` dans son propre `lib/bench/bench-<mesure>.sh`
+  (noyau `_bench_one` et sélections dans `lib/bench/bench.sh`) ou `cmd_spec_*` dans
   `lib/spec.sh`, l'analyse dans un `py/*.py` à sorties contractuelles
   (lignes `CLÉ=` consommées par le bash, fixture + référence dans
   `tests/py-golden.sh`), un journal TSV dans `logs/` avec le build

@@ -1,0 +1,11 @@
+# Lancé par ./setup-llm.sh --bench-agentic <modèle> [passes] (MODEL, PASSES
+# et SERVER_URL posés par la commande). Réseau HÔTE : 127.0.0.1:8009 est le llama-server
+# du service systemd user. Rien n'est installé sur l'hôte.
+services:
+  pi:
+    build: .
+    network_mode: host
+    environment:
+      MODEL: "${MODEL:-}"
+      PASSES: "${PASSES:-1}"
+      SERVER_URL: "${SERVER_URL:-http://127.0.0.1:8009}"

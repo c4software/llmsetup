@@ -1,5 +1,5 @@
 # lib/spec.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # spec-test — mesure le décode réel d'un modèle via l'API (chemin spéculatif
@@ -275,7 +275,7 @@ cmd_spec_test() {
   done
 
   # Médianes exposées aux appelants (--spec-tune, --spec-ngram-tune) sur le
-  # modèle de BENCH_ROW dans lib/bench.sh : vides si la mesure a échoué.
+  # modèle de BENCH_ROW dans lib/bench/bench.sh : vides si la mesure a échoué.
   SPEC_TEST_MED_GEN=""
   SPEC_TEST_MED_ACC=""
 

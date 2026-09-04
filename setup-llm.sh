@@ -35,7 +35,12 @@ source "$SCRIPT_DIR/lib/models.sh"
 source "$SCRIPT_DIR/lib/ini.sh"
 source "$SCRIPT_DIR/lib/preload.sh"
 source "$SCRIPT_DIR/lib/setup.sh"
-source "$SCRIPT_DIR/lib/bench.sh"
+source "$SCRIPT_DIR/lib/bench/bench.sh"
+source "$SCRIPT_DIR/lib/bench/bench-devices.sh"
+source "$SCRIPT_DIR/lib/bench/bench-parallel.sh"
+source "$SCRIPT_DIR/lib/bench/bench-cache.sh"
+source "$SCRIPT_DIR/lib/bench/bench-load.sh"
+source "$SCRIPT_DIR/lib/bench/bench-agentic.sh"
 source "$SCRIPT_DIR/lib/spec.sh"
 source "$SCRIPT_DIR/lib/service.sh"
 source "$SCRIPT_DIR/lib/help.sh"
@@ -52,6 +57,7 @@ case "${1:-}" in
   --bench-devices)     cmd_bench_devices "${2:-}" "${3:-}" "${4:-}" ;;
   --bench-parallel)    cmd_bench_parallel "${2:-}" "${3:-}" "${4:-}" ;;
   --bench-cache)       cmd_bench_cache "${2:-}" ;;
+  --bench-agentic)     cmd_bench_agentic "${2:-}" "${3:-}" ;;
   --bench-sanity)      cmd_bench_sanity "${2:-}" ;;
   --bench-load)        cmd_bench_load "${2:-}" ;;
   --preload)           cmd_preload ;;

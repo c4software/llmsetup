@@ -52,6 +52,7 @@ systemctl --user start llama-server
 | `--bench-parallel [modèle] [n] [passes]` | Débit sous `n` requêtes simultanées (défaut : le `parallel` du modèle) : agrégé et décode par requête contre 1 requête ; montre ce que vaut `parallel = N` et la file d'attente au-delà |
 | `--bench-cache [modèle]` | Efficacité du cache de prompt sur le pattern agentic (contexte froid, tour suivant, édition au premier tiers, requête identique) : part du prompt servie du cache et prefill à chaque fois ; c'est la mesure de `cache-ram` / `ctx-checkpoints` / `cache-reuse` |
 | `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : un device qui répond faux est exclu de `--bench-devices`, en plus du garde-fou anti-charabia |
+| `--bench-agentic [modèle] [passes]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels) |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
 | `--list-devices` | Backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
@@ -74,6 +75,7 @@ systemctl --user start llama-server
 ./setup-llm.sh --bench-parallel <m>   # ce que vaut parallel = N
 ./setup-llm.sh --bench-cache <m>      # part du prompt repayée à chaque tour (agentic)
 ./setup-llm.sh --bench-load <m>       # coût d'une bascule LRU
+./setup-llm.sh --bench-agentic <m> 3  # vraie boucle de tool calls (pi), PASS/FAIL et t/s réels
 ./setup-llm.sh --update qwen3.8-27b   # après un re-upload unsloth
 ./setup-llm.sh --bench all            # après chaque mise à jour de llama-cpp : régressions
 ```
@@ -124,6 +126,7 @@ laquelle lancer selon le rôle du modèle.
 | `--bench-sanity [modèle\|all]` | Le backend produit-il un texte juste ? | recopie exacte d'un code (`prompts/bench-sanity.txt`), trivial pour ne tester que le backend ; `--bench-devices` l'applique avant chaque device, en plus du garde-fou anti-charabia de `timings.py` (mot dominant, mots distincts, répétition périodique de caractères) |
 | `--bench-parallel [modèle] [n] [passes]` | Que vaut `parallel = N` ? | salves de 1 puis n requêtes simultanées (spec-test.txt, 400 tokens), débit agrégé et décode médian par requête ; `parallel` réel lu sur `/v1/models`, au-delà les requêtes font la queue |
 | `--bench-cache [modèle]` | Combien du prompt est repayé à chaque tour ? | quatre requêtes : contexte froid, tour suivant, édition au premier tiers (préfixe commun 2/3, au-dessus du seuil `slot-prompt-similarity 0.5`), requête identique ; part servie du cache (`cache_n`) et prefill |
+| `--bench-agentic [modèle] [passes]` | Que vaut le modèle en boucle agentic ? | pi dans un conteneur (`bench-agentic/`, réseau hôte) joue un appel froid puis N passes de 5 scénarios de tool calls en direct sur `:8009` ; delta de `/metrics?model=` par scénario : prompt (part du cache), généré, prefill et décode t/s, plus PASS et temps mur, médianes sur les passes |
 | `--bench-load [modèle\|all]` | Que coûte un modèle à la demande ? | restart du service, première requête chronométrée (chargement + premier token), puis TTFT à chaud |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | Ce réglage vaut-il mieux que celui-là ? | chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée au ini, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
 | `tools/bench-depth.sh <gguf>` | Et à 32k de contexte ? | `llama-bench -d`, hors service, prefill et décode à 0 / 16k / 32k par device, tour simulé par profondeur |
@@ -221,9 +224,7 @@ le cas n-gram) ne se comparent pas entre elles.
 |---|---|---|---|---|---|---|
 | lfm2.5-2.6b | Q8_0 (2,7 Go) | Vulkan0 (mesuré) | parallel 4 | 2279 | 67,7 (205 agrégés à 4 requêtes, x3,06) | cache tour suivant 62 % ; chargement 0,5 s, TTFT 27 ms |
 | qwen3.5-9b | UD-Q6_K_XL (8,2 Go) | Vulkan0 (mesuré) | parallel 4 | 837 | 25,7 (78,6 agrégés à 4, x3,06) | cache 62 % ; chargement 1,9 s |
-| qwen3.6-35b-a3b-nothink | UD-Q6_K_XL (29 Go) | Vulkan0 (mesuré) | parallel 2, sans spéculation | 640 | 53,1 (72,2 agrégés à 2, x1,43) | cache 62 % |
-| qwen3.6-35b-a3b (thinking) | idem | Vulkan0 (mesuré) | parallel 3 | 874 | 52,5 (90,7 agrégés à 3, x1,73) | |
-| qwen3.6-35b-a3b-mtp-nothink | UD-Q4_K_XL (22 Go) | Vulkan0 (mesuré : ROCm0 711 / 69,3) | ngram-map-k 7 + draft-mtp 4 (confirmé, k2/4/6 = 79,5 / **86,3** / 82,2) | 955 | 79,5 (bench, acc. 0,70) ; **110,3** (refactor) | chargement 36 s depuis le disque |
+| ornith-1.5-35b-a3b | Q4_K_M (22 Go) | Vulkan0 (mesuré : ROCm0 931 / 57,6) | parallel 4, sans spéculation | 974 | 70,7 (136,8 agrégés à 4, x1,93) | cache 62 % ; remplace les trois Qwen3.6-35B-A3B le 28/08/2026 (b10566) |
 | qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation | 215 (289 → 183 à 32k en llama-bench) | 12,1 | |
 | qwen3.8-27b-mtp-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + draft-mtp 6 | 261 | 29,5 (bench, acc. 0,65) ; **56,1** (refactor) ; 33,1 (spec-test, MTP seul) | chargement 4,4 s |
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M (19 Go) | Vulkan0 (mesuré : ROCm0 328 / 21,6) | ngram-map-k 47 + draft-mtp 4 (confirmé, k2/4/6 = 24,6 / **30,2** / 30,2) | 245 | 26,4 (bench, acc. 0,65) ; **50,7** (refactor) | cache 62 % ; chargement 4,5 s |
@@ -248,7 +249,7 @@ pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
 | | | ROCm0 (15/08) | draft-mtp n-max 2 / 4 / 6 | 22,2 / 25,5 / 26,0 | | spec-test |
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M | Vulkan0 | ngram-map-k 7 + mtp 4 | 43,9 | 0,95 | spec-refactor |
 | | | | **ngram-map-k 47 + mtp 4** (retenu) | **50,7** | 0,78 | spec-refactor |
-| qwen3.6-35b-a3b-mtp-nothink | UD-Q4_K_XL (MoE) | Vulkan0 | **ngram-map-k 7 + mtp 4** (retenu) | **110,3** | 0,93 | spec-refactor |
+| qwen3.6-35b-a3b-mtp-nothink (retiré le 28/08/2026) | UD-Q4_K_XL (MoE) | Vulkan0 | ngram-map-k 7 + mtp 4 | 110,3 | 0,93 | spec-refactor |
 | | | | ngram-map-k 47 + mtp 4 | 105,3 | 0,71 | spec-refactor |
 | qwen3-coder-next | UD-Q4_K_XL (MoE, GDN) | Vulkan0 | sans spéculation | 46,8 | | spec-refactor |
 | | | | ngram-map-k 7 | 20,8 | 0,98 | spec-refactor : surcoût fixe par pas spéculatif, un petit draft ne l'amortit pas |
@@ -304,8 +305,21 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 |---|---|---|---|---|
 | qwen3.5-9b | 4 | 25,7 t/s | 78,6 t/s agrégés (x3,06), 20,1 t/s par requête | le `parallel 4` des tâches auxiliaires est justifié |
 | lfm2.5-2.6b | 4 | 67,4 t/s | 205 t/s agrégés (x3,06), 52 t/s par requête | idem |
-| qwen3.6-35b-a3b-nothink | 2 | 53,7 t/s | 72,2 t/s agrégés à 2 (x1,43), 40 t/s par requête | le MoE s'amortit moins bien : chaque requête route ses propres experts |
-| qwen3.6-35b-a3b (thinking) | 3 | 53,0 t/s | 90,7 t/s agrégés à 3 (x1,73), 31 t/s par requête | idem |
+| ornith-1.5-35b-a3b | 4 | 70,7 t/s | 136,8 t/s agrégés à 4 (x1,93), 35 t/s par requête | le MoE s'amortit moins bien qu'un dense : chaque requête route ses propres experts (le Qwen3.6 qu'il remplace faisait x1,43 à 2) |
+
+### Boucle agentic réelle (--bench-agentic)
+
+pi 0.84.3 en conteneur, appel froid puis 3 passes de 5 scénarios de tool calls en direct sur `:8009`, médianes, bigchuck, b10566, 28/08/2026 :
+
+| Modèle | Verdict | Scénario | Mur | Prompt (part du cache) | Généré | Prefill | Décode |
+|---|---|---|---|---|---|---|---|
+| ornith-1.5-35b-a3b | 16/16 | froid (prompt système de pi) | 1,5 s | 1 523 tok (66 %) | 2 | 820 t/s | n/s |
+| | 3/3 | write+bash+read | 2,8 s | 4 833 tok (98 %) | 133 | 228 t/s | 72,3 t/s |
+| | 3/3 | edit | 4,1 s | 6 605 tok (91 %) | 181 | 518 t/s | 71,0 t/s |
+| | 3/3 | création module + tests | 11,0 s | 5 876 tok (89 %) | 666 | 525 t/s | 70,9 t/s |
+| | 3/3 | bug sans toucher au test | 7,2 s | 9 447 tok (91 %) | 361 | 508 t/s | 71,0 t/s |
+
+Lecture : le décode en boucle d'outils (71 t/s) rejoint le `--bench` (70,7) ; le cache sert 89 à 98 % tant que la conversation ne fait que s'allonger, et le préfixe de pi survit d'un conteneur à l'autre (cache-ram). La variance est celle du modèle : le scénario 5 a pris 18 s (1 069 tokens, trois tours) sur une passe et 7 s sur les deux autres ; le tout premier run du jour l'avait fait en 49 s et 65 k tokens de prompt cumulés (28 % repayés, décode apparent 8 t/s : le coût GDN quand les tours s'enchaînent).
 
 ### Réglages n-gram alternatifs
 
@@ -322,7 +336,7 @@ GGUF, et l'écart se creuse en contexte long (le régime agentic).
 | Modèle | Architecture | Tour suivant | Édition au 1er tiers | Requête identique |
 |---|---|---|---|---|
 | qwen3.5-9b | hybride SWA/GDN | 62 % (847 tok) | 0 % | 63 % (861 tok) |
-| qwen3.6-35b-a3b-nothink | GDN, MoE | 62 % (847 tok) | 0 % | 63 % (861 tok) |
+| ornith-1.5-35b-a3b | GDN, MoE | 62 % (883 tok) | 0 % | 64 % (897 tok) |
 | qwopus3.6-27b | GDN | 62 % (847 tok) | 0 % | 63 % (861 tok) |
 | lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 0 % | 63 % (876 tok) |
 | qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 0 % | 66 % (978 tok) |
@@ -353,7 +367,6 @@ relu depuis le disque.
 | qwen3.5-9b | 8,2 Go | 1,9 s | 65 ms | chaud |
 | qwen3.8-27b | 17 Go | 4,4 s | 165 ms | chaud (~4 Go/s) |
 | qwopus3.6-27b | 19 Go | 4,5 s | 147 ms | chaud |
-| qwen3.6-35b-a3b-mtp | 22 Go | 36 s | 54 ms | disque (~0,6 Go/s) |
 | qwen3-coder-next | 47 Go | 72 s | 406 ms | disque |
 | gpt-oss | 59 Go | 91 s | 86 ms | disque |
 | laguna-s-2.1 | 69 Go | 67 s | 173 ms | disque |
@@ -390,6 +403,7 @@ le garde-fou de `timings.py`).
 | `logs/spec-tests.log` | journal TSV des runs `--spec-test` |
 | `logs/bench.log` | journal TSV des `--bench` (avec le build llama.cpp) ; chaque `--bench` se compare au run précédent du même modèle/GGUF/device et signale un écart de plus de 5 % |
 | `logs/bench-parallel.log` | journal TSV des `--bench-parallel` |
+| `logs/bench-agentic.log` | journal TSV des `--bench-agentic` (une ligne par scénario) |
 | `logs/bench-cache.log` | journal TSV des `--bench-cache` |
 | `logs/bench-load.log` | journal TSV des `--bench-load` |
 | `logs/spec-batch.log` / `.tsv` | journal des balayages `tools/bench-spec-batch.sh` |

@@ -1,5 +1,5 @@
 # lib/models.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # BACKENDS
@@ -73,7 +73,9 @@ _GROUPE_EN_ATTENTE=""
 # fichier qui cesse d'être déclaré devient un orphelin supprimable.
 # (retirés le 15/08/2026, remplacés par qwen3.8-27b : qwen3.6-27b et
 #  qwen3.6-27b-mtp ; retirés le 15/08/2026 car jamais utilisés : qwen3.5-2b,
-#  qwen3.5-9b-mtp, gemma-31b, gemma-12b → ./setup-llm.sh --cleanup les purge)
+#  qwen3.5-9b-mtp, gemma-31b, gemma-12b ; retirés le 28/08/2026, remplacés par
+#  ornith-1.5-35b-a3b : qwen3.6-35b-a3b et qwen3.6-35b-a3b-mtp
+#  → ./setup-llm.sh --cleanup les purge)
 KNOWN_FILES=()
 
 # download_hf <dossier> <repo> VAR=<fichier> [VAR=<fichier>...]
@@ -133,7 +135,7 @@ llama_model() {
 
 # =============================================================================
 # Groupe de tête du ini — candidats naturels au préchargement (preload.conf) :
-#   9b = tâches auxiliaires, 35b-a3b-nothink = default agentic (opencode & co)
+#   9b = tâches auxiliaires, ornith-1.5-35b-a3b = default agentic (opencode & co)
 # =============================================================================
 
 download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
@@ -168,44 +170,61 @@ parallel             = 4
 swa-full             = true
 ctx-checkpoints      = 128"
 
-download_hf qwen3.6-35b-a3b "unsloth/Qwen3.6-35B-A3B-GGUF" \
-  QWEN36_35B_A3B_PATH="Qwen3.6-35B-A3B-UD-Q6_K_XL.gguf"
+download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
+  ORNITH15_35B_A3B_PATH="Ornith-1.5-35B-Q4_K_M.gguf"
 
-# Qwen3.6-35B-A3B nothink — DEFAULT AGENTIC, always-on
-#   Sert opencode (usage principal) et les autres clients agentic.
-# Repassé devant la variante MTP pour l'agentic : le rollback partiel de
-#   l'état récurrent GDN sur rejet de draft est livré en mainline (PR #22673,
-#   mai 2026 — #22400 fermé en sa faveur), mais il n'a pas été validé ici sur
-#   Vulkan en boucle de tool calls → checkpoints/prompt-cache sans spéculation,
-#   c'est ce qui compte en agentic. Réserve à lever par un test, plus un fait
-#   upstream.
-# parallel 2 : subagents opencode / requêtes concurrentes sans sérialisation
+# Ornith-1.5-35B-A3B nothink — DEFAULT AGENTIC, always-on
+#   Remplace le 28/08/2026 les trois variantes Qwen3.6-35B-A3B (nothink,
+#   thinking, mtp-nothink) par une seule section, parallel 4.
+# Fiche (model card HF ornith-ai, 24/08/2026, pas de guide unsloth) : post-train
+#   d'Ornith AI sur Qwen3.6-35B-A3B, arch llama.cpp qwen35moe (même famille
+#   que le 35B-A3B remplacé : GDN + MoE, 3B actifs, support mainline acquis
+#   en b10566). Pas de tête MTP (pas de repo -MTP, pas de nextn), donc pas de
+#   spéculation ici — et parallel 4 serait de toute façon incompatible. Un
+#   mmproj BF16 (0,9 Go) existe : texte seul, non téléchargé.
+# Quant Q4_K_M (21,7 Go) : choix du 28/08/2026, c'est la quant de la commande
+#   de référence de la fiche ; pas de quant unsloth UD sur ce repo
+#   (grille : Q4_K_M 21,7 / Q5_K_M 25,3 / Q6_K 29,2 / Q8_0 37,8 Go).
+# Sampling : reco officielle temp 0.6 / top-p 0.95 / top-k 20 (la fiche donne
+#   temp 1.0 pour les benchs seulement). Thinking par défaut ; nothink via
+#   chat-template-kwargs (le template gère enable_thinking:false en
+#   émettant <think>\n\n</think>), reasoning off en plus pour ne rien
+#   renvoyer dans reasoning_content.
+# ctx 1048576 : llama-server partage ctx-size entre les slots, 4 x 262144 =
+#   le contexte natif entier pour chaque requête (au-delà : YaRN facteur 4,
+#   non activé).
+# parallel 4 : subagents des clients agentic (omp, opencode) sans
+#   sérialisation. --bench-parallel 28/08/2026 : 4 requêtes = 136,8 t/s
+#   agrégés (x1,93), 35,0 t/s par requête (le Qwen3.6 faisait x1,43 à 2).
+# Device : Vulkan0, --bench-devices 28/08/2026 (b10566, 3 passes) : 976 pp /
+#   70,9 tg contre ROCm0 931 / 57,6, justesse OK sur les deux, tour simulé
+#   44 s contre 54. --bench (bench-task) : 974 pp / 70,7 tg. --bench-cache :
+#   62 % au tour suivant, 64 % à l'identique, 0 % après édition (GDN, cf.
+#   en-tête). Sortie contrôlée à la main : réponse lisible, pas de warning.
+#   --bench-agentic 28/08/2026 (pi 0.84.3, 3 passes) : 16/16, décode 71 t/s
+#   en boucle d'outils, cache 89 à 98 % en continuation (72 % sur un run à
+#   65 k tokens cumulés, trois tours de correction).
 # cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
-# cache-reuse 0 : ignoré de toute façon sur GDN (état récurrent) — la
-#   restauration de préfixe passe par cache-ram + ctx-checkpoints, au dernier
-#   checkpoint seulement : --bench-cache 21/08/2026 = 62 % au tour suivant,
-#   63 % à l'identique (cf. en-tête).
-# Mesuré 21/08/2026 (Vulkan0, b10433) : prefill 640 t/s, décode 53,1 t/s ;
-#   --bench-parallel : 2 requêtes = 72,2 t/s agrégés (x1,43 seulement), 40 t/s
-#   par requête — le MoE s'amortit moins bien qu'un dense (chaque requête
-#   route ses propres experts) ; parallel 2 sert à ne pas sérialiser les
-#   subagents, pas au débit.
-# NB : la variante thinking (même GGUF, $QWEN36_35B_A3B_PATH) est déclarée
-#   plus bas, dans le groupe « famille 35B A3B ».
-llama_model qwen3.6-35b-a3b-nothink "
-model            = $QWEN36_35B_A3B_PATH
-ctx-size         = 524288
-cache-ram        = 12288
-reasoning        = off
-temp             = 0.6
-top-k            = 20
-top-p            = 0.95
-min-p            = 0.0
-cache-type-v     = q8_0
-parallel         = 2
-cache-reuse      = 0
-swa-full         = true
-ctx-checkpoints  = 128"
+# cache-reuse 0 : ignoré sur GDN (état récurrent) — la restauration de
+#   préfixe passe par cache-ram + ctx-checkpoints, au dernier checkpoint
+#   seulement (cf. en-tête, 62 % au tour suivant sur cette arch).
+# jinja : template chat requis pour le tool calling XML (<function=...>).
+llama_model ornith-1.5-35b-a3b "
+model                = $ORNITH15_35B_A3B_PATH
+ctx-size             = 1048576
+cache-ram            = 12288
+reasoning            = off
+chat-template-kwargs = {\"enable_thinking\":false}
+temp                 = 0.6
+top-k                = 20
+top-p                = 0.95
+min-p                = 0.0
+cache-type-v         = q8_0
+jinja                = true
+parallel             = 4
+cache-reuse          = 0
+swa-full             = true
+ctx-checkpoints      = 128"
 
 # =============================================================================
 # Légers à la demande
@@ -254,83 +273,6 @@ cache-type-v     = f16
 cache-reuse      = 0
 jinja            = true
 parallel         = 4"
-
-# =============================================================================
-# Famille 35B A3B
-# =============================================================================
-
-groupe "; --- Famille 35B A3B ---"
-
-# Qwen3.6-35B-A3B thinking — raisonnement activé
-# Même GGUF que le nothink always-on : le download_hf est déclaré avec lui,
-#   plus haut dans le groupe « préchargés » (l'ordre du ini prime sur la
-#   contiguïté du bloc).
-# cache-reuse 0 : ignoré sur GDN
-# Mesuré 21/08/2026 (Vulkan0, b10433) : prefill 874 t/s, décode 52,5 t/s ;
-#   --bench-parallel : 3 requêtes = 90,7 t/s agrégés (x1,73), 31 t/s par requête.
-llama_model qwen3.6-35b-a3b "
-model            = $QWEN36_35B_A3B_PATH
-ctx-size         = 393216
-cache-ram        = 6144
-temp             = 0.6
-top-k            = 20
-top-p            = 0.95
-min-p            = 0.0
-parallel         = 3
-cache-reuse      = 0
-swa-full         = true
-ctx-checkpoints  = 128"
-
-# Qwen3.6-35B-A3B-MTP — variante MTP, draft intégré (Q4_K_XL)
-download_hf qwen3.6-35b-a3b-mtp "unsloth/Qwen3.6-35B-A3B-MTP-GGUF" \
-  QWEN36_35B_A3B_MTP_PATH="Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
-
-# Qwen3.6-35B-A3B-MTP nothink — passé en LRU (ex-default)
-# MTP draft=4 (mesuré 15/08/2026, valeur historique 2) : décodage spéculatif
-#   sans perte, gain max sur tool calls / JSON,
-#   mais rollback GDN fragile en agentic (cf. ci-dessus) → bascule manuelle
-#   uniquement : /model qwen3.6-35b-a3b-mtp-nothink
-# (ne PAS précharger ce modèle en même temps que le nothink dans --preload,
-#  ce serait ~29 Go chargés deux fois pour le même modèle)
-# cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
-# cache-reuse 0 : ignoré sur GDN — nothink via chat-template-kwargs (pas --reasoning off)
-# parallel 1 : contrainte MTP (np > 1 non supporté)
-# spec-type ngram-map-k,draft-mtp : même montage que qwen3.8-27b-mtp-nothink
-#   (voir ce bloc pour le fond). Le MoE a la même marche Vulkan 8→9 (x2,06,
-#   batch 8 = 33 ms, batch 9 = 68 ms) mais sur une pente bien plus raide :
-#   batch 8 coûte déjà 1,94x le batch 1 (trafic mémoire de l'union des experts
-#   routés), donc seuil de non-perte 1,9 token sur 7 et gain plafonné x4.
-#   --spec-ngram-tune du 21/08/2026 (Vulkan0, spec-refactor.txt, 4 passes) :
-#   size_m 7 = 110,3 t/s (acceptance 0,93), 47 = 105,3 t/s (0,71) → 7, le
-#   régime large ne s'amortit pas ici. spec-ngram.conf prime. Prefill ~865 t/s
-#   (passe 1, spec-refactor).
-# Device : Vulkan0, mesuré --bench-devices 21/08/2026 : 954 pp / 79,2 tg
-#   (acceptance 0,70) contre ROCm0 711 / 69,3 — tour simulé 40 s contre 46.
-# n-max 4 CONFIRMÉ sur Vulkan0 par --spec-tune 21/08/2026 (draft-mtp seul,
-#   spec-test.txt, 4 passes) : k2 = 79,5 / k4 = 86,3 / k6 = 82,2 t/s
-#   (acceptance 0,93 / 0,82 / 0,69) — contrairement au dense 27B, le MoE
-#   redescend à 6. --bench (bench-task) : 955 pp / 79,5 tg. --bench-load :
-#   36 s (22 Go relus depuis le disque après l'éviction par DeepSeek), TTFT 54 ms.
-llama_model qwen3.6-35b-a3b-mtp-nothink "
-model                = $QWEN36_35B_A3B_MTP_PATH
-ctx-size             = 131072
-cache-ram            = 6144
-temp                 = 0.7
-top-k                = 20
-top-p                = 0.8
-min-p                = 0.0
-presence-penalty     = 1.5
-chat-template-kwargs = {\"enable_thinking\":false}
-cache-type-v         = q8_0
-cache-reuse          = 0
-spec-type            = ngram-map-k,draft-mtp
-spec-draft-n-max     = 4
-spec-ngram-map-k-size-m   = 7
-spec-ngram-map-k-min-hits = 2
-jinja                = true
-parallel             = 1
-swa-full             = true
-ctx-checkpoints      = 128"
 
 download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
   QWEN3_CODER_NEXT_PATH="Qwen3-Coder-Next-UD-Q4_K_XL.gguf"

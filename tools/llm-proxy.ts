@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 
 // Valeurs en dur pour le test — repasser sur process.env avant de committer.
 const ENDPOINT = "http://llmproxy";
@@ -21,7 +21,6 @@ interface ModelInfo {
   id: string;
   contextWindow: number;
   maxTokens: number;
-  reasoning: boolean;
   costs: { input: number; output: number };
 }
 
@@ -31,10 +30,17 @@ function num(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-/** Albert ne déclare pas la capacité de raisonnement : heuristique sur l'id. */
-function isReasoning(id: string): boolean {
-  return /(?:^|[\/\-_])(?:r1|qwq|thinking|reasoner)(?:[\-_.]|$)/i.test(id);
-}
+const THINKING: Partial<ProviderModelConfig> = {
+  reasoning: true,
+  thinkingLevelMap: { off: "off", minimal: null, low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: null },
+  compat: {
+    thinkingFormat: "chat-template",
+    chatTemplateKwargs: {
+      enable_thinking: { $var: "thinking.enabled" },
+      reasoning_effort: { $var: "thinking.effort", omitWhenOff: true },
+    },
+  },
+};
 
 export default async function (pi: ExtensionAPI) {
   let models: ModelInfo[] = [];
@@ -56,7 +62,6 @@ export default async function (pi: ExtensionAPI) {
           id: m.id,
           contextWindow,
           maxTokens: Math.min(DEFAULT_MAX_TOKENS, contextWindow),
-          reasoning: isReasoning(m.id),
           costs: {
             input: num(m.costs?.prompt_tokens, 0),
             output: num(m.costs?.completion_tokens, 0),
@@ -84,7 +89,6 @@ export default async function (pi: ExtensionAPI) {
     models: models.map((m) => ({
       id: m.id,
       name: m.id,
-      reasoning: m.reasoning,
       input: ["text"],
       // Albert facture en unités de budget par million de tokens.
       cost: {
@@ -95,6 +99,7 @@ export default async function (pi: ExtensionAPI) {
       },
       contextWindow: m.contextWindow,
       maxTokens: m.maxTokens,
+      ...THINKING,
     })),
   });
 }
