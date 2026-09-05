@@ -35,6 +35,24 @@ révisé le 04/09/2026.
   déclencheur, mais elle ne vaut que comme invitation à lancer le `strings` de
   l'étape 1, jamais comme feu vert.
 
+## Jalon 1 : FAIT le 05/09/2026 (étapes 1 à 8), reste 9 et 10
+
+- Paquet `extra/llama-cpp 0.4.0-1.1` (build 10809, ggml 0.23.0) installé sur
+  bigchuck le 05/09 à 11:36, `strings` confirme `qwen4exp`.
+- bigchuck était sur `master`, remis sur la branche. Le dépôt y est dans
+  `~/llm/llmsetup` (les `.conf` sont dans le dépôt, pas dans `~/models`).
+- `--update` : shards inchangés (etags identiques). `--preload` : seule la
+  section `-nothink` a été ajoutée au ini, l'ancienne n'y était plus.
+- Mesures reportées dans le commentaire du bloc et le README : Vulkan0
+  (ROCm0 exclu, charabia), ngram-map-k 7 = 54,0 t/s contre 25,1 sans
+  (spec-refactor), bench 197 / 25,9 t/s, cache 62 %, chargement 14 s à chaud.
+- Note d'outillage : `--bench-devices <modèle> Vulkan0 3` refuse un seul
+  device (« moins de 2 devices »), et un `--bench` lancé juste après le
+  restart final d'un `--spec-ab` échoue (« ne répond pas ») : attendre que
+  `/v1/models` réponde avant d'enchaîner.
+- Reste : étape 9 (merge dans master, suppression de ce fichier, bigchuck
+  sur master) et étape 10 (re-bench du parc après le bump ggml 0.22 → 0.23).
+
 ## Ce qui a changé depuis le 27/08
 
 1. **Le paquet a bougé sans débloquer.** 0.2.0 (b10566) puis 0.3.0-1 le 30/08

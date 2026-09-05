@@ -794,23 +794,42 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661
 #   PR #28243. Donc draft-mtp RETIRÉ et section -nothink ; le retour du MTP
 #   (sidecar + clé de drafter externe + -mtp-nothink) est le jalon 2 du PLAN.
 #   Sur cette arch (GDN + MoE 512 experts, la même famille que Qwen3-Coder-Next)
-#   attendre un gros surcoût fixe par pas spéculatif (sauvegarde/restauration de
-#   l'état récurrent) : les petits drafts n-gram peuvent être perdants. Le tune
-#   ne mesure que les deux candidats issus de la courbe, comparer 7 et 47 par
-#   --spec-ab avec spec-type=none en référence.
+#   on attendait un gros surcoût fixe par pas spéculatif ; mesuré le 05/09/2026
+#   (b10809, Vulkan0) : ce n'est PAS le cas ici, le petit draft gagne, cf. le
+#   commentaire de la section -nothink.
 # parallel 1 : c'était la contrainte MTP, tombée avec le retrait de draft-mtp.
 #   Gardé à 1 quand même : 93,7 Go de poids sur 124 Go, un deuxième slot de KV
 #   à 128k mangerait la marge. À rouvrir seulement si la mesure le réclame.
-# Device : à mesurer (--bench-devices) ; les deux autres MoE à opérateurs
-#   fusionnés du parc (DeepSeek V4, Qwen3-Coder-Next) sont INUTILISABLES sur
-#   ROCm0 (charabia), s'attendre au même et lire le texte généré.
+# Device : Vulkan0 (--bench-devices 05/09/2026, b10809 : prefill 181 t/s,
+#   décode 24 t/s brut). ROCm0 EXCLU par la question de contrôle : réponse
+#   « LAMPAMPAMPAMP... » dégénérée, le même symptôme que DeepSeek V4 et
+#   Qwen3-Coder-Next (MoE à opérateurs fusionnés). Re-tester à chaque bump
+#   de ggml-hip, en lisant le texte généré.
 download_hf_shards qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
   QWEN38_FLASH_NEXT_PATH="UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
 
 # Qwen3.8-Flash-Next nothink : spéculation n-gram seule, sampling instruct.
-# Aucune mesure encore (arch non supportée par le build, cf. ci-dessus).
 # Renommée -nothink le 04/09 : plus de draft-mtp, la tête est un sidecar que
 #   mainline ne sait pas charger (PR #28243 en draft).
+# Mesuré le 05/09/2026 (bigchuck, llama-cpp 0.4.0-1.1 = b10809, ggml 0.23.0,
+#   UD-IQ4_XS, Vulkan0, médianes hors 1re passe) :
+#   --bench 3 passes : prefill 197 t/s, décode 25,9 t/s (acceptance 0,75 sur
+#     le prompt générique) ; le premier run du matin donnait 181 / 24,0.
+#   --spec-ngram-tune 4 passes puis --spec-ab (spec-refactor.txt), identiques :
+#     sans spéculation 25,1 t/s ; size_m 7 = 54,0 t/s (+115 %, acceptance
+#     0,95) ; size_m 47 = 48,2 t/s (+92 %, acceptance 0,86, et la passe 2
+#     (seed 44) sort une réponse illisible dans les deux runs). Retenu 7
+#     (spec-ngram.conf). Courbe llama-bench : batch 1 = 41 ms, batch 8 = 94 ms
+#     (x2,3), marche x2,5 entre 8 et 9, batch 48 = 515 ms (x12,6) : jugée
+#     défavorable, la mesure dit le contraire, comme pour Laguna et gpt-oss.
+#     Contrairement à Qwen3-Coder-Next (même famille GDN + MoE), le petit
+#     draft n'est pas perdant : pas de surcoût fixe visible par pas spéculatif
+#     sur ce build.
+#   --bench-cache : tour suivant 62 %, édition en amont 0 %, requête identique
+#     64 % (état récurrent GDN, restauration au dernier checkpoint).
+#   --bench-load : chargement + 1er token 14,1 s (88 Go, cache de pages chaud
+#     après la campagne), TTFT à chaud 86 ms. Depuis le disque : à mesurer,
+#     compter plus d'une minute (gpt-oss 59 Go = 91 s).
 llama_model qwen3.8-flash-next-nothink "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 131072
