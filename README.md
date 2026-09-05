@@ -232,6 +232,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** ; DFlash refusé par le mainline (`wrong number of tensors; expected 76, got 69`, fork Poolside requis) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
+| qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** (sans MTP : sidecar non chargeable par le mainline, PR #28243) | 197 | 25,1 sans ; **54,0** (refactor, +115 %) ; 25,9 (bench) | 05/09/2026, b10809 / ggml 0.23.0 ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
 pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
@@ -262,6 +263,10 @@ pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
 | | | | **ngram-map-k 7** (retenu) | **53,0** | | spec-refactor : +85 %, le plus gros gain n-gram mesuré |
 | | | | ngram-map-k 47 | 39,9 | | spec-refactor |
 | | | | draft-dflash (n-max 15 ou 7) | échec | | le mainline refuse le drafter : 69 tenseurs au lieu de 76 |
+| qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 | sans spéculation | 25,1 | | spec-refactor (b10809, 05/09/2026) |
+| | | | **ngram-map-k 7** (retenu) | **54,0** | 0,95 | spec-refactor : +115 %, le petit draft gagne malgré la famille GDN + MoE |
+| | | | ngram-map-k 47 | 48,2 | 0,86 | spec-refactor : une passe sur quatre illisible (seed 44), reproductible |
+| | | ROCm0 | sans spéculation | **charabia**, exclu | | bench-devices, question de contrôle |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go, MoE) | Vulkan0 | sans spéculation | 11,3 | | spec-refactor |
 | | | | **ngram-map-k 7** (retenu) | **12,3** | 0,9 sur les hits | spec-refactor |
 | | | | ngram-map-k 31 | 11,8 | 0,27 à 0,66 | spec-refactor |
@@ -283,6 +288,7 @@ Sur Vulkan0 (`tools/bench-spec-batch.sh`, reps=5) :
 | Qwen3-Coder-Next Q4 (MoE, GDN) | 21 ms | 46 ms | marche | 199 ms | x2,16 au batch 8 ; en réel, surcoût fixe par pas spéculatif, seul 47 gagne |
 | gpt-oss-120b Q4 (MoE, SWA) | 17 ms | 57 ms | | 246 ms | x3,4 au batch 8, x14,7 au batch 48 ; en réel size_m 7 = +16 % |
 | Laguna-S-2.1 Q4 (MoE) | 33 ms | 95 ms | | 540 ms | x2,9 au batch 8, x16,5 au batch 48 ; en réel size_m 7 = +85 % |
+| Qwen3.8-Flash-Next IQ4 (MoE, GDN) | 41 ms | 94 ms | 238 ms | 515 ms | marche x2,5 entre 8 et 9, x12,6 au batch 48 ; en réel size_m 7 = +115 % (b10809) |
 
 ### Profondeur de contexte
 
@@ -340,6 +346,7 @@ Lecture : le décode en boucle d'outils (71 t/s) rejoint le `--bench` (70,7) ; l
 | qwopus3.6-27b | GDN | 62 % (847 tok) | 0 % | 63 % (861 tok) |
 | lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 0 % | 63 % (876 tok) |
 | qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 0 % | 66 % (978 tok) |
+| qwen3.8-flash-next-nothink | GDN, MoE | 62 % (883 tok) | 0 % | 64 % (897 tok) |
 | **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **0 %** | **100 %** |
 | **gpt-oss** | **attention + SWA, MoE** | **99 %** | **4 %** | **100 %** |
 | **laguna-s-2.1** | **attention SWA + globale, MoE** | **99 %** | **2 %** | **100 %** |
@@ -370,6 +377,7 @@ relu depuis le disque.
 | qwen3-coder-next | 47 Go | 72 s | 406 ms | disque |
 | gpt-oss | 59 Go | 91 s | 86 ms | disque |
 | laguna-s-2.1 | 69 Go | 67 s | 173 ms | disque |
+| qwen3.8-flash-next-nothink | 88 Go | 14,1 s | 86 ms | chaud (après la campagne de mesures) |
 
 Une bascule LRU entre modèles moyens coûte quelques secondes si le fichier
 est encore en cache de pages, une minute et plus s'il a été évincé (les
