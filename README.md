@@ -87,8 +87,9 @@ estime l'importance des tokens du prompt et le gros n'en prefille qu'une
 fraction (`spec-prefill-p`, 0,30 par défaut). Contrairement au MTP et aux
 n-grams, c'est **lossy** — les tokens élagués sont perdus — donc à valider par
 `--bench` et `--bench-agentic` modèle par modèle. Le graphe MTP `qwen4exp` et
-le drafter externe (`spec-draft-model`) viennent du fork également : c'est ce
-qui débloque le jalon 2 de Qwen3.8-Flash-Next, sans attendre la PR #28243.
+le drafter externe (`spec-draft-model`) viennent du fork également, mais il
+refuse les sidecars MTP d'unsloth (tenseur `output_hc_norm` absent) : le jalon
+2 de Qwen3.8-Flash-Next reste bloqué (essai du 12/09/2026).
 
 ## Sous-commandes
 

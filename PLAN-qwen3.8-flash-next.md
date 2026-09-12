@@ -124,35 +124,27 @@ Sur bigchuck, dans `~/llm/llmsetup` (branche `qwen3.8-flash-next`,
 10. Bump ggml 0.22 : relancer `--bench` sur les autres modèles du parc, le
     journal signale les écarts > 5 %.
 
-## Jalon 2 : MTP par le fork (préparé le 12/09/2026)
+## Jalon 2 : MTP par le fork (essayé le 12/09/2026, toujours bloqué)
 
 Ce jalon attendait la PR mainline #28243 (graphe MTP `qwen4exp`, emprunt de
-tenseurs entre modèles, `--spec-type draft-mtp` pour cette arch). Elle n'est
-toujours pas mergée, mais le passage du service au fork halo-box/strix-llama.cpp
-le 12/09/2026 le débloque autrement : le fork a le graphe MTP `qwen4exp` et le
-drafter externe (`spec-draft-model`). Le jalon 2 est donc préparé dans
-`lib/models.sh`, à mesurer.
+tenseurs entre modèles, `--spec-type draft-mtp` pour cette arch). Le passage du
+service au fork halo-box/strix-llama.cpp le 12/09/2026 semblait le débloquer :
+le fork a un graphe MTP `qwen4exp` et un drafter externe (`spec-draft-model`).
 
-1. FAIT : sidecar déclaré (`download_hf` sur le même repo,
-   `QWEN38_FLASH_NEXT_MTP_PATH="MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf"`, 4,1 Go)
-   et déjà téléchargé sur bigchuck. C'est la version AUTONOME, pas la
-   « shared- » de 2,60 Go : le fork ne sait pas emprunter au modèle hôte les
-   embeddings et la projection de sortie.
-2. FAIT : `spec-type = ngram-map-k,draft-mtp`, `spec-draft-model` = le sidecar,
-   `spec-draft-n-max = 4` (valeur de départ de la skill), ngram-map-k size-m 7
-   min-hits 2 et `ngram-on-disk` inchangés. Pas de `spec-draft-adaptive` :
-   mesuré le 12/09 sur les deux 27B MTP, aucun gain visible.
-   Section NON renommée en `-mtp-nothink` tant que le gain n'est pas mesuré
-   (renommer casse `preload.conf`, `spec-ngram.conf` et le README pour un
-   réglage à l'essai).
-3. À FAIRE : `--spec-test qwen3.8-flash-next-nothink 2` — une acceptance autre
-   que « n/a » prouve que le sidecar est chargé ; sinon le chargement de 94 Go
-   se passe sans rien dire de la cause.
-4. À FAIRE : `--bench 3` contre la référence n-gram seul sur le fork
-   (414 t/s prefill, 30,9 t/s décode, `--bench` du 12/09/2026, strix-0007bc6).
-   Puis, si le MTP est gardé : `--spec-tune 2,4,6,8 4` et re-arbitrage de
-   l'étape 5 (la courbe n-gram change quand le MTP occupe le batch), enfin
-   renommage de la section en `-mtp-nothink`.
+Essai du 12/09 : `spec-type = ngram-map-k,draft-mtp` avec le sidecar autonome
+Q8_0 d'unsloth (4,1 Go), puis vérification de la variante « shared- » (2,8 Go).
+Le fork refuse les deux : `check_tensor_dims: tensor 'output_hc_norm.weight'
+not found` (le graphe `qwen4exp` du fork exige la norme de tête des
+hyper-connexions, que les sidecars unsloth, faits pour #28243, ne contiennent
+pas, 34 et 32 tenseurs). Conséquence : Flash-Next ne chargeait plus du tout.
+Remis en n-gram seul le soir même. Les deux sidecars restent déclarés et sur
+disque.
+
+Conditions de reprise : une tête MTP convertie avec le convertisseur du fork
+(qui connaît `output_hc_norm`), ou le merge de #28243 puis un moteur qui le
+porte. Ensuite, reprendre à : `--spec-test` (acceptance autre que « n/a »),
+`--bench 3` contre la référence n-gram seul sur le fork (414 t/s prefill,
+30,9 t/s décode, strix-0007bc6), `--spec-tune`, renommage en `-mtp-nothink`.
 
 Note : l'alternative « binaires prébuilts unsloth » (tag `b10715-mix-86bd2d3`
 ou plus récent) ou un build de la PR sortirait du paquet Arch, donc du mode de
