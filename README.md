@@ -85,8 +85,9 @@ d'environ 100, à prefill et décode identiques, mesuré le 12/09/2026), les
 apporte aussi le **speculative prefill** (`spec-prefill*`) : un petit modèle
 estime l'importance des tokens du prompt et le gros n'en prefille qu'une
 fraction (`spec-prefill-p`, 0,30 par défaut). Contrairement au MTP et aux
-n-grams, c'est **lossy** — les tokens élagués sont perdus — donc à valider par
-`--bench` et `--bench-agentic` modèle par modèle. Le graphe MTP `qwen4exp` et
+n-grams, c'est **lossy** — les tokens élagués sont perdus — et, mesuré le
+12/09/2026 sur qwen3.8-27b, il neutralise le cache de prompt (0 % même sur une
+requête identique) : retiré, perdant en boucle agentic. Le graphe MTP `qwen4exp` et
 le drafter externe (`spec-draft-model`) viennent du fork également, ce qui
 débloque le MTP de Qwen3.8-Flash-Next (jalon 2), à une condition : le sidecar
 MTP d'unsloth doit d'abord être **renommé** par `tools/mtp-rename-hc-head.py`
@@ -286,7 +287,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | lfm2.5-2.6b | Q8_0 (2,7 Go) | Vulkan0 (mesuré) | parallel 4 | 2279 | 67,7 (205 agrégés à 4 requêtes, x3,06) | cache tour suivant 62 % ; chargement 0,5 s, TTFT 27 ms |
 | qwen3.5-9b | UD-Q6_K_XL (8,2 Go) | Vulkan0 (mesuré) | parallel 4 | 837 | 25,7 (78,6 agrégés à 4, x3,06) | cache 62 % ; chargement 1,9 s |
 | ornith-1.5-35b-a3b | Q4_K_M (22 Go) | Vulkan0 (mesuré : ROCm0 931 / 57,6) | parallel 4, sans spéculation | 974 | 70,7 (136,8 agrégés à 4, x1,93) | cache 62 % ; remplace les trois Qwen3.6-35B-A3B le 28/08/2026 (b10566) |
-| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation de décode ; **spec-prefill p 0,30** (estimateur Qwen3.5-2B, à valider ici) | 215 (289 → 183 à 32k en llama-bench) | 12,1 | spec-prefill lossy : mesuré par le fork sur ce GGUF, TTFT 12 992 → 5 199 ms à 3 131 tokens, décode inchangé ; à confirmer par `--bench` et `--bench-agentic` |
+| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation (spec-prefill p 0,30 essayé le 12/09/2026 sur le fork et **retiré** : prefill 759 t/s mais cache de prompt à 0 %, même requête identique) | 215 (289 → 183 à 32k en llama-bench) | 12,1 | reasoning-budget 4096 (fork) ; spec-prefill lossy et incompatible avec le cache de prompt, perdant en agentic |
 | qwen3.8-27b-mtp-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + draft-mtp 6 | 261 | 29,5 (bench, acc. 0,65) ; **56,1** (refactor) ; 33,1 (spec-test, MTP seul) | chargement 4,4 s |
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M (19 Go) | Vulkan0 (mesuré : ROCm0 328 / 21,6) | ngram-map-k 47 + draft-mtp 4 (confirmé, k2/4/6 = 24,6 / **30,2** / 30,2) | 245 | 26,4 (bench, acc. 0,65) ; **50,7** (refactor) | cache 62 % ; chargement 4,5 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |

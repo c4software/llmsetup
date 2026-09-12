@@ -445,9 +445,16 @@ download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
 #   ⚠ Ne JAMAIS poser spec-prefill-ctx, -device ou -ngl seuls : chacun met
 #   enabled = true en effet de bord et le serveur sort sur « speculative prefill
 #   enabled but no draft model was provided ».
-#   À VALIDER ICI avant de garder : --bench (c'est la passe de prefill qui doit
-#   bouger, pas le décode) puis --bench-agentic — retirer les trois clés si les
-#   éditions agentic se dégradent, un oldString élagué ne se recopie pas.
+#   MESURÉ ICI le 12-13/09/2026 (strix-0007bc6, Vulkan0, p 0,30) et NON RETENU :
+#   --bench : prefill 759 t/s (n=1365, contre 239 sans, l'estimateur garde
+#     401 tokens sur 1361), décode 12,2 t/s inchangé.
+#   --bench-agentic 2 passes : 11/11 PASS, prefill 345 t/s, décode 12,3.
+#   --bench-cache : 0 % de cache sur les quatre requêtes, MÊME la requête
+#     identique (1,7 s de prefill à chaque fois). Le prefill spéculatif
+#     court-circuite le cache de prompt : en boucle agentic à contexte
+#     croissant, tout est repayé à chaque tour (12 772 tokens re-prefillés
+#     au scénario edit). Perdant contre un cache à 62 % ; les trois clés sont
+#     retirées, à ré-essayer si le fork rend le cache compatible.
 #   ⚠ Clés inconnues du paquet Arch (vérifié le 12/09/2026 : aucune ligne
 #   spec-prefill dans /usr/bin/llama-server --help) : FORK_ONLY_KEYS, lib/fork.sh.
 llama_model qwen3.8-27b "
@@ -464,9 +471,6 @@ reasoning-budget-enable       = true
 reasoning-budget              = 4096
 reasoning-budget-soft-ratio   = 0.7
 reasoning-budget-grace-tokens = 128
-spec-prefill                  = true
-spec-prefill-draft-model      = $QWEN35_2B_PATH
-spec-prefill-p                = 0.30
 jinja                = true
 parallel             = 1
 swa-full             = true
