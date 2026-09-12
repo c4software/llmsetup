@@ -306,7 +306,8 @@ sur un ou plusieurs devices, sans passer par le service (à arrêter soi-même
 pour une mesure propre, l'état est journalisé). Journal lisible
 `logs/spec-batch.log` et TSV `logs/spec-batch.tsv`. Sert à
 explorer ; pour régler, `--spec-ngram-tune`. Les autres fichiers de `tools/`
-(sync opencode, extension pi) sont décrits dans le README.
+(sync opencode, extension pi, renommage du sidecar MTP pour le fork) sont
+décrits dans le README.
 
 `bench-depth.sh` : même principe avec `llama-bench -d` (profondeur de KV
 avant la mesure) : prefill et décode à 0 / 16k / 32k (64k sur demande), KV

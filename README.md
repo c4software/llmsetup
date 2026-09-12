@@ -87,9 +87,16 @@ estime l'importance des tokens du prompt et le gros n'en prefille qu'une
 fraction (`spec-prefill-p`, 0,30 par défaut). Contrairement au MTP et aux
 n-grams, c'est **lossy** — les tokens élagués sont perdus — donc à valider par
 `--bench` et `--bench-agentic` modèle par modèle. Le graphe MTP `qwen4exp` et
-le drafter externe (`spec-draft-model`) viennent du fork également, mais il
-refuse les sidecars MTP d'unsloth (tenseur `output_hc_norm` absent) : le jalon
-2 de Qwen3.8-Flash-Next reste bloqué (essai du 12/09/2026).
+le drafter externe (`spec-draft-model`) viennent du fork également, ce qui
+débloque le MTP de Qwen3.8-Flash-Next (jalon 2), à une condition : le sidecar
+MTP d'unsloth doit d'abord être **renommé** par `tools/mtp-rename-hc-head.py`
+(voir Outils). Le fork lit le mixeur des hyper-connexions sous
+`output_hc_{norm,down,up}`, unsloth le range sous
+`blk.<n>.nextn.hc_head_*` (convention de la PR mainline #28243) : sans
+renommage, `check_tensor_dims: tensor 'output_hc_norm.weight' not found` et le
+modèle ne charge pas du tout. Le renommage est automatique au `--setup`
+(`derive_gguf` dans `lib/models.sh`). Le DFlash du fork, lui, ne débloque
+rien : Laguna S 2.1 y est refusé comme sur le paquet Arch (12/09/2026).
 
 ## Sous-commandes
 
@@ -285,8 +292,8 @@ le cas n-gram) ne se comparent pas entre elles.
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
-| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** + **draft-dflash 7** à l'essai sur le fork (le mainline refusait le drafter : `wrong number of tensors; expected 76, got 69`) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
-| qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** à l'essai sur le fork (sidecar autonome Q8_0 ; le mainline ne sait toujours pas le charger, PR #28243) | 197 | 25,1 sans ; **54,0** (refactor, +115 %) ; 25,9 (bench) | 05/09/2026, b10809 / ggml 0.23.0 ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
+| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** seul (draft-dflash refusé par le mainline `wrong number of tensors; expected 76, got 69` **et** par le fork le 12/09/2026 : `failed to load draft model`) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
+| qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** à l'essai sur le fork (sidecar autonome Q8_0 renommé par `tools/mtp-rename-hc-head.py` ; le mainline ne sait toujours pas le charger, PR #28243) | 197 | 25,1 sans ; **54,0** (refactor, +115 %) ; 25,9 (bench) | 05/09/2026, b10809 / ggml 0.23.0 ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
 pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
@@ -317,11 +324,11 @@ pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
 | | | | **ngram-map-k 7** (retenu) | **53,0** | | spec-refactor : +85 %, le plus gros gain n-gram mesuré |
 | | | | ngram-map-k 47 | 39,9 | | spec-refactor |
 | | | | draft-dflash (n-max 15 ou 7) | échec | | mainline b10548 : refuse le drafter, 69 tenseurs créés au lieu des 76 du fichier |
-| | | | **ngram-map-k 7 + draft-dflash 7** (à l'essai) | à mesurer | | fork strix-0007bc6 : il revendique DFlash, mais son loader ne crée toujours aucun `attn_gate` — même écart de 7 attendu, à vérifier au chargement |
+| | | | ngram-map-k 7 + draft-dflash 7 | échec | | fork strix-0007bc6 (12/09/2026) : il revendique DFlash, mais son loader ne crée toujours aucun `attn_gate` — `common_speculative_init_result: failed to load draft model`, retour au n-gram seul |
 | qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 | sans spéculation | 25,1 | | spec-refactor (b10809, 05/09/2026) |
 | | | | **ngram-map-k 7** (retenu) | **54,0** | 0,95 | spec-refactor : +115 %, le petit draft gagne malgré la famille GDN + MoE |
 | | | | ngram-map-k 47 | 48,2 | 0,86 | spec-refactor : une passe sur quatre illisible (seed 44), reproductible |
-| | | | **ngram-map-k 7 + draft-mtp 4** (à l'essai) | à mesurer | | fork strix-0007bc6, sidecar autonome Q8_0 (4,1 Go) ; référence n-gram seul sur le fork : 414 prefill / 30,9 décode (--bench du 12/09/2026) |
+| | | | **ngram-map-k 7 + draft-mtp 4** (à l'essai) | à mesurer | 0,64 au chargement | fork strix-0007bc6, sidecar autonome Q8_0 (4,1 Go) renommé par `tools/mtp-rename-hc-head.py` ; chargement validé le 12/09/2026 (MTP seul, n-max 4 : 40,3 t/s sur 300 tokens de code, acceptance 0,64 = 215/336) ; référence n-gram seul sur le fork : 414 prefill / 30,9 décode (--bench du 12/09/2026) |
 | | | ROCm0 | sans spéculation | **charabia**, exclu | | bench-devices, question de contrôle |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go, MoE) | Vulkan0 | sans spéculation | 11,3 | | spec-refactor |
 | | | | **ngram-map-k 7** (retenu) | **12,3** | 0,9 sur les hits | spec-refactor |
@@ -504,6 +511,11 @@ parallel         = 4"
 - `download_hf <dossier> <repo> VAR=<fichier>` déclare le fichier (chemin,
   inventaire pour `--cleanup`, téléchargement) ; pour un modèle en shards,
   `download_hf_shards` avec le shard 00001 et son sous-dossier de quant.
+- `derive_gguf <dossier> VAR=<fichier> <source> <script>` déclare un GGUF
+  **produit en local** à partir d'un fichier déjà déclaré (aucun repo ne le
+  porte) : même inventaire `--cleanup`, et `--setup` lance le script après les
+  téléchargements si le fichier manque ou si la source a bougé. Unique cas :
+  le sidecar MTP de Qwen3.8-Flash-Next renommé pour le fork.
 - `llama_model <section> "<corps ini>"` déclare la section ; deux sections
   peuvent partager le même `*_PATH` (cas Qwen3.8-27B, thinking et MTP).
 - `groupe "; --- titre ---"` avant le premier `llama_model` d'une nouvelle
@@ -521,6 +533,7 @@ d'`AGENTS.md` (skill `ajout-modele`).
 | `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
 | `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices (`DEV=Vulkan0,ROCm0`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
 | `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k, KV q8_0 comme le service), par device, avec le tour simulé de `--bench-devices` recalculé à chaque profondeur : c'est le régime agentic réel, où le classement des devices peut s'inverser. Journal `logs/bench-depth.log` + `.tsv` |
+| `mtp-rename-hc-head.py` | Renomme les trois tenseurs du mixeur final des hyper-connexions d'un sidecar MTP Qwen3.8-Flash-Next (`blk.<n>.nextn.hc_head_*` chez unsloth, convention de la PR mainline #28243) vers les noms que lit le fork strix-llama.cpp (`output_hc_*`). Données recopiées telles quelles. `PYTHONPATH=$HOME/llm/strix-llama.cpp/gguf-py python3 tools/mtp-rename-hc-head.py <in> <out>` ; appelé aussi par `--setup`. Inutile sur un moteur mainline portant #28243 |
 | `llm-proxy.ts` | Extension pi / omp : découvre les modèles `text-generation` du proxy Albert (`/v1/models`, ctx, coûts, reasoning déduit de l'id) et enregistre le provider `albert`. A copier dans `~/.pi/agent/extensions/` et `~/.omp/agent/extensions/` (une seule extension provider par agent). Endpoint `http://llmproxy` et clé en dur pour l'instant (à passer sur `process.env` avant diffusion) |
 
 Les scripts shell pointent sur `http://bigchuck:8009` par défaut (surchargeable par variable d'environnement).

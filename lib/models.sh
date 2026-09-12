@@ -113,6 +113,21 @@ download_hf_shards() {
   DL_SPECS+=("shard"$'\t'"$chemin"$'\t'"$repo"$'\t'"${entry%/*}/*")
 }
 
+# derive_gguf <dossier> VAR=<fichier produit> <chemin source> <script du dépôt>
+#   Comme download_hf, mais pour un fichier qu'AUCUN repo ne porte : il est
+#   calculé en local à partir d'un fichier déjà déclaré (donc déjà téléchargé —
+#   l'appel doit SUIVRE celui de la source). Définit VAR, ajoute le chemin à
+#   KNOWN_FILES et enregistre une étape de post-traitement, jouée par cmd_setup
+#   après les téléchargements, dans l'ordre de déclaration (_derive, lib/common.sh).
+derive_gguf() {
+  local dossier="$1" spec="$2" source="$3" script="$4" var fichier chemin
+  var="${spec%%=*}"; fichier="${spec#*=}"
+  chemin="$MODELS_BASE/$dossier/$fichier"
+  printf -v "$var" '%s' "$chemin"
+  KNOWN_FILES+=("$chemin")
+  DL_SPECS+=("derive"$'\t'"$chemin"$'\t'"$source"$'\t'"$script")
+}
+
 # groupe <ligne> [<ligne>...]
 #   En-tête de groupe du ini, émis (suivi d'une ligne vide) juste avant la
 #   PROCHAINE section déclarée par `llama_model`. Plusieurs appels consécutifs =
@@ -790,10 +805,15 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 #   Or le drafter en porte un par couche : ses tenseurs (lus dans l'en-tête du
 #   GGUF) font 12 par couche sur 6 couches = 72, plus 4 hors blocs = 76, quand
 #   le loader générique n'en crée que 11 x 6 + 3 = 69. C'est exactement l'écart
-#   de 7 déjà mesuré. Non vérifié au chargement (le modèle fait 118B, on ne
-#   lance pas de serveur pour ça) : si le fork refuse lui aussi, REVENIR AU
-#   NGRAM SEUL (retirer draft-dflash, spec-draft-model et spec-draft-n-max) —
-#   le serveur sort au chargement, ce n'est pas un repli silencieux.
+#   de 7 déjà mesuré.
+#   VÉRIFIÉ le 12/09/2026 sur strix-0007bc6, et la lecture du code avait raison :
+#   refus identique au paquet Arch (« common_speculative_init_result: failed to
+#   load draft model »), le modèle ne charge plus du tout via le routeur. Retour
+#   au NGRAM SEUL le jour même : draft-dflash, spec-draft-model et
+#   spec-draft-n-max retirés du corps ci-dessous. Le drafter reste déclaré et
+#   sur disque (2,2 Go) pour le jour où un moteur crée les attn_gate : il
+#   faudra le fork poolside/llama.cpp branche `laguna`, ou un DFlash mainline
+#   qui connaisse le contrat Laguna.
 # Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
 # Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10548, sans
 #   spéculation, 3 passes) : 247 pp / 28,6 tg contre ROCm0 320 / 23,6 (tour
@@ -823,9 +843,7 @@ top-k            = 0
 min-p            = 0.0
 cache-type-v     = q8_0
 cache-reuse      = 0
-spec-type        = ngram-map-k,draft-dflash
-spec-draft-model = $LAGUNA_DFLASH_PATH
-spec-draft-n-max = 7
+spec-type        = ngram-map-k
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
 jinja            = true
@@ -902,31 +920,51 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661
 #   de ggml-hip, en lisant le texte généré.
 download_hf_shards qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
   QWEN38_FLASH_NEXT_PATH="UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
-# Têtes MTP en sidecar, même repo, sous-dossier MTP/ (recréé tel quel sous le
-# dossier modèle par _dl). Téléchargées sur bigchuck le 12/09/2026, déclarées
-# ici pour KNOWN_FILES (--cleanup ne les purge pas). INUTILISABLES sur le fork
-# strix-llama.cpp 0007bc6 : son graphe MTP qwen4exp exige le tenseur
-# output_hc_norm.weight (norme de tête des hyper-connexions) que ni la version
-# autonome (34 tenseurs) ni la « shared- » (32) d'unsloth ne contiennent
-# (« check_tensor_dims: tensor 'output_hc_norm.weight' not found », le modèle
-# ne charge plus du tout). Ces sidecars visent la PR mainline #28243. Gardés
-# pour le jour où le fork ou la PR les accepte.
+# Tête MTP en sidecar, même repo, sous-dossier MTP/ (recréé tel quel sous le
+# dossier modèle par _dl). Téléchargée sur bigchuck le 12/09/2026. Version
+# AUTONOME Q8_0 (4,1 Go, 34 tenseurs) : le fork ne sait pas emprunter les
+# tenseurs partagés du modèle hôte, la « shared- » (2,60 Go, 32 tenseurs) ne lui
+# sert donc à rien et n'est plus déclarée depuis le 12/09/2026 — l'exemplaire
+# déjà téléchargé reste sur disque et --cleanup ne le purgera pas (il est dans
+# MTP/, sous-dossier protégé en bloc comme un dossier de quant) ; le supprimer à
+# la main ne coûte rien.
+# Ce sidecar n'est PAS chargeable tel quel par le fork : il nomme le mixeur final
+# des hyper-connexions blk.48.nextn.hc_head_* (convention de la PR mainline
+# #28243) quand le graphe qwen4exp du fork lit output_hc_* (« check_tensor_dims:
+# tensor 'output_hc_norm.weight' not found », et c'est le modèle entier qui ne
+# charge plus). D'où la copie renommée ci-dessous ; le fichier d'origine reste la
+# SOURCE, et redevient utilisable tel quel le jour où #28243 est mergée.
 download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
   QWEN38_FLASH_NEXT_MTP_PATH="MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf"
-download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
-  QWEN38_FLASH_NEXT_MTP_SHARED_PATH="MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"
+# Copie renommée pour le fork, produite en local (aucun repo ne la porte) par
+# tools/mtp-rename-hc-head.py : trois tenseurs renommés, données recopiées
+# telles quelles, mêmes formes et mêmes types. Faite sur bigchuck le 12/09/2026,
+# et refaite automatiquement par --setup si elle manque ou si la source a bougé.
+derive_gguf qwen3.8-flash-next \
+  QWEN38_FLASH_NEXT_MTP_STRIX_PATH="MTP/mtp-Qwen3.8-Flash-Next-strix-Q8_0.gguf" \
+  "$QWEN38_FLASH_NEXT_MTP_PATH" tools/mtp-rename-hc-head.py
 
 # Qwen3.8-Flash-Next nothink : spéculation n-gram, sampling instruct.
 # Renommée -nothink le 04/09, quand draft-mtp avait été retiré faute de moteur
 #   capable de charger le sidecar.
-# JALON 2 du plan Flash-Next (PLAN-qwen3.8-flash-next.md) TOUJOURS BLOQUÉ :
-#   le fork strix-llama.cpp a bien un graphe MTP qwen4exp et un drafter externe,
-#   mais il refuse les deux sidecars unsloth (tenseur output_hc_norm absent,
-#   cf. les déclarations ci-dessus) ; essayé le 12/09/2026, Flash-Next ne
-#   chargeait plus, remis en n-gram seul le soir même. Reprise possible avec
-#   une tête convertie pour le fork, ou quand la PR #28243 est mergée.
-#   Référence n-gram seul sur le fork : prefill 414 t/s, décode 30,9 t/s
-#   (--bench du 12/09/2026, strix-0007bc6, Vulkan0, ngram-on-disk).
+# JALON 2 du plan Flash-Next (PLAN-qwen3.8-flash-next.md) DÉBLOQUÉ le
+#   12/09/2026 par le renommage du sidecar (tools/mtp-rename-hc-head.py, cf. la
+#   déclaration ci-dessus) : le fork apporte le graphe MTP qwen4exp et le
+#   drafter externe, il ne manquait que la convention de nom.
+#   Historique du même jour : le premier essai, avec les sidecars unsloth tels
+#   quels, refusait de charger (« tensor 'output_hc_norm.weight' not found »,
+#   Flash-Next ne démarrait plus du tout) et le bloc avait été remis en n-gram
+#   seul le soir même, avant que la cause soit trouvée.
+#   Chargement validé sur le fork (instance isolée, draft-mtp seul, n-max 4,
+#   ngram-on-disk) : sortie cohérente, acceptance 0,64 (215/336), 40,3 t/s sur
+#   300 tokens de code. Les tenseurs blk.48.indexer.* du sidecar sont ignorés
+#   par le fork (« unused tensor », sans effet).
+#   Référence à battre, n-gram seul sur le fork : prefill 414 t/s, décode
+#   30,9 t/s (--bench du 12/09/2026, strix-0007bc6, Vulkan0, ngram-on-disk).
+#   À MESURER dans cet ordre : --spec-test (acceptance autre que « n/a »),
+#   --bench 3 contre cette référence, puis --spec-tune si le mode mixte est
+#   gardé ; renommer ensuite la section en -mtp-nothink (et la variante shared
+#   d'unsloth, restée sur disque, peut disparaître).
 # Mesuré le 05/09/2026 (bigchuck, llama-cpp 0.4.0-1.1 = b10809, ggml 0.23.0,
 #   UD-IQ4_XS, Vulkan0, médianes hors 1re passe) :
 #   --bench 3 passes : prefill 197 t/s, décode 25,9 t/s (acceptance 0,75 sur
@@ -970,9 +1008,11 @@ presence-penalty = 1.5
 chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v     = q8_0
 cache-reuse      = 0
-spec-type        = ngram-map-k
+spec-type        = ngram-map-k,draft-mtp
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
+spec-draft-model = $QWEN38_FLASH_NEXT_MTP_STRIX_PATH
+spec-draft-n-max = 4
 ngram-on-disk    = true
 jinja            = true
 parallel         = 1"

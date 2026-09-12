@@ -124,32 +124,63 @@ Sur bigchuck, dans `~/llm/llmsetup` (branche `qwen3.8-flash-next`,
 10. Bump ggml 0.22 : relancer `--bench` sur les autres modèles du parc, le
     journal signale les écarts > 5 %.
 
-## Jalon 2 : MTP par le fork (essayé le 12/09/2026, toujours bloqué)
+## Jalon 2 : MTP par le fork — DÉBLOQUÉ le 12/09/2026 (renommage du sidecar)
 
 Ce jalon attendait la PR mainline #28243 (graphe MTP `qwen4exp`, emprunt de
 tenseurs entre modèles, `--spec-type draft-mtp` pour cette arch). Le passage du
-service au fork halo-box/strix-llama.cpp le 12/09/2026 semblait le débloquer :
-le fork a un graphe MTP `qwen4exp` et un drafter externe (`spec-draft-model`).
+service au fork halo-box/strix-llama.cpp le 12/09/2026 l'a débloqué : le fork a
+un graphe MTP `qwen4exp` et un drafter externe (`spec-draft-model`).
 
-Essai du 12/09 : `spec-type = ngram-map-k,draft-mtp` avec le sidecar autonome
-Q8_0 d'unsloth (4,1 Go), puis vérification de la variante « shared- » (2,8 Go).
-Le fork refuse les deux : `check_tensor_dims: tensor 'output_hc_norm.weight'
-not found` (le graphe `qwen4exp` du fork exige la norme de tête des
-hyper-connexions, que les sidecars unsloth, faits pour #28243, ne contiennent
-pas, 34 et 32 tenseurs). Conséquence : Flash-Next ne chargeait plus du tout.
-Remis en n-gram seul le soir même. Les deux sidecars restent déclarés et sur
-disque.
+Le premier essai du 12/09 avait échoué : le fork refusait les deux sidecars
+unsloth (autonome 4,1 Go et « shared- » 2,8 Go) sur
+`check_tensor_dims: tensor 'output_hc_norm.weight' not found`, et Flash-Next ne
+chargeait plus du tout ; retour au n-gram seul le soir même. Cause trouvée dans
+la foulée : simple divergence de NOMS. Le graphe MTP du fork
+(`src/models/qwen4exp.cpp`, `graph_mtp`) lit le mixeur final des
+hyper-connexions sous `output_hc_{norm,down,up}.weight` (niveau modèle), unsloth
+le range sous `blk.48.nextn.hc_head_{norm,down,up}.weight` (convention #28243).
+Mêmes formes (10240 ; 10240x320 ; 320x10240), mêmes types (F32, Q8_0, Q8_0) :
+renommer les trois tenseurs suffit, aucune conversion.
 
-Conditions de reprise : une tête MTP convertie avec le convertisseur du fork
-(qui connaît `output_hc_norm`), ou le merge de #28243 puis un moteur qui le
-porte. Ensuite, reprendre à : `--spec-test` (acceptance autre que « n/a »),
-`--bench 3` contre la référence n-gram seul sur le fork (414 t/s prefill,
-30,9 t/s décode, strix-0007bc6), `--spec-tune`, renommage en `-mtp-nothink`.
+### FAIT
+
+- `tools/mtp-rename-hc-head.py` (gguf-py du fork via `PYTHONPATH`) : renomme les
+  trois tenseurs, recopie les données telles quelles.
+- Sortie sur bigchuck : `~/models/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-strix-Q8_0.gguf`
+  (4,1 Go), déclarée dans `lib/models.sh` par `derive_gguf` (KNOWN_FILES, et
+  `--setup` la reproduit si elle manque ou si la source a bougé). La variante
+  « shared- » n'est plus déclarée (le fork ne sait pas emprunter les tenseurs du
+  modèle hôte) ; son fichier reste sur disque, `--cleanup` ne le purge pas.
+- Chargement validé sur le fork (instance isolée, `draft-mtp` seul, n-max 4,
+  ngram-on-disk) : sortie cohérente, `draft acceptance = 0.64 (215/336)`,
+  40,3 t/s sur 300 tokens de code. Les `blk.48.indexer.*` du sidecar sont
+  ignorés par le fork (« unused tensor », sans effet).
+- Bloc remis en `spec-type = ngram-map-k,draft-mtp` (ngram-map-k 7, min-hits 2,
+  `spec-draft-n-max` 4, `ngram-on-disk`), sans `spec-draft-adaptive`.
+
+### À FAIRE (sur bigchuck, dans l'ordre)
+
+1. `git pull --ff-only`, `./setup-llm.sh --preload` (régénère le ini), restart,
+   puis une requête sur le modèle et `curl localhost:8009/v1/models` :
+   `status.args` doit porter `--spec-type ngram-map-k,draft-mtp` et le GGUF
+   `-strix-`.
+2. `./setup-llm.sh --spec-test qwen3.8-flash-next-nothink` : l'acceptance doit
+   être un nombre, pas « n/a » (c'est le contrôle que le MTP tourne vraiment).
+3. `./setup-llm.sh --bench qwen3.8-flash-next-nothink 3`, à comparer à la
+   référence n-gram seul sur le fork : 414 t/s prefill, 30,9 t/s décode
+   (strix-0007bc6, Vulkan0, ngram-on-disk). Garder le mode mixte seulement s'il
+   la bat.
+4. Si gardé : `./setup-llm.sh --spec-tune qwen3.8-flash-next-nothink` (mesure en
+   `draft-mtp` seul, écrit `spec-nmax.conf`), puis renommer la section en
+   `qwen3.8-flash-next-mtp-nothink` (le garde-fou de préchargement en dérive) et
+   reporter les chiffres dans le commentaire du bloc et le README.
 
 Note : l'alternative « binaires prébuilts unsloth » (tag `b10715-mix-86bd2d3`
 ou plus récent) ou un build de la PR sortirait du paquet Arch, donc du mode de
 fonctionnement du dépôt, et rendrait les mesures incomparables aux tableaux
-existants. Non retenu sauf décision explicite.
+existants. Non retenu sauf décision explicite. Le jour où #28243 est mergée et
+portée par le moteur, le sidecar unsloth se lira tel quel et le renommage (donc
+`derive_gguf` et le script) deviendra inutile.
 
 ## Pistes gardées pour plus tard (non engagées)
 
