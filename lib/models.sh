@@ -867,7 +867,8 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661
 #   ('#tag=v${pkgver}'), pas les pre-releases bXXXXX : un changement de pkgver
 #   ne prouve rien (0.3.0 = b10621, sans qwen4exp). Le seul contrôle fiable :
 #   strings /usr/lib/libllama.so* | grep -x qwen4exp
-#   Suivi de l'attente et des jalons : PLAN-qwen3.8-flash-next.md.
+#   Suivi de l'attente et des jalons : PLAN-qwen3.8-flash-next.md (supprimé au
+#   merge du 13/09/2026, historique dans git).
 # Quant : grille HF complète depuis le 27/08 (uploads 15:01 à 15:16 UTC) :
 #   UD-IQ1_S 72,5 / UD-Q2_K_XL 78,9 / UD-IQ3_XXS 82,0 / UD-Q3_K_XL 90,0 /
 #   UD-IQ4_XS 93,7 / UD-Q4_K_XL 111,3 Go (3 shards jusqu'à l'IQ4_XS, 4 pour
@@ -952,7 +953,7 @@ derive_gguf qwen3.8-flash-next \
 # Renommée -nothink le 04/09, quand draft-mtp avait été retiré faute de moteur
 #   capable de charger le sidecar ; revenue à -mtp-nothink le 12/09/2026 avec le
 #   retour de draft-mtp sur le fork, comme qwen3.8-27b-mtp-nothink.
-# JALON 2 du plan Flash-Next (PLAN-qwen3.8-flash-next.md) DÉBLOQUÉ le
+# JALON 2 du plan Flash-Next (ancien PLAN-qwen3.8-flash-next.md) DÉBLOQUÉ le
 #   12/09/2026 par le renommage du sidecar (tools/mtp-rename-hc-head.py, cf. la
 #   déclaration ci-dessus) : le fork apporte le graphe MTP qwen4exp et le
 #   drafter externe, il ne manquait que la convention de nom.
