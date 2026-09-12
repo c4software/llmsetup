@@ -62,7 +62,8 @@ Deux pièges :
 - le routeur refuse toute clé ini qu'il ne connaît pas, et l'échec n'est pas
   local au modèle fautif : c'est le routeur **entier** qui ne démarre pas. Les
   clés propres au fork (`ngram-on-disk`, `reasoning-budget-*`,
-  `spec-draft-adaptive` — liste `FORK_ONLY_KEYS` dans `lib/fork.sh`) font donc
+  `spec-draft-adaptive`, `spec-prefill*` — liste `FORK_ONLY_KEYS` dans
+  `lib/fork.sh`) font donc
   échouer le paquet Arch. Le dépôt ne gère pas deux moteurs : il ne filtre ni ne
   réécrit rien, mais `--start` refuse de lancer un moteur upstream sur un tel
   ini, en nommant le modèle et la clé. Pour rester sur le paquet Arch : retirer
@@ -79,8 +80,15 @@ commentaires de `lib/models.sh`) : `ngram-on-disk` laisse la table n-gram de
 28,8 Go de Qwen3.8-Flash-Next sur disque (72 Go de mémoire utilisée au lieu
 d'environ 100, à prefill et décode identiques, mesuré le 12/09/2026), les
 `reasoning-budget-*` plafonnent la réflexion des modèles thinking, et
-`spec-draft-adaptive` dimensionne le draft sur l'acceptance mesurée (à
-mesurer).
+`spec-draft-adaptive` dimensionne le draft sur l'acceptance mesurée (--spec-ab du
+12/09/2026 sur les deux 27B MTP : 2 % sous le draft fixe, non retenu). Il
+apporte aussi le **speculative prefill** (`spec-prefill*`) : un petit modèle
+estime l'importance des tokens du prompt et le gros n'en prefille qu'une
+fraction (`spec-prefill-p`, 0,30 par défaut). Contrairement au MTP et aux
+n-grams, c'est **lossy** — les tokens élagués sont perdus — donc à valider par
+`--bench` et `--bench-agentic` modèle par modèle. Le graphe MTP `qwen4exp` et
+le drafter externe (`spec-draft-model`) viennent du fork également : c'est ce
+qui débloque le jalon 2 de Qwen3.8-Flash-Next, sans attendre la PR #28243.
 
 ## Sous-commandes
 
@@ -270,14 +278,14 @@ le cas n-gram) ne se comparent pas entre elles.
 | lfm2.5-2.6b | Q8_0 (2,7 Go) | Vulkan0 (mesuré) | parallel 4 | 2279 | 67,7 (205 agrégés à 4 requêtes, x3,06) | cache tour suivant 62 % ; chargement 0,5 s, TTFT 27 ms |
 | qwen3.5-9b | UD-Q6_K_XL (8,2 Go) | Vulkan0 (mesuré) | parallel 4 | 837 | 25,7 (78,6 agrégés à 4, x3,06) | cache 62 % ; chargement 1,9 s |
 | ornith-1.5-35b-a3b | Q4_K_M (22 Go) | Vulkan0 (mesuré : ROCm0 931 / 57,6) | parallel 4, sans spéculation | 974 | 70,7 (136,8 agrégés à 4, x1,93) | cache 62 % ; remplace les trois Qwen3.6-35B-A3B le 28/08/2026 (b10566) |
-| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation | 215 (289 → 183 à 32k en llama-bench) | 12,1 | |
+| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation de décode ; **spec-prefill p 0,30** (estimateur Qwen3.5-2B, à valider ici) | 215 (289 → 183 à 32k en llama-bench) | 12,1 | spec-prefill lossy : mesuré par le fork sur ce GGUF, TTFT 12 992 → 5 199 ms à 3 131 tokens, décode inchangé ; à confirmer par `--bench` et `--bench-agentic` |
 | qwen3.8-27b-mtp-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + draft-mtp 6 | 261 | 29,5 (bench, acc. 0,65) ; **56,1** (refactor) ; 33,1 (spec-test, MTP seul) | chargement 4,4 s |
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M (19 Go) | Vulkan0 (mesuré : ROCm0 328 / 21,6) | ngram-map-k 47 + draft-mtp 4 (confirmé, k2/4/6 = 24,6 / **30,2** / 30,2) | 245 | 26,4 (bench, acc. 0,65) ; **50,7** (refactor) | cache 62 % ; chargement 4,5 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
-| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** ; DFlash refusé par le mainline (`wrong number of tensors; expected 76, got 69`, fork Poolside requis) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
-| qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** (sans MTP : sidecar non chargeable par le mainline, PR #28243) | 197 | 25,1 sans ; **54,0** (refactor, +115 %) ; 25,9 (bench) | 05/09/2026, b10809 / ggml 0.23.0 ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
+| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** + **draft-dflash 7** à l'essai sur le fork (le mainline refusait le drafter : `wrong number of tensors; expected 76, got 69`) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
+| qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** à l'essai sur le fork (sidecar autonome Q8_0 ; le mainline ne sait toujours pas le charger, PR #28243) | 197 | 25,1 sans ; **54,0** (refactor, +115 %) ; 25,9 (bench) | 05/09/2026, b10809 / ggml 0.23.0 ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
 pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
@@ -307,10 +315,12 @@ pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 | sans spéculation | 28,7 | | spec-refactor (b10548) |
 | | | | **ngram-map-k 7** (retenu) | **53,0** | | spec-refactor : +85 %, le plus gros gain n-gram mesuré |
 | | | | ngram-map-k 47 | 39,9 | | spec-refactor |
-| | | | draft-dflash (n-max 15 ou 7) | échec | | le mainline refuse le drafter : 69 tenseurs au lieu de 76 |
+| | | | draft-dflash (n-max 15 ou 7) | échec | | mainline b10548 : refuse le drafter, 69 tenseurs créés au lieu des 76 du fichier |
+| | | | **ngram-map-k 7 + draft-dflash 7** (à l'essai) | à mesurer | | fork strix-0007bc6 : il revendique DFlash, mais son loader ne crée toujours aucun `attn_gate` — même écart de 7 attendu, à vérifier au chargement |
 | qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 | sans spéculation | 25,1 | | spec-refactor (b10809, 05/09/2026) |
 | | | | **ngram-map-k 7** (retenu) | **54,0** | 0,95 | spec-refactor : +115 %, le petit draft gagne malgré la famille GDN + MoE |
 | | | | ngram-map-k 47 | 48,2 | 0,86 | spec-refactor : une passe sur quatre illisible (seed 44), reproductible |
+| | | | **ngram-map-k 7 + draft-mtp 4** (à l'essai) | à mesurer | | fork strix-0007bc6, sidecar autonome Q8_0 (4,1 Go) ; référence n-gram seul sur le fork : 414 prefill / 30,9 décode (--bench du 12/09/2026) |
 | | | ROCm0 | sans spéculation | **charabia**, exclu | | bench-devices, question de contrôle |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go, MoE) | Vulkan0 | sans spéculation | 11,3 | | spec-refactor |
 | | | | **ngram-map-k 7** (retenu) | **12,3** | 0,9 sur les hits | spec-refactor |

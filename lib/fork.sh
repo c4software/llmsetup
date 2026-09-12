@@ -44,6 +44,9 @@ FORK_ONLY_KEYS=(
   reasoning-budget-soft2-ratio
   reasoning-budget-grace-tokens
   spec-draft-adaptive
+  spec-prefill
+  spec-prefill-draft-model
+  spec-prefill-p
 )
 
 # _fork_keys_guard [fichier ini] — garde-fou de démarrage. Ne dit rien si le

@@ -195,7 +195,7 @@ cmd_spec_test() {
   mdev="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE}"
   gguf="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
   gsize="$(du -h "$gguf" 2>/dev/null | cut -f1 || echo '?')"
-  llver="$(paru -Q llama-cpp ggml 2>/dev/null | tr '\n' ' ')"
+  llver="$(_llama_build) ($(llama-server --version 2>&1 | head -1))"
   local kernel cpu
   kernel="$(uname -r)"
   cpu="$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"

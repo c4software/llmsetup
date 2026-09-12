@@ -124,32 +124,35 @@ Sur bigchuck, dans `~/llm/llmsetup` (branche `qwen3.8-flash-next`,
 10. Bump ggml 0.22 : relancer `--bench` sur les autres modèles du parc, le
     journal signale les écarts > 5 %.
 
-## Jalon 2 : merge de la PR MTP #28243
+## Jalon 2 : MTP par le fork (préparé le 12/09/2026)
 
-Indépendant du jalon 1 et postérieur : la PR est en draft au 04/09. Elle
-apporte le graphe MTP `qwen4exp`, l'emprunt de tenseurs entre modèles et
-`--spec-type draft-mtp` pour cette arch. À sa merge, puis à son arrivée dans un
-tag stable :
+Ce jalon attendait la PR mainline #28243 (graphe MTP `qwen4exp`, emprunt de
+tenseurs entre modèles, `--spec-type draft-mtp` pour cette arch). Elle n'est
+toujours pas mergée, mais le passage du service au fork halo-box/strix-llama.cpp
+le 12/09/2026 le débloque autrement : le fork a le graphe MTP `qwen4exp` et le
+drafter externe (`spec-draft-model`). Le jalon 2 est donc préparé dans
+`lib/models.sh`, à mesurer.
 
-1. Déclarer le sidecar dans le bloc (`download_hf` sur le même repo,
-   `QWEN38_FLASH_NEXT_MTP_PATH="MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"`,
-   2,60 Go ; `_dl` recrée le sous-dossier `MTP/` sous le dossier modèle depuis
-   le 04/09) et le télécharger par `--setup`. La variante `shared-` emprunte
-   embeddings et projection de sortie au modèle hôte ; les fichiers autonomes
-   ne servent qu'aux builds sans cet emprunt.
-2. Remettre `spec-type = ngram-map-k,draft-mtp` et `spec-draft-n-max = 4`,
-   ET transmettre le sidecar à llama-server : les blocs MTP existants n'ont
-   pas de clé pour ça (tête embarquée dans leur GGUF). Clé attendue
-   `spec-draft-model = $QWEN38_FLASH_NEXT_MTP_PATH` (le seul précédent de
-   drafter externe, cf. commentaire laguna), À CONFIRMER sur la PR #28243
-   avant le restart : sans elle llama-server ne trouve pas de tête MTP et le
-   « n/a » de l'étape 3 arrive après un chargement de 94 Go sans en donner la
-   cause. Renommer la section en `qwen3.8-flash-next-mtp-nothink`.
-3. Vérifier l'acceptance (`--spec-test ... 2`, pas de « n/a »), puis refaire
-   l'étape 4 de la skill (`--spec-tune 2,4,6,8 4`) et re-arbitrer l'étape 5,
-   la courbe n-gram change quand le MTP occupe le batch.
-4. Re-mesurer l'étape 6 et comparer au tableau du jalon 1 : c'est le seul
-   chiffre qui dit ce que le MTP rapporte vraiment ici.
+1. FAIT : sidecar déclaré (`download_hf` sur le même repo,
+   `QWEN38_FLASH_NEXT_MTP_PATH="MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf"`, 4,1 Go)
+   et déjà téléchargé sur bigchuck. C'est la version AUTONOME, pas la
+   « shared- » de 2,60 Go : le fork ne sait pas emprunter au modèle hôte les
+   embeddings et la projection de sortie.
+2. FAIT : `spec-type = ngram-map-k,draft-mtp`, `spec-draft-model` = le sidecar,
+   `spec-draft-n-max = 4` (valeur de départ de la skill), ngram-map-k size-m 7
+   min-hits 2 et `ngram-on-disk` inchangés. Pas de `spec-draft-adaptive` :
+   mesuré le 12/09 sur les deux 27B MTP, aucun gain visible.
+   Section NON renommée en `-mtp-nothink` tant que le gain n'est pas mesuré
+   (renommer casse `preload.conf`, `spec-ngram.conf` et le README pour un
+   réglage à l'essai).
+3. À FAIRE : `--spec-test qwen3.8-flash-next-nothink 2` — une acceptance autre
+   que « n/a » prouve que le sidecar est chargé ; sinon le chargement de 94 Go
+   se passe sans rien dire de la cause.
+4. À FAIRE : `--bench 3` contre la référence n-gram seul sur le fork
+   (414 t/s prefill, 30,9 t/s décode, `--bench` du 12/09/2026, strix-0007bc6).
+   Puis, si le MTP est gardé : `--spec-tune 2,4,6,8 4` et re-arbitrage de
+   l'étape 5 (la courbe n-gram change quand le MTP occupe le batch), enfin
+   renommage de la section en `-mtp-nothink`.
 
 Note : l'alternative « binaires prébuilts unsloth » (tag `b10715-mix-86bd2d3`
 ou plus récent) ou un build de la PR sortirait du paquet Arch, donc du mode de
