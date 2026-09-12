@@ -299,6 +299,41 @@ le cas n-gram) ne se comparent pas entre elles.
 Médianes hors première passe ; « cache » = part du prompt servie du cache
 pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
 
+### Paquet Arch contre fork : mesures
+
+Protocole `--bench` du dépôt (prefill de la passe 1 à froid, décode médian des
+passes suivantes, acceptance médiane), sauf mention. Colonne « paquet » :
+valeurs de la table du parc ci-dessus, série `bNNNNN`. Colonne « fork » :
+`--bench` 3 passes, Vulkan0, `strix-0007bc6`, les 12 et 13/09/2026.
+
+| Modèle | Paquet, sans optimisation (prefill / gen) | Fork strix-0007bc6 (prefill / gen) | Écart de gen | Note |
+|---|---|---|---|---|
+| lfm2.5-2.6b | 2279 / 67,7 (b10433, 21/08) | 3048 / 70,8 (13/09) | +4,6 % | bench.log du 02/09 (b10621) donnait déjà 2743 / 69,4 : l'essentiel de l'écart de prefill vient du build, pas du fork |
+| qwen3.5-9b | 837 / 25,7 (b10433, 21/08) | 971 / 25,7 (13/09) | 0 % | décode identique au dixième ; bench.log 02/09 (b10621) 25,59, prefill inexploitable (67, contaminé par le cache) |
+| ornith-1.5-35b-a3b | 974 / 70,7 (b10566, 28/08) | 1129 / 73,3 (13/09) | +3,7 % | sans spéculation des deux côtés |
+| qwen3.8-27b (thinking) | 215 / 12,1 (b10433, 21/08) | non mesuré sans spec-prefill | n/a | seule mesure fork disponible : 759 / 12,2 le 12/09 à 23:15, mais avec `spec-prefill-p` 0,30, option retirée depuis (cache de prompt à 0 %) ; bench.log 02/09 (b10621) : 239 / 12,13 |
+| qwen3.8-27b-mtp-nothink | 261 / 29,5 / acc. 0,65 (b10433, 21/08) | 321 / 25,8 / acc. 0,59 (12/09) | -12,5 % | seule régression de décode du parc ; l'acceptance baisse dans le même sens ; sur spec-refactor.txt (`--spec-test`, décode seul) fork 53,7 acc. 0,67 contre paquet 56,1 acc. 0,80 (b10433, 21/08), soit -4,3 % |
+| qwopus3.6-27b-coder-mtp-nothink | 245 / 26,4 / acc. 0,65 (b10433, 21/08) | non mesuré (`--bench`) | n/a | mesuré seulement sur spec-refactor.txt (`--spec-ab`, décode seul) : 77,4 t/s acc. 0,85 contre 50,7 acc. 0,78 au paquet (b10433, 21/08), soit +52,7 % |
+| qwen3.8-flash-next-mtp-nothink | 197 / 25,9 / acc. 0,75 (b10809, 05/09) | 414 / 30,9 / acc. 0,80 en n-gram seul avec `ngram-on-disk` (12/09) | +19,3 % | à réglage égal (n-gram seul) ; sur spec-refactor.txt le paquet fait 54,0 en n-gram seul |
+| qwen3.8-flash-next-mtp-nothink (n-gram + draft-mtp 4) | impossible sur le paquet | 383 / 50,0 / acc. 0,87 (12/09) | +93 % contre le paquet en n-gram seul | le MTP n'existe pas sur le paquet (sidecar refusé) ; `--spec-tune` draft-mtp seul k2/4/6/8 = 43,0 / **50,7** / 49,5 / 32,7 ; `--spec-test` mixte 48,8 acc. 0,86 |
+| deepseek-v4-flash | 110 / 12,3 | non mesuré sur le fork | n/a | |
+| qwen3-coder-next | 457 / 43,7 (bench) | non mesuré sur le fork | n/a | |
+| gpt-oss | 333 / 51,9 sans spéculation | non mesuré sur le fork | n/a | |
+| laguna-s-2.1 | 247 / 30,3 (bench) | non mesuré sur le fork | n/a | DFlash refusé par le fork comme par le paquet (12/09) |
+
+Trois mesures du fork n'entrent pas dans le tableau. Le draft adaptatif
+(`spec-draft-adaptive`) rend 2 % de moins que le draft fixe sur les deux 27B MTP
+(`--spec-ab` du 12/09), il n'est pas retenu. Le speculative prefill sur
+qwen3.8-27b passe la boucle agentic (`--bench-agentic` 11/11 PASS, prefill
+345 t/s) mais met `--bench-cache` à 0 % même sur requête identique : retiré.
+Côté mémoire, `ngram-on-disk` charge Qwen3.8-Flash-Next en 72 Go en instance
+seule (79 Go via le routeur, avec lfm2.5 et le sidecar MTP) au lieu d'environ
+100, à prefill et décode inchangés.
+
+Les deux séries ne se comparent pas à la décimale : builds et jours différents,
+et les passes MTP sont dispersées. Détail des runs dans `logs/bench.log` et
+`logs/spec-tests.log` sur bigchuck.
+
 ### Spéculation
 
 | Modèle | GGUF | Device | Configuration | Gen t/s | Acceptance | Prompt |
