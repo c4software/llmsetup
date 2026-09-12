@@ -909,7 +909,7 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661
 #   Sur cette arch (GDN + MoE 512 experts, la même famille que Qwen3-Coder-Next)
 #   on attendait un gros surcoût fixe par pas spéculatif ; mesuré le 05/09/2026
 #   (b10809, Vulkan0) : ce n'est PAS le cas ici, le petit draft gagne, cf. le
-#   commentaire de la section -nothink.
+#   commentaire de la section -mtp-nothink.
 # parallel 1 : contrainte MTP (np > 1 non supporté), de nouveau active avec le
 #   retour de draft-mtp. De toute façon imposé par la place : 93,7 Go de poids
 #   sur 124 Go, un deuxième slot de KV à 128k mangerait la marge.
@@ -944,9 +944,10 @@ derive_gguf qwen3.8-flash-next \
   QWEN38_FLASH_NEXT_MTP_STRIX_PATH="MTP/mtp-Qwen3.8-Flash-Next-strix-Q8_0.gguf" \
   "$QWEN38_FLASH_NEXT_MTP_PATH" tools/mtp-rename-hc-head.py
 
-# Qwen3.8-Flash-Next nothink : spéculation n-gram, sampling instruct.
+# Qwen3.8-Flash-Next nothink : spéculation mixte n-gram + MTP, sampling instruct.
 # Renommée -nothink le 04/09, quand draft-mtp avait été retiré faute de moteur
-#   capable de charger le sidecar.
+#   capable de charger le sidecar ; revenue à -mtp-nothink le 12/09/2026 avec le
+#   retour de draft-mtp sur le fork, comme qwen3.8-27b-mtp-nothink.
 # JALON 2 du plan Flash-Next (PLAN-qwen3.8-flash-next.md) DÉBLOQUÉ le
 #   12/09/2026 par le renommage du sidecar (tools/mtp-rename-hc-head.py, cf. la
 #   déclaration ci-dessus) : le fork apporte le graphe MTP qwen4exp et le
@@ -967,9 +968,13 @@ derive_gguf qwen3.8-flash-next \
 #   --bench 3 passes : prefill 383 t/s, décode 50,0 t/s, acceptance 0,87,
 #   soit +62 % de décode et -7 % de prefill contre le n-gram seul. MTP GARDÉ.
 #   Mémoire utilisée avec Flash-Next chargé : 79 Go.
-#   Reste : --spec-tune 2,4,6,8 4 (n-max 4 = valeur de départ), renommer la
-#   section en -mtp-nothink (preload.conf, spec-ngram.conf, README), et la
-#   variante shared d'unsloth restée sur disque peut disparaître.
+#   --spec-tune 2,4,6,8 4 (draft-mtp seul, spec-test.txt) : n-max 2 = 43,0 t/s
+#     (acceptance 0,95) / 4 = 50,7 (0,90) / 6 = 49,5 (0,84) / 8 = 32,7 (0,80).
+#     Retenu 4 (spec-nmax.conf), la valeur de départ est confirmée. La chute à
+#     8 est la marche de la courbe llama-bench entre les batchs 8 et 9 (x2,5,
+#     cf. plus bas) : au-delà de 8 tokens de draft le pas spéculatif coûte plus
+#     que ce que l'acceptance rapporte.
+#   Reste : la variante shared d'unsloth restée sur disque peut disparaître.
 # Mesuré le 05/09/2026 (bigchuck, llama-cpp 0.4.0-1.1 = b10809, ggml 0.23.0,
 #   UD-IQ4_XS, Vulkan0, médianes hors 1re passe) :
 #   --bench 3 passes : prefill 197 t/s, décode 25,9 t/s (acceptance 0,75 sur
@@ -1001,7 +1006,7 @@ derive_gguf qwen3.8-flash-next \
 #   inconnues). Revenir au paquet Arch (--unset-fork) impose donc de retirer
 #   cette ligne à la main puis de relancer --preload ; le dépôt ne filtre rien,
 #   il refuse seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
-llama_model qwen3.8-flash-next-nothink "
+llama_model qwen3.8-flash-next-mtp-nothink "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 131072
 cache-ram        = 8192

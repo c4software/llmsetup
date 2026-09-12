@@ -293,7 +293,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** seul (draft-dflash refusé par le mainline `wrong number of tensors; expected 76, got 69` **et** par le fork le 12/09/2026 : `failed to load draft model`) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
-| qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** à l'essai sur le fork (sidecar autonome Q8_0 renommé par `tools/mtp-rename-hc-head.py` ; le mainline ne sait toujours pas le charger, PR #28243) | 197 | 25,1 sans ; **54,0** (refactor, +115 %) ; 25,9 (bench) | 05/09/2026, b10809 / ggml 0.23.0 ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
+| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** (confirmé, k2/4/6/8 = 43,0 / **50,7** / 49,5 / 32,7) sur le fork (sidecar autonome Q8_0 renommé par `tools/mtp-rename-hc-head.py` ; le mainline ne sait toujours pas le charger, PR #28243) | **383** (197 en n-gram seul, b10809) | 25,1 sans ; **54,0** (refactor, +115 %) ; **50,0** (bench mixte, acc. 0,87) | 12/09/2026, strix-0007bc6 (mixte) et 05/09/2026, b10809 / ggml 0.23.0 (n-gram) ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
 pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
@@ -325,10 +325,11 @@ pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
 | | | | ngram-map-k 47 | 39,9 | | spec-refactor |
 | | | | draft-dflash (n-max 15 ou 7) | échec | | mainline b10548 : refuse le drafter, 69 tenseurs créés au lieu des 76 du fichier |
 | | | | ngram-map-k 7 + draft-dflash 7 | échec | | fork strix-0007bc6 (12/09/2026) : il revendique DFlash, mais son loader ne crée toujours aucun `attn_gate` — `common_speculative_init_result: failed to load draft model`, retour au n-gram seul |
-| qwen3.8-flash-next-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 | sans spéculation | 25,1 | | spec-refactor (b10809, 05/09/2026) |
+| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 | sans spéculation | 25,1 | | spec-refactor (b10809, 05/09/2026) |
 | | | | **ngram-map-k 7** (retenu) | **54,0** | 0,95 | spec-refactor : +115 %, le petit draft gagne malgré la famille GDN + MoE |
 | | | | ngram-map-k 47 | 48,2 | 0,86 | spec-refactor : une passe sur quatre illisible (seed 44), reproductible |
-| | | | **ngram-map-k 7 + draft-mtp 4** (à l'essai) | à mesurer | 0,64 au chargement | fork strix-0007bc6, sidecar autonome Q8_0 (4,1 Go) renommé par `tools/mtp-rename-hc-head.py` ; chargement validé le 12/09/2026 (MTP seul, n-max 4 : 40,3 t/s sur 300 tokens de code, acceptance 0,64 = 215/336) ; référence n-gram seul sur le fork : 414 prefill / 30,9 décode (--bench du 12/09/2026) |
+| | | | **ngram-map-k 7 + draft-mtp 4** (retenu) | **50,0** | 0,87 | fork strix-0007bc6, sidecar autonome Q8_0 (4,1 Go) renommé par `tools/mtp-rename-hc-head.py` ; --bench du 12/09/2026 : prefill 383 t/s, contre 414 / 30,9 en n-gram seul sur le même fork (+62 % de décode, -7 % de prefill) ; --spec-test 4 passes : 48,8 t/s, acceptance 0,86 |
+| | | | draft-mtp seul, n-max 2 / 4 / 6 / 8 | 43,0 / **50,7** / 49,5 / 32,7 | 0,95 / 0,90 / 0,84 / 0,80 | --spec-tune du 12/09/2026 (spec-test.txt, 4 passes) : n-max 4 retenu (spec-nmax.conf) ; la chute à 8 est la marche de la courbe entre les batchs 8 et 9 |
 | | | ROCm0 | sans spéculation | **charabia**, exclu | | bench-devices, question de contrôle |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go, MoE) | Vulkan0 | sans spéculation | 11,3 | | spec-refactor |
 | | | | **ngram-map-k 7** (retenu) | **12,3** | 0,9 sur les hits | spec-refactor |
@@ -409,7 +410,7 @@ Lecture : le décode en boucle d'outils (71 t/s) rejoint le `--bench` (70,7) ; l
 | qwopus3.6-27b | GDN | 62 % (847 tok) | 0 % | 63 % (861 tok) |
 | lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 0 % | 63 % (876 tok) |
 | qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 0 % | 66 % (978 tok) |
-| qwen3.8-flash-next-nothink | GDN, MoE | 62 % (883 tok) | 0 % | 64 % (897 tok) |
+| qwen3.8-flash-next-mtp-nothink | GDN, MoE | 62 % (883 tok) | 0 % | 64 % (897 tok) |
 | **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **0 %** | **100 %** |
 | **gpt-oss** | **attention + SWA, MoE** | **99 %** | **4 %** | **100 %** |
 | **laguna-s-2.1** | **attention SWA + globale, MoE** | **99 %** | **2 %** | **100 %** |
@@ -440,7 +441,7 @@ relu depuis le disque.
 | qwen3-coder-next | 47 Go | 72 s | 406 ms | disque |
 | gpt-oss | 59 Go | 91 s | 86 ms | disque |
 | laguna-s-2.1 | 69 Go | 67 s | 173 ms | disque |
-| qwen3.8-flash-next-nothink | 88 Go | 14,1 s | 86 ms | chaud (après la campagne de mesures) |
+| qwen3.8-flash-next-mtp-nothink | 88 Go | 14,1 s | 86 ms | chaud (après la campagne de mesures) |
 
 Une bascule LRU entre modèles moyens coûte quelques secondes si le fichier
 est encore en cache de pages, une minute et plus s'il a été évincé (les

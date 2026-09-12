@@ -168,12 +168,62 @@ renommer les trois tenseurs suffit, aucune conversion.
    acceptance 0,87, contre 414 / 30,9 en n-gram seul : +62 % de décode pour
    -7 % de prefill. Mode mixte GARDÉ. 79 Go utilisés une fois chargé.
 
+4. **FAIT** : `--spec-tune qwen3.8-flash-next-nothink 2,4,6,8 4` (draft-mtp
+   seul, spec-test.txt, strix-0007bc6) : n-max 2 = 43,0 t/s (acceptance 0,95),
+   4 = 50,7 (0,90), 6 = 49,5 (0,84), 8 = 32,7 (0,80). Retenu **4**, écrit dans
+   `spec-nmax.conf` : la valeur de départ est confirmée, et la chute à 8 est la
+   marche de la courbe llama-bench entre les batchs 8 et 9. Section renommée
+   `qwen3.8-flash-next-mtp-nothink` (même convention que
+   `qwen3.8-27b-mtp-nothink`), chiffres reportés dans le commentaire du bloc et
+   dans le README (table du parc et table spéculation).
+
+   Précision sur le garde-fou de préchargement : il ne dérive **pas** du nom de
+   section. `_preload_sanity` (lib/preload.sh) travaille sur la clé modèle,
+   c'est-à-dire le dossier du GGUF (`_key`, lib/common.sh) : il avertit quand
+   `<clé>` et `<clé>-mtp` sont préchargés ensemble. Flash-Next n'a qu'une clé,
+   `qwen3.8-flash-next` (le sidecar MTP vit dans son sous-dossier `MTP/`, pas
+   dans un dossier `qwen3.8-flash-next-mtp`) : le renommage de la section ne
+   change donc rien à ce garde-fou, et l'autre garde-fou, « plusieurs modèles
+   préchargés sur la même ligne `model =` », ne se déclenche pas non plus
+   puisqu'aucune autre section ne pointe sur ce GGUF. Le suffixe `-mtp-nothink`
+   est ici une convention de lisibilité, alignée sur les deux 27B.
+
 ### À FAIRE (sur bigchuck, dans l'ordre)
 
-4. Si gardé : `./setup-llm.sh --spec-tune qwen3.8-flash-next-nothink` (mesure en
-   `draft-mtp` seul, écrit `spec-nmax.conf`), puis renommer la section en
-   `qwen3.8-flash-next-mtp-nothink` (le garde-fou de préchargement en dérive) et
-   reporter les chiffres dans le commentaire du bloc et le README.
+4bis. **À la main sur bigchuck** (les `.conf` ne sont pas versionnés, le dépôt
+   ne peut pas les renommer) : après `git pull --ff-only`, renommer la clé qui
+   porte le nom de section dans
+
+   - `~/llm/llmsetup/spec-nmax.conf` :
+     ancienne ligne `qwen3.8-flash-next-nothink = 4`
+     nouvelle ligne `qwen3.8-flash-next-mtp-nothink = 4`
+   - `~/llm/llmsetup/spec-ngram.conf` :
+     ancienne ligne `qwen3.8-flash-next-nothink = 7`
+     nouvelle ligne `qwen3.8-flash-next-mtp-nothink = 7`
+   - `~/llm/llmsetup/preload.conf` : **rien à faire**, vérifié le 12/09/2026,
+     aucune ligne `flash-next` (le modèle n'est pas préchargé). Si elle
+     réapparaissait avant le `--preload`, la renommer de la même façon, sinon
+     elle est ignorée en silence puis supprimée et le modèle cesse d'être
+     préchargé.
+
+   `bench-devices.conf` n'est **pas** concerné : sa clé est le dossier du GGUF
+   (`qwen3.8-flash-next = Vulkan0`), pas le nom de section. Ce sont des choix
+   utilisateur : on renomme la clé, on ne touche pas à la valeur. Puis
+   `./setup-llm.sh --preload` (la section `-nothink` disparaît du `models.ini`
+   au profit de `-mtp-nothink`) et `systemctl --user restart llama-server`.
+
+5. Merger la branche dans `master`, supprimer ce fichier, remettre bigchuck sur
+   `master` (`git checkout master && git pull --ff-only`).
+
+6. Re-bencher le parc sur le fork : les mesures faites sous `strix-<commit>`
+   forment une nouvelle série, non comparable aux `bNNNNN` du paquet Arch (cf.
+   README, section Moteur). Seuls Flash-Next et Laguna ont été remesurés sur le
+   fork ; les autres lignes des tableaux sont encore des chiffres Arch.
+
+7. Purger la variante `shared-` du sidecar MTP restée sur disque
+   (`~/models/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf`,
+   2,60 Go) : elle n'est plus déclarée et `--cleanup` ne la purge pas (le
+   sous-dossier `MTP/` est protégé en bloc).
 
 Note : l'alternative « binaires prébuilts unsloth » (tag `b10715-mix-86bd2d3`
 ou plus récent) ou un build de la PR sortirait du paquet Arch, donc du mode de
