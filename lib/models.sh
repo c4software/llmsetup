@@ -961,10 +961,15 @@ derive_gguf qwen3.8-flash-next \
 #   par le fork (« unused tensor », sans effet).
 #   Référence à battre, n-gram seul sur le fork : prefill 414 t/s, décode
 #   30,9 t/s (--bench du 12/09/2026, strix-0007bc6, Vulkan0, ngram-on-disk).
-#   À MESURER dans cet ordre : --spec-test (acceptance autre que « n/a »),
-#   --bench 3 contre cette référence, puis --spec-tune si le mode mixte est
-#   gardé ; renommer ensuite la section en -mtp-nothink (et la variante shared
-#   d'unsloth, restée sur disque, peut disparaître).
+#   MESURÉ le 12/09/2026 via le routeur (strix-0007bc6, Vulkan0, mode mixte
+#   ngram-map-k 7 + draft-mtp n-max 4, ngram-on-disk) :
+#   --spec-test 4 passes (spec-test.txt) : 48,8 t/s, acceptance 0,86 agrégée ;
+#   --bench 3 passes : prefill 383 t/s, décode 50,0 t/s, acceptance 0,87,
+#   soit +62 % de décode et -7 % de prefill contre le n-gram seul. MTP GARDÉ.
+#   Mémoire utilisée avec Flash-Next chargé : 79 Go.
+#   Reste : --spec-tune 2,4,6,8 4 (n-max 4 = valeur de départ), renommer la
+#   section en -mtp-nothink (preload.conf, spec-ngram.conf, README), et la
+#   variante shared d'unsloth restée sur disque peut disparaître.
 # Mesuré le 05/09/2026 (bigchuck, llama-cpp 0.4.0-1.1 = b10809, ggml 0.23.0,
 #   UD-IQ4_XS, Vulkan0, médianes hors 1re passe) :
 #   --bench 3 passes : prefill 197 t/s, décode 25,9 t/s (acceptance 0,75 sur

@@ -158,18 +158,18 @@ renommer les trois tenseurs suffit, aucune conversion.
 - Bloc remis en `spec-type = ngram-map-k,draft-mtp` (ngram-map-k 7, min-hits 2,
   `spec-draft-n-max` 4, `ngram-on-disk`), sans `spec-draft-adaptive`.
 
+### FAIT le 12/09/2026 au soir (via le routeur, strix-0007bc6, Vulkan0)
+
+1. Déployé (`git pull`, `--preload`, restart) : le routeur lance bien
+   `--spec-type ngram-map-k,draft-mtp` avec le GGUF `-strix-`.
+2. `--spec-test qwen3.8-flash-next-nothink 4` : 48,8 t/s, acceptance 0,86
+   agrégée (le MTP tourne : ce n'est pas « n/a »).
+3. `--bench qwen3.8-flash-next-nothink 3` : prefill 383 t/s, décode 50,0 t/s,
+   acceptance 0,87, contre 414 / 30,9 en n-gram seul : +62 % de décode pour
+   -7 % de prefill. Mode mixte GARDÉ. 79 Go utilisés une fois chargé.
+
 ### À FAIRE (sur bigchuck, dans l'ordre)
 
-1. `git pull --ff-only`, `./setup-llm.sh --preload` (régénère le ini), restart,
-   puis une requête sur le modèle et `curl localhost:8009/v1/models` :
-   `status.args` doit porter `--spec-type ngram-map-k,draft-mtp` et le GGUF
-   `-strix-`.
-2. `./setup-llm.sh --spec-test qwen3.8-flash-next-nothink` : l'acceptance doit
-   être un nombre, pas « n/a » (c'est le contrôle que le MTP tourne vraiment).
-3. `./setup-llm.sh --bench qwen3.8-flash-next-nothink 3`, à comparer à la
-   référence n-gram seul sur le fork : 414 t/s prefill, 30,9 t/s décode
-   (strix-0007bc6, Vulkan0, ngram-on-disk). Garder le mode mixte seulement s'il
-   la bat.
 4. Si gardé : `./setup-llm.sh --spec-tune qwen3.8-flash-next-nothink` (mesure en
    `draft-mtp` seul, écrit `spec-nmax.conf`), puis renommer la section en
    `qwen3.8-flash-next-mtp-nothink` (le garde-fou de préchargement en dérive) et
