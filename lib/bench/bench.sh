@@ -23,6 +23,15 @@
 #
 # NB : chaque modèle non chargé est chargé par le routeur à la 1re requête
 # (LRU --models-max) — sur --bench all, prévoir les temps de chargement.
+# ⚠ Le bench ne décharge RIEN : c'est le routeur qui évince, en LRU, sans
+#   connaître la taille des modèles. Sur une suite de géants, la somme du
+#   sortant et de l'entrant peut dépasser la mémoire de la machine : campagne
+#   du 13/09/2026, routeur tué deux fois par l'OOM du noyau (Laguna 73 Go
+#   chargé pendant que gpt-oss 59 Go tenait encore ; puis DeepSeek 104 Go après
+#   éviction de lfm2.5, le LRU, au lieu de Laguna). Le service se relance seul
+#   (Restart=on-failure), la mesure en cours est perdue. Parade côté opérateur,
+#   pas côté code : décharger le précédent (POST /models/unload) ou ordonner la
+#   suite du plus petit au plus gros.
 # Le choix du device par modèle reste celui de bench-devices.conf
 # (--bench-devices pour le comparer automatiquement, édition manuelle sinon) ;
 # le réglage MTP passe par --spec-test/--spec-tune.

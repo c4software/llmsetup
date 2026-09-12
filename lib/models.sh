@@ -174,6 +174,8 @@ download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
 #   (8,2 Go), TTFT à chaud 65 ms ; --bench-cache : 62 % au tour suivant, 63 % à
 #   l'identique (cf. en-tête). Justesse OK (recopie) ; un calcul mental simple, lui, est raté
 #   (93 → 33) : tâches auxiliaires, pas de raisonnement.
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   971 t/s, décode 25,7 t/s : prefill +16 %, décode identique au dixième.
 llama_model qwen3.5-9b "
 model                = $QWEN35_9B_PATH
 ctx-size             = 32768
@@ -227,6 +229,9 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   préfixe passe par cache-ram + ctx-checkpoints, au dernier checkpoint
 #   seulement (cf. en-tête, 62 % au tour suivant sur cette arch).
 # jinja : template chat requis pour le tool calling XML (<function=...>).
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   1129 t/s, décode 73,3 t/s : prefill +16 %, décode +4 % (sans spéculation
+#   des deux côtés).
 llama_model ornith-1.5-35b-a3b "
 model                = $ORNITH15_35B_A3B_PATH
 ctx-size             = 1048576
@@ -278,6 +283,9 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-GGUF" \
 #   --bench-parallel : 4 requêtes = 205 t/s agrégés (x3,06) ; --bench-load :
 #   0,5 s (2,7 Go), TTFT 27 ms ; --bench-cache : 62 % / 63 % comme les GDN
 #   (autre tokenizer, même plafond : c'est l'état récurrent, conv ici).
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   3048 t/s, décode 70,8 t/s : prefill +34 % contre le 21/08, mais bench.log
+#   du 02/09 (b10621) donnait déjà 2743 : l'essentiel vient du build.
 llama_model lfm2.5-2.6b "
 model            = $LFM25_26B_PATH
 ctx-size         = 131072
@@ -325,6 +333,10 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 #   64 % / 66 % (état récurrent). --bench-load : 72 s (47 Go relus depuis le
 #   disque), TTFT à chaud 406 ms — à la demande, ce modèle coûte plus d'une
 #   minute à charger quand DeepSeek est passé avant lui.
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   763 t/s, décode 48,7 t/s, acceptance 0,27 : prefill +63 %, décode +11 %
+#   contre le paquet (468 / 43,7, b10433) à acceptance inchangée : le gain
+#   vient du moteur, pas de la spéculation.
 llama_model qwen3-coder-next "
 model            = $QWEN3_CODER_NEXT_PATH
 ctx-size         = 131072
@@ -549,6 +561,13 @@ ctx-checkpoints      = 128"
 #   (acceptance 0,62) contre 53,7 (0,67) en draft fixe n-max 6. Aucun gain,
 #   et l'adaptatif casse la calibration α de --spec-tune (k variable par
 #   forward). Draft fixe conservé.
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   360 t/s, décode 26,6 t/s, acceptance 0,59 : prefill +38 %, mais décode
+#   -10 % contre le paquet (261 / 29,5 / 0,65, b10433) : SEUL décode en retrait
+#   du parc sur le fork. Première mesure du 12/09 à 321 / 25,8 / 0,59,
+#   contre-mesurée le 13/09 ; les passes vont de 22 à 28 t/s, l'écart tient
+#   dans leur dispersion. Sur spec-refactor.txt (décode seul) : 53,7 t/s
+#   acceptance 0,67 contre 56,1 / 0,80 au paquet, soit -4 %.
 llama_model qwen3.8-27b-mtp-nothink "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
@@ -602,6 +621,10 @@ download_hf qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
 #   12/09/2026 (strix-0007bc6, spec-refactor.txt, 4 passes) : adaptatif 76,0 t/s
 #   (acceptance 0,82) contre 77,4 (0,85) en draft fixe n-max 4. Draft fixe
 #   conservé (cf. le bloc 27B-MTP).
+# Fork (strix-0007bc6) : pas de --bench, seule la mesure de décode existe.
+#   --spec-ab du 12/09/2026 (spec-refactor.txt, 4 passes) : 77,4 t/s acceptance
+#   0,85 contre 50,7 / 0,78 au paquet (b10433), soit +53 %. Le --bench reste à
+#   faire pour avoir le prefill sur cette série.
 llama_model qwopus3.6-27b-coder-mtp-nothink "
 model                = $QWOPUS_CODER_MTP_PATH
 ctx-size             = 131072
@@ -653,6 +676,9 @@ download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
 #   draft de gagner : pas d'état récurrent, donc pas de surcoût fixe par pas
 #   (contraste avec Qwen3-Coder-Next), et les misses sont gratuits. Le grand
 #   draft, lui, paie son batch x14,7 à chaque hit partiel.
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   599 t/s, décode 52,9 t/s, acceptance 0,57 : prefill +80 %, décode neutre
+#   (+2 %) contre le paquet (333 / 51,9, b10548).
 llama_model gpt-oss "
 model            = $GPTOSS_PATH
 ctx-size         = 131072
@@ -732,6 +758,11 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   -soft-ratio, -soft2-ratio ni -grace-tokens : une clé inconnue fait échouer
 #   le démarrage du routeur entier. Revenir au paquet impose de retirer ces
 #   lignes à la main puis --preload (FORK_ONLY_KEYS, lib/fork.sh).
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   205 t/s, décode 19,9 t/s, acceptance 0,65 : prefill +86 % et décode +62 %
+#   contre le paquet (110 / 12,3, b10433), le plus gros gain de décode du parc.
+#   Le reasoning-budget ci-dessus n'a pas été atteint sur le test fait
+#   (1678 tokens de pensée).
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072
@@ -837,6 +868,9 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 #   sans (+6 %) — pas de revers hors refactor, contrairement à Qwen3-Coder-Next.
 #   --bench-cache : 99 % au tour suivant, 100 % à l'identique (pas d'état
 #   récurrent). --bench-load : 67 s (69 Go depuis le disque), TTFT à chaud 173 ms.
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   346 t/s, décode 29,6 t/s, acceptance 0,80 : prefill +36 %, décode -2 %
+#   contre le paquet (255 / 30,3 / 0,835, b10548), soit le bruit de mesure.
 llama_model laguna-s-2.1 "
 model            = $LAGUNA_S_PATH
 ctx-size         = 262144
