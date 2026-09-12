@@ -1,5 +1,5 @@
 # lib/bench/bench-devices.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 #
 # Sorti de bench.sh (trop gros) : --bench-devices, --bench-sanity (que devices
 # applique avant chaque device) et --list-devices. Réutilise _bench_one et
@@ -134,7 +134,7 @@ cmd_bench_devices() {
   local -a devs=()
   local d
   IFS=',' read -r -a devs <<< "$devlist"
-  export PATH="$HOME/.local/bin:$PATH"
+  # ($HOME/.local/bin est déjà en tête du PATH, posé par common.sh)
   if command -v llama-bench >/dev/null 2>&1; then
     local exposed
     exposed="$(llama-bench --list-devices 2>/dev/null || true)"
@@ -269,8 +269,14 @@ cmd_bench_devices() {
 # =============================================================================
 
 cmd_list_devices() {
-  export PATH="$HOME/.local/bin:$PATH"
+  # ($HOME/.local/bin est déjà en tête du PATH, posé par common.sh)
   command -v llama-bench >/dev/null || error "llama-bench introuvable (paquet llama-cpp)"
+
+  # Quel moteur répond réellement : paquet Arch ou fork strix-llama.cpp
+  # (lib/fork.sh). C'est ce que journalisent les mesures, et ce qui décide
+  # si les clés ini propres au fork sont comprises.
+  _fork_status
+  echo ""
 
   info "Backends ggml installés :"
   local pkg

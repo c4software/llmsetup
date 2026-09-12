@@ -39,6 +39,66 @@ de conf locaux à côté du script (non versionnés, propres à la machine). Le 
 systemctl --user start llama-server
 ```
 
+## Moteur : fork strix-llama.cpp
+
+Depuis le 12/09/2026 le service ne tourne plus sur le paquet Arch `llama-cpp`
+mais sur le fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp),
+construit localement dans `~/llm/strix-llama.cpp` et exposé par quatre liens
+(`llama-server`, `llama-bench`, `llama-cli`, `llama-quantize`) dans
+`~/.local/bin`, que l'unité systemd met en tête du PATH.
+
+```bash
+./setup-llm.sh --setup-fork   # installe ET met à jour (clone ou git pull --ff-only, build, liens)
+systemctl --user restart llama-server
+./setup-llm.sh --list-devices # quel binaire répond, et sa version
+./setup-llm.sh --unset-fork   # retire les liens : retour au paquet Arch
+```
+
+Le paquet Arch reste installé, c'est lui qui reprend la main sans les liens.
+Deux pièges :
+
+- les binaires portent un RUNPATH absolu vers leur dossier `build` : déplacer
+  `~/llm/strix-llama.cpp` impose un rebuild (`--setup-fork`), jamais un `mv` ;
+- le routeur refuse toute clé ini qu'il ne connaît pas, et l'échec n'est pas
+  local au modèle fautif : c'est le routeur **entier** qui ne démarre pas. Les
+  clés propres au fork (`ngram-on-disk`, `reasoning-budget-*`,
+  `spec-draft-adaptive`, `spec-prefill*` — liste `FORK_ONLY_KEYS` dans
+  `lib/fork.sh`) font donc
+  échouer le paquet Arch. Le dépôt ne gère pas deux moteurs : il ne filtre ni ne
+  réécrit rien, mais `--start` refuse de lancer un moteur upstream sur un tel
+  ini, en nommant le modèle et la clé. Pour rester sur le paquet Arch : retirer
+  ces clés de `lib/models.sh`, puis `--preload` (régénère le ini) avant le
+  restart.
+
+Comparabilité : les mesures faites sous le fork forment une **nouvelle série**.
+La colonne build des journaux porte `strix-<commit>` au lieu de `bNNNNN`, et ces
+deux séries ne se comparent pas (cf. ARCHITECTURE.md, comparabilité des
+journaux) — le fork décode Qwen3.8-Flash-Next à 27 t/s contre 21 sous Arch.
+
+Ce que le fork apporte aujourd'hui côté réglages (détail et mesures dans les
+commentaires de `lib/models.sh`) : `ngram-on-disk` laisse la table n-gram de
+28,8 Go de Qwen3.8-Flash-Next sur disque (72 Go de mémoire utilisée au lieu
+d'environ 100, à prefill et décode identiques, mesuré le 12/09/2026), les
+`reasoning-budget-*` plafonnent la réflexion des modèles thinking, et
+`spec-draft-adaptive` dimensionne le draft sur l'acceptance mesurée (--spec-ab du
+12/09/2026 sur les deux 27B MTP : 2 % sous le draft fixe, non retenu). Il
+apporte aussi le **speculative prefill** (`spec-prefill*`) : un petit modèle
+estime l'importance des tokens du prompt et le gros n'en prefille qu'une
+fraction (`spec-prefill-p`, 0,30 par défaut). Contrairement au MTP et aux
+n-grams, c'est **lossy** — les tokens élagués sont perdus — et, mesuré le
+12/09/2026 sur qwen3.8-27b, il neutralise le cache de prompt (0 % même sur une
+requête identique) : retiré, perdant en boucle agentic. Le graphe MTP `qwen4exp` et
+le drafter externe (`spec-draft-model`) viennent du fork également, ce qui
+débloque le MTP de Qwen3.8-Flash-Next (jalon 2), à une condition : le sidecar
+MTP d'unsloth doit d'abord être **renommé** par `tools/mtp-rename-hc-head.py`
+(voir Outils). Le fork lit le mixeur des hyper-connexions sous
+`output_hc_{norm,down,up}`, unsloth le range sous
+`blk.<n>.nextn.hc_head_*` (convention de la PR mainline #28243) : sans
+renommage, `check_tensor_dims: tensor 'output_hc_norm.weight' not found` et le
+modèle ne charge pas du tout. Le renommage est automatique au `--setup`
+(`derive_gguf` dans `lib/models.sh`). Le DFlash du fork, lui, ne débloque
+rien : Laguna S 2.1 y est refusé comme sur le paquet Arch (12/09/2026).
+
 ## Sous-commandes
 
 | Commande | Rôle |
@@ -54,7 +114,9 @@ systemctl --user start llama-server
 | `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : un device qui répond faux est exclu de `--bench-devices`, en plus du garde-fou anti-charabia |
 | `--bench-agentic [modèle] [passes]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels) |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
-| `--list-devices` | Backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
+| `--setup-fork` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin` (voir « Moteur ») |
+| `--unset-fork` | Retire les liens du fork : retour au paquet Arch au prochain restart |
+| `--list-devices` | Moteur résolu (paquet Arch ou fork) avec sa version, backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | A/B de réglages spéculatifs sur mesure réelle : chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
@@ -225,16 +287,52 @@ le cas n-gram) ne se comparent pas entre elles.
 | lfm2.5-2.6b | Q8_0 (2,7 Go) | Vulkan0 (mesuré) | parallel 4 | 2279 | 67,7 (205 agrégés à 4 requêtes, x3,06) | cache tour suivant 62 % ; chargement 0,5 s, TTFT 27 ms |
 | qwen3.5-9b | UD-Q6_K_XL (8,2 Go) | Vulkan0 (mesuré) | parallel 4 | 837 | 25,7 (78,6 agrégés à 4, x3,06) | cache 62 % ; chargement 1,9 s |
 | ornith-1.5-35b-a3b | Q4_K_M (22 Go) | Vulkan0 (mesuré : ROCm0 931 / 57,6) | parallel 4, sans spéculation | 974 | 70,7 (136,8 agrégés à 4, x1,93) | cache 62 % ; remplace les trois Qwen3.6-35B-A3B le 28/08/2026 (b10566) |
-| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation | 215 (289 → 183 à 32k en llama-bench) | 12,1 | |
+| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | sans spéculation (spec-prefill p 0,30 essayé le 12/09/2026 sur le fork et **retiré** : prefill 759 t/s mais cache de prompt à 0 %, même requête identique) | 215 (289 → 183 à 32k en llama-bench) | 12,1 | reasoning-budget 4096 (fork) ; spec-prefill lossy et incompatible avec le cache de prompt, perdant en agentic |
 | qwen3.8-27b-mtp-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + draft-mtp 6 | 261 | 29,5 (bench, acc. 0,65) ; **56,1** (refactor) ; 33,1 (spec-test, MTP seul) | chargement 4,4 s |
 | qwopus3.6-27b-coder-mtp-nothink | Q5_K_M (19 Go) | Vulkan0 (mesuré : ROCm0 328 / 21,6) | ngram-map-k 47 + draft-mtp 4 (confirmé, k2/4/6 = 24,6 / **30,2** / 30,2) | 245 | 26,4 (bench, acc. 0,65) ; **50,7** (refactor) | cache 62 % ; chargement 4,5 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | 110 | **12,3** (11,3 sans) | ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | 457 | 46,2 sans ; **68,7** (refactor) ; 43,7 (bench) | ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | 333 (413 en bench-devices) | 51,9 sans ; **59,8** (refactor) | cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
-| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** ; DFlash refusé par le mainline (`wrong number of tensors; expected 76, got 69`, fork Poolside requis) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
+| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** seul (draft-dflash refusé par le mainline `wrong number of tensors; expected 76, got 69` **et** par le fork le 12/09/2026 : `failed to load draft model`) | 247 | 28,7 sans ; **53,0** (refactor, +85 %) ; 30,3 (bench, +6 %) | b10548 ; cache 99 % ; chargement 67 s depuis le disque |
+| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** (confirmé, k2/4/6/8 = 43,0 / **50,7** / 49,5 / 32,7) sur le fork (sidecar autonome Q8_0 renommé par `tools/mtp-rename-hc-head.py` ; le mainline ne sait toujours pas le charger, PR #28243) | **383** (197 en n-gram seul, b10809) | 25,1 sans ; **54,0** (refactor, +115 %) ; **50,0** (bench mixte, acc. 0,87) | 12/09/2026, strix-0007bc6 (mixte) et 05/09/2026, b10809 / ggml 0.23.0 (n-gram) ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
 
 Médianes hors première passe ; « cache » = part du prompt servie du cache
 pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
+
+### Paquet Arch contre fork : mesures
+
+Protocole `--bench` du dépôt (prefill de la passe 1 à froid, décode médian des
+passes suivantes, acceptance médiane), sauf mention. Colonne « paquet » :
+valeurs de la table du parc ci-dessus, série `bNNNNN`. Colonne « fork » :
+`--bench` 3 passes, Vulkan0, `strix-0007bc6`, les 12 et 13/09/2026.
+
+| Modèle | Paquet, sans optimisation (prefill / gen) | Fork strix-0007bc6 (prefill / gen) | Écart de gen | Note |
+|---|---|---|---|---|
+| lfm2.5-2.6b | 2279 / 67,7 (b10433, 21/08) | 3048 / 70,8 (13/09) | +4,6 % | bench.log du 02/09 (b10621) donnait déjà 2743 / 69,4 : l'essentiel de l'écart de prefill vient du build, pas du fork |
+| qwen3.5-9b | 837 / 25,7 (b10433, 21/08) | 971 / 25,7 (13/09) | 0 % | décode identique au dixième ; bench.log 02/09 (b10621) 25,59, prefill inexploitable (67, contaminé par le cache) |
+| ornith-1.5-35b-a3b | 974 / 70,7 (b10566, 28/08) | 1129 / 73,3 (13/09) | +3,7 % | sans spéculation des deux côtés |
+| qwen3.8-27b (thinking) | 215 / 12,1 (b10433, 21/08) | non mesuré sans spec-prefill | n/a | seule mesure fork disponible : 759 / 12,2 le 12/09 à 23:15, mais avec `spec-prefill-p` 0,30, option retirée depuis (cache de prompt à 0 %) ; bench.log 02/09 (b10621) : 239 / 12,13 |
+| qwen3.8-27b-mtp-nothink | 261 / 29,5 / acc. 0,65 (b10433, 21/08) | 321 / 25,8 / acc. 0,59 (12/09) | -12,5 % | seule régression de décode du parc ; l'acceptance baisse dans le même sens ; sur spec-refactor.txt (`--spec-test`, décode seul) fork 53,7 acc. 0,67 contre paquet 56,1 acc. 0,80 (b10433, 21/08), soit -4,3 % |
+| qwopus3.6-27b-coder-mtp-nothink | 245 / 26,4 / acc. 0,65 (b10433, 21/08) | non mesuré (`--bench`) | n/a | mesuré seulement sur spec-refactor.txt (`--spec-ab`, décode seul) : 77,4 t/s acc. 0,85 contre 50,7 acc. 0,78 au paquet (b10433, 21/08), soit +52,7 % |
+| qwen3.8-flash-next-mtp-nothink | 197 / 25,9 / acc. 0,75 (b10809, 05/09) | 414 / 30,9 / acc. 0,80 en n-gram seul avec `ngram-on-disk` (12/09) | +19,3 % | à réglage égal (n-gram seul) ; sur spec-refactor.txt le paquet fait 54,0 en n-gram seul |
+| qwen3.8-flash-next-mtp-nothink (n-gram + draft-mtp 4) | impossible sur le paquet | 383 / 50,0 / acc. 0,87 (12/09) | +93 % contre le paquet en n-gram seul | le MTP n'existe pas sur le paquet (sidecar refusé) ; `--spec-tune` draft-mtp seul k2/4/6/8 = 43,0 / **50,7** / 49,5 / 32,7 ; `--spec-test` mixte 48,8 acc. 0,86 |
+| deepseek-v4-flash | 110 / 12,3 | non mesuré sur le fork | n/a | |
+| qwen3-coder-next | 457 / 43,7 (bench) | non mesuré sur le fork | n/a | |
+| gpt-oss | 333 / 51,9 sans spéculation | non mesuré sur le fork | n/a | |
+| laguna-s-2.1 | 247 / 30,3 (bench) | non mesuré sur le fork | n/a | DFlash refusé par le fork comme par le paquet (12/09) |
+
+Trois mesures du fork n'entrent pas dans le tableau. Le draft adaptatif
+(`spec-draft-adaptive`) rend 2 % de moins que le draft fixe sur les deux 27B MTP
+(`--spec-ab` du 12/09), il n'est pas retenu. Le speculative prefill sur
+qwen3.8-27b passe la boucle agentic (`--bench-agentic` 11/11 PASS, prefill
+345 t/s) mais met `--bench-cache` à 0 % même sur requête identique : retiré.
+Côté mémoire, `ngram-on-disk` charge Qwen3.8-Flash-Next en 72 Go en instance
+seule (79 Go via le routeur, avec lfm2.5 et le sidecar MTP) au lieu d'environ
+100, à prefill et décode inchangés.
+
+Les deux séries ne se comparent pas à la décimale : builds et jours différents,
+et les passes MTP sont dispersées. Détail des runs dans `logs/bench.log` et
+`logs/spec-tests.log` sur bigchuck.
 
 ### Spéculation
 
@@ -261,7 +359,14 @@ pour tour suivant / édition au milieu / requête identique. Détail ci-dessous.
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 | sans spéculation | 28,7 | | spec-refactor (b10548) |
 | | | | **ngram-map-k 7** (retenu) | **53,0** | | spec-refactor : +85 %, le plus gros gain n-gram mesuré |
 | | | | ngram-map-k 47 | 39,9 | | spec-refactor |
-| | | | draft-dflash (n-max 15 ou 7) | échec | | le mainline refuse le drafter : 69 tenseurs au lieu de 76 |
+| | | | draft-dflash (n-max 15 ou 7) | échec | | mainline b10548 : refuse le drafter, 69 tenseurs créés au lieu des 76 du fichier |
+| | | | ngram-map-k 7 + draft-dflash 7 | échec | | fork strix-0007bc6 (12/09/2026) : il revendique DFlash, mais son loader ne crée toujours aucun `attn_gate` — `common_speculative_init_result: failed to load draft model`, retour au n-gram seul |
+| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 | sans spéculation | 25,1 | | spec-refactor (b10809, 05/09/2026) |
+| | | | **ngram-map-k 7** (retenu) | **54,0** | 0,95 | spec-refactor : +115 %, le petit draft gagne malgré la famille GDN + MoE |
+| | | | ngram-map-k 47 | 48,2 | 0,86 | spec-refactor : une passe sur quatre illisible (seed 44), reproductible |
+| | | | **ngram-map-k 7 + draft-mtp 4** (retenu) | **50,0** | 0,87 | fork strix-0007bc6, sidecar autonome Q8_0 (4,1 Go) renommé par `tools/mtp-rename-hc-head.py` ; --bench du 12/09/2026 : prefill 383 t/s, contre 414 / 30,9 en n-gram seul sur le même fork (+62 % de décode, -7 % de prefill) ; --spec-test 4 passes : 48,8 t/s, acceptance 0,86 |
+| | | | draft-mtp seul, n-max 2 / 4 / 6 / 8 | 43,0 / **50,7** / 49,5 / 32,7 | 0,95 / 0,90 / 0,84 / 0,80 | --spec-tune du 12/09/2026 (spec-test.txt, 4 passes) : n-max 4 retenu (spec-nmax.conf) ; la chute à 8 est la marche de la courbe entre les batchs 8 et 9 |
+| | | ROCm0 | sans spéculation | **charabia**, exclu | | bench-devices, question de contrôle |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go, MoE) | Vulkan0 | sans spéculation | 11,3 | | spec-refactor |
 | | | | **ngram-map-k 7** (retenu) | **12,3** | 0,9 sur les hits | spec-refactor |
 | | | | ngram-map-k 31 | 11,8 | 0,27 à 0,66 | spec-refactor |
@@ -283,6 +388,7 @@ Sur Vulkan0 (`tools/bench-spec-batch.sh`, reps=5) :
 | Qwen3-Coder-Next Q4 (MoE, GDN) | 21 ms | 46 ms | marche | 199 ms | x2,16 au batch 8 ; en réel, surcoût fixe par pas spéculatif, seul 47 gagne |
 | gpt-oss-120b Q4 (MoE, SWA) | 17 ms | 57 ms | | 246 ms | x3,4 au batch 8, x14,7 au batch 48 ; en réel size_m 7 = +16 % |
 | Laguna-S-2.1 Q4 (MoE) | 33 ms | 95 ms | | 540 ms | x2,9 au batch 8, x16,5 au batch 48 ; en réel size_m 7 = +85 % |
+| Qwen3.8-Flash-Next IQ4 (MoE, GDN) | 41 ms | 94 ms | 238 ms | 515 ms | marche x2,5 entre 8 et 9, x12,6 au batch 48 ; en réel size_m 7 = +115 % (b10809) |
 
 ### Profondeur de contexte
 
@@ -340,6 +446,7 @@ Lecture : le décode en boucle d'outils (71 t/s) rejoint le `--bench` (70,7) ; l
 | qwopus3.6-27b | GDN | 62 % (847 tok) | 0 % | 63 % (861 tok) |
 | lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 0 % | 63 % (876 tok) |
 | qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 0 % | 66 % (978 tok) |
+| qwen3.8-flash-next-mtp-nothink | GDN, MoE | 62 % (883 tok) | 0 % | 64 % (897 tok) |
 | **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **0 %** | **100 %** |
 | **gpt-oss** | **attention + SWA, MoE** | **99 %** | **4 %** | **100 %** |
 | **laguna-s-2.1** | **attention SWA + globale, MoE** | **99 %** | **2 %** | **100 %** |
@@ -370,6 +477,7 @@ relu depuis le disque.
 | qwen3-coder-next | 47 Go | 72 s | 406 ms | disque |
 | gpt-oss | 59 Go | 91 s | 86 ms | disque |
 | laguna-s-2.1 | 69 Go | 67 s | 173 ms | disque |
+| qwen3.8-flash-next-mtp-nothink | 88 Go | 14,1 s | 86 ms | chaud (après la campagne de mesures) |
 
 Une bascule LRU entre modèles moyens coûte quelques secondes si le fichier
 est encore en cache de pages, une minute et plus s'il a été évincé (les
@@ -440,6 +548,11 @@ parallel         = 4"
 - `download_hf <dossier> <repo> VAR=<fichier>` déclare le fichier (chemin,
   inventaire pour `--cleanup`, téléchargement) ; pour un modèle en shards,
   `download_hf_shards` avec le shard 00001 et son sous-dossier de quant.
+- `derive_gguf <dossier> VAR=<fichier> <source> <script>` déclare un GGUF
+  **produit en local** à partir d'un fichier déjà déclaré (aucun repo ne le
+  porte) : même inventaire `--cleanup`, et `--setup` lance le script après les
+  téléchargements si le fichier manque ou si la source a bougé. Unique cas :
+  le sidecar MTP de Qwen3.8-Flash-Next renommé pour le fork.
 - `llama_model <section> "<corps ini>"` déclare la section ; deux sections
   peuvent partager le même `*_PATH` (cas Qwen3.8-27B, thinking et MTP).
 - `groupe "; --- titre ---"` avant le premier `llama_model` d'une nouvelle
@@ -457,6 +570,7 @@ d'`AGENTS.md` (skill `ajout-modele`).
 | `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
 | `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices (`DEV=Vulkan0,ROCm0`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
 | `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k, KV q8_0 comme le service), par device, avec le tour simulé de `--bench-devices` recalculé à chaque profondeur : c'est le régime agentic réel, où le classement des devices peut s'inverser. Journal `logs/bench-depth.log` + `.tsv` |
+| `mtp-rename-hc-head.py` | Renomme les trois tenseurs du mixeur final des hyper-connexions d'un sidecar MTP Qwen3.8-Flash-Next (`blk.<n>.nextn.hc_head_*` chez unsloth, convention de la PR mainline #28243) vers les noms que lit le fork strix-llama.cpp (`output_hc_*`). Données recopiées telles quelles. `PYTHONPATH=$HOME/llm/strix-llama.cpp/gguf-py python3 tools/mtp-rename-hc-head.py <in> <out>` ; appelé aussi par `--setup`. Inutile sur un moteur mainline portant #28243 |
 | `llm-proxy.ts` | Extension pi / omp : découvre les modèles `text-generation` du proxy Albert (`/v1/models`, ctx, coûts, reasoning déduit de l'id) et enregistre le provider `albert`. A copier dans `~/.pi/agent/extensions/` et `~/.omp/agent/extensions/` (une seule extension provider par agent). Endpoint `http://llmproxy` et clé en dur pour l'instant (à passer sur `process.env` avant diffusion) |
 
 Les scripts shell pointent sur `http://bigchuck:8009` par défaut (surchargeable par variable d'environnement).

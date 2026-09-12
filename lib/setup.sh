@@ -1,5 +1,5 @@
 # lib/setup.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # setup
@@ -76,12 +76,15 @@ cmd_setup() {
 
   # Téléchargements pilotés par les déclarations de models.sh (DL_SPECS),
   # dans l'ordre de déclaration (= ordre du ini)
-  local spec mode cible repo arg
+  # p1/p2 : sens dépendant du mode — repo + fichier (plat), repo + glob
+  # (shard), source + script (derive, fichier calculé en local après coup).
+  local spec mode cible p1 p2
   for spec in "${DL_SPECS[@]}"; do
-    IFS=$'\t' read -r mode cible repo arg <<< "$spec"
+    IFS=$'\t' read -r mode cible p1 p2 <<< "$spec"
     case "$mode" in
-      plat)  _dl "$cible" "$repo" "$arg" ;;
-      shard) _dl_shard "$cible" "$repo" "$arg" ;;
+      plat)   _dl "$cible" "$p1" "$p2" ;;
+      shard)  _dl_shard "$cible" "$p1" "$p2" ;;
+      derive) _derive "$cible" "$p1" "$p2" ;;
     esac
   done
 

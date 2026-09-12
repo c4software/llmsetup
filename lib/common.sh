@@ -1,5 +1,5 @@
 # lib/common.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Helpers
@@ -55,16 +55,19 @@ _skip() {
   [[ -n "$ONLY" && "$(_key "$1")" != "$ONLY" ]]
 }
 
+# _dl <cible absolue> <repo> <chemin dans le repo>
+#   hf recrée sous --local-dir le chemin relatif au repo : local-dir est donc
+#   la cible amputée de ce chemin (= le dossier modèle), pas dirname, sinon une
+#   entrée en sous-dossier (ex : MTP/x.gguf) atterrit dans MTP/MTP/x.gguf.
 _dl() {
-  local target="$1" repo="$2"
-  shift 2
+  local target="$1" repo="$2" entry="$3"
   _skip "$target" && return 0
   if [[ -f "$target" && "$REFRESH" -eq 0 ]]; then
     info "$(basename "$target") déjà présent, skip."
     return
   fi
   info "Téléchargement $(basename "$target")..."
-  HF_XET_HIGH_PERFORMANCE=1 hf download "$repo" "$@" --local-dir "$(dirname "$target")"
+  HF_XET_HIGH_PERFORMANCE=1 hf download "$repo" "$entry" --local-dir "${target%/"$entry"}"
 }
 
 _dl_shard() {
@@ -81,9 +84,61 @@ _dl_shard() {
   HF_XET_HIGH_PERFORMANCE=1 hf download "$repo" --include "$glob" --local-dir "$dest_dir"
 }
 
+# _derive <cible absolue> <source absolue> <script du dépôt>
+#   Fichier PRODUIT localement : aucun repo HF ne le porte, il est calculé à
+#   partir d'un fichier déjà téléchargé (cas unique aujourd'hui : le sidecar MTP
+#   de Qwen3.8-Flash-Next renommé pour le fork, cf. tools/mtp-rename-hc-head.py).
+#   Mêmes règles que _dl pour --update (ONLY) et le skip, sauf que la fraîcheur
+#   se juge sur la source : une source retéléchargée (etag changé) redonne une
+#   cible plus vieille qu'elle, donc à refaire.
+#   Rien n'est fatal ici : le setup des autres modèles doit aller au bout. Une
+#   dérivation sautée se paie au chargement du modèle qui consomme le fichier,
+#   avec le message de llama-server, pas par un setup interrompu.
+_derive() {
+  local cible="$1" source="$2" script="$3"
+  _skip "$cible" && return 0
+  if [[ -f "$cible" && ! "$source" -nt "$cible" ]]; then
+    info "$(basename "$cible") déjà dérivé, skip."
+    return 0
+  fi
+  if [[ ! -f "$source" ]]; then
+    warn "$(basename "$cible") : source absente ($source), dérivation sautée."
+    return 0
+  fi
+  # Le script importe le gguf-py DU FORK (il connaît l'arch qwen4exp) : sans le
+  # dépôt du fork, rien à faire ici — et rien à faire tout court, puisque la
+  # sortie ne sert qu'au fork.
+  if [[ ! -d "$FORK_DIR/gguf-py" ]]; then
+    warn "$(basename "$cible") : $FORK_DIR/gguf-py absent (fork non installé,"
+    warn "  voir ./setup-llm.sh --setup-fork) — dérivation sautée."
+    return 0
+  fi
+  info "Dérivation $(basename "$cible") par $script..."
+  if ! PYTHONPATH="$FORK_DIR/gguf-py" python3 "$SCRIPT_DIR/$script" "$source" "$cible"; then
+    rm -f "$cible"          # sortie partielle : pire qu'absente
+    warn "Dérivation en échec ($script) — le modèle qui l'utilise ne chargera pas."
+  fi
+  return 0
+}
+
 # =============================================================================
 # CHEMINS
 # =============================================================================
+
+# PATH du service : $HOME/.local/bin en tête, comme l'unité systemd. Les
+# liens du fork strix-llama.cpp y vivent (./setup-llm.sh --setup-fork), donc
+# toute commande du script (llama-server, llama-bench, llama-cli,
+# llama-quantize) voit le MÊME moteur que le serveur mesuré. Sans fork, ces
+# liens n'existent pas et /usr/bin (paquet Arch) reprend la main.
+# Ajout conditionnel : le dossier est déjà en tête pour le service (unité
+# systemd) et dans la plupart des sessions ; le rajouter empilerait un doublon
+# à chaque source. Effet de bord assumé et voulu : ce dossier prime aussi pour
+# les autres outils appelés ici (hf, python3…), c'est déjà le cas d'une session
+# interactive normale, où pip/pipx installe justement `hf` là.
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
 
 MODELS_BASE="$HOME/models"
 CONFIG_DIR="$MODELS_BASE"
@@ -134,13 +189,56 @@ SPEC_LOG="$LOG_DIR/spec-tests.log"
 # de la comparaison au run précédent (py/bench_compare.py).
 BENCH_LOG="$LOG_DIR/bench.log"
 
-# Version de llama.cpp en service, forme courte "b10433" (llama-server
-# --version : "version: 0.1.0-dev (build 10433, commit …)"), repli sur le
-# paquet. Toujours journalisée : un chiffre sans son build ne se compare pas.
+# Binaire llama.cpp effectivement utilisé, résolu COMME LE SERVICE : le
+# service (lib/service.sh) met $HOME/.local/bin en tête du PATH, donc les
+# liens du fork y priment sur le paquet Arch de /usr/bin. Une session ssh
+# sans ce PATH lisait le binaire Arch et journalisait son build pour des
+# mesures faites par le fork (arrivé le 12/09/2026, deux lignes de
+# logs/bench.log) : on cherche donc d'abord dans ~/.local/bin, repli sur le
+# PATH. $1 = nom du binaire (défaut llama-server).
+_llama_bin() {
+  local n="${1:-llama-server}"
+  if [[ -x "$HOME/.local/bin/$n" ]]; then
+    echo "$HOME/.local/bin/$n"
+  else
+    command -v "$n" 2>/dev/null
+  fi
+}
+
+# Étiquette de moteur, journalisée par toutes les mesures. Deux formes, parce
+# que deux moteurs coexistent (cf. README « Moteur : fork strix-llama.cpp ») :
+#   - upstream (paquet Arch) : "b10809", le numéro de build de
+#     `--version` ("version: 0.4.0-dev (build 10809, commit 5266f24da7)") ;
+#   - fork : le fork ne numérote pas ses builds ("build 1"), l'étiquette est
+#     donc "<dépôt>-<commit court>", ex. "strix-0007bc6". Règle du préfixe :
+#     nom du dossier du dépôt (realpath du binaire remonté de build/bin),
+#     amputé du suffixe "-llama.cpp" ; "fork" si le chemin ne dit rien.
+# Repli final sur la version du paquet. Une étiquette n'est JAMAIS numérique
+# pure côté consommateurs : elle est traitée en chaîne partout (colonne build
+# des journaux TSV, comparaison « build X → Y » de py/bench_compare.py).
 _llama_build() {
-  local b
-  b="$(llama-server --version 2>&1 | sed -n 's/.*build \([0-9][0-9]*\).*/b\1/p' | head -1)"
-  [[ -n "$b" ]] || b="$(paru -Q llama-cpp 2>/dev/null | awk '{print $2}')"
+  local bin ver b commit repo
+  bin="$(_llama_bin llama-server)"
+  if [[ -n "$bin" ]]; then
+    ver="$("$bin" --version 2>&1 | head -3)"
+    b="$(sed -n 's/.*build \([0-9][0-9]*\).*/\1/p' <<< "$ver" | head -1)"
+    commit="$(sed -n 's/.*commit \([0-9a-f][0-9a-f]*\).*/\1/p' <<< "$ver" | head -1)"
+    if [[ -n "$b" && "$b" -gt 1 ]]; then
+      echo "b$b"; return
+    fi
+    if [[ -n "$commit" ]]; then
+      repo="$(realpath "$bin" 2>/dev/null)"
+      if [[ "$repo" == */build/bin/* ]]; then
+        repo="$(basename "${repo%/build/bin/*}")"
+        repo="${repo%-llama.cpp}"
+      else
+        repo=""
+      fi
+      [[ -n "$repo" ]] || repo="fork"
+      echo "${repo}-${commit:0:7}"; return
+    fi
+  fi
+  b="$(paru -Q llama-cpp 2>/dev/null | awk '{print $2}')"
   echo "${b:-?}"
 }
 # Surcharges spec-draft-n-max par modèle (à côté du script, comme

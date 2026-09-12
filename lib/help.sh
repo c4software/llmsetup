@@ -1,5 +1,5 @@
 # lib/help.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # help
@@ -59,7 +59,26 @@ Commandes :
                            Temps de chargement + 1er token après restart, puis TTFT
                            à chaud — ce que coûte un modèle à la demande (preload,
                            bascule LRU). Journal logs/bench-load.log
-  --list-devices           Backends ggml installés + devices exposés par llama-bench,
+  --setup-fork             Moteur : installe OU met à jour le fork
+                           https://github.com/halo-box/strix-llama.cpp dans
+                           ~/llm/strix-llama.cpp (clone, sinon git pull --ff-only),
+                           construit (cmake Vulkan/Release/CURL : llama-server,
+                           llama-bench, llama-cli, llama-quantize) et pose les liens
+                           dans ~/.local/bin, que le service met en tête du PATH.
+                           Affiche l'ancien et le nouveau commit puis la version
+                           résolue ; ne redémarre pas le service. ⚠ Les mesures
+                           faites sous le fork forment une série à part
+                           (étiquette strix-<commit>), non comparable aux campagnes
+                           du paquet Arch
+  --unset-fork             Retire les quatre liens : retour au paquet Arch au
+                           prochain restart. ⚠ Retirer d'abord de lib/models.sh
+                           les clés ini propres au fork (ngram-on-disk,
+                           reasoning-budget-*, spec-draft-adaptive) puis
+                           --preload : le routeur Arch refuse de démarrer sur
+                           une clé inconnue, et --start le signale au lieu de
+                           le laisser échouer
+  --list-devices           Moteur résolu (paquet Arch ou fork) + backends ggml
+                           installés + devices exposés par llama-bench,
                            croisés avec bench-devices.conf (alerte si device disparu)
   --spec-test [modèle] [n] [prompt]
                            Mesure le décode réel via l'API (spéculation incluse) :
