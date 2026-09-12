@@ -1,5 +1,5 @@
 # lib/models.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # BACKENDS
@@ -390,6 +390,16 @@ download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
 # Qwen3.8-27B thinking — reasoning_effort medium (défaut modèle = xhigh), tool-calling jinja
 # Mesuré --bench 21/08/2026 (Vulkan0, b10433) : prefill 215 t/s, décode 12,1 t/s
 #   (cohérent avec les 12,3 t/s bruts de llama-bench, cf. profondeur ci-dessus).
+# reasoning-budget-* : options du fork strix-llama.cpp (cf. lib/fork.sh) —
+#   plafond de tokens de réflexion, avertissement doux à 70 % du budget, et
+#   128 tokens de grâce pour finir le paragraphe avant la coupure dure. Le
+#   modèle thinking est le seul à en avoir l'usage ici (12 t/s : un raisonnement
+#   qui part en boucle coûte des minutes). Budget à affiner à l'usage.
+#   ⚠ Le paquet Arch b10809 connaît reasoning-budget mais PAS -enable,
+#   -soft-ratio ni -grace-tokens : une clé inconnue fait échouer le démarrage du
+#   routeur entier (vérifié le 12/09/2026). Revenir au paquet impose de retirer
+#   ces lignes à la main puis --preload : le dépôt ne gère pas deux moteurs, il
+#   refuse seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
 llama_model qwen3.8-27b "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
@@ -400,6 +410,10 @@ top-p                = 0.95
 min-p                = 0.0
 chat-template-kwargs = {\"reasoning_effort\":\"medium\"}
 cache-type-v         = q8_0
+reasoning-budget-enable       = true
+reasoning-budget              = 4096
+reasoning-budget-soft-ratio   = 0.7
+reasoning-budget-grace-tokens = 128
 jinja                = true
 parallel             = 1
 swa-full             = true
@@ -473,6 +487,18 @@ ctx-checkpoints      = 128"
 #   tokens (~325 s à 180 t/s) à chaque retour d'agent, au-delà du timeout
 #   premier token d'omp (300 s) → 4 prefills annulés, 22 min perdues. 12 Go
 #   gardent l'orchestrateur en RAM pendant qu'un agent occupe le slot.
+# spec-draft-adaptive + spec-draft-n-min : options du fork strix-llama.cpp (cf.
+#   lib/fork.sh) — la taille du draft suit l'acceptance mesurée au lieu de
+#   drafter systématiquement n-max, avec un plancher de 2. n-max 6 reste le
+#   plafond (réglage mesuré, inchangé). À MESURER par --spec-test : le gain
+#   n'est pas établi sur ce couple modèle/device.
+#   ⚠ Incompatible avec la CALIBRATION de --spec-tune : le modèle α suppose un
+#   k constant par forward (py/spec_analyze.py), l'adaptatif le fait varier.
+#   Mesurer par --spec-test/--spec-ab, pas par --spec-tune.
+#   ⚠ spec-draft-adaptive est inconnue du paquet Arch b10809 et y fait échouer
+#   le démarrage du routeur entier (spec-draft-n-min, elle, y existe). Revenir
+#   au paquet impose de retirer cette ligne à la main puis --preload
+#   (FORK_ONLY_KEYS, lib/fork.sh : --start refuse de démarrer sans ça).
 llama_model qwen3.8-27b-mtp-nothink "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
@@ -487,6 +513,8 @@ cache-type-v         = q8_0
 cache-reuse          = 0
 spec-type            = ngram-map-k,draft-mtp
 spec-draft-n-max     = 6
+spec-draft-adaptive  = true
+spec-draft-n-min     = 2
 spec-ngram-map-k-size-m   = 47
 spec-ngram-map-k-min-hits = 2
 jinja                = true
@@ -522,6 +550,13 @@ download_hf qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
 #   0,95), 47 = 50,7 t/s (0,78) → 47, +16 %. spec-ngram.conf prime. --bench
 #   (bench-task) : 245 pp / 26,4 tg, acceptance 0,65. --bench-cache : 62 % /
 #   63 %. --bench-load : 4,5 s (19 Go, cache de pages chaud), TTFT 147 ms.
+# spec-draft-adaptive + spec-draft-n-min : options du fork strix-llama.cpp (cf.
+#   lib/fork.sh) — draft dimensionné sur l'acceptance mesurée, plancher 2,
+#   plafond n-max 4 inchangé. À MESURER par --spec-test (pas par --spec-tune :
+#   sa calibration α suppose un k constant par forward, cf. le bloc 27B-MTP).
+#   ⚠ spec-draft-adaptive est inconnue du paquet Arch b10809 et y fait échouer
+#   le démarrage du routeur entier : revenir au paquet impose de retirer cette
+#   ligne à la main puis --preload (FORK_ONLY_KEYS, lib/fork.sh).
 llama_model qwopus3.6-27b-coder-mtp-nothink "
 model                = $QWOPUS_CODER_MTP_PATH
 ctx-size             = 131072
@@ -536,6 +571,8 @@ cache-type-v         = q8_0
 cache-reuse          = 0
 spec-type            = ngram-map-k,draft-mtp
 spec-draft-n-max     = 4
+spec-draft-adaptive  = true
+spec-draft-n-min     = 2
 spec-ngram-map-k-size-m   = 47
 spec-ngram-map-k-min-hits = 2
 jinja                = true
@@ -643,6 +680,15 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 # --bench-cache 21/08 : 99 % au tour suivant, 100 % à l'identique — attention
 #   pure (MLA), pas d'état récurrent : le témoin qui montre que le plafond de
 #   62-66 % des Qwen/LFM2 vient de la restauration par checkpoint.
+# reasoning-budget-* : options du fork strix-llama.cpp (cf. lib/fork.sh) —
+#   budget de réflexion plus large que le 27B (le modèle pense longuement avant
+#   de produire) avec deux paliers d'avertissement doux (60 % puis 85 %) et 192
+#   tokens de grâce. À 12 t/s, c'est le garde-fou contre un raisonnement qui
+#   s'emballe. Budget à affiner à l'usage.
+#   ⚠ Le paquet Arch b10809 connaît reasoning-budget mais PAS -enable,
+#   -soft-ratio, -soft2-ratio ni -grace-tokens : une clé inconnue fait échouer
+#   le démarrage du routeur entier. Revenir au paquet impose de retirer ces
+#   lignes à la main puis --preload (FORK_ONLY_KEYS, lib/fork.sh).
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072
@@ -657,6 +703,11 @@ cache-reuse      = 0
 spec-type        = ngram-map-k
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
+reasoning-budget-enable        = true
+reasoning-budget               = 6144
+reasoning-budget-soft-ratio    = 0.6
+reasoning-budget-soft2-ratio   = 0.85
+reasoning-budget-grace-tokens  = 192
 jinja            = true
 parallel         = 1"
 
@@ -830,6 +881,18 @@ download_hf_shards qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 #   --bench-load : chargement + 1er token 14,1 s (88 Go, cache de pages chaud
 #     après la campagne), TTFT à chaud 86 ms. Depuis le disque : à mesurer,
 #     compter plus d'une minute (gpt-oss 59 Go = 91 s).
+# ngram-on-disk : option du fork strix-llama.cpp (cf. lib/fork.sh). La table
+#   n-gram per_layer_token_embd (28,8 Go, propre à qwen4exp) n'est ni mappée ni
+#   chargée, chaque batch relit du GGUF les seules lignes qu'il rassemble.
+#   Mesuré le 12/09/2026 sur le fork : même prefill et même décode (391 / 27,3
+#   t/s contre 380 / 27,3 sans), sortie identique, mémoire utilisée 72 Go au
+#   lieu d'environ 100.
+#   ⚠ Le paquet Arch (b10809) NE connaît PAS cette clé et refuse alors de
+#   démarrer le routeur ENTIER (« option 'ngram-on-disk' not recognized in
+#   preset », vérifié le 12/09/2026 — l'ini n'est pas tolérant aux clés
+#   inconnues). Revenir au paquet Arch (--unset-fork) impose donc de retirer
+#   cette ligne à la main puis de relancer --preload ; le dépôt ne filtre rien,
+#   il refuse seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
 llama_model qwen3.8-flash-next-nothink "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 131072
@@ -845,6 +908,7 @@ cache-reuse      = 0
 spec-type        = ngram-map-k
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
+ngram-on-disk    = true
 jinja            = true
 parallel         = 1"
 

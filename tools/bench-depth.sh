@@ -48,6 +48,10 @@ FA="${FA:-auto}"
 PROFILE_PP="${PROFILE_PP:-2000}"
 PROFILE_GEN="${PROFILE_GEN:-3000}"
 
+# $HOME/.local/bin en tête, comme le service et lib/common.sh : les liens du
+# fork strix-llama.cpp y vivent, sinon c'est le paquet Arch de /usr/bin.
+export PATH="$HOME/.local/bin:$PATH"
+
 command -v llama-bench >/dev/null || { echo "llama-bench introuvable (paquet llama-cpp)" >&2; exit 1; }
 command -v python3     >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
 [[ $# -gt 0 ]] || { echo "Usage : tools/bench-depth.sh <gguf> [<gguf>...]" >&2; exit 1; }
@@ -67,7 +71,23 @@ done
 
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
-BUILD="$(llama-server --version 2>&1 | sed -n 's/.*build \([0-9][0-9]*\).*/b\1/p' | head -1)"
+# Étiquette de moteur, même règle que _llama_build (lib/common.sh) : "bNNNNN"
+# pour un build upstream, "<dépôt>-<commit>" pour le fork, qui ne numérote pas
+# ses builds ("build 1"). Deux séries de mesures, jamais comparables.
+_ver="$(llama-server --version 2>&1 | head -3)"
+BUILD="$(sed -n 's/.*build \([0-9][0-9]*\).*/\1/p' <<< "$_ver" | head -1)"
+if [[ -n "$BUILD" && "$BUILD" -gt 1 ]]; then
+  BUILD="b$BUILD"
+else
+  _commit="$(sed -n 's/.*commit \([0-9a-f][0-9a-f]*\).*/\1/p' <<< "$_ver" | head -1)"
+  _repo="$(realpath "$(command -v llama-server)" 2>/dev/null)"
+  if [[ "$_repo" == */build/bin/* ]]; then
+    _repo="$(basename "${_repo%/build/bin/*}")"; _repo="${_repo%-llama.cpp}"
+  else
+    _repo="fork"
+  fi
+  BUILD="${_commit:+${_repo}-${_commit:0:7}}"
+fi
 TSV_HDR=$'date\tmodele\tdevice\tdepth\tpp_ts\tpp_sd\ttg_ts\ttg_sd\ttour_s'
 if [[ ! -s "$TSV" ]]; then
   printf '%s\n' "$TSV_HDR" > "$TSV"

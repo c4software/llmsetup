@@ -35,6 +35,7 @@ source "$SCRIPT_DIR/lib/models.sh"
 source "$SCRIPT_DIR/lib/ini.sh"
 source "$SCRIPT_DIR/lib/preload.sh"
 source "$SCRIPT_DIR/lib/setup.sh"
+source "$SCRIPT_DIR/lib/fork.sh"
 source "$SCRIPT_DIR/lib/bench/bench.sh"
 source "$SCRIPT_DIR/lib/bench/bench-devices.sh"
 source "$SCRIPT_DIR/lib/bench/bench-parallel.sh"
@@ -61,6 +62,8 @@ case "${1:-}" in
   --bench-sanity)      cmd_bench_sanity "${2:-}" ;;
   --bench-load)        cmd_bench_load "${2:-}" ;;
   --preload)           cmd_preload ;;
+  --setup-fork)        cmd_setup_fork ;;
+  --unset-fork)        cmd_unset_fork ;;
   --list-devices)      cmd_list_devices ;;
   --spec-test)         cmd_spec_test "${2:-}" "${3:-}" "${4:-}" ;;
   --spec-tune)         cmd_spec_tune "${2:-}" "${3:-}" "${4:-}" ;;

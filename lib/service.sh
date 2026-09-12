@@ -1,14 +1,21 @@
 # lib/service.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # start
 # =============================================================================
 
 cmd_start() {
-  export PATH="$HOME/.local/bin:$PATH"
+  # ($HOME/.local/bin est déjà en tête du PATH, posé par common.sh, et
+  #  l'unité systemd le pose aussi de son côté : le fork prime sur /usr/bin)
   command -v llama-server >/dev/null || error "llama-server introuvable"
   [[ -f "$CONFIG_DIR/models.ini" ]] || error "Config introuvable — lance d'abord --setup"
+  # Garde-fou moteur/ini (lib/fork.sh) : un moteur upstream sur un ini qui
+  # porte des clés du fork ne démarre pas du tout (le routeur refuse la clé
+  # inconnue, tous modèles confondus). Autant le dire ici, en nommant modèle
+  # et clé, plutôt que de laisser llama-server sortir sur « option ... not
+  # recognized » quelques lignes plus bas.
+  _fork_keys_guard "$CONFIG_DIR/models.ini"
 
   # --models-max dérivé de preload.conf : nb de modèles préchargés + 1 slot
   #   LRU pour le modèle appelé à la demande (minimum 2).

@@ -28,7 +28,7 @@ régresser.
 ordre imposé :
 
 ```
-common → models → ini → preload → setup → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
@@ -67,6 +67,18 @@ common → models → ini → preload → setup → bench → bench-devices → 
 - `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
+- `fork.sh` : moteur. `cmd_setup_fork` (clone ou `git pull --ff-only` de
+  `halo-box/strix-llama.cpp` dans `~/llm/strix-llama.cpp`, build cmake Vulkan,
+  liens dans `~/.local/bin` — la même commande installe et met à jour),
+  `cmd_unset_fork` (retrait des liens, retour au paquet Arch), `_fork_status`
+  (binaire résolu + version, affiché aussi par `--list-devices`), `FORK_ONLY_KEYS`
+  + `_fork_keys_guard` (clés ini que seul le fork comprend ; appelé par
+  `cmd_start` : un moteur upstream sur un ini qui en porte une ne démarre pas
+  du tout, le routeur entier refuse la clé inconnue — la garde le dit en
+  nommant modèle et clé, elle ne filtre ni ne réécrit rien). Les binaires
+  portent un RUNPATH absolu : déplacer le dépôt impose un rebuild. Les mesures
+  faites sous le fork forment une série à part (`_llama_build` les étiquette
+  `strix-<commit>` au lieu de `bNNNNN`).
 - `bench/bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`), les
   sélections (`_bench_presets`, `_bench_select_presets`, `_bench_select_one`)
   et `cmd_bench` (mesure du serveur en l'état, journal `logs/bench.log` +
@@ -316,6 +328,8 @@ en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 - Les lignes existantes des journaux (`logs/*.log`) restent lisibles : toute
   colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 - Tout journal de mesure porte la version de llama.cpp (`_llama_build`) : un
-  chiffre sans son build ne se compare pas.
+  chiffre sans son build ne se compare pas. L'étiquette est une CHAÎNE, pas un
+  nombre : `bNNNNN` pour un build upstream, `strix-<commit>` pour le fork
+  (lib/fork.sh). Deux séries distinctes, jamais comparables entre elles.
 - Entrée non interactive (`! -t 0`) gérée partout : jamais de question, jamais
   de restart automatique.

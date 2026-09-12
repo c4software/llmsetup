@@ -47,6 +47,10 @@ BATCHES="${BATCHES:-1,8,16,32,48}"
 REPS="${REPS:-5}"
 FA="${FA:-auto}"
 
+# $HOME/.local/bin en tête, comme le service et lib/common.sh : les liens du
+# fork strix-llama.cpp y vivent, sinon c'est le paquet Arch de /usr/bin.
+export PATH="$HOME/.local/bin:$PATH"
+
 command -v llama-bench >/dev/null || { echo "llama-bench introuvable (paquet llama-cpp)" >&2; exit 1; }
 command -v python3     >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
 

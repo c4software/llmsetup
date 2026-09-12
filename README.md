@@ -39,6 +39,49 @@ de conf locaux à côté du script (non versionnés, propres à la machine). Le 
 systemctl --user start llama-server
 ```
 
+## Moteur : fork strix-llama.cpp
+
+Depuis le 12/09/2026 le service ne tourne plus sur le paquet Arch `llama-cpp`
+mais sur le fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp),
+construit localement dans `~/llm/strix-llama.cpp` et exposé par quatre liens
+(`llama-server`, `llama-bench`, `llama-cli`, `llama-quantize`) dans
+`~/.local/bin`, que l'unité systemd met en tête du PATH.
+
+```bash
+./setup-llm.sh --setup-fork   # installe ET met à jour (clone ou git pull --ff-only, build, liens)
+systemctl --user restart llama-server
+./setup-llm.sh --list-devices # quel binaire répond, et sa version
+./setup-llm.sh --unset-fork   # retire les liens : retour au paquet Arch
+```
+
+Le paquet Arch reste installé, c'est lui qui reprend la main sans les liens.
+Deux pièges :
+
+- les binaires portent un RUNPATH absolu vers leur dossier `build` : déplacer
+  `~/llm/strix-llama.cpp` impose un rebuild (`--setup-fork`), jamais un `mv` ;
+- le routeur refuse toute clé ini qu'il ne connaît pas, et l'échec n'est pas
+  local au modèle fautif : c'est le routeur **entier** qui ne démarre pas. Les
+  clés propres au fork (`ngram-on-disk`, `reasoning-budget-*`,
+  `spec-draft-adaptive` — liste `FORK_ONLY_KEYS` dans `lib/fork.sh`) font donc
+  échouer le paquet Arch. Le dépôt ne gère pas deux moteurs : il ne filtre ni ne
+  réécrit rien, mais `--start` refuse de lancer un moteur upstream sur un tel
+  ini, en nommant le modèle et la clé. Pour rester sur le paquet Arch : retirer
+  ces clés de `lib/models.sh`, puis `--preload` (régénère le ini) avant le
+  restart.
+
+Comparabilité : les mesures faites sous le fork forment une **nouvelle série**.
+La colonne build des journaux porte `strix-<commit>` au lieu de `bNNNNN`, et ces
+deux séries ne se comparent pas (cf. ARCHITECTURE.md, comparabilité des
+journaux) — le fork décode Qwen3.8-Flash-Next à 27 t/s contre 21 sous Arch.
+
+Ce que le fork apporte aujourd'hui côté réglages (détail et mesures dans les
+commentaires de `lib/models.sh`) : `ngram-on-disk` laisse la table n-gram de
+28,8 Go de Qwen3.8-Flash-Next sur disque (72 Go de mémoire utilisée au lieu
+d'environ 100, à prefill et décode identiques, mesuré le 12/09/2026), les
+`reasoning-budget-*` plafonnent la réflexion des modèles thinking, et
+`spec-draft-adaptive` dimensionne le draft sur l'acceptance mesurée (à
+mesurer).
+
 ## Sous-commandes
 
 | Commande | Rôle |
@@ -54,7 +97,9 @@ systemctl --user start llama-server
 | `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : un device qui répond faux est exclu de `--bench-devices`, en plus du garde-fou anti-charabia |
 | `--bench-agentic [modèle] [passes]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels) |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
-| `--list-devices` | Backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
+| `--setup-fork` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin` (voir « Moteur ») |
+| `--unset-fork` | Retire les liens du fork : retour au paquet Arch au prochain restart |
+| `--list-devices` | Moteur résolu (paquet Arch ou fork) avec sa version, backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | A/B de réglages spéculatifs sur mesure réelle : chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
