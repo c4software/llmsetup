@@ -379,7 +379,7 @@ Règles du tableau :
 - les mêmes chiffres vont, résumés, à trois endroits versionnés : le
   commentaire du bloc `lib/models.sh` (date, moteur, device, quant), la table
   « Parc au <date> » du README, et la section « Paquet Arch contre fork »
-  quand la mesure oppose les deux séries ;
+  de `docs/HISTORIQUE.md` quand la mesure oppose les deux séries ;
 - mettre à jour la ligne du modèle dans `docs/perfs.tsv` (mêmes chiffres,
   point décimal) puis régénérer les figures du README :
   `python3 py/perf_graphs.py`. Les trois SVG de `docs/graphs/` se commitent
@@ -424,7 +424,7 @@ sur le scénario 5, même jour, même build). Lire :
   pas la génération.
 
 Critère de passage : 5/5 sur au moins une passe, une ligne dans le tableau
-de l'étape 6 (« Boucle agentic réelle » dans le README) avec pi, build,
+de l'étape 6 (« Boucle agentic réelle » dans `docs/HISTORIQUE.md`) avec pi, build,
 date, et le résumé dans le commentaire du bloc (verdict, part du cache).
 
 ## Déroulé quand la machine de mesure n'est pas celle du dépôt

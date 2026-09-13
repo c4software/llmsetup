@@ -117,7 +117,8 @@ là-bas, lancer, ne rien commiter sur place.
 7. **`--bench-agentic <modèle> 3`** : le modèle en vraie boucle de tool
    calls (pi en conteneur jetable, `bench-agentic/`, en direct sur `:8009`) :
    appel froid à part, puis médianes par scénario (PASS, temps mur, part du
-   cache, prefill et décode réels). Ligne dans le README et le bloc.
+   cache, prefill et décode réels). Ligne dans `docs/HISTORIQUE.md`
+   (« Boucle agentic réelle ») et dans le commentaire du bloc.
 
 ## Où ajouter…
 
