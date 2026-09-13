@@ -7,12 +7,18 @@
 # Vulkan0 reste le défaut global ([*] device = Vulkan0). Backends ggml en
 # paquets séparés (split Arch mi-août 2026) : ggml-vulkan pour Vulkan0,
 # ggml-hip + runtime ROCm pour ROCm0 — le runtime seul ne suffit plus.
+# Depuis le passage au fork strix-llama.cpp (13/09/2026, cf. lib/fork.sh), le
+# binaire servi n'embarque que Vulkan : ROCm0 n'est atteignable qu'en repassant
+# au paquet Arch (llama-cpp b10809). Les paquets ggml ci-dessus ne valent que
+# pour ce secours.
 #
-# Sélection par modèle : via bench-devices.conf (édition manuelle, guidée
-# par les mesures de --bench). Chaque modèle dont le GGUF a une entrée dans
-# le conf reçoit `device = <retenu>` dans le ini. Pas d'entrée → héritage du [*].
+# Sélection par GGUF : via bench-devices.conf, écrit par --bench-devices
+# (édition manuelle OK), clé = dossier du GGUF. Chaque modèle dont le GGUF a
+# une entrée reçoit `device = <retenu>` dans le ini. Pas d'entrée : héritage
+# du [*].
 #
-# ⚠ Les modèles MTP/spéculatifs héritent du device benché sur leur GGUF, mais
+# ⚠ Garde-fou pour un retour au paquet Arch (le fork est Vulkan seul) : les
+#   modèles MTP/spéculatifs héritent du device benché sur leur GGUF, mais
 #   le bench ne mesure PAS le chemin spéculatif : après une bascule ROCm d'un
 #   modèle MTP, valider la spéculation dans les logs (acceptance, pas de
 #   fallback silencieux) avant de garder.
@@ -37,30 +43,43 @@ DEFAULT_DEVICE="Vulkan0"
 #     preload.conf (sélection interactive au --setup ou via --preload).
 #     Pas de stop-timeout : l'éviction des modèles à la demande est gérée
 #     par le LRU de --models-max, un timer n'apporte rien.
-#   - device : hérité du [*] (Vulkan0) sauf surcharge locale ROCm0
-#   - cache-reuse = 0 : explicite sur les 35B A3B — le cache-reuse est de toute
+#   - device : hérité du [*] (Vulkan0) sauf surcharge locale (ROCm0, seulement
+#     en secours sur le paquet Arch : aucune ligne device dans ce fichier au
+#     13/09/2026)
+#   - cache-reuse = 0 : explicite sur toutes les sections à état récurrent (GDN)
+#     ou à attention hybride/MLA ; seuls qwen3.5-9b (hérite du 4096 global, de
+#     toute façon ignoré) et gpt-oss (MoE mais sans état récurrent, attention +
+#     SWA : le cache-reuse sert) ne l'ont pas. Le cache-reuse
+#     est de toute
 #     façon ignoré sur les architectures à état récurrent (GDN), llama-server
 #     log "cache reuse is not supported by this context". La vraie restauration
 #     de préfixe passe par cache-ram + ctx-checkpoints — et elle ne se fait
-#     qu'AU DERNIER CHECKPOINT, pas au token près : mesuré --bench-cache le
-#     21/08/2026 (b10433) sur TOUTES les archs à état récurrent (9b, 35B-A3B,
-#     27B coder, coder-next, lfm2.5 conv) : tour suivant 62 à 66 % servi du
-#     cache, requête identique 63 à 66 %, tokenizers différents compris ;
+#     qu'AU DERNIER CHECKPOINT, pas au token près : mesuré --bench-cache les 21
+#     et 28/08/2026 (b10433) puis refait sur le fork le 13/09/2026 (cf.
+#     docs/HISTORIQUE.md, « Cache de prompt ») sur toutes les archs à état
+#     récurrent (9b, 35B-A3B, coder-next, lfm2.5 conv, et le qwopus3.6-27b
+#     coder depuis retiré) : tour suivant 62 à 66 % (paquet) et 62 à 65 %
+#     (fork) servi du cache, requête identique 63 à 66 % (paquet) et 64 à 67 %
+#     (fork), tokenizers différents compris ;
 #     témoin DeepSeek (attention pure) : 99 % et 100 %. C'est le coût de ces
 #     architectures en boucle agentic, à mettre en face de leur débit. Et pour
 #     TOUS, DeepSeek compris : une édition en amont du prompt (2/3 de préfixe
-#     commun) = 0 % réutilisé, le cache ne sert que les continuations — ne
+#     commun) = 0 % réutilisé (4 % sur gpt-oss, le seul au-dessus de zéro),
+#     le cache ne sert que les continuations — ne
 #     jamais réécrire l'historique (compaction, tronquage) si on tient au cache.
 #   - cache-type-v = q8_0 en surcharge locale pour les modèles à usage
 #     agentic/tool calling (le KV V q4_0 dégrade le tool calling, cf. doc
 #     llama.cpp function-calling)
-#   - swa-full + ctx-checkpoints : hybrides Qwen3.5/3.6/3.8 uniquement
-#     (note : sans effet sur les 35B A3B, pas de SWA — llama-server le
-#      désactive au chargement, seul ctx-checkpoints travaille)
+#   - swa-full + ctx-checkpoints : posé sur qwen3.5-9b, ornith-1.5-35b-a3b et
+#     qwen3.8-27b-dflash-nothink. swa-full n'est effectif que sur le 9b :
+#     llama-server le désactive au chargement sur les 35B A3B (pas de SWA) et
+#     le refuse sur l'arch du 3.8-27B (« swa_full is not supported by this
+#     model ») ; seul ctx-checkpoints y travaille.
 #   - parallel = 1 OBLIGATOIRE sur tous les modèles MTP : "-np > 1 and --mmproj
 #     are not yet supported with MTP" (doc unsloth, confirmée sur les README
 #     Qwen MTP et Gemma QAT, juin/juillet 2026). Les anciens parallel 2/3 sur
-#     les modèles MTP étaient au mieux ignorés, au pire cassaient la spéculation.
+#     les modèles MTP étaient au mieux ignorés, au pire cassaient la spéculation
+#     (constaté avant le 15/08/2026, plus aucune section ne les porte).
 # =============================================================================
 
 declare -A MODEL_INI GROUPE_AVANT
@@ -69,18 +88,16 @@ DL_SPECS=()
 _GROUPE_EN_ATTENTE=""
 
 # Inventaire des fichiers attendus — source unique pour la création des dossiers
-# et pour --cleanup, alimenté par les appels download_hf ci-dessous. Tout
+# et pour --cleanup, alimenté par les appels download_hf / download_hf_shards /
+# derive_gguf ci-dessous. Tout
 # fichier qui cesse d'être déclaré devient un orphelin supprimable.
-# (retirés le 15/08/2026, remplacés par qwen3.8-27b : qwen3.6-27b et
-#  qwen3.6-27b-mtp ; retirés le 15/08/2026 car jamais utilisés : qwen3.5-2b,
-#  qwen3.5-9b-mtp, gemma-31b, gemma-12b ; retirés le 28/08/2026, remplacés par
-#  ornith-1.5-35b-a3b : qwen3.6-35b-a3b et qwen3.6-35b-a3b-mtp ; retiré le
-#  13/09/2026 car plus utilisé : qwopus3.6-27b-coder-mtp (ses mesures restent
-#  dans logs/)
+# (retiré le 13/09/2026 car plus utilisé : qwopus3.6-27b-coder-mtp (ses mesures
+#  restent dans logs/)
 #  → ./setup-llm.sh --cleanup les purge)
 # (qwen3.5-2b : revenu le 12/09/2026 comme estimateur de speculative prefill du
 #  27B thinking (jamais servi, sans section ini), retiré à nouveau le
 #  13/09/2026 (spec-prefill abandonné) — à purger par --cleanup)
+# (retraits antérieurs : docs/HISTORIQUE.md)
 KNOWN_FILES=()
 
 # download_hf <dossier> <repo> VAR=<fichier> [VAR=<fichier>...]
@@ -308,8 +325,11 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 
 # Qwen3-Coder-Next — MoE 80B hybrid-attention, agentic coding
 # cache-type-v q8_0 : précision V critique pour les diffs de code
-# cache-reuse 0 : MoE hybrid-attention incompatible
-# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
+# cache-reuse 0 : ignoré sur l'état récurrent GDN (cf. en-tête) ; la
+#   restauration de préfixe passe par cache-ram + ctx-checkpoints, au dernier
+#   checkpoint seulement (65 % au tour suivant sur le fork, 64 au paquet).
+# Candidat ROCm sur le papier (gros prefill agentic) : invalidé par la mesure
+#   ci-dessous.
 # Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433) : prefill 470 t/s,
 #   décode 46,7 t/s. ⚠ ROCm0 INUTILISABLE sur cette arch avec ce build : répond
 #   « LAMPAMPAMPAMP… » à la recopie de contrôle (exclu par --bench-sanity avant
@@ -356,13 +376,17 @@ spec-ngram-map-k-min-hits = 2
 parallel         = 1"
 
 # =============================================================================
-# Famille Qwen3.8-27B — un seul GGUF (UD-Q4_K_XL, tête MTP embarquée) partagé
-# par les deux modèles ci-dessous. Remplace qwen3.6-27b, qwen3.6-27b-nothink
-# et qwen3.6-27b-mtp-nothink. Pas de modèle nothink non-MTP : à parallel 1 il
-# ferait doublon strict avec le mtp-nothink (même GGUF, mêmes réglages, juste
-# sans la spéculation). Le thinking reste non-MTP volontairement : c'est le
-# chemin checkpoints/prompt-cache fiable (rollback GDN sur rejet de draft
-# encore fragile en agentic, cf. 35B-A3B) — spec-type à ajouter si envie.
+# Famille Qwen3.8-27B : le GGUF cible (UD-Q4_K_XL, tête MTP embarquée, non
+# servie depuis le 13/09/2026) et son drafter DFlash 2, dans le même dossier,
+# pour la seule section qwen3.8-27b-dflash-nothink. Remplace qwen3.6-27b,
+# qwen3.6-27b-nothink et qwen3.6-27b-mtp-nothink.
+# Historique (13/09/2026) : tant qu'une section thinking existait, pas de
+# nothink non-MTP, à parallel 1 il aurait fait doublon strict avec la section
+# spéculative ; la thinking, non-MTP jusqu'au 12/09 puis draft-dflash, est
+# retirée (docs/HISTORIQUE.md, « Qwen3.8-27B thinking : section retirée le
+# 13/09/2026 »). Jusqu'au 12/09 le thinking restait non-MTP volontairement :
+# chemin checkpoints/prompt-cache fiable, le rollback GDN sur rejet de draft
+# étant encore jugé fragile en agentic (cf. 35B-A3B).
 #
 # Sampling officiel Qwen3.8-27B (model card + doc unsloth) :
 #   thinking : temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 / presence 0.0
@@ -377,16 +401,20 @@ parallel         = 1"
 #   inutile ici, ctx-size 131072 comme la 3.6 (natif 256K, YaRN 1M dispo).
 # cache-type-v q8_0 : agentic/coding, précision V critique (tool calls, diffs)
 # jinja : template unsloth (developer role, tool calling nested objects amélioré)
-# swa-full + ctx-checkpoints : arch hybride GDN/SWA identique 3.5/3.6
+# ctx-checkpoints : arch hybride GDN/SWA identique 3.5/3.6 ; swa-full posé pour
+#   la même raison mais inopérant ici, cf. la note swa-full à la fin du
+#   commentaire de la section qwen3.8-27b-dflash-nothink.
 # Vision : mmproj non téléchargé (--include du seul GGUF texte) → pas de
 #   --mmproj, texte seul. Ajouter mmproj-F16.gguf + "mmproj =" si besoin un jour
 #   (attention : mmproj incompatible MTP, cf. contrainte np/mmproj plus haut).
 # Tête MTP embarquée VALIDÉE : llama-server charge draft-mtp sur ce GGUF et
 #   --spec-test mesure une acceptance de 0,82 à 0,94 (15/08 et 21/08/2026) —
-#   pas de repo -MTP séparé à réintroduire.
+#   pas de repo -MTP séparé à réintroduire (mesures des 15/08 et 21/08/2026,
+#   tête non servie depuis le 13/09/2026 ; elle reste utilisable en secours,
+#   cf. « Historique MTP » de la section).
 # =============================================================================
 
-groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée) ---"
+groupe "; --- Famille 27B (Qwen3.8 : GGUF cible + drafter DFlash 2) ---"
 
 # Qwen3.8-27B — dense 27B hybrid-thinking (arch qwen35 : même base GDN + gated
 # attention que 3.5/3.6, aucun bump llama.cpp requis), vision native, ctx natif
@@ -395,8 +423,9 @@ groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée) ---"
 # 79.0 vs 49.3, Terminal Bench 2.1 73.0 vs 63.4, IFBench 79.5 vs 69.1.
 # MTP : tête MTP embarquée dans le GGUF principal (unsloth : "MTP for fast
 #   inference is available", pas de repo -MTP séparé dans la collection Qwen3.8 —
-#   seul Qwen3.6 exigeait encore un GGUF MTP à part). Un seul fichier sert donc
-#   les modèles non-MTP ET MTP, fini le doublon Q6 + Q4 de la 3.6.
+#   seul Qwen3.6 exigeait encore un GGUF MTP à part). Un seul fichier servait
+#   donc les modèles non-MTP et MTP (fini le doublon Q6 + Q4 de la 3.6) ; la
+#   tête n'est plus servie depuis le 13/09/2026, cf. l'en-tête.
 # Quant UD-Q4_K_XL (~16 Go, quant par défaut du guide llama.cpp unsloth) :
 #   ~26 % de poids en moins que le Q6 à relire par token → décode ×1,3-1,5
 #   (Q6 : 8,5 t/s brut / 16 t/s MTP ; Q4 mesuré : 25,5 t/s MTP sur ROCm0 le
@@ -412,8 +441,8 @@ groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée) ---"
 #   les profondeurs (tour simulé 252 → 272 s contre 256 → 324 s), et l'écart
 #   se creuse en contexte long, le régime agentic. Chargement : 4,4 s (17 Go,
 #   cache de pages chaud), TTFT à chaud 165 ms.
-# ⚠ Repo day-zero (mi-août 2026) — template chat et quants encore mouvants,
-#   prévoir un --update qwen3.8-27b d'ici quelques jours.
+# Repo day-zero (mi-août 2026), template et quants mouvants à l'époque ; stable
+#   depuis, aucun --update nécessaire au 13/09/2026.
 download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
   QWEN38_27B_PATH="Qwen3.8-27B-UD-Q4_K_XL.gguf"
 # Drafter DFlash 2 officiel (z-lab, diffusion par blocs, lit les couches 6, 20,
@@ -452,22 +481,31 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   c'était k2=22,2 / k4=25,5 / k6=26,0 → 4 : l'optimum dépend du device,
 #   re-régler après chaque bascule. La tête MTP reste dans le GGUF et reste
 #   utilisable (spec-type draft-mtp) si le drafter venait à manquer.
+#   Historique de quant : Q6/n-max 2 = 16 t/s contre Q4/n-max 2 = 22 ;
+#   + ngram-map-k size_m 47 = 47,4 sur refactor (mesuré avec n-max 4, avant ce
+#   réglage).
 # La tête MTP reste embarquée dans ce GGUF (cf. l'en-tête du bloc) : une
 #   section thinking sur le même fichier, comme celle retirée le 13/09/2026,
 #   ne doit PAS être préchargée en même temps (~16 Go chargés deux fois,
 #   _preload_sanity le signale).
-# Historique : Q6/n-max 2 = 16 t/s ; Q4/n-max 2 = 22 ; Q4/n-max 4 = 25,5 (ROCm0) ;
-#   Q4/n-max 4 = 31,8 et n-max 6 = 33,1 (Vulkan0) ; + ngram-map-k size_m 47 =
-#   47,4 sur refactor (mesuré avec n-max 4, avant ce réglage).
-#   Re-régler avec ./setup-llm.sh --spec-tune après changement de quant/build/device.
-# cache-reuse 0 : incompatible MTP
-# parallel 1 : contrainte MTP (np > 1 non supporté)
+# (courbe k2/k4/k6 des deux devices : paragraphe « Historique MTP » ci-dessus
+#   et docs/HISTORIQUE.md, Spéculation)
+#   Re-régler avec --spec-ab (--spec-tune refuse ce modèle depuis le passage à
+#   DFlash : il exige draft-mtp, cf. lib/spec.sh) après changement de
+#   quant/build/device.
+# cache-reuse 0 : ignoré sur l'arch hybride GDN (état récurrent), cf. l'en-tête
+#   du fichier (était justifié par le MTP jusqu'au 13/09/2026).
+# parallel 1 : un seul slot, régime agentic sérialisé ; la contrainte MTP
+#   (« -np > 1 and --mmproj are not yet supported with MTP », en-tête du
+#   fichier) redeviendrait bloquante si la tête MTP était reprise.
 #
-# spec-type ngram-map-k,draft-mtp — la liste est essayée dans l'ordre de
+# spec-type ngram-map-k,draft-dflash (draft-mtp jusqu'au 13/09/2026) : la liste
+#   est essayée dans l'ordre de
 #   priorité de llama.cpp (les draftless d'abord) et la première implémentation
 #   qui produit un draft non vide gagne le pas de décode ; un miss n-gram coûte
-#   une sonde de hash et le MTP reprend la main. Gratuit en VRAM (une table de
-#   2^18 entrées, ~1 Mio par séquence) et sans perte, comme le MTP.
+#   une sonde de hash et le drafter DFlash reprend la main. Gratuit en VRAM
+#   (une table de 2^18 entrées, ~1 Mio par séquence) et sans perte ; le
+#   drafter, lui, coûte 2,0 Go (cf. bas de bloc).
 #   Intérêt en agentic : l'outil d'édition d'opencode fait ré-émettre le
 #   oldString mot pour mot depuis le fichier lu, et ngram-map-k construit sa
 #   map à partir du PROMPT entier, pas seulement du texte généré.
@@ -519,31 +557,36 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   12/09/2026 (strix-0007bc6, spec-refactor.txt, 4 passes) : adaptatif 52,4 t/s
 #   (acceptance 0,62) contre 53,7 (0,67) en draft fixe n-max 6. Aucun gain,
 #   et l'adaptatif casse la calibration α de --spec-tune (k variable par
-#   forward). Draft fixe conservé.
-# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
-#   360 t/s, décode 26,6 t/s, acceptance 0,59 : prefill +38 %, mais décode
-#   -10 % contre le paquet (261 / 29,5 / 0,65, b10433) : SEUL décode en retrait
-#   du parc sur le fork. Première mesure du 12/09 à 321 / 25,8 / 0,59,
-#   contre-mesurée le 13/09. Sur spec-refactor.txt (décode seul) : 53,7 t/s
-#   acceptance 0,67 contre 56,1 / 0,80 au paquet, soit -4 %.
-# Historique du n-max MTP sur le fork : 4 (était 6), parce que le -10 %
+#   forward). Draft fixe conservé (mesuré contre la tête MTP, non re-mesuré
+#   depuis le passage à DFlash 2).
+# Historique (réglage MTP n-max 6, --bench du 13/09/2026, strix-0007bc6) :
+#   prefill 360 t/s, décode 26,6, acceptance 0,59, prefill +38 % mais décode
+#   -10 % contre le paquet (261 / 29,5 / 0,65, b10433), seul décode alors en
+#   retrait du parc ; annulé par le passage à DFlash 2 (bas de bloc). Première
+#   mesure du 12/09 à 321 / 25,8 / 0,59, contre-mesurée le 13/09. Sur
+#   spec-refactor.txt (décode seul) : 53,7 t/s acceptance 0,67 contre
+#   56,1 / 0,80 au paquet, soit -4 %.
+# Historique du n-max MTP sur le fork (réglage servi le 13/09 jusqu'au passage
+#   à DFlash le même jour) : 4 (était 6), parce que le -10 %
 #   ci-dessus s'explique. Le fork découpe les mat-vec batchés en colonnes
 #   (4/2/1), optimisation restreinte à q8_0 et q6_K par sa PR #27, et le
 #   UD-Q4_K_XL porte 110 tenseurs q8_0 et 56 q6_K : elle s'applique donc ici.
-#   Le batch de vérification vaut n-max + 1 : à 7 il se découpe en 4+2+1, le
-#   pire cas. llama-bench du 13/09/2026 (Vulkan0, strix-0007bc6, -b 8 -ub 8
+#   Le batch de vérification vaut n-max + 1 : à n-max 6 il vaut 7, découpé en
+#   4+2+1, le pire cas. llama-bench du 13/09/2026 (Vulkan0, strix-0007bc6, -b 8 -ub 8
 #   -r 3) : pp7 68,9 t/s contre 74,4 avec GGML_VK_MMV_NO_SPLIT=1 et 74,5 au
 #   paquet b10809, soit -7,4 % ; pp5 54,2 contre 56,9 (-4,7 %) ; pp4 47,8
 #   contre 47,7 (aucune pénalité). --spec-ab du 13/09 (spec-refactor.txt,
 #   4 passes) : n-max 4 = 57,8 t/s acceptance 0,712 contre 54,1 / 0,668 en
-#   n-max 6, soit +6,8 % ; en draft-mtp seul l'acceptance monte à 0,962 (la
+#   n-max 6 (run du 13/09, série n-max), soit +6,8 % ; en draft-mtp seul l'acceptance monte à 0,962 (la
 #   tête MTP du fork est saine, le 0,67 est l'agrégat n-gram + MTP).
 #
 # DRAFTER DFLASH 2 (retenu le 13/09/2026, remplace la tête MTP) : le drafter
 #   officiel z-lab $QWEN38_27B_DFLASH_PATH (2,0 Go, Q8_0, déclaré plus haut)
 #   bat la tête MTP embarquée sur les deux prompts, sur le fork strix-0007bc6.
-#   --spec-ab qwen3.8-27b-mtp-nothink 4, décode médian hors 1re passe :
-#     spec-refactor.txt : ngram 47 + draft-mtp n-max 6 = 53,8 t/s (acc. 0,67) ;
+#   --spec-ab qwen3.8-27b-dflash-nothink 4 (lancé sous son ancien nom
+#   -mtp-nothink), décode médian hors 1re passe :
+#     spec-refactor.txt : ngram 47 + draft-mtp n-max 6 = 53,8 t/s (acc. 0,67,
+#       run de la série DFlash) ;
 #       ngram 47 + draft-mtp n-max 4 = 57,6 (0,71) ; ngram 47 + draft-dflash
 #       n-max 7 = 64,5 (0,67) ; draft-dflash seul n-max 7 = 47,0 (0,96).
 #     spec-test.txt (générique, pas de blocs à recopier) : ngram 47 + draft-mtp
@@ -557,6 +600,10 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   que DFlash2 préfère 7. Elle contourne aussi le découpage mat-vec : le
 #   drafter propose 7 tokens, le batch de vérification en vaut 8, découpé en
 #   4+4 : pas de 2 ni de 1, donc pas le pire cas qui coûtait -7,4 % au batch 7.
+#   Comme le size-m, cette valeur est surchargeable par spec-nmax.conf
+#   (lib/ini.sh) ; --spec-tune ne peut plus l'écrire ici (il exige draft-mtp) :
+#   la mesurer par --spec-ab, puis écrire la valeur à la main (spec-nmax.conf
+#   ou ce bloc).
 #   ngram-map-k size-m 47 et min-hits 2 inchangés (le drafter ne change rien
 #   au régime n-gram, mesuré identique ci-dessus).
 #   ⚠ Non mesuré sur le paquet Arch : b10809 expose bien draft-dflash (la
@@ -642,8 +689,8 @@ parallel         = 1"
 # UD-IQ3_XXS (104 Go, reco unsloth pour 128 Go de RAM) : le checkpoint est QAT
 # FP4 natif sur les experts (96% des poids), donc le 3-bit est peu destructeur.
 # Support llama.cpp mainline depuis fin juin 2026 (PR #24162).
-# ⚠ Repo tout frais (squashé le 01/08) — les quants bougent encore, prévoir un
-#   --update deepseek-v4-flash d'ici quelques jours.
+# Repo squashé le 01/08/2026, quants alors mouvantes ; aucun ré-upload depuis,
+#   dernier contrôle 13/09/2026, pas de --update.
 # Décode ~12,5 t/s sur Strix Halo Vulkan avec ce quant : c'est la baseline
 #   communautaire, bornée bande passante — mesuré ici 11,3 t/s sans spéculation
 #   (21/08/2026, b10433), 12,3 avec n-gram : normal, pas un bug de config.
@@ -668,8 +715,10 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 # cache-reuse 0 : MoE incompatible — pas de swa-full (MLA/DSA, non SWA).
 # Module DSpark (spéculation) : en mainline depuis le 02/08/2026 (PR #25784
 #   « DeepseekV4 MTP + DSpark », sidecar drafter via #26458 ; le port #25683
-#   a été fermé sans merge). b10433 expose draft-dspark et draft-mtp. Pas
-#   activé : drafter GGUF à identifier et tête MTP du checkpoint à vérifier.
+#   a été fermé sans merge). Le fork strix-llama.cpp comme le paquet Arch de
+#   secours exposent draft-dspark et draft-mtp (déjà le cas en b10433).
+#   Toujours pas activé : drafter GGUF à identifier et tête MTP du checkpoint à
+#   vérifier.
 #   Gain modeste attendu sur APU.
 # Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433) — prefill 120 t/s,
 #   décode 11,2 t/s. ⚠ ROCm0 INUTILISABLE sur cette arch avec ce build : le
@@ -696,14 +745,17 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   pure (MLA), pas d'état récurrent : le témoin qui montre que le plafond de
 #   62-66 % des Qwen/LFM2 vient de la restauration par checkpoint.
 # reasoning-budget-* : options du fork strix-llama.cpp (cf. lib/fork.sh) —
-#   budget de réflexion plus large que le 27B (le modèle pense longuement avant
-#   de produire) avec deux paliers d'avertissement doux (60 % puis 85 %) et 192
+#   budget de réflexion plus large que les 4096 de l'ancienne section thinking
+#   qwen3.8-27b (retirée le 13/09/2026, cf. docs/HISTORIQUE.md), le modèle
+#   pensant longuement avant de produire, avec deux paliers d'avertissement doux (60 % puis 85 %) et 192
 #   tokens de grâce. À 12 t/s, c'est le garde-fou contre un raisonnement qui
 #   s'emballe. Budget à affiner à l'usage.
-#   ⚠ Le paquet Arch b10809 connaît reasoning-budget mais PAS -enable,
-#   -soft-ratio, -soft2-ratio ni -grace-tokens : une clé inconnue fait échouer
-#   le démarrage du routeur entier. Revenir au paquet impose de retirer ces
-#   lignes à la main puis --preload (FORK_ONLY_KEYS, lib/fork.sh).
+#   ⚠ Ces quatre clés sont propres au fork (FORK_ONLY_KEYS, lib/fork.sh) : le
+#   paquet Arch de secours connaît reasoning-budget mais pas
+#   reasoning-budget-enable, -soft-ratio, -soft2-ratio ni -grace-tokens, et une
+#   clé inconnue ferait échouer le routeur entier ; --start refuse donc de
+#   démarrer sur le paquet tant qu'elles sont là, y revenir impose de les
+#   retirer à la main puis --preload.
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   205 t/s, décode 19,9 t/s, acceptance 0,65 : prefill +86 % et décode +62 %
 #   contre le paquet (110 / 12,3, b10433), le plus gros gain de décode du parc.
@@ -731,13 +783,11 @@ reasoning-budget-grace-tokens  = 192
 jinja            = true
 parallel         = 1"
 
-groupe "; --- Laguna S 2.1 — nécessite llama.cpp >= b10087 (arch 'laguna', confirmé jusqu'à b10181) ---"
+groupe "; --- Laguna S 2.1 : arch 'laguna', servie par le fork strix-llama.cpp ; sur le paquet Arch de secours, b10087 minimum (vérifié jusqu'à b10548) ---"
 
 # Laguna S 2.1 (poolside) — MoE 118B (8B actifs), agentic coding, shards UD-Q4_K_XL
 # 73.4 Go / 3 shards.
-# ⚠ Quants ré-uploadés fin juillet 2026 par unsloth ("Fix rope/context metadata to
-#   256K YaRN (poolside config)" + fixes poolside) → si téléchargé avant :
-#   ./setup-llm.sh --update laguna-s-2.1
+# (ré-upload de fin juillet 2026 absorbé, cf. docs/HISTORIQUE.md)
 # Alternative plus légère si la RAM est juste : UD-IQ4_XS (57.6 Go) — changer
 #   l'entrée en conséquence, le glob suit. (UD-Q4_K_S a été RETIRÉ du repo
 #   unsloth ; il ne reste en shards que UD-IQ4_XS, UD-Q3_K_XL, UD-Q4_K_XL et
@@ -771,14 +821,16 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 #   number of tensors; expected 76, got 69 », le serveur sort, le modèle ne
 #   charge pas. La model card poolside avait raison : le mainline « ships the
 #   generic DFlash framework » mais pas le contrat spécifique Laguna (7
-#   tenseurs d'écart), fork poolside/llama.cpp branche `laguna` requis — hors
-#   périmètre ici (paquet Arch). Flags à réutiliser le jour où le mainline
+#   tenseurs d'écart), fork poolside/llama.cpp branche laguna requis, hors
+#   périmètre ici : ni le paquet Arch de secours ni le fork strix-llama.cpp ne
+#   portent ce contrat. Flags à réutiliser le jour où le mainline
 #   suit : --spec-type draft-dflash -md <drafter> --spec-draft-n-max 7 (bloc
-#   entraîné 16). Le drafter reste déclaré (2,2 Go) pour ce jour-là.
-#   Retours communauté (sur le fork) : jusqu'à +30 tok/s.
+#   entraîné 16).
+#   Retours communauté sur le fork poolside : jusqu'à +30 tok/s.
 #   12/09/2026 : le fork strix-llama.cpp revendique DFlash (draft-dflash dans
 #   son --spec-type, loader src/models/dflash.cpp, DFlash2/DSpark compris),
-#   d'où le draft-dflash remis ci-dessous — MAIS LA LECTURE DU CODE DIT QUE ÇA
+#   d'où le draft-dflash remis ci-dessous le 12/09, puis retiré le jour même
+#   (cf. VÉRIFIÉ ci-dessous) — MAIS LA LECTURE DU CODE DIT QUE ÇA
 #   VA ENCORE ÉCHOUER, et de la même façon : le contrôle de comptage est
 #   toujours là (« wrong number of tensors; expected %d, got %d »,
 #   src/llama-model-loader.cpp) et le loader DFlash du fork ne crée AUCUN
@@ -795,7 +847,8 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 #   sur disque (2,2 Go) pour le jour où un moteur crée les attn_gate : il
 #   faudra le fork poolside/llama.cpp branche `laguna`, ou un DFlash mainline
 #   qui connaisse le contrat Laguna.
-# Candidat ROCm naturel (gros prefill agentic) — device auto via --bench-devices.
+# Candidat ROCm sur le papier (gros prefill agentic) : invalidé par la mesure
+#   ci-dessous.
 # Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10548, sans
 #   spéculation, 3 passes) : 247 pp / 28,6 tg contre ROCm0 320 / 23,6 (tour
 #   simulé 113 s contre 134), les deux justes — le schéma des denses.
@@ -813,7 +866,8 @@ download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
 # --bench (bench-task, peu de répétitions) avec n-gram 7 : 30,3 t/s contre 28,6
 #   sans (+6 %) — pas de revers hors refactor, contrairement à Qwen3-Coder-Next.
 #   --bench-cache : 99 % au tour suivant, 100 % à l'identique (pas d'état
-#   récurrent). --bench-load : 67 s (69 Go depuis le disque), TTFT à chaud 173 ms.
+#   récurrent). --bench-load : 90,5 s depuis le disque (13/09/2026, fork ; 67 s
+#   au paquet le 21/08), TTFT à chaud 138 ms (173 ms au paquet).
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   346 t/s, décode 29,6 t/s, acceptance 0,80 : prefill +36 %, décode -2 %
 #   contre le paquet (255 / 30,3 / 0,835, b10548), soit le bruit de mesure.
@@ -833,7 +887,7 @@ spec-ngram-map-k-min-hits = 2
 jinja            = true
 parallel         = 1"
 
-groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661 minimum, PR #27742) ---"
+groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-llama.cpp ; sur le paquet Arch de secours, b10661 minimum (PR #27742, mergée le 27/08/2026, présente dans b10809) ---"
 
 # Qwen3.8-Flash-Next (Qwen) : MoE 125B (6B actifs, 512 experts, 10 routés + 1
 # partagé) + 51B d'embeddings n-gram (bigrammes/trigrammes à la couche 2, table
@@ -847,8 +901,10 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661
 #   ('#tag=v${pkgver}'), pas les pre-releases bXXXXX : un changement de pkgver
 #   ne prouve rien (0.3.0 = b10621, sans qwen4exp). Le seul contrôle fiable :
 #   strings /usr/lib/libllama.so* | grep -x qwen4exp
-#   Suivi de l'attente et des jalons : PLAN-qwen3.8-flash-next.md (supprimé au
-#   merge du 13/09/2026, historique dans git).
+#   (attente close le 05/09/2026 : le paquet 0.4.0-1.1 = b10809 porte qwen4exp)
+#   Suivi de l'attente et des jalons : cf. docs/HISTORIQUE.md, « Passage au
+#   fork (12 et 13/09/2026) » (plan détaillé : PLAN-qwen3.8-flash-next.md,
+#   supprimé au merge du 13/09/2026, récupérable dans l'historique git).
 # Quant : grille HF complète depuis le 27/08 (uploads 15:01 à 15:16 UTC) :
 #   UD-IQ1_S 72,5 / UD-Q2_K_XL 78,9 / UD-IQ3_XXS 82,0 / UD-Q3_K_XL 90,0 /
 #   UD-IQ4_XS 93,7 / UD-Q4_K_XL 111,3 Go (3 shards jusqu'à l'IQ4_XS, 4 pour
@@ -857,10 +913,8 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661
 #   système, plus que DeepSeek V4 (104 Go) qui tourne. Le Q4_K_XL (111 Go)
 #   ne laisse rien. Repli si le chargement est trop juste : UD-IQ3_XXS
 #   (82 Go), changer l'entrée, le glob suit.
-#   Quants converties AVANT le merge de la PR (15:16 contre 19:32 UTC), donc
-#   ré-upload redouté : n'a PAS eu lieu, vérifié le 04/09 (tailles des 3 shards
-#   inchangées, 10 946 624 / 49 835 229 856 / 43 836 407 744 octets). Les
-#   commits HF du 01/09 n'ont ajouté que le dossier MTP/. Pas de --update.
+#   ré-upload redouté : n'a pas eu lieu, vérifié le 04/09 (tailles des shards
+#   consignées dans docs/HISTORIQUE.md). Pas de --update.
 # Sampling officiel (guide unsloth + model card) : même table que Qwen3.8-27B
 #   (cf. l'en-tête du bloc Qwen3.8-27B plus haut), thinking et instruct.
 # Thinking ON par défaut (<think>), reasoning_effort xhigh (défaut) / medium /
@@ -872,7 +926,8 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661
 #     (temp 1.0 / top-p 0.95, presence-penalty 0)
 # cache-type-v q8_0 : agentic/coding, précision V critique (tool calls, diffs)
 # cache-reuse 0 : état récurrent GDN (l'interdit à lui seul), et de nouveau
-#   contrainte MTP depuis le retour de draft-mtp (jalon 2)
+#   contrainte MTP depuis le retour de draft-mtp (jalon 2, cf.
+#   docs/HISTORIQUE.md, « Passage au fork (12 et 13/09/2026) »)
 # Pas de swa-full ni ctx-checkpoints : pas de SWA (QSA n'est pas une fenêtre
 #   glissante) : à revoir si la PR expose des checkpoints pour l'état GDN.
 # jinja : template unsloth (developer role, systèmes fusionnés, tool calling
@@ -889,8 +944,9 @@ groupe "; --- Qwen3.8-Flash-Next, nécessite l'arch 'qwen4exp' (llama.cpp b10661
 #   Le paquet Arch, lui, ne sait charger ni l'une ni l'autre : ni graphe MTP
 #   pour qwen4exp, ni emprunt de tenseurs entre modèles, ni --spec-type
 #   draft-mtp pour cette arch — c'est la PR #28243, toujours non mergée au
-#   12/09/2026. Le fork apporte le graphe MTP qwen4exp et le drafter externe :
-#   le jalon 2 du PLAN est donc débloqué par le fork, PAS par le mainline.
+#   13/09/2026. Le fork apporte le graphe MTP qwen4exp et le drafter externe :
+#   le jalon 2 (cf. docs/HISTORIQUE.md, « Passage au fork (12 et 13/09/2026) »)
+#   est donc débloqué par le fork, PAS par le mainline.
 #   Sur cette arch (GDN + MoE 512 experts, la même famille que Qwen3-Coder-Next)
 #   on attendait un gros surcoût fixe par pas spéculatif ; mesuré le 05/09/2026
 #   (b10809, Vulkan0) : ce n'est PAS le cas ici, le petit draft gagne, cf. le
@@ -918,7 +974,8 @@ download_hf_shards qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 # #28243) quand le graphe qwen4exp du fork lit output_hc_* (« check_tensor_dims:
 # tensor 'output_hc_norm.weight' not found », et c'est le modèle entier qui ne
 # charge plus). D'où la copie renommée ci-dessous ; le fichier d'origine reste la
-# SOURCE, et redevient utilisable tel quel le jour où #28243 est mergée.
+# SOURCE, et redevient utilisable tel quel le jour où #28243 est mergée
+# (toujours non mergée au 13/09/2026).
 download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
   QWEN38_FLASH_NEXT_MTP_PATH="MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf"
 # Copie renommée pour le fork, produite en local (aucun repo ne la porte) par
@@ -932,8 +989,11 @@ derive_gguf qwen3.8-flash-next \
 # Qwen3.8-Flash-Next nothink : spéculation mixte n-gram + MTP, sampling instruct.
 # Renommée -nothink le 04/09, quand draft-mtp avait été retiré faute de moteur
 #   capable de charger le sidecar ; revenue à -mtp-nothink le 12/09/2026 avec le
-#   retour de draft-mtp sur le fork, comme qwen3.8-27b-mtp-nothink.
-# JALON 2 du plan Flash-Next (ancien PLAN-qwen3.8-flash-next.md) DÉBLOQUÉ le
+#   retour de draft-mtp sur le fork, comme l'était alors
+#   qwen3.8-27b-mtp-nothink (renommée qwen3.8-27b-dflash-nothink le
+#   13/09/2026, la tête MTP y étant remplacée par le drafter DFlash 2).
+# Jalon 2 (MTP de Flash-Next, cf. docs/HISTORIQUE.md, « Passage au fork »)
+#   DÉBLOQUÉ le
 #   12/09/2026 par le renommage du sidecar (tools/mtp-rename-hc-head.py, cf. la
 #   déclaration ci-dessus) : le fork apporte le graphe MTP qwen4exp et le
 #   drafter externe, il ne manquait que la convention de nom.
@@ -959,7 +1019,6 @@ derive_gguf qwen3.8-flash-next \
 #     8 est la marche de la courbe llama-bench entre les batchs 8 et 9 (x2,5,
 #     cf. plus bas) : au-delà de 8 tokens de draft le pas spéculatif coûte plus
 #     que ce que l'acceptance rapporte.
-#   Reste : la variante shared d'unsloth restée sur disque peut disparaître.
 # Mesuré le 05/09/2026 (bigchuck, llama-cpp 0.4.0-1.1 = b10809, ggml 0.23.0,
 #   UD-IQ4_XS, Vulkan0, médianes hors 1re passe) :
 #   --bench 3 passes : prefill 197 t/s, décode 25,9 t/s (acceptance 0,75 sur
@@ -976,13 +1035,14 @@ derive_gguf qwen3.8-flash-next \
 #     sur ce build.
 #   --bench-cache : tour suivant 62 %, édition en amont 0 %, requête identique
 #     64 % (état récurrent GDN, restauration au dernier checkpoint).
-#   --bench-load : chargement + 1er token 14,1 s (88 Go, cache de pages chaud
-#     après la campagne), TTFT à chaud 86 ms. Depuis le disque : à mesurer,
-#     compter plus d'une minute (gpt-oss 59 Go = 91 s).
+#   --bench-load : 60,8 s depuis le disque (88 Go, sidecar MTP compris,
+#     13/09/2026) ; 14,1 s avec le fichier encore en cache de pages (05/09),
+#     TTFT à chaud 86 ms.
 # ngram-on-disk : option du fork strix-llama.cpp (cf. lib/fork.sh). La table
 #   n-gram per_layer_token_embd (28,8 Go, propre à qwen4exp) n'est ni mappée ni
 #   chargée, chaque batch relit du GGUF les seules lignes qu'il rassemble.
-#   Mesuré le 12/09/2026 sur le fork : même prefill et même décode (391 / 27,3
+#   Mesuré le 12/09/2026 sur le fork (A/B de l'option, run antérieur au --bench
+#   de référence 414 / 30,9) : même prefill et même décode (391 / 27,3
 #   t/s contre 380 / 27,3 sans), sortie identique, mémoire utilisée 72 Go au
 #   lieu d'environ 100.
 #   ⚠ Le paquet Arch (b10809) NE connaît PAS cette clé et refuse alors de

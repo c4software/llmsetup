@@ -38,8 +38,8 @@ le cas n-gram) ne se comparent pas entre elles.
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | **205** (110 au paquet b10433) | **19,9** (acc. 0,65 ; 12,3 au paquet) | fork strix-0007bc6, 13/09/2026, plus gros gain de décode du parc (+62 %) ; ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) ; reasoning-budget 6144 (fork) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | **763** (468 au paquet b10433) | **48,7** (bench, acc. 0,27 ; 43,7 au paquet) ; 68,7 (refactor, paquet) | fork strix-0007bc6, 13/09/2026 ; ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | **599** (333 au paquet b10548) | **52,9** (bench, acc. 0,57 ; 51,9 au paquet) ; 59,8 (refactor, paquet) | fork strix-0007bc6, 13/09/2026 ; cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
-| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** seul (draft-dflash refusé par le mainline `wrong number of tensors; expected 76, got 69` **et** par le fork le 12/09/2026 : `failed to load draft model`) | **346** (255 au paquet b10548) | **29,6** (bench, acc. 0,80 ; 30,3 acc. 0,835 au paquet) ; 53,0 (refactor, +85 %, paquet) | fork strix-0007bc6, 13/09/2026 ; cache 99 % ; chargement 67 s depuis le disque |
-| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** (confirmé, k2/4/6/8 = 43,0 / **50,7** / 49,5 / 32,7) sur le fork (sidecar autonome Q8_0 renommé par `tools/mtp-rename-hc-head.py` ; le mainline ne sait toujours pas le charger, PR #28243) | **383** (414 en n-gram seul sur le fork ; 197 au paquet b10809) | **50,0** (bench mixte, acc. 0,87 ; 30,9 en n-gram seul sur le fork, 25,9 au paquet) ; **54,0** (refactor, +115 %) | fork strix-0007bc6, 12/09/2026 (le MTP n'existe pas sur le paquet) ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 14 s (cache de pages chaud) |
+| laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** seul (draft-dflash refusé par le mainline `wrong number of tensors; expected 76, got 69` **et** par le fork le 12/09/2026 : `failed to load draft model`) | **346** (255 au paquet b10548) | **29,6** (bench, acc. 0,80 ; 30,3 acc. 0,835 au paquet) ; 53,0 (refactor, +85 %, paquet) | fork strix-0007bc6, 13/09/2026 ; cache 99 % ; chargement 90,5 s depuis le disque (67 s au paquet) |
+| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** (confirmé, k2/4/6/8 = 43,0 / **50,7** / 49,5 / 32,7) sur le fork (sidecar autonome Q8_0 renommé par `tools/mtp-rename-hc-head.py` ; le mainline ne sait toujours pas le charger, PR #28243) | **383** (414 en n-gram seul sur le fork ; 197 au paquet b10809) | **50,0** (bench mixte, acc. 0,87 ; 30,9 en n-gram seul sur le fork, 25,9 au paquet) ; **54,0** (refactor, +115 %) | fork strix-0007bc6, 12/09/2026 (le MTP n'existe pas sur le paquet) ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 60,8 s depuis le disque (14,1 s fichier chaud) |
 
 Prefill et Gen : valeur du fork strix-0007bc6 en gras, valeur du paquet Arch
 entre parenthèses. Médianes hors première passe ; « cache » = part du prompt
@@ -54,6 +54,24 @@ retirée à son tour (doublon sur le GGUF de qwen3.8-27b-dflash-nothink, moitié
 moins vite : 21,7 contre 32,6 t/s), cf. « Qwen3.8-27B thinking : section
 retirée le 13/09/2026 » ; les tables ci-dessous gardent sa ligne. Avant lui, les trois Qwen3.6-35B-A3B ont été remplacés
 par ornith-1.5-35b-a3b le 28/08/2026.
+
+Retraits de l'inventaire de fichiers (`KNOWN_FILES`, déplacés de
+`lib/models.sh` le 13/09/2026) : retirés le 15/08/2026, remplacés par
+qwen3.8-27b : qwen3.6-27b et qwen3.6-27b-mtp ; retirés le 15/08/2026 car
+jamais utilisés : qwen3.5-2b, qwen3.5-9b-mtp, gemma-31b, gemma-12b ; retirés
+le 28/08/2026, remplacés par ornith-1.5-35b-a3b : qwen3.6-35b-a3b et
+qwen3.6-35b-a3b-mtp. `./setup-llm.sh --cleanup` les purge.
+
+Laguna S 2.1 (déplacé de `lib/models.sh` le 13/09/2026) : quants ré-uploadées
+fin juillet 2026 par unsloth (« Fix rope/context metadata to 256K YaRN
+(poolside config) » + fixes poolside), d'où un `./setup-llm.sh --update
+laguna-s-2.1` nécessaire si le modèle avait été téléchargé avant.
+
+Qwen3.8-Flash-Next (déplacé de `lib/models.sh` le 13/09/2026) : quants
+converties AVANT le merge de la PR (15:16 contre 19:32 UTC), donc ré-upload
+redouté ; il n'a pas eu lieu, vérifié le 04/09/2026, tailles des 3 shards
+inchangées : 10 946 624 / 49 835 229 856 / 43 836 407 744 octets. Les commits
+HF du 01/09 n'ont ajouté que le dossier `MTP/`.
 
 ## Paquet Arch contre fork : mesures
 
