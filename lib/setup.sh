@@ -119,7 +119,6 @@ cmd_setup() {
 # Updates amont connus (juillet/août 2026) à rattraper si téléchargés avant :
 #   --update laguna-s-2.1   (fix rope/context 256K YaRN + fixes poolside)
 #   --update qwen3.8-27b    (repo day-zero mi-août, template/quants mouvants)
-#   --update qwopus3.6-27b-coder-mtp  (repo squashé, re-validation etags)
 # =============================================================================
 
 cmd_update() {

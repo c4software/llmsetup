@@ -44,7 +44,7 @@ DEFAULT_DEVICE="Vulkan0"
 #     de préfixe passe par cache-ram + ctx-checkpoints — et elle ne se fait
 #     qu'AU DERNIER CHECKPOINT, pas au token près : mesuré --bench-cache le
 #     21/08/2026 (b10433) sur TOUTES les archs à état récurrent (9b, 35B-A3B,
-#     Qwopus, coder-next, lfm2.5 conv) : tour suivant 62 à 66 % servi du
+#     27B coder, coder-next, lfm2.5 conv) : tour suivant 62 à 66 % servi du
 #     cache, requête identique 63 à 66 %, tokenizers différents compris ;
 #     témoin DeepSeek (attention pure) : 99 % et 100 %. C'est le coût de ces
 #     architectures en boucle agentic, à mettre en face de leur débit. Et pour
@@ -74,7 +74,9 @@ _GROUPE_EN_ATTENTE=""
 # (retirés le 15/08/2026, remplacés par qwen3.8-27b : qwen3.6-27b et
 #  qwen3.6-27b-mtp ; retirés le 15/08/2026 car jamais utilisés : qwen3.5-2b,
 #  qwen3.5-9b-mtp, gemma-31b, gemma-12b ; retirés le 28/08/2026, remplacés par
-#  ornith-1.5-35b-a3b : qwen3.6-35b-a3b et qwen3.6-35b-a3b-mtp
+#  ornith-1.5-35b-a3b : qwen3.6-35b-a3b et qwen3.6-35b-a3b-mtp ; retiré le
+#  13/09/2026 car plus utilisé : qwopus3.6-27b-coder-mtp (ses mesures restent
+#  dans logs/)
 #  → ./setup-llm.sh --cleanup les purge)
 # (revenu le 12/09/2026 : qwen3.5-2b, non plus comme modèle servi mais comme
 #  estimateur de speculative prefill du 27B thinking — déclaré sans section ini)
@@ -360,8 +362,6 @@ parallel         = 1"
 # sans la spéculation). Le thinking reste non-MTP volontairement : c'est le
 # chemin checkpoints/prompt-cache fiable (rollback GDN sur rejet de draft
 # encore fragile en agentic, cf. 35B-A3B) — spec-type à ajouter si envie.
-# (Le Qwopus, SFT coder de la 3.6-27B, est gardé en modèle séparé plus bas —
-# choix perso, pas un doublon strict.)
 #
 # Sampling officiel Qwen3.8-27B (model card + doc unsloth) :
 #   thinking : temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 / presence 0.0
@@ -385,12 +385,12 @@ parallel         = 1"
 #   pas de repo -MTP séparé à réintroduire.
 # =============================================================================
 
-groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée — + Qwopus 3.6 coder) ---"
+groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée) ---"
 
 # Qwen3.8-27B — dense 27B hybrid-thinking (arch qwen35 : même base GDN + gated
 # attention que 3.5/3.6, aucun bump llama.cpp requis), vision native, ctx natif
 # 256K (1M via YaRN), Dynamic V3.0 (preview). Remplace TOUTE la famille 3.6-27B
-# (base + MTP + Qwopus coder SFT) : SWE-bench Pro 61.7 vs 53.5, QwenSWEBench
+# (base, MTP et le SFT coder Qwopus) : SWE-bench Pro 61.7 vs 53.5, QwenSWEBench
 # 79.0 vs 49.3, Terminal Bench 2.1 73.0 vs 63.4, IFBench 79.5 vs 69.1.
 # MTP : tête MTP embarquée dans le GGUF principal (unsloth : "MTP for fast
 #   inference is available", pas de repo -MTP séparé dans la collection Qwen3.8 —
@@ -565,70 +565,29 @@ ctx-checkpoints      = 128"
 #   360 t/s, décode 26,6 t/s, acceptance 0,59 : prefill +38 %, mais décode
 #   -10 % contre le paquet (261 / 29,5 / 0,65, b10433) : SEUL décode en retrait
 #   du parc sur le fork. Première mesure du 12/09 à 321 / 25,8 / 0,59,
-#   contre-mesurée le 13/09 ; les passes vont de 22 à 28 t/s, l'écart tient
-#   dans leur dispersion. Sur spec-refactor.txt (décode seul) : 53,7 t/s
+#   contre-mesurée le 13/09. Sur spec-refactor.txt (décode seul) : 53,7 t/s
 #   acceptance 0,67 contre 56,1 / 0,80 au paquet, soit -4 %.
+# spec-draft-n-max 4 (était 6) : sur le fork c'est 4, pas 6, et le -10 %
+#   ci-dessus s'explique. Le fork découpe les mat-vec batchés en colonnes
+#   (4/2/1), optimisation restreinte à q8_0 et q6_K par sa PR #27, et le
+#   UD-Q4_K_XL porte 110 tenseurs q8_0 et 56 q6_K : elle s'applique donc ici.
+#   Le batch de vérification vaut n-max + 1 : à 7 il se découpe en 4+2+1, le
+#   pire cas. llama-bench du 13/09/2026 (Vulkan0, strix-0007bc6, -b 8 -ub 8
+#   -r 3) : pp7 68,9 t/s contre 74,4 avec GGML_VK_MMV_NO_SPLIT=1 et 74,5 au
+#   paquet b10809, soit -7,4 % ; pp5 54,2 contre 56,9 (-4,7 %) ; pp4 47,8
+#   contre 47,7 (aucune pénalité). --spec-ab du 13/09 (spec-refactor.txt,
+#   4 passes) : n-max 4 = 57,8 t/s acceptance 0,712 contre 54,1 / 0,668 en
+#   n-max 6, soit +6,8 % ; n-max 7 rend le même chiffre avec une acceptance
+#   moindre ; en draft-mtp seul l'acceptance monte à 0,962 (la tête MTP du fork
+#   est saine, le 0,67 est l'agrégat n-gram + MTP). Revenir à 6 si le découpage
+#   est corrigé en amont.
+# swa-full : inopérant sur cette architecture (le journal du serveur dit
+#   « swa_full is not supported by this model »). La clé est gardée telle
+#   quelle : elle ne coûte rien et redeviendra utile si l'arch est supportée.
 llama_model qwen3.8-27b-mtp-nothink "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
 cache-ram            = 12288
-temp                 = 0.7
-top-k                = 20
-top-p                = 0.8
-min-p                = 0.0
-presence-penalty     = 1.5
-chat-template-kwargs = {\"enable_thinking\":false}
-cache-type-v         = q8_0
-cache-reuse          = 0
-spec-type            = ngram-map-k,draft-mtp
-spec-draft-n-max     = 6
-spec-ngram-map-k-size-m   = 47
-spec-ngram-map-k-min-hits = 2
-jinja                = true
-parallel             = 1
-swa-full             = true
-ctx-checkpoints      = 128"
-
-# Qwopus3.6-27B-Coder-MTP — fine-tune coder SFT de la 3.6-27B, SWE-bench Verified 67.0%
-# Conservé malgré l'arrivée de la 3.8-27B : seul survivant de la famille 3.6-27B,
-#   gardé pour son style/coding, pas pour les benchs (la 3.8 native est devant).
-# ⚠ Repo "super-squashé" fin juillet 2026 (historique nettoyé, etags changés) :
-#   un --update qwopus3.6-27b-coder-mtp re-vérifiera proprement. Une variante
-#   Jackrong/Qwopus3.6-27B-Coder-Compat-MTP-GGUF existe aussi si souci de compat.
-download_hf qwopus3.6-27b-coder-mtp "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF" \
-  QWOPUS_CODER_MTP_PATH="Qwopus3.6-27B-Coder-MTP-Q5_K_M.gguf"
-
-# Qwopus3.6-27B-Coder-MTP nothink — fine-tune coder SFT, SWE-bench 67.0%
-#   (score confirmé : run Q5_K_M, 335/500 Verified, thinking-off)
-# Bascule manuelle : /model qwopus3.6-27b-coder-mtp-nothink
-# spec-draft-n-max 4 : CONFIRMÉ sur Vulkan0 par --spec-tune 21/08/2026
-#   (draft-mtp seul, spec-test.txt, 4 passes) : k2 = 24,6 / k4 = 30,2 /
-#   k6 = 30,2 t/s (acceptance 0,93 / 0,82 / 0,72) — plateau dès 4, le plus
-#   petit gagne (valeur historique 2, puis 4 le 15/08).
-# Device : Vulkan0, mesuré --bench-devices 21/08/2026 : 243 pp / 26,5 tg
-#   contre ROCm0 328 / 21,6 (tour simulé 122 s contre 145) — comme tous les
-#   denses : ROCm prefill plus vite, décode moins bien.
-# cache-type-v q8_0 : précision V critique pour les diffs de code
-# cache-reuse 0 : incompatible MTP
-# spec-type ngram-map-k,draft-mtp : même montage que qwen3.8-27b-mtp-nothink
-#   (voir ce bloc pour le fond). Même marche Vulkan 8→9 sur ce Q5_K_M (x2,42,
-#   batch 8 = 106 ms, batch 9 = 257 ms). --spec-ngram-tune du 21/08/2026
-#   (Vulkan0, spec-refactor.txt, 4 passes) : size_m 7 = 43,9 t/s (acceptance
-#   0,95), 47 = 50,7 t/s (0,78) → 47, +16 %. spec-ngram.conf prime. --bench
-#   (bench-task) : 245 pp / 26,4 tg, acceptance 0,65. --bench-cache : 62 % /
-#   63 %. --bench-load : 4,5 s (19 Go, cache de pages chaud), TTFT 147 ms.
-# Pas de spec-draft-adaptive (option du fork strix-llama.cpp) : --spec-ab du
-#   12/09/2026 (strix-0007bc6, spec-refactor.txt, 4 passes) : adaptatif 76,0 t/s
-#   (acceptance 0,82) contre 77,4 (0,85) en draft fixe n-max 4. Draft fixe
-#   conservé (cf. le bloc 27B-MTP).
-# Fork (strix-0007bc6) : pas de --bench, seule la mesure de décode existe.
-#   --spec-ab du 12/09/2026 (spec-refactor.txt, 4 passes) : 77,4 t/s acceptance
-#   0,85 contre 50,7 / 0,78 au paquet (b10433), soit +53 %. Le --bench reste à
-#   faire pour avoir le prefill sur cette série.
-llama_model qwopus3.6-27b-coder-mtp-nothink "
-model                = $QWOPUS_CODER_MTP_PATH
-ctx-size             = 131072
-cache-ram            = 4096
 temp                 = 0.7
 top-k                = 20
 top-p                = 0.8
