@@ -481,6 +481,13 @@ download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
 #     retirées, à ré-essayer si le fork rend le cache compatible.
 #   ⚠ Clés inconnues du paquet Arch (vérifié le 12/09/2026 : aucune ligne
 #   spec-prefill dans /usr/bin/llama-server --help) : FORK_ONLY_KEYS, lib/fork.sh.
+# DRAFTER DFLASH 2 (z-lab, cf. la déclaration QWEN38_27B_DFLASH_PATH) sur la
+#   section thinking : --spec-ab du 13/09/2026 (strix-0007bc6, spec-test.txt,
+#   3 passes, reasoning_effort medium) : sans spéculation 12,3 t/s ;
+#   draft-dflash seul n-max 7 = 24,5 t/s (+99 %, acceptance 0,42) ;
+#   ngram-map-k 47 + draft-dflash = 24,3 (le n-gram n'apporte rien sur du
+#   raisonnement, il est laissé de côté ici). Distribution cible préservée
+#   par DFlash. Non mesuré sur le paquet Arch. --bench à refaire.
 llama_model qwen3.8-27b "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
@@ -495,6 +502,9 @@ reasoning-budget-enable       = true
 reasoning-budget              = 4096
 reasoning-budget-soft-ratio   = 0.7
 reasoning-budget-grace-tokens = 128
+spec-type            = draft-dflash
+spec-draft-model     = $QWEN38_27B_DFLASH_PATH
+spec-draft-n-max     = 7
 jinja                = true
 parallel             = 1
 swa-full             = true
