@@ -57,6 +57,18 @@ mkdir -p "$TMP/repo"
 ln -sfn "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$TMP/home/.local/bin/llama-server"
 _ck "fork : binaire résolu" "$TMP/home/.local/bin/llama-server" "$(_run '_llama_bin llama-server')"
 _ck "fork : étiquette"      "strix-0007bc6"                     "$(_run '_llama_build')"
+# 1bis. Clone approfondi : le fork affiche alors un vrai numéro ("build 2224",
+#    arrivé le 13/09/2026 après --update-fork) ; l'étiquette reste celle du
+#    commit, sinon _fork_keys_guard le prendrait pour un paquet upstream.
+mkdir -p "$TMP/home/llm/strix-llama.cpp/build/bin"
+cat > "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server.deep" <<'EOF2'
+#!/usr/bin/env bash
+echo "version: 0.4.0-dev (build 2224, commit 654803517)"
+EOF2
+chmod +x "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server.deep"
+ln -sfn "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server.deep" "$TMP/home/.local/bin/llama-server"
+_ck "fork approfondi : étiquette" "strix-6548035" "$(_run '_llama_build')"
+ln -sfn "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$TMP/home/.local/bin/llama-server"
 
 # 2. Sans lien : repli sur le PATH, étiquette bNNNNN inchangée (c'est elle qui
 #    figure dans toutes les campagnes antérieures, à ne pas casser).

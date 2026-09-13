@@ -209,8 +209,9 @@ _llama_bin() {
 # que deux moteurs coexistent (cf. README « Moteur : fork strix-llama.cpp ») :
 #   - upstream (paquet Arch) : "b10809", le numéro de build de
 #     `--version` ("version: 0.4.0-dev (build 10809, commit 5266f24da7)") ;
-#   - fork : le fork ne numérote pas ses builds ("build 1"), l'étiquette est
-#     donc "<dépôt>-<commit court>", ex. "strix-0007bc6". Règle du préfixe :
+#   - fork (binaire construit depuis les sources, realpath dans un build/bin) :
+#     "<dépôt>-<commit court>", ex. "strix-0007bc6", quel que soit le numéro
+#     de build affiché (1 en clone superficiel, 2224 une fois approfondi). Règle du préfixe :
 #     nom du dossier du dépôt (realpath du binaire remonté de build/bin),
 #     amputé du suffixe "-llama.cpp" ; "fork" si le chemin ne dit rien.
 # Repli final sur la version du paquet. Une étiquette n'est JAMAIS numérique
@@ -223,19 +224,22 @@ _llama_build() {
     ver="$("$bin" --version 2>&1 | head -3)"
     b="$(sed -n 's/.*build \([0-9][0-9]*\).*/\1/p' <<< "$ver" | head -1)"
     commit="$(sed -n 's/.*commit \([0-9a-f][0-9a-f]*\).*/\1/p' <<< "$ver" | head -1)"
+    # Un binaire construit depuis les sources (realpath dans un build/bin) est
+    # TOUJOURS étiqueté par son commit, quel que soit le numéro de build : le
+    # fork affichait "build 1" en clone superficiel, puis "build 2224" dès que
+    # --update-fork a approfondi le clone (13/09/2026), et "b2224" aurait été
+    # pris pour un paquet upstream par _fork_keys_guard (refus de démarrer).
+    repo="$(realpath "$bin" 2>/dev/null)"
+    if [[ "$repo" == */build/bin/* && -n "$commit" ]]; then
+      repo="$(basename "${repo%/build/bin/*}")"
+      repo="${repo%-llama.cpp}"
+      echo "${repo:-fork}-${commit:0:7}"; return
+    fi
     if [[ -n "$b" && "$b" -gt 1 ]]; then
       echo "b$b"; return
     fi
     if [[ -n "$commit" ]]; then
-      repo="$(realpath "$bin" 2>/dev/null)"
-      if [[ "$repo" == */build/bin/* ]]; then
-        repo="$(basename "${repo%/build/bin/*}")"
-        repo="${repo%-llama.cpp}"
-      else
-        repo=""
-      fi
-      [[ -n "$repo" ]] || repo="fork"
-      echo "${repo}-${commit:0:7}"; return
+      echo "fork-${commit:0:7}"; return
     fi
   fi
   b="$(paru -Q llama-cpp 2>/dev/null | awk '{print $2}')"
