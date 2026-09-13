@@ -558,18 +558,37 @@ Lecture : le décode en boucle d'outils (71 t/s) rejoint le `--bench` (70,7) ; l
 | min-hits 1 | 55,8 | 0,80 | équivalent, 2 gardé |
 | ngram-map-k4v 47, min-hits 2 | 44,9 | 0,91 | -20 % : drafte moins souvent malgré une meilleure acceptance |
 
-`--bench-cache`, bench-context.txt ~1370 tokens :
+`--bench-cache`, bench-context.txt ~1370 tokens. Série **fork
+strix-0007bc6, 13/09/2026**, parc complet du plus petit au plus gros, modèle
+précédent déchargé avant chaque gros ; entre parenthèses la valeur de la
+campagne du paquet Arch (b10433, 21 au 28/08/2026) quand elle existe. La
+requête froide est à 0 % partout, par construction (horodatage en tête du
+contexte).
 
-| Modèle | Architecture | Tour suivant | Édition au 1er tiers | Requête identique |
-|---|---|---|---|---|
-| qwen3.5-9b | hybride SWA/GDN | 62 % (847 tok) | 0 % | 63 % (861 tok) |
-| ornith-1.5-35b-a3b | GDN, MoE | 62 % (883 tok) | 0 % | 64 % (897 tok) |
-| lfm2.5-2.6b | conv récurrente (autre tokenizer) | 62 % (864 tok) | 0 % | 63 % (876 tok) |
-| qwen3-coder-next | GDN, MoE | 64 % (962 tok) | 0 % | 66 % (978 tok) |
-| qwen3.8-flash-next-mtp-nothink | GDN, MoE | 62 % (883 tok) | 0 % | 64 % (897 tok) |
-| **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** | **0 %** | **100 %** |
-| **gpt-oss** | **attention + SWA, MoE** | **99 %** | **4 %** | **100 %** |
-| **laguna-s-2.1** | **attention SWA + globale, MoE** | **99 %** | **2 %** | **100 %** |
+| Modèle | Architecture | Tour suivant | Édition au 1er tiers | Requête identique | Prefill froid → identique |
+|---|---|---|---|---|---|
+| lfm2.5-2.6b | conv récurrente (autre tokenizer) | 63 % (62) | 0 % (0) | 64 % (63) | 373 → 151 ms |
+| qwen3.5-9b | hybride SWA/GDN | 62 % (62) | 0 % (0) | 64 % (63) | 1 419 → 549 ms |
+| qwen3.8-27b | dense, GDN + gated attention | 62 % | 0 % | 64 % | 3 814 → 1 463 ms |
+| qwen3.8-27b-dflash-nothink | idem (même GGUF) | 62 % | 0 % | 64 % | 3 838 → 1 472 ms |
+| ornith-1.5-35b-a3b | GDN, MoE | 62 % (62) | 0 % (0) | 64 % (64) | 1 182 → 447 ms |
+| qwen3-coder-next | GDN, MoE | 65 % (64) | 0 % (0) | 67 % (66) | 1 941 → 697 ms |
+| qwen3.8-flash-next-mtp-nothink | GDN, MoE | 62 % (62) | 0 % (0) | 64 % (64) | 3 652 → 1 293 ms |
+| **gpt-oss** | **attention + SWA, MoE** | **99 %** (99) | **4 %** (4) | **100 %** (100) | 2 131 → 65 ms |
+| **laguna-s-2.1** | **attention SWA + globale, MoE** | **99 %** (99) | **0 %** (2) | **100 %** (100) | 4 756 → 138 ms |
+| **deepseek-v4-flash** | **attention pure (MLA)** | **99 %** (99) | **0 %** (0) | **100 %** (100) | 7 262 → 109 ms |
+
+Le passage au fork ne change rien au verdict : les écarts contre le paquet
+tiennent dans un point de pourcentage (lfm2.5 et qwen3.5-9b gagnent 1 point à
+l'identique, qwen3-coder-next 1 point partout), et la seule différence de
+nature est laguna-s-2.1, qui passe de 2 % à 0 % sur l'édition. Les deux
+variantes du 27B, jamais mesurées sur le paquet, se rangent avec les
+architectures à état récurrent (62 / 0 / 64) : leur `swa-full` +
+`swa-checkpoints` ne les en sort pas. Les prefill sont la nouveauté de cette
+série : sur une requête identique, gpt-oss repaie 65 ms contre 2 131 à froid
+(x33), deepseek 109 contre 7 262 (x67), alors que le 27B reste à 1 463 ms
+contre 3 814 (x2,6 seulement) — le coût du tour suivant sur état récurrent se
+lit directement là.
 
 Deux enseignements. DeepSeek et gpt-oss tranchent le premier : les
 architectures à état récurrent (GDN, conv) ne restaurent leur état qu'à un
@@ -586,21 +605,33 @@ résultats d'outils) si on tient au cache.
 
 `--bench-load`, restart puis première requête. Le chiffre dépend d'abord de
 l'état du cache de pages du noyau : fichier chaud (benché à l'instant) ou
-relu depuis le disque.
+relu depuis le disque. Série **fork strix-0007bc6, 13/09/2026**, parc complet
+à la suite d'une campagne `--bench-cache` ; entre parenthèses la valeur de la
+campagne du paquet Arch (b10433 à b10566, 21 au 28/08/2026) quand elle
+existe. L'état du cache de pages est déduit de la variation de `buff/cache`
+pendant le chargement.
 
 | Modèle | Taille | Chargement + 1er token | TTFT à chaud | État du cache de pages |
 |---|---|---|---|---|
-| lfm2.5-2.6b | 2,7 Go | 0,5 s | 27 ms | chaud |
-| qwen3.5-9b | 8,2 Go | 1,9 s | 65 ms | chaud |
-| qwen3.8-27b | 17 Go | 4,4 s | 165 ms | chaud (~4 Go/s) |
-| qwen3-coder-next | 47 Go | 72 s | 406 ms | disque |
-| gpt-oss | 59 Go | 91 s | 86 ms | disque |
-| laguna-s-2.1 | 69 Go | 67 s | 173 ms | disque |
-| qwen3.8-flash-next-mtp-nothink | 88 Go | 14,1 s | 86 ms | chaud (après la campagne de mesures) |
+| lfm2.5-2.6b | 2,7 Go | 0,9 s (0,5) | 26 ms (27) | chaud |
+| qwen3.5-9b | 8,2 Go | 5,0 s (1,9) | 63 ms (65) | disque (+8 Go de cache de pages) |
+| qwen3.8-27b | 17 Go | 3,6 s (4,4) | 129 ms (165) | chaud (~4,7 Go/s) |
+| qwen3.8-27b-dflash-nothink | 17 Go (même GGUF) | 3,5 s | 131 ms | chaud |
+| ornith-1.5-35b-a3b | 21 Go | 8,3 s | 42 ms | disque (+20 Go de cache de pages) |
+| qwen3-coder-next | 47 Go | 55,4 s (72) | 54 ms (406) | disque |
+| gpt-oss | 59 Go | 91,3 s (91) | 85 ms (86) | disque |
+| laguna-s-2.1 | 69 Go | 90,5 s (67) | 138 ms (173) | disque |
+| qwen3.8-flash-next-mtp-nothink | 88 Go | 60,8 s (14,1 avec le fichier chaud) | 86 ms (86) | disque (sidecar MTP compris) |
+| deepseek-v4-flash | 98 Go | 236,0 s | 133 ms | disque |
 
 Une bascule LRU entre modèles moyens coûte quelques secondes si le fichier
 est encore en cache de pages, une minute et plus s'il a été évincé (les
-104 Go de DeepSeek évincent tout le reste).
+98 Go de DeepSeek évincent tout le reste). Les 88 Go de Flash-Next à 14,1 s
+mesurés le 05/09 étaient un fichier entièrement en cache de pages : le même
+chargement depuis le disque coûte 60,8 s, et DeepSeek, jamais mesuré sur le
+paquet, tient les quatre minutes (~0,4 Go/s en IQ3_XXS sur quatre shards).
+Le TTFT à chaud est stable d'une série à l'autre, sauf qwen3-coder-next qui
+tombe de 406 à 54 ms.
 
 ### Enseignements
 
