@@ -146,8 +146,10 @@ Une contrepartie mesurée : le fork découpe les mat-vec batchés en colonnes
 27B dans « Paquet Arch contre fork »). `GGML_VK_MMV_NO_SPLIT=1` annule la
 pénalité, mais désactive le découpage pour **tout** le parc, Flash-Next
 compris, qui lui en profite : non retenu. Le réglage par modèle (n-max qui
-évite le pire cas) suffit ; une issue en amont sur le découpage serait
-recevable.
+évite le pire cas, ou le drafter DFlash 2 à n-max 7) suffit. Signalé en amont
+le 13/09/2026 : [issue #50](https://github.com/halo-box/strix-llama.cpp/issues/50)
+(table llama-bench, contournement DFlash 2) ; si un correctif arrive, re-comparer
+la tête MTP du 27B contre DFlash 2 après `--update-fork`.
 
 ## Sous-commandes
 
