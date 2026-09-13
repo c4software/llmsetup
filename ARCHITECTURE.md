@@ -155,7 +155,7 @@ près — voir `tests/py-golden.sh`.
 | `parallel_agg.py <temps_mur_s> <réponse.json>...` | réponses d'une salve de requêtes simultanées | ligne lisible + `AGG=` (tokens / temps mur) `MED=` (décode médian par requête) `TOK=` `ERR=` | `_bench_parallel_salve` (bench.sh) |
 | `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device, build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
 | `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `logs/spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
-| `perf_graphs.py [<tsv> [<dossier>]]` | `docs/perfs.tsv` (TSV versionné, une ligne par section servie) | `docs/graphs/prefill.svg`, `decode.svg`, `ecarts.svg` (SVG statiques, rendu crayon, graine fixe → sortie reproductible) | personne : lancé à la main quand la table du parc change (README, skill `ajout-modele` étape 6) |
+| `perf_graphs.py [<tsv> [<dossier>]]` | `docs/perfs.tsv` (TSV versionné, une ligne par section servie) | `docs/graphs/prefill.svg`, `decode.svg`, `ecarts.svg` (SVG statiques, rendu sobre, tracé déterministe → sortie reproductible) | personne : lancé à la main quand la table du parc change (README, skill `ajout-modele` étape 6) |
 
 ## Prompts de mesure (`prompts/`)
 

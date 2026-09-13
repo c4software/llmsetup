@@ -5,16 +5,16 @@
 #   docs/graphs/decode.svg    idem sur le décode
 #   docs/graphs/ecarts.svg    écart du fork en % du paquet, zéro au centre
 #
-# Rendu « crayon » : chaque trait est une polyligne à segments courts dont les
-# points sont décalés de 1 à 2 px, tracée deux fois (contour doublé), hachures
-# diagonales clipées dans la barre, police manuscrite avec repli cursive. Le
-# hasard est tiré d'un random.Random(GRAINE) et les figures sont dessinées
-# toujours dans le même ordre : la sortie est reproductible, un régénéré ne
-# produit un diff que si les chiffres du TSV ont bougé.
+# Rendu sobre : barres rectangulaires à remplissage plein, sans contour ni
+# dégradé, grille verticale fine en gris clair, valeurs au bout des barres,
+# légende à carrés de couleur, fond blanc. Aucun aléa : le tracé ne dépend que
+# des chiffres du TSV, donc un régénéré ne produit un diff que si ces chiffres
+# ont bougé.
 #
 # Contraintes GitHub (qui assainit les SVG des README) : pas de <script>, pas
-# de <foreignObject>, pas de police ni d'image externe. XML écrit à la main,
-# stdlib seule (csv, random). Vérification :
+# de <foreignObject>, pas de police ni d'image externe (la famille demandée a
+# un repli Helvetica/Arial). XML écrit à la main, stdlib seule (csv).
+# Vérification :
 #   python3 -c 'import xml.dom.minidom,sys; xml.dom.minidom.parse(sys.argv[1])' \
 #     docs/graphs/prefill.svg
 #
@@ -23,29 +23,26 @@
 #  déduite du chemin du script, pas du cwd.)
 import csv
 import os
-import random
 import sys
 
-GRAINE = 20260913          # figée : changer la graine rejoue tout le rendu
 LARGEUR = 900
 MARGE_G = 258              # place des noms de sections, les plus longs du parc
 MARGE_D = 74               # place des valeurs au bout des barres
-HAUT_TITRE = 94            # titre + légende
+HAUT_TITRE = 116           # titre + sous-titre sur deux lignes + légende
 HAUT_AXE = 44              # graduations sous le cadre
 H_BARRE = 16
 ECART_BARRES = 5           # entre les deux barres d'un même modèle
 ECART_GROUPES = 20         # entre deux modèles
 
-POLICE = "Comic Neue, Comic Sans MS, Segoe Print, Bradley Hand, cursive"
-# Couleurs « crayon » : graphite pour le paquet, bleu de couleur pour le fork,
-# rouge pour les écarts négatifs.
-GRAPHITE = "#4a4a4a"
-GRAPHITE_CLAIR = "#b9b9b9"
-BLEU = "#2f6fb0"
-BLEU_CLAIR = "#a9c8e6"
-ROUGE = "#b2382f"
-ROUGE_CLAIR = "#e3b0ab"
-AXE = "#8a8a8a"
+POLICE = "Inter, Helvetica, Arial, sans-serif"
+# Gris moyen pour le paquet, bleu pour le fork, rouge pour les écarts négatifs.
+GRIS = "#9aa0a6"
+BLEU = "#2f6fdd"
+ROUGE = "#c0392b"
+TEXTE = "#3c4043"          # gris foncé des libellés et des valeurs
+TEXTE_FAIBLE = "#5f6368"   # sous-titre et étiquettes de graduation
+GRILLE = "#e4e6e9"         # grille verticale
+AXE = "#bdc1c6"            # ligne de base et axe du zéro
 
 
 # --- XML minimal -------------------------------------------------------------
@@ -56,81 +53,24 @@ def esc(t):
             .replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def texte(x, y, t, taille=12, couleur=GRAPHITE, ancre="start", opacite=0.9):
+def texte(x, y, t, taille=12, couleur=TEXTE, ancre="start", graisse=None):
+    poids = ' font-weight="%s"' % graisse if graisse else ""
     return ('<text x="%.1f" y="%.1f" font-family="%s" font-size="%d" '
-            'fill="%s" text-anchor="%s" opacity="%.2f">%s</text>'
-            % (x, y, esc(POLICE), taille, couleur, ancre, opacite, esc(t)))
+            'fill="%s" text-anchor="%s"%s>%s</text>'
+            % (x, y, esc(POLICE), taille, couleur, ancre, poids, esc(t)))
 
 
-# --- traits tremblés ---------------------------------------------------------
-
-def _jitter(rng):
-    """Décalage d'un point : 1 à 2 px, d'un côté ou de l'autre."""
-    return rng.uniform(1.0, 2.0) * rng.choice((-1.0, 1.0))
+def ligne(x1, y1, x2, y2, couleur, epaisseur=1.0):
+    return ('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" '
+            'stroke-width="%.1f"/>' % (x1, y1, x2, y2, couleur, epaisseur))
 
 
-def densifie(points, pas=13.0):
-    """Redécoupe une polyligne en segments d'au plus `pas` px."""
-    sortie = [points[0]]
-    for (x1, y1), (x2, y2) in zip(points, points[1:]):
-        d = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
-        n = max(1, int(d / pas))
-        for i in range(1, n + 1):
-            sortie.append((x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n))
-    return sortie
-
-
-def tremble(points, rng, dx=0.0, dy=0.0):
-    """Points densifiés puis décalés au hasard, translatés de (dx, dy)."""
-    return [(x + dx + _jitter(rng), y + dy + _jitter(rng))
-            for x, y in densifie(points)]
-
-
-def _d(points):
-    return " ".join("%.1f,%.1f" % p for p in points)
-
-
-def trait(points, rng, couleur=GRAPHITE, epaisseur=1.6, opacite=0.8,
-          passes=2, ferme=False):
-    """Un trait crayonné : deux passes de contour légèrement décalées."""
-    pts = list(points)
-    if ferme and pts[0] != pts[-1]:
-        pts.append(pts[0])
-    out = []
-    for i in range(passes):
-        dx, dy = (0.0, 0.0) if i == 0 else (0.6, 0.5)
-        out.append('<polyline points="%s" fill="none" stroke="%s" '
-                   'stroke-width="%.1f" stroke-linecap="round" '
-                   'stroke-linejoin="round" opacity="%.2f"/>'
-                   % (_d(tremble(pts, rng, dx, dy)), couleur, epaisseur,
-                      opacite))
-    return out
-
-
-def barre(x0, x1, y0, y1, rng, couleur, clair, cid):
-    """Barre horizontale crayonnée : aplat pâle, hachures diagonales clipées
-    dans la barre, puis le contour doublé."""
+def barre(x0, x1, y0, y1, couleur):
+    """Barre horizontale : un rectangle plein, coins droits, sans contour."""
     if x1 < x0:
         x0, x1 = x1, x0
-    coins = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
-    h = y1 - y0
-    out = ['<polygon points="%s" fill="%s" stroke="none" opacity="0.55"/>'
-           % (_d(tremble(coins + [coins[0]], rng)), clair)]
-    # Hachures : le clip est un rectangle net, les lignes restent tremblées.
-    out.append('<clipPath id="%s"><rect x="%.1f" y="%.1f" width="%.1f" '
-               'height="%.1f"/></clipPath>' % (cid, x0, y0, max(0.1, x1 - x0), h))
-    out.append('<g clip-path="url(#%s)">' % cid)
-    k = 0.0
-    while k < (x1 - x0) + h:
-        # hachures : trop courtes pour être densifiées, seuls les bouts bougent
-        out.append('<polyline points="%s" fill="none" stroke="%s" '
-                   'stroke-width="1" stroke-linecap="round" opacity="0.42"/>'
-                   % (_d([(x0 + k - h + _jitter(rng), y1 + _jitter(rng)),
-                          (x0 + k + _jitter(rng), y0 + _jitter(rng))]), couleur))
-        k += 8.0
-    out.append("</g>")
-    out += trait(coins, rng, couleur, epaisseur=1.7, opacite=0.8, ferme=True)
-    return out
+    return ('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>'
+            % (x0, y0, max(0.0, x1 - x0), y1 - y0, couleur))
 
 
 # --- lecture du TSV ----------------------------------------------------------
@@ -185,42 +125,38 @@ def graduations(vmax, cibles=6):
 
 # --- squelette commun --------------------------------------------------------
 
-def _entete(rng, titre, sous_titre, legende, largeur, hauteur):
-    """Fond blanc, titre, soulignement crayonné et légende à pastilles."""
+def _entete(titre, sous_titre, legende, largeur, hauteur):
+    """Fond blanc, titre, sous-titre (une ou deux lignes) et légende à carrés."""
     out = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" '
            'viewBox="0 0 %d %d" role="img" aria-label="%s">'
            % (largeur, hauteur, largeur, hauteur, esc(titre)),
            '<rect x="0" y="0" width="%d" height="%d" fill="#ffffff"/>'
            % (largeur, hauteur),
-           texte(24, 34, titre, taille=19, opacite=0.95),
-           texte(24, 54, sous_titre, taille=11, couleur=AXE)]
-    out += trait([(24, 41), (24 + min(560, 10 * len(titre)), 41)], rng,
-                 GRAPHITE, epaisseur=1.4, opacite=0.55)
+           texte(24, 34, titre, taille=18, graisse="600")]
+    for i, l in enumerate(str(sous_titre).split("\n")):
+        out.append(texte(24, 56 + 16 * i, l, taille=12, couleur=TEXTE_FAIBLE))
     x = 24
-    for libelle, couleur, clair in legende:
-        out += barre(x, x + 22, 64, 78, rng, couleur, clair,
-                     "lg%d" % int(x))
-        out.append(texte(x + 28, 76, libelle, taille=12, couleur=couleur))
-        x += 34 + int(7.0 * len(libelle))
+    for libelle, couleur in legende:
+        out.append('<rect x="%.1f" y="%.1f" width="11" height="11" '
+                   'fill="%s"/>' % (x, 89, couleur))
+        out.append(texte(x + 17, 98, libelle, taille=12))
+        x += 24 + int(7.0 * len(libelle))
     return out
 
 
-def _axe_vertical(out, rng, x, y0, y1, valeurs, xs, unite=""):
-    """Graduations verticales (grille pâle) et leurs étiquettes sous le cadre."""
+def _axe_vertical(out, x, y0, y1, valeurs, xs, unite=""):
+    """Grille verticale fine et étiquettes des graduations sous le cadre."""
     for v, xv in zip(valeurs, xs):
-        out += trait([(xv, y0), (xv, y1)], rng, GRAPHITE_CLAIR,
-                     epaisseur=1.0, opacite=0.45, passes=1)
+        out.append(ligne(xv, y0, xv, y1, GRILLE))
         out.append(texte(xv, y1 + 18, nombre(v, unite), taille=11,
-                         couleur=AXE, ancre="middle"))
-    out += trait([(x, y1), (xs[-1] if xs else x, y1)], rng, AXE,
-                 epaisseur=1.4, opacite=0.7)
+                         couleur=TEXTE_FAIBLE, ancre="middle"))
+    out.append(ligne(x, y1, xs[-1] if xs else x, y1, AXE))
 
 
 # --- graphes groupés (prefill, décode) ---------------------------------------
 
 def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
                   forcer=None):
-    rng = random.Random(GRAINE)
     h_groupe = 2 * H_BARRE + ECART_BARRES + ECART_GROUPES
     y_top = HAUT_TITRE
     hauteur = HAUT_TITRE + h_groupe * len(rows) + HAUT_AXE
@@ -230,28 +166,24 @@ def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
     ticks, haut = graduations(vmax)
     ech = (x_max - x0) / haut
 
-    out = _entete(rng, titre, sous_titre,
-                  [("paquet Arch", GRAPHITE, GRAPHITE_CLAIR),
-                   ("fork strix-llama.cpp", BLEU, BLEU_CLAIR)],
+    out = _entete(titre, sous_titre,
+                  [("paquet Arch", GRIS), ("fork strix-llama.cpp", BLEU)],
                   LARGEUR, hauteur)
     y_bas = y_top + h_groupe * len(rows)
-    _axe_vertical(out, rng, x0, y_top - 6, y_bas,
+    _axe_vertical(out, x0, y_top - 6, y_bas,
                   ticks, [x0 + t * ech for t in ticks])
 
     for i, r in enumerate(rows):
         yg = y_top + i * h_groupe + ECART_GROUPES / 2
         out.append(texte(x0 - 12, yg + H_BARRE + 2, r["modele"], taille=12,
                          ancre="end"))
-        for j, (cle, couleur, clair) in enumerate(
-                ((cle_paquet, GRAPHITE, GRAPHITE_CLAIR),
-                 (cle_fork, BLEU, BLEU_CLAIR))):
+        for j, (cle, couleur) in enumerate(
+                ((cle_paquet, GRIS), (cle_fork, BLEU))):
             y = yg + j * (H_BARRE + ECART_BARRES)
             x1 = x0 + r[cle] * ech
-            out += barre(x0, x1, y, y + H_BARRE, rng, couleur, clair,
-                         "b%d%d" % (i, j))
+            out.append(barre(x0, x1, y, y + H_BARRE, couleur))
             out.append(texte(x1 + 8, y + H_BARRE - 3,
-                             nombre(r[cle], forcer=forcer),
-                             taille=11, couleur=couleur))
+                             nombre(r[cle], forcer=forcer), taille=11))
     out.append("</svg>")
     ecrire(chemin, out)
 
@@ -263,7 +195,6 @@ def ecart(paquet, fork):
 
 
 def graphe_ecarts(rows, titre, sous_titre, chemin):
-    rng = random.Random(GRAINE)
     h_groupe = 2 * H_BARRE + ECART_BARRES + ECART_GROUPES
     y_top = HAUT_TITRE
     hauteur = HAUT_TITRE + h_groupe * len(rows) + HAUT_AXE
@@ -278,38 +209,32 @@ def graphe_ecarts(rows, titre, sous_titre, chemin):
     x_zero = (x0 + x_max) / 2.0
     ech = (x_max - x_zero) / haut
 
-    out = _entete(rng, titre, sous_titre,
-                  [("prefill", BLEU, BLEU_CLAIR),
-                   ("décode", GRAPHITE, GRAPHITE_CLAIR),
-                   ("négatif", ROUGE, ROUGE_CLAIR)],
+    out = _entete(titre, sous_titre,
+                  [("prefill", BLEU), ("décode", GRIS), ("négatif", ROUGE)],
                   LARGEUR, hauteur)
     y_bas = y_top + h_groupe * len(rows)
-    _axe_vertical(out, rng, x0, y_top - 6, y_bas,
+    _axe_vertical(out, x0, y_top - 6, y_bas,
                   ticks, [x_zero + t * ech for t in ticks], unite=" %")
     # L'axe du zéro, plus appuyé que la grille.
-    out += trait([(x_zero, y_top - 6), (x_zero, y_bas)], rng, GRAPHITE,
-                 epaisseur=1.5, opacite=0.7)
+    out.append(ligne(x_zero, y_top - 6, x_zero, y_bas, AXE, epaisseur=1.5))
 
     for i, (r, (e_pp, e_gen)) in enumerate(zip(rows, vals)):
         yg = y_top + i * h_groupe + ECART_GROUPES / 2
         out.append(texte(x0 - 12, yg + H_BARRE + 2, r["modele"], taille=12,
                          ancre="end"))
-        for j, (v, couleur, clair) in enumerate(
-                ((e_pp, BLEU, BLEU_CLAIR), (e_gen, GRAPHITE, GRAPHITE_CLAIR))):
+        for j, (v, couleur) in enumerate(((e_pp, BLEU), (e_gen, GRIS))):
             if v < 0:
-                couleur, clair = ROUGE, ROUGE_CLAIR
+                couleur = ROUGE
             y = yg + j * (H_BARRE + ECART_BARRES)
             x1 = x_zero + v * ech
-            out += barre(x_zero, x1, y, y + H_BARRE, rng, couleur, clair,
-                         "e%d%d" % (i, j))
+            out.append(barre(x_zero, x1, y, y + H_BARRE, couleur))
             signe = "+" if v >= 0 else "-"
             etiq = signe + nombre(abs(v), " %")
             if v >= 0:
-                out.append(texte(x1 + 8, y + H_BARRE - 3, etiq, taille=11,
-                                 couleur=couleur))
+                out.append(texte(x1 + 8, y + H_BARRE - 3, etiq, taille=11))
             else:
                 out.append(texte(x1 - 8, y + H_BARRE - 3, etiq, taille=11,
-                                 couleur=couleur, ancre="end"))
+                                 ancre="end"))
     out.append("</svg>")
     ecrire(chemin, out)
 
@@ -326,21 +251,22 @@ def main(argv):
     tsv = argv[1] if len(argv) > 1 else os.path.join(racine, "docs", "perfs.tsv")
     sortie = argv[2] if len(argv) > 2 else os.path.join(racine, "docs", "graphs")
     rows = lire(tsv)
-    # Sous-titre commun : les deux séries ne partagent ni le build ni le jour,
-    # la colonne source du TSV garde le détail ligne par ligne.
+    # Sous-titre commun, sur sa propre ligne : les deux séries ne partagent ni
+    # le build ni le jour, la colonne source du TSV garde le détail ligne par
+    # ligne.
     st = ("colonne paquet : dernier run bNNNNN du modèle ; colonne fork : "
           "strix-0007bc6, Vulkan0, --bench 3 passes, 12 et 13/09/2026")
     graphe_groupe(rows, "prefill_paquet", "prefill_fork",
                   "Prefill : paquet Arch contre fork",
-                  "tokens/s du prompt, passe 1 à froid. " + st,
+                  "tokens/s du prompt, passe 1 à froid.\n" + st,
                   os.path.join(sortie, "prefill.svg"))
     graphe_groupe(rows, "decode_paquet", "decode_fork",
                   "Décode : paquet Arch contre fork",
-                  "tokens/s générés, médiane hors 1re passe. " + st,
+                  "tokens/s générés, médiane hors 1re passe.\n" + st,
                   os.path.join(sortie, "decode.svg"), forcer=1)
     graphe_ecarts(rows, "Écart du fork, en % du paquet",
-                  "positif = le fork gagne ; réglages parfois différents "
-                  "des deux côtés, deux séries non comparables à la décimale",
+                  "positif = le fork gagne ; réglages parfois différents des "
+                  "deux côtés,\ndeux séries non comparables à la décimale",
                   os.path.join(sortie, "ecarts.svg"))
 
 

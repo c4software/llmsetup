@@ -4,9 +4,10 @@
 # recommend), sur données synthétiques exactes — complètent tests/py-golden.sh
 # qui ne vérifie que la sortie texte de bout en bout.
 #
-# Aussi : py/perf_graphs.py, qui n'a pas de référence golden (rendu crayon à
-# graine fixe, donc reproductible mais trop fragile pour une comparaison
-# octet à octet) ; on vérifie ici qu'il produit trois SVG bien formés.
+# Aussi : py/perf_graphs.py, qui n'a pas de référence golden (le rendu suit
+# les chiffres du TSV, donc reproductible mais trop fragile pour une
+# comparaison octet à octet) ; on vérifie ici qu'il produit trois SVG bien
+# formés.
 #
 # python3 stdlib seule (unittest), pas de framework. Lancer :
 #   python3 tests/py-unit.py
@@ -175,15 +176,15 @@ class TestPerfGraphs(unittest.TestCase):
             self.assertNotIn("<foreignObject", texte)
 
     def test_rendu_reproductible(self):
-        # graine fixe : deux générations donnent le même octet, sans quoi
-        # chaque régénération produirait un faux diff
+        # tracé déterministe : deux générations donnent le même octet, sans
+        # quoi chaque régénération produirait un faux diff
         pg.main(["perf_graphs.py", self.tsv, self.out])
         premier = open(os.path.join(self.out, "prefill.svg"), "rb").read()
         pg.main(["perf_graphs.py", self.tsv, self.out])
         self.assertEqual(premier, open(os.path.join(self.out, "prefill.svg"), "rb").read())
 
     def test_ecart_negatif_en_rouge(self):
-        # modele-test-a perd la moitié de son décode : -50 % en rouge crayon
+        # modele-test-a perd la moitié de son décode : -50 % en rouge
         pg.main(["perf_graphs.py", self.tsv, self.out])
         texte = open(os.path.join(self.out, "ecarts.svg"), encoding="utf-8").read()
         self.assertIn("-50 %", texte)
