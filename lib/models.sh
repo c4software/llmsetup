@@ -415,6 +415,15 @@ groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée) ---"
 #   prévoir un --update qwen3.8-27b d'ici quelques jours.
 download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
   QWEN38_27B_PATH="Qwen3.8-27B-UD-Q4_K_XL.gguf"
+# Drafter DFlash 2 officiel (z-lab, diffusion par blocs, lit les couches 6, 20,
+# 34, 48, 62 de la cible ; ~5,3 tokens acceptés par étape annoncés, cible en
+# quant libre). Même dossier que le modèle, autre repo. Téléchargé le
+# 13/09/2026 ; --spec-ab du même jour sur le fork (spec-refactor, 4 passes) :
+# ngram-map-k 47 + draft-dflash n-max 7 = 64,5 t/s (+20 % contre MTP n-max 6,
+# +12 % contre MTP n-max 4), draft-dflash seul 47,0 (acceptance 0,96).
+# Réglage à trancher sur spec-test.txt et --bench avant de remplacer le MTP.
+download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
+  QWEN38_27B_DFLASH_PATH="Qwen3.8-27B-DFlash2-Q8_0.gguf"
 
 # Qwen3.5-2B UD-Q4_K_XL (1,3 Go) — PAS un modèle servi : aucune section ini, il
 # n'est déclaré que pour être téléchargé et protégé de --cleanup, comme le
