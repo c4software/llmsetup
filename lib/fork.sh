@@ -20,6 +20,11 @@
 # =============================================================================
 
 FORK_REPO="https://github.com/halo-box/strix-llama.cpp"
+# Amont de l'amont : le llama.cpp officiel, dont le fork resynchronise
+# périodiquement des centaines de commits d'un coup (PR « sync »). Sert
+# uniquement à trier le changelog (cf. _fork_changelog), jamais à construire.
+FORK_UPSTREAM_REPO="https://github.com/ggml-org/llama.cpp"
+FORK_UPSTREAM_BRANCHE="master"
 FORK_DIR="$HOME/llm/strix-llama.cpp"
 FORK_BIN_DIR="$HOME/.local/bin"
 # Les quatre cibles construites et liées : le serveur du service, llama-bench
@@ -208,26 +213,100 @@ _fork_fetch() {
   fi
 }
 
+# Prépare le remote `upstream` (llama.cpp officiel) et le rapatrie, pour
+# pouvoir trier les commits du changelog. Mesuré le 13/09/2026 sur bigchuck :
+# 0007bc6 → 6548035 = 210 commits, dont 209 sont des commits ggml-org/llama.cpp
+# ramenés d'un bloc par la PR de sync #47 ; sans ce tri, le vrai changement du
+# fork (une ligne) se noie dans 209 lignes d'amont.
+# N'écrase jamais un remote `upstream` déjà présent (choix de l'humain), ne
+# fait rien de fatal : sans réseau, sans remote, ou sur un fetch en échec, on
+# renvoie 1 et le changelog retombe sur la liste complète.
+_fork_upstream_prep() {
+  git -C "$FORK_DIR" remote get-url upstream >/dev/null 2>&1 \
+    || git -C "$FORK_DIR" remote add upstream "$FORK_UPSTREAM_REPO" 2>/dev/null \
+    || return 1
+
+  # Même contrainte que pour origin : sur un clone superficiel, un fetch nu ne
+  # ramène que le sommet et « ^upstream/master » exclurait trop peu.
+  # --tags est nécessaire : avec une branche nommée explicitement, git ne suit
+  # PLUS les tags tout seuls, et ce sont eux qui donnent les bornes bNNNNN.
+  # Chaque repli abandonne une exigence plutôt que la mise à jour entière.
+  if [[ "$(git -C "$FORK_DIR" rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+    git -C "$FORK_DIR" fetch --deepen=200 --tags upstream "$FORK_UPSTREAM_BRANCHE" >/dev/null 2>&1 \
+      || git -C "$FORK_DIR" fetch --deepen=200 upstream "$FORK_UPSTREAM_BRANCHE" >/dev/null 2>&1 \
+      || git -C "$FORK_DIR" fetch upstream "$FORK_UPSTREAM_BRANCHE" >/dev/null 2>&1 \
+      || return 1
+  else
+    git -C "$FORK_DIR" fetch --tags upstream "$FORK_UPSTREAM_BRANCHE" >/dev/null 2>&1 \
+      || git -C "$FORK_DIR" fetch upstream "$FORK_UPSTREAM_BRANCHE" >/dev/null 2>&1 \
+      || return 1
+  fi
+
+  git -C "$FORK_DIR" rev-parse --verify -q "upstream/$FORK_UPSTREAM_BRANCHE" >/dev/null 2>&1
+}
+
 # _fork_changelog <ancien> <nouveau> — titres des commits reçus, du plus récent
-# au plus ancien. Les merges sont GARDÉS volontairement : l'amont intègre
-# presque tout par pull request, et --no-merges masquerait justement les lignes
-# « Merge pull request #47 from ... » qui portent le sujet du changement.
-# Affichage borné à 60 lignes (un bump après plusieurs semaines en compte des
-# centaines) ; le reste est résumé par un compte.
+# au plus ancien, en DEUX blocs : ce que le fork a changé lui-même, puis le
+# volume d'amont llama.cpp intégré (compté, pas listé). Les merges sont GARDÉS
+# volontairement : le fork intègre presque tout par pull request, et --no-merges
+# masquerait justement les lignes « Merge pull request #47 from ... » qui
+# portent le sujet du changement.
+# Affichage borné (40 lignes propres au fork, 60 en repli) ; le reste est résumé
+# par un compte.
 _fork_changelog() {
-  local ancien="$1" nouveau="$2" max=60
+  local ancien="$1" nouveau="$2" max_fork=40 max_tout=60
+  local amont="upstream/$FORK_UPSTREAM_BRANCHE"
+  local total propres_n
+  total="$(git -C "$FORK_DIR" rev-list --count "$ancien..$nouveau" 2>/dev/null || echo '')"
+
   local -a lignes=()
+  if _fork_upstream_prep; then
+    # ^upstream/master : tout ce qui est déjà dans le llama.cpp officiel sort de
+    # la liste. Restent les commits propres au fork, merges de sync compris.
+    mapfile -t lignes < <(git -C "$FORK_DIR" log --format='  %h %ad %s' --date=short \
+      "$ancien..$nouveau" "^$amont" 2>/dev/null)
+    propres_n="${#lignes[@]}"
+    info "Commits propres au fork ($propres_n) :"
+    if [[ "$propres_n" -eq 0 ]]; then
+      echo "  (aucun : la mise à jour n'apporte que de l'amont llama.cpp)"
+    else
+      printf '%s\n' "${lignes[@]:0:$max_fork}"
+      if [[ "$propres_n" -gt "$max_fork" ]]; then
+        echo "  ... et $(( propres_n - max_fork )) de plus"
+      fi
+    fi
+    if [[ -n "$total" ]]; then
+      info "Commits llama.cpp amont intégrés : $(( total - propres_n ))$(_fork_bornes_amont "$ancien" "$nouveau")"
+    fi
+    return 0
+  fi
+
+  warn "Remote upstream (llama.cpp) indisponible — changelog non trié :"
+  warn "  une resynchronisation d'amont y apparaît comme des centaines de commits."
   mapfile -t lignes < <(git -C "$FORK_DIR" log --format='  %h %ad %s' --date=short \
     "$ancien..$nouveau" 2>/dev/null)
   if [[ ${#lignes[@]} -eq 0 ]]; then
     warn "  (changelog illisible : historique superficiel ou commits greffés)"
     return 0
   fi
-  printf '%s\n' "${lignes[@]:0:$max}"
-  if [[ ${#lignes[@]} -gt "$max" ]]; then
-    echo "  ... et $(( ${#lignes[@]} - max )) de plus"
+  printf '%s\n' "${lignes[@]:0:$max_tout}"
+  if [[ ${#lignes[@]} -gt "$max_tout" ]]; then
+    echo "  ... et $(( ${#lignes[@]} - max_tout )) de plus"
   fi
   return 0
+}
+
+# Bornes de version d'amont, si le clone a récupéré les tags bNNNNN de
+# llama.cpp : « (amont : b10809 → b10950) », sinon rien du tout. Le tag le plus
+# récent ATTEIGNABLE depuis chaque commit, donc la version d'amont réellement
+# embarquée de part et d'autre du bump.
+_fork_bornes_amont() {
+  local ta tb
+  ta="$(git -C "$FORK_DIR" describe --tags --abbrev=0 --match 'b[0-9]*' "$1" 2>/dev/null || true)"
+  tb="$(git -C "$FORK_DIR" describe --tags --abbrev=0 --match 'b[0-9]*' "$2" 2>/dev/null || true)"
+  if [[ -n "$ta" && -n "$tb" && "$ta" != "$tb" ]]; then
+    echo " (amont : $ta → $tb)"
+  fi
 }
 
 # _fork_confirm <nouveau> — accord explicite avant de tirer et reconstruire.

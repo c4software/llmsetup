@@ -73,7 +73,9 @@ Commandes :
   --update-fork            Moteur : suivi d'amont du fork, à lancer juste après
                            un --update. Ne fait QUE la mise à jour du fork déjà
                            installé : git fetch, changelog des commits reçus
-                           (ancien → nouveau, nombre, titres) puis CONFIRMATION
+                           (ancien → nouveau, titres des commits PROPRES au
+                           fork, le reste compté comme « amont llama.cpp
+                           intégré » avec ses bornes bNNNNN) puis CONFIRMATION
                            avant le git pull --ff-only, le rebuild des quatre
                            cibles et la repose des liens ; sans « o », rien n'est
                            tiré. Entrée non interactive : rien n'est fait, sauf

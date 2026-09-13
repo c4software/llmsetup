@@ -162,14 +162,33 @@ mkdir -p "$FH/.local/bin" "$FH/llm"
 _git() { git -c user.name=test -c user.email=test@example.invalid \
              -c init.defaultBranch=master -c commit.gpgsign=false "$@"; }
 
-_git init -q "$UP"
-echo un > "$UP/a.txt"
-_git -C "$UP" add -A && _git -C "$UP" commit -qm "init : premier commit"
-echo deux >> "$UP/a.txt"
-_git -C "$UP" commit -qam "core : deuxieme commit, deja dans le clone"
+# Trois dépôts, comme en vrai : l'amont llama.cpp (UPS, avec ses tags bNNNNN),
+# le fork qui le suit (UP = "origin"), et le clone local (FCLONE). Le bump
+# testé apporte UN commit propre au fork (le merge de sync) et UN commit
+# d'amont : le changelog doit les compter séparément — mesuré le 13/09/2026 sur
+# bigchuck, un bump réel valait 210 commits dont 209 d'amont.
+UPS="$TMP/llamacpp"
+_git init -q "$UPS"
+echo un > "$UPS/a.txt"
+_git -C "$UPS" add -A && _git -C "$UPS" commit -qm "llama.cpp : commit d'amont initial"
+_git -C "$UPS" tag b10800
+
+_git clone -q "$UPS" "$UP"
+echo fork > "$UP/f.txt"
+_git -C "$UP" add -A && _git -C "$UP" commit -qm "strix : reglage propre au fork, deja dans le clone"
 _git clone -q "$UP" "$FCLONE"
-echo trois >> "$UP/a.txt"
-_git -C "$UP" commit -qam "vulkan : troisieme commit, celui du changelog"
+
+echo deux >> "$UPS/a.txt"
+_git -C "$UPS" commit -qam "vulkan : optimisation d'amont, pas un commit du fork"
+_git -C "$UPS" tag b10810
+_git -C "$UP" remote add ups "$UPS"
+_git -C "$UP" fetch -q ups
+_git -C "$UP" merge -q --no-ff ups/master -m "Merge pull request #47 : sync amont llama.cpp"
+
+# Remote upstream déjà posé dans le clone : _fork_upstream_prep ne réécrit
+# jamais un remote existant, c'est ce qui permet de le pointer ici sur le faux
+# llama.cpp local plutôt que sur github.
+_git -C "$FCLONE" remote add upstream "$UPS"
 
 # Faux build du fork + les quatre liens, sinon _fork_links_ok refuse tout de
 # suite. build/ est exclu du git du clone (le .gitignore du vrai llama.cpp le
@@ -194,11 +213,29 @@ _run_upd() {  # $1 = env supplémentaire ; stdin fermé = entrée non interactiv
 
 avant_head="$(_head_clone)"
 out="$(_run_upd)"; grc=$?
-if [[ "$grc" -eq 0 && "$out" == *"troisieme commit, celui du changelog"* \
+if [[ "$grc" -eq 0 && "$out" == *"Merge pull request #47"* \
       && "$out" == *"FORK_UPDATE_YES=1"* && "$(_head_clone)" == "$avant_head" ]]; then
   echo "[OK]   update-fork : changelog affiché, rien tiré sans confirmation"
 else
   echo "[FAIL] update-fork : sans confirmation, code $grc, HEAD $(_head_clone) (attendu $avant_head)"
+  echo "$out" | sed 's/^/       /'; rc=1
+fi
+
+# Le tri : le commit propre au fork est listé, celui d'amont seulement compté.
+if [[ "$out" == *"Commits propres au fork (1)"* \
+      && "$out" == *"Commits llama.cpp amont intégrés : 1"* \
+      && "$out" != *"optimisation d'amont"* ]]; then
+  echo "[OK]   update-fork : changelog trié (1 commit propre listé, 1 d'amont compté)"
+else
+  echo "[FAIL] update-fork : tri fork/amont du changelog"
+  echo "$out" | sed 's/^/       /'; rc=1
+fi
+
+# Bornes de version d'amont, quand les tags bNNNNN sont atteignables.
+if [[ "$out" == *"(amont : b10800 → b10810)"* ]]; then
+  echo "[OK]   update-fork : bornes d'amont bNNNNN affichées"
+else
+  echo "[FAIL] update-fork : bornes d'amont absentes"
   echo "$out" | sed 's/^/       /'; rc=1
 fi
 

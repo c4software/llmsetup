@@ -61,10 +61,16 @@ toujours) ; `--update-fork` est la commande de suivi au quotidien, à lancer
 si les liens de `~/.local/bin` ne viennent pas de lui (« lancer --setup-fork
 d'abord »), refuse un arbre sale, et s'arrête sans rebuild si rien n'a bougé en
 amont. Sinon elle `git fetch` seulement, affiche le **changelog** entre le
-commit installé et le sommet d'amont (« Fork strix-llama.cpp : a5df3b4 →
-e5a2313, 12 commits » puis les titres, merges de PR compris, 60 lignes au plus)
-et **demande confirmation** avant de tirer et reconstruire : sans « o », rien
-n'est tiré. En entrée non interactive elle ne fait rien et le dit ;
+commit installé et le sommet d'amont, puis **demande confirmation** avant de
+tirer et reconstruire : sans « o », rien n'est tiré. Le changelog est **trié**,
+parce que le fork resynchronise le llama.cpp officiel par blocs (0007bc6 →
+6548035 = 210 commits, dont 209 d'amont) : les titres listés sont ceux des
+commits **propres au fork** (merges de PR compris, 40 lignes au plus), le reste
+n'étant qu'un compte, « Commits llama.cpp amont intégrés : 209 (amont : b10809 →
+b10950) ». Le tri demande un remote `upstream` sur
+[ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp), ajouté au clone à
+la première mise à jour s'il manque ; sans lui (pas de réseau), la liste
+complète est affichée avec un avertissement. En entrée non interactive elle ne fait rien et le dit ;
 `FORK_UPDATE_YES=1 ./setup-llm.sh --update-fork` vaut confirmation. Ni l'une ni l'autre ne redémarre le service et aucune ne lance de
 mesure. Enchaînement recommandé :
 
