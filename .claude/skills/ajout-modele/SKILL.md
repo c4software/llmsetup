@@ -379,7 +379,11 @@ Règles du tableau :
 - les mêmes chiffres vont, résumés, à trois endroits versionnés : le
   commentaire du bloc `lib/models.sh` (date, moteur, device, quant), la table
   « Parc au <date> » du README, et la section « Paquet Arch contre fork »
-  quand la mesure oppose les deux séries.
+  quand la mesure oppose les deux séries ;
+- mettre à jour la ligne du modèle dans `docs/perfs.tsv` (mêmes chiffres,
+  point décimal) puis régénérer les figures du README :
+  `python3 py/perf_graphs.py`. Les trois SVG de `docs/graphs/` se commitent
+  avec le reste, ils ne sont pas produits à la volée.
 
 Sources des chiffres : `logs/spec-tests.log` (TSV, colonnes spec-type et
 prompt), `logs/spec-batch.log` / `.tsv` (courbes), sortie de `--bench` et

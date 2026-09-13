@@ -4,13 +4,19 @@
 # recommend), sur données synthétiques exactes — complètent tests/py-golden.sh
 # qui ne vérifie que la sortie texte de bout en bout.
 #
+# Aussi : py/perf_graphs.py, qui n'a pas de référence golden (rendu crayon à
+# graine fixe, donc reproductible mais trop fragile pour une comparaison
+# octet à octet) ; on vérifie ici qu'il produit trois SVG bien formés.
+#
 # python3 stdlib seule (unittest), pas de framework. Lancer :
 #   python3 tests/py-unit.py
 # =============================================================================
-import sys, os, unittest
+import sys, os, shutil, tempfile, unittest
+import xml.dom.minidom
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "py"))
 import spec_analyze as sa
+import perf_graphs as pg
 
 
 def T(alpha, k):
@@ -132,6 +138,56 @@ class TestCoherenceModele(unittest.TestCase):
         for r in pts:
             # tolérance large : pn/da arrondis à l'entier dans le run synthétique
             self.assertAlmostEqual(pred[r["k"]], r["gen"], delta=r["gen"] * 0.02)
+
+
+class TestPerfGraphs(unittest.TestCase):
+    """Générateur des figures du README, sur un TSV minimal dans un tmpdir."""
+
+    TSV = ("# commentaire ignoré\n"
+           "modele\tprefill_paquet\tprefill_fork\tdecode_paquet\tdecode_fork"
+           "\tacceptance_paquet\tacceptance_fork\treglage\tsource\n"
+           "modele-test-a\t100\t200\t10.0\t5.0\t\t0.5\taucun\tbXXXXX contre fork\n"
+           "modele-test-b\t200\t250\t20.0\t22.5\t0.6\t0.7\tngram\tbXXXXX contre fork\n")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="perf-graphs-")
+        self.tsv = os.path.join(self.tmp, "perfs.tsv")
+        with open(self.tsv, "w", encoding="utf-8") as f:
+            f.write(self.TSV)
+        self.out = os.path.join(self.tmp, "graphs")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_trois_svg_bien_formes(self):
+        pg.main(["perf_graphs.py", self.tsv, self.out])
+        for nom in ("prefill.svg", "decode.svg", "ecarts.svg"):
+            chemin = os.path.join(self.out, nom)
+            self.assertTrue(os.path.exists(chemin), nom)
+            # bien formé : c'est la seule garantie que GitHub affichera quelque
+            # chose (il sert le fichier tel quel, sans le réparer)
+            xml.dom.minidom.parse(chemin)
+            texte = open(chemin, encoding="utf-8").read()
+            for modele in ("modele-test-a", "modele-test-b"):
+                self.assertIn(modele, texte, f"{modele} absent de {nom}")
+            # pas de <script> ni de <foreignObject> : GitHub les filtre
+            self.assertNotIn("<script", texte)
+            self.assertNotIn("<foreignObject", texte)
+
+    def test_rendu_reproductible(self):
+        # graine fixe : deux générations donnent le même octet, sans quoi
+        # chaque régénération produirait un faux diff
+        pg.main(["perf_graphs.py", self.tsv, self.out])
+        premier = open(os.path.join(self.out, "prefill.svg"), "rb").read()
+        pg.main(["perf_graphs.py", self.tsv, self.out])
+        self.assertEqual(premier, open(os.path.join(self.out, "prefill.svg"), "rb").read())
+
+    def test_ecart_negatif_en_rouge(self):
+        # modele-test-a perd la moitié de son décode : -50 % en rouge crayon
+        pg.main(["perf_graphs.py", self.tsv, self.out])
+        texte = open(os.path.join(self.out, "ecarts.svg"), encoding="utf-8").read()
+        self.assertIn("-50 %", texte)
+        self.assertIn(pg.ROUGE, texte)
 
 
 if __name__ == "__main__":

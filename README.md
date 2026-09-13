@@ -384,6 +384,16 @@ par ornith-1.5-35b-a3b le 28/08/2026.
 
 ### Paquet Arch contre fork : mesures
 
+![Prefill paquet contre fork](docs/graphs/prefill.svg)
+
+![Décode paquet contre fork](docs/graphs/decode.svg)
+
+![Écart du fork en % du paquet](docs/graphs/ecarts.svg)
+
+Ces trois figures sont générées par `python3 py/perf_graphs.py` depuis
+`docs/perfs.tsv` (une ligne par section servie) : à régénérer, avec le TSV mis
+à jour, dès que la table ci-dessous change.
+
 Protocole `--bench` du dépôt (prefill de la passe 1 à froid, décode médian des
 passes suivantes, acceptance médiane), sauf mention. Colonne « paquet » :
 dernière valeur de la série `bNNNNN` dans `logs/bench.log` pour ce modèle.
@@ -740,6 +750,7 @@ d'`AGENTS.md` (skill `ajout-modele`).
 | `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices (`DEV=Vulkan0,ROCm0`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
 | `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k, KV q8_0 comme le service), par device, avec le tour simulé de `--bench-devices` recalculé à chaque profondeur : c'est le régime agentic réel, où le classement des devices peut s'inverser. Journal `logs/bench-depth.log` + `.tsv` |
 | `mtp-rename-hc-head.py` | Renomme les trois tenseurs du mixeur final des hyper-connexions d'un sidecar MTP Qwen3.8-Flash-Next (`blk.<n>.nextn.hc_head_*` chez unsloth, convention de la PR mainline #28243) vers les noms que lit le fork strix-llama.cpp (`output_hc_*`). Données recopiées telles quelles. `PYTHONPATH=$HOME/llm/strix-llama.cpp/gguf-py python3 tools/mtp-rename-hc-head.py <in> <out>` ; appelé aussi par `--setup`. Inutile sur un moteur mainline portant #28243 |
+| `py/perf_graphs.py` | Régénère les trois SVG de `docs/graphs/` (prefill, décode, écarts en %) à partir de `docs/perfs.tsv`, en rendu crayon. Aucune dépendance, aucun service : `python3 py/perf_graphs.py [<tsv> [<dossier>]]`. À relancer après toute modification du TSV |
 | `llm-proxy.ts` | Extension pi / omp : découvre les modèles `text-generation` du proxy Albert (`/v1/models`, ctx, coûts, reasoning déduit de l'id) et enregistre le provider `albert`. A copier dans `~/.pi/agent/extensions/` et `~/.omp/agent/extensions/` (une seule extension provider par agent). Endpoint `http://llmproxy` et clé en dur pour l'instant (à passer sur `process.env` avant diffusion) |
 
 Les scripts shell pointent sur `http://bigchuck:8009` par défaut (surchargeable par variable d'environnement).
