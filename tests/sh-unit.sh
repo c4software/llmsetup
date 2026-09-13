@@ -149,6 +149,75 @@ else
 fi
 rmdir "$TMP/home/llm/strix-llama.cpp/.git"
 
+# 4quater. --update-fork : changelog PUIS confirmation. Un bump de moteur casse
+# la comparabilité de toutes les mesures qui suivent : la commande doit montrer
+# ce qui change avant de tirer, et ne rien tirer sans accord. Testé sur un vrai
+# petit dépôt git jetable (origine + clone + un commit d'avance), sans réseau ;
+# FORK_SKIP_BUILD=1 (réservé aux tests) évite cmake et la pose des liens.
+FH="$TMP/fhome"                       # HOME du test : le fork y est cloné
+UP="$TMP/upstream"                    # "amont" du fork
+FCLONE="$FH/llm/strix-llama.cpp"
+mkdir -p "$FH/.local/bin" "$FH/llm"
+
+_git() { git -c user.name=test -c user.email=test@example.invalid \
+             -c init.defaultBranch=master -c commit.gpgsign=false "$@"; }
+
+_git init -q "$UP"
+echo un > "$UP/a.txt"
+_git -C "$UP" add -A && _git -C "$UP" commit -qm "init : premier commit"
+echo deux >> "$UP/a.txt"
+_git -C "$UP" commit -qam "core : deuxieme commit, deja dans le clone"
+_git clone -q "$UP" "$FCLONE"
+echo trois >> "$UP/a.txt"
+_git -C "$UP" commit -qam "vulkan : troisieme commit, celui du changelog"
+
+# Faux build du fork + les quatre liens, sinon _fork_links_ok refuse tout de
+# suite. build/ est exclu du git du clone (le .gitignore du vrai llama.cpp le
+# fait aussi) : sans ça, _fork_pull verrait un arbre sale.
+echo 'build/' > "$FCLONE/.git/info/exclude"
+mkdir -p "$FCLONE/build/bin"
+for b in llama-server llama-bench llama-cli llama-quantize; do
+  cp "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$FCLONE/build/bin/$b"
+  chmod +x "$FCLONE/build/bin/$b"
+  ln -sfn "$FCLONE/build/bin/$b" "$FH/.local/bin/$b"
+done
+
+_head_clone() { git -C "$FCLONE" rev-parse --short HEAD; }
+_run_upd() {  # $1 = env supplémentaire ; stdin fermé = entrée non interactive
+  env -i HOME="$FH" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
+      FORK_SKIP_BUILD=1 ${1:-} \
+    bash -c "set -euo pipefail
+      source '$REPO_DIR/lib/common.sh'
+      source '$REPO_DIR/lib/fork.sh'
+      cmd_update_fork" </dev/null 2>&1
+}
+
+avant_head="$(_head_clone)"
+out="$(_run_upd)"; grc=$?
+if [[ "$grc" -eq 0 && "$out" == *"troisieme commit, celui du changelog"* \
+      && "$out" == *"FORK_UPDATE_YES=1"* && "$(_head_clone)" == "$avant_head" ]]; then
+  echo "[OK]   update-fork : changelog affiché, rien tiré sans confirmation"
+else
+  echo "[FAIL] update-fork : sans confirmation, code $grc, HEAD $(_head_clone) (attendu $avant_head)"
+  echo "$out" | sed 's/^/       /'; rc=1
+fi
+
+out="$(_run_upd FORK_UPDATE_YES=1)"; grc=$?
+attendu="$(git -C "$UP" rev-parse --short HEAD)"
+if [[ "$grc" -eq 0 && "$(_head_clone)" == "$attendu" ]]; then
+  echo "[OK]   update-fork : FORK_UPDATE_YES=1 ⇒ pull effectué ($avant_head → $attendu)"
+else
+  echo "[FAIL] update-fork : FORK_UPDATE_YES=1, code $grc, HEAD $(_head_clone) (attendu $attendu)"
+  echo "$out" | sed 's/^/       /'; rc=1
+fi
+
+out="$(_run_upd)"; grc=$?
+if [[ "$grc" -eq 0 && "$out" == *"Rien de nouveau en amont"* ]]; then
+  echo "[OK]   update-fork : clone à jour ⇒ rien de nouveau, aucun rebuild"
+else
+  echo "[FAIL] update-fork : clone à jour, code $grc, sortie : $out"; rc=1
+fi
+
 # 4ter. Garde mémoire _ensure_room_for (lib/common.sh) : avant de laisser le
 # routeur charger un modèle, décharger les plus gros modèles chargés tant que
 # `free` ne montre pas la place. Testée sur de faux `free` et `curl` et des
@@ -232,5 +301,5 @@ else
   echo "[FAIL] étiquette impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini et refus de --update-fork conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire et --update-fork (refus, changelog, confirmation) conformes. ──"
 exit "$rc"

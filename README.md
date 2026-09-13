@@ -59,9 +59,13 @@ systemctl --user restart llama-server
 toujours) ; `--update-fork` est la commande de suivi au quotidien, à lancer
 **juste après un `--update`** : elle refuse d'agir si le fork n'est pas cloné ou
 si les liens de `~/.local/bin` ne viennent pas de lui (« lancer --setup-fork
-d'abord »), refuse un arbre sale, affiche l'ancien et le nouveau commit avec le
-nombre de commits récupérés, et s'arrête sans rebuild si rien n'a bougé en
-amont. Ni l'une ni l'autre ne redémarre le service et aucune ne lance de
+d'abord »), refuse un arbre sale, et s'arrête sans rebuild si rien n'a bougé en
+amont. Sinon elle `git fetch` seulement, affiche le **changelog** entre le
+commit installé et le sommet d'amont (« Fork strix-llama.cpp : a5df3b4 →
+e5a2313, 12 commits » puis les titres, merges de PR compris, 60 lignes au plus)
+et **demande confirmation** avant de tirer et reconstruire : sans « o », rien
+n'est tiré. En entrée non interactive elle ne fait rien et le dit ;
+`FORK_UPDATE_YES=1 ./setup-llm.sh --update-fork` vaut confirmation. Ni l'une ni l'autre ne redémarre le service et aucune ne lance de
 mesure. Enchaînement recommandé :
 
 ```bash
@@ -148,7 +152,7 @@ recevable.
 | `--bench-agentic [modèle] [passes]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels) |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
 | `--setup-fork` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin` (voir « Moteur ») |
-| `--update-fork` | Suivi d'amont du moteur, juste après un `--update` : met à jour le fork **déjà installé** (`git pull --ff-only`, commits avant/après, rebuild et liens), s'arrête si rien n'a bougé, ne redémarre rien et ne mesure rien (voir « Moteur ») |
+| `--update-fork` | Suivi d'amont du moteur, juste après un `--update` : `git fetch`, changelog des commits reçus et confirmation, puis mise à jour du fork **déjà installé** (`git pull --ff-only`, rebuild et liens), s'arrête si rien n'a bougé, ne redémarre rien et ne mesure rien (voir « Moteur ») |
 | `--unset-fork` | Retire les liens du fork : retour au paquet Arch au prochain restart |
 | `--list-devices` | Moteur résolu (paquet Arch ou fork) avec sa version, backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |

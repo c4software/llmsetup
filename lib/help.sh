@@ -72,11 +72,14 @@ Commandes :
                            du paquet Arch
   --update-fork            Moteur : suivi d'amont du fork, à lancer juste après
                            un --update. Ne fait QUE la mise à jour du fork déjà
-                           installé (git pull --ff-only, ancien et nouveau commit,
-                           nombre de commits, rebuild des quatre cibles, liens
-                           reposés) ; s'arrête sans rebuild si rien n'a bougé, et
-                           refuse si le fork n'est pas le moteur en place
-                           (--setup-fork d'abord). Ne redémarre pas le service et
+                           installé : git fetch, changelog des commits reçus
+                           (ancien → nouveau, nombre, titres) puis CONFIRMATION
+                           avant le git pull --ff-only, le rebuild des quatre
+                           cibles et la repose des liens ; sans « o », rien n'est
+                           tiré. Entrée non interactive : rien n'est fait, sauf
+                           FORK_UPDATE_YES=1 qui vaut confirmation. S'arrête sans
+                           rebuild si rien n'a bougé, et refuse si le fork n'est
+                           pas le moteur en place (--setup-fork d'abord). Ne redémarre pas le service et
                            ne lance aucune mesure : enchaînement recommandé
                            --update → --update-fork → systemctl --user restart
                            $SERVICE_NAME → --bench à la main. ⚠ Chaque bump du

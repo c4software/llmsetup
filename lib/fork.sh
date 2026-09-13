@@ -122,9 +122,17 @@ _fork_status() {
 # chaque étape, deux commandes qui les enchaînent différemment.
 # =============================================================================
 
+# FORK_SKIP_BUILD=1 : construction et pose des liens sautées. RÉSERVÉ AUX
+# TESTS (tests/sh-unit.sh, cas --update-fork) : ils vérifient l'enchaînement
+# changelog / confirmation / pull sur un faux dépôt git, sans lancer cmake ni
+# exiger qu'il soit installé. Jamais en usage réel : sans build ni liens, le
+# moteur en place resterait celui d'avant le pull.
+_fork_skip_build() { [[ "${FORK_SKIP_BUILD:-0}" == "1" ]]; }
+
 # Outils nécessaires à toute opération sur le fork.
 _fork_tools() {
   command -v git >/dev/null   || error "git introuvable"
+  _fork_skip_build && return 0
   command -v cmake >/dev/null || error "cmake introuvable (paru -S cmake)"
 }
 
@@ -165,10 +173,90 @@ _fork_pull() {
     || error "git pull --ff-only en échec — dépôt divergent ? Régler à la main dans $FORK_DIR"
 }
 
+# Branche suivie du clone. Un clone en état détaché (git checkout <commit>)
+# n'a pas de branche courante : git répond "HEAD", on retombe sur master, la
+# branche par défaut de l'amont.
+_fork_branche() {
+  local b
+  b="$(git -C "$FORK_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+  [[ -z "$b" || "$b" == "HEAD" ]] && b="master"
+  echo "$b"
+}
+
+# _fork_fetch <branche> — rapatrie l'amont SANS toucher à l'arbre de travail
+# (pas de pull ici : on veut d'abord montrer le changelog et demander).
+# Clone superficiel (le clone de bigchuck est en --depth 1) : un `git fetch`
+# ordinaire n'y ramène que le nouveau sommet, sans les commits intermédiaires,
+# et `git log ancien..nouveau` comme `git rev-list --count` répondent alors à
+# côté (historique greffé, pas d'ancêtre commun). D'où --deepen=200, qui
+# rallonge l'historique de 200 commits en plus du sommet ; et si l'ancien HEAD
+# n'est toujours pas un ancêtre du nouveau (plus de 200 commits d'écart), on
+# déroule tout par --unshallow. Sur un clone complet, un fetch simple suffit.
+_fork_fetch() {
+  local branche="$1"
+  if [[ "$(git -C "$FORK_DIR" rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+    git -C "$FORK_DIR" fetch --deepen=200 origin "$branche" 2>/dev/null \
+      || git -C "$FORK_DIR" fetch origin "$branche" \
+      || error "git fetch en échec — réseau, ou dépôt à régler à la main dans $FORK_DIR"
+    if ! git -C "$FORK_DIR" merge-base --is-ancestor HEAD "origin/$branche" 2>/dev/null; then
+      info "Historique encore trop court pour lister les commits — dépliage complet..."
+      git -C "$FORK_DIR" fetch --unshallow origin 2>/dev/null || true
+    fi
+  else
+    git -C "$FORK_DIR" fetch origin "$branche" \
+      || error "git fetch en échec — réseau, ou dépôt à régler à la main dans $FORK_DIR"
+  fi
+}
+
+# _fork_changelog <ancien> <nouveau> — titres des commits reçus, du plus récent
+# au plus ancien. Les merges sont GARDÉS volontairement : l'amont intègre
+# presque tout par pull request, et --no-merges masquerait justement les lignes
+# « Merge pull request #47 from ... » qui portent le sujet du changement.
+# Affichage borné à 60 lignes (un bump après plusieurs semaines en compte des
+# centaines) ; le reste est résumé par un compte.
+_fork_changelog() {
+  local ancien="$1" nouveau="$2" max=60
+  local -a lignes=()
+  mapfile -t lignes < <(git -C "$FORK_DIR" log --format='  %h %ad %s' --date=short \
+    "$ancien..$nouveau" 2>/dev/null)
+  if [[ ${#lignes[@]} -eq 0 ]]; then
+    warn "  (changelog illisible : historique superficiel ou commits greffés)"
+    return 0
+  fi
+  printf '%s\n' "${lignes[@]:0:$max}"
+  if [[ ${#lignes[@]} -gt "$max" ]]; then
+    echo "  ... et $(( ${#lignes[@]} - max )) de plus"
+  fi
+  return 0
+}
+
+# _fork_confirm <nouveau> — accord explicite avant de tirer et reconstruire.
+# Même convention que le reste du dépôt : question seulement sur un terminal
+# interactif, défaut NON, et en entrée non interactive on ne fait rien en
+# disant comment forcer (FORK_UPDATE_YES=1, pour un script ou un cron).
+_fork_confirm() {
+  local nouveau="$1" reply=""
+  if [[ "${FORK_UPDATE_YES:-0}" == "1" ]]; then
+    info "FORK_UPDATE_YES=1 — mise à jour confirmée sans question."
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    warn "Entrée non interactive — aucune confirmation possible."
+    warn "  Forcer sans question : FORK_UPDATE_YES=1 ./setup-llm.sh --update-fork"
+    return 1
+  fi
+  read -r -p "Mettre à jour le fork vers $nouveau ? [o/N] " reply
+  [[ "$reply" =~ ^[oOyY]$ ]]
+}
+
 # Configuration cmake + construction des quatre cibles.
 # Vulkan uniquement : c'est le backend de tous les modèles retenus
 # (bench-devices.conf) ; ROCm reste servi par le paquet Arch si besoin.
 _fork_build() {
+  if _fork_skip_build; then
+    warn "FORK_SKIP_BUILD=1 — construction sautée (mode test uniquement)."
+    return 0
+  fi
   info "Configuration cmake (Vulkan, Release, CURL)..."
   cmake -B "$FORK_DIR/build" -S "$FORK_DIR" \
     -DGGML_VULKAN=ON -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=ON \
@@ -197,6 +285,10 @@ _fork_build() {
 
 # Pose (ou repose) les quatre liens du fork dans $FORK_BIN_DIR.
 _fork_links() {
+  if _fork_skip_build; then
+    warn "FORK_SKIP_BUILD=1 — liens non reposés (mode test uniquement)."
+    return 0
+  fi
   info "Pose des liens dans $FORK_BIN_DIR..."
   mkdir -p "$FORK_BIN_DIR"
   local b
@@ -236,6 +328,10 @@ cmd_setup_fork() {
     info "Commit inchangé : $apres (rebuild quand même, cmake ne refait que le nécessaire)."
   else
     info "Commit : ${avant:-néant} → $apres"
+    # Même affichage que --update-fork, mais APRÈS coup : --setup-fork installe
+    # ou remet à niveau sans rien demander, le changelog n'est ici qu'un compte
+    # rendu de ce qui vient d'être tiré (rien à afficher sur un premier clone).
+    [[ -n "$avant" ]] && _fork_changelog "$avant" "$apres"
   fi
 
   _fork_build
@@ -258,6 +354,11 @@ cmd_setup_fork() {
 # amont, et se termine sur le rappel de l'enchaînement (restart, puis --bench à
 # la main quand l'humain le décide : chaque bump ouvre une nouvelle série de
 # mesures étiquetée au commit).
+#
+# Rien n'est tiré avant accord : on fetch (sans pull), on montre le changelog
+# entre le commit installé et le sommet d'amont, puis on demande. Un bump de
+# moteur casse la comparabilité de toutes les mesures qui suivent, donc l'humain
+# doit voir CE QUI change avant de dire oui.
 # =============================================================================
 
 cmd_update_fork() {
@@ -278,11 +379,18 @@ cmd_update_fork() {
 
   _fork_tools
 
-  local avant apres n
+  local avant apres branche n
   avant="$(_fork_head)"
-  info "Suivi d'amont sur $FORK_DIR (commit actuel $avant)..."
-  _fork_pull --update-fork
-  apres="$(_fork_head)"
+  branche="$(_fork_branche)"
+  info "Suivi d'amont sur $FORK_DIR (commit actuel $avant, branche $branche)..."
+
+  # Fetch seul : l'arbre de travail n'est pas touché tant que rien n'est
+  # confirmé. Le pull (ff-only) ne vient qu'après l'accord.
+  _fork_fetch "$branche"
+  apres="$(git -C "$FORK_DIR" rev-parse --short "origin/$branche" 2>/dev/null || echo '?')"
+  if [[ "$apres" == '?' ]]; then
+    error "origin/$branche introuvable après fetch — dépôt à régler à la main dans $FORK_DIR"
+  fi
 
   if [[ "$avant" == "$apres" ]]; then
     info "Rien de nouveau en amont : toujours $apres."
@@ -290,8 +398,23 @@ cmd_update_fork() {
     return 0
   fi
 
+  # rev-list --count peut échouer sur un historique encore greffé malgré
+  # _fork_fetch : le nombre passe alors à "?", le changelog reste affiché.
   n="$(git -C "$FORK_DIR" rev-list --count "$avant..$apres" 2>/dev/null || echo '?')"
-  info "Commit : $avant → $apres ($n commit(s) d'amont)"
+  echo ""
+  info "Fork strix-llama.cpp : $avant → $apres, $n commits"
+  _fork_changelog "$avant" "$apres"
+  echo ""
+
+  if ! _fork_confirm "$apres"; then
+    info "Mise à jour annulée : rien n'a été modifié (aucun pull, aucun rebuild,"
+    info "  aucun lien touché). Le moteur reste $avant."
+    return 0
+  fi
+
+  _fork_pull --update-fork
+  apres="$(_fork_head)"
+  info "Commit : $avant → $apres"
 
   _fork_build
   _fork_links
