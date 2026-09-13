@@ -398,6 +398,33 @@ demande un remote `upstream` sur
 la première mise à jour s'il manque ; sans lui (pas de réseau), la liste
 complète est affichée avec un avertissement.
 
+### Mise à jour du fork vers 654803517 (13/09/2026) : régression, retour à 0007bc6
+
+Premier `--update-fork` réel : 0007bc6 vers 654803517, soit la PR de sync #47
+du fork (206 commits llama.cpp amont, b10891 vers b10917) et aucun changement
+propre au fork. `--bench all` sur ce commit (série strix-6548035, garde mémoire
+exercée trois fois sans OOM) : neuf modèles au niveau de la série précédente,
+mais les deux sections du 27B en DFlash 2 perdent 18 à 23 % de décode à
+acceptance égale (nothink 26,7 t/s contre 32,6, thinking 16,8 contre 21,7).
+`--spec-ab` sur le nouveau build : sans spéculation 11,9 t/s (inchangé), donc
+le forward à batch 1 n'a pas bougé ; DFlash seul 29,4 contre 37,0 : c'est le
+chemin de vérification batché qui ralentit. llama-bench, `-b 8 -ub 8 -r 3` :
+
+| cols | fork 0007bc6 | fork 654803517 | 654803517 + NO_SPLIT | paquet b10809 |
+|---|---|---|---|---|
+| 4 | 47,8 | 48,2 | 48,1 | 47,4 |
+| 5 | 54,2 | 51,2 | 53,6 | 56,7 |
+| 7 | 68,9 | 58,0 | 61,5 | 74,3 |
+| 8 | 79,3 | 51,7 | 53,5 | 80,5 |
+
+Le batch 8 devient plus lent que le batch 7, indépendamment du découpage.
+Suspects parmi les commits amont intégrés : « vulkan: small M matrix
+optimizations for qwen » (#28457) et « vulkan: tune mat-vec rows for batched
+inference on Strix Halo » (#27909). Retour à 0007bc6 le jour même (pp7 68,5,
+pp8 77,9 retrouvés), fork épinglé par `fork.conf` tant que l'amont n'est pas
+corrigé ; à re-tester à chaque `--update-fork` (le changelog s'affiche sans
+rien faire tant que l'épinglage est en place).
+
 ## Choix du device (--bench-devices) : méthode et exemples datés
 
 Méthode complète et exemple du 16/08/2026 (paquet Arch b10433).
