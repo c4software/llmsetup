@@ -126,6 +126,104 @@ fi
 rm -f "$TMP/home/.local/bin/llama-server"
 cp "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$TMP/home/.local/bin/llama-server"
 
+# 4bis. --update-fork : commande de SUIVI, pas d'installation. Elle doit refuser
+# tout de suite (avant tout git ou cmake) si le fork n'est pas cloné, ou si les
+# liens de ~/.local/bin ne viennent pas de son build — sinon elle mettrait à
+# jour un dépôt dont le moteur en place ne sort pas, sans que rien ne change.
+# Ici $TMP/home/llm/strix-llama.cpp existe (build/bin peuplé) mais sans .git, et
+# $TMP/home/.local/bin/llama-server est une COPIE, pas un lien vers le build :
+# les deux refus sont donc atteints sans qu'aucun vrai git/cmake ne tourne.
+out="$(_run_fork "cmd_update_fork" 2>&1)"; grc=$?
+if [[ "$grc" -ne 0 && "$out" == *"--setup-fork d'abord"* ]]; then
+  echo "[OK]   update-fork : pas de clone ⇒ refus, renvoi vers --setup-fork"
+else
+  echo "[FAIL] update-fork : pas de clone, code $grc, sortie : $out"; rc=1
+fi
+
+mkdir -p "$TMP/home/llm/strix-llama.cpp/.git"   # clone simulé, liens toujours faux
+out="$(_run_fork "cmd_update_fork" 2>&1)"; grc=$?
+if [[ "$grc" -ne 0 && "$out" == *"--setup-fork d'abord"* && "$out" == *"llama-bench"* ]]; then
+  echo "[OK]   update-fork : liens hors du fork ⇒ refus nommant les binaires"
+else
+  echo "[FAIL] update-fork : liens hors du fork, code $grc, sortie : $out"; rc=1
+fi
+rmdir "$TMP/home/llm/strix-llama.cpp/.git"
+
+# 4ter. Garde mémoire _ensure_room_for (lib/common.sh) : avant de laisser le
+# routeur charger un modèle, décharger les plus gros modèles chargés tant que
+# `free` ne montre pas la place. Testée sur de faux `free` et `curl` et des
+# GGUF creux (truncate) — aucun serveur, aucun modèle réel. Les tailles sont
+# en Mio pour rester lisibles ; seuls les rapports comptent.
+ROOM="$TMP/room"
+mkdir -p "$ROOM/bin" "$ROOM/repo" "$ROOM/w"
+truncate -s 100M "$ROOM/w/geant.gguf"
+truncate -s 10M  "$ROOM/w/geant-draft.gguf"   # spec-draft-model : compte aussi
+truncate -s 80M  "$ROOM/w/gros.gguf"
+truncate -s 20M  "$ROOM/w/petit.gguf"
+echo "petit-precharge" > "$ROOM/repo/preload.conf"
+
+# Faux free : la colonne "available" est lue dans un fichier d'état que le faux
+# curl met à jour à chaque déchargement (le noyau rend les pages).
+cat > "$ROOM/bin/free" <<EOF
+#!/usr/bin/env bash
+echo "               total        used        free      shared  buff/cache   available"
+echo "Mem: 1000000000 0 0 0 0 \$(cat "$ROOM/avail")"
+EOF
+# Faux curl : GET /models → liste des chargés ; POST /models/unload → retire le
+# modèle de la liste, rend sa taille au "free" et journalise le déchargement.
+cat > "$ROOM/bin/curl" <<EOF
+#!/usr/bin/env bash
+if [[ "\$*" == *"/models/unload"* ]]; then
+  m="\$(printf '%s\n' "\$@" | sed -n 's/.*"model": *"\([^"]*\)".*/\1/p' | head -1)"
+  echo "\$m" >> "$ROOM/unloaded"
+  grep -vx "\$m" "$ROOM/loaded" > "$ROOM/l.tmp" || true
+  mv "$ROOM/l.tmp" "$ROOM/loaded"
+  a="\$(cat "$ROOM/avail")"; s="\$(cat "$ROOM/size.\$m" 2>/dev/null || echo 0)"
+  echo \$(( a + s )) > "$ROOM/avail"
+  echo '{"success":true}'
+  exit 0
+fi
+python3 -c '
+import json, sys
+ids = [l.strip() for l in open(sys.argv[1]) if l.strip()]
+print(json.dumps({"data": [{"id": i, "status": {"value": "loaded"}} for i in ids]}))
+' "$ROOM/loaded"
+EOF
+chmod +x "$ROOM/bin/free" "$ROOM/bin/curl"
+echo $(( 80 * 1024 * 1024 )) > "$ROOM/size.gros"
+echo $(( 20 * 1024 * 1024 )) > "$ROOM/size.petit-precharge"
+
+# Déclarations minimales : deux modèles chargés (un gros à la demande, un petit
+# préchargé) et le géant à charger.
+ROOM_DECL="
+declare -A MODEL_INI
+MODEL_INI[geant]='model = $ROOM/w/geant.gguf
+spec-draft-model = $ROOM/w/geant-draft.gguf'
+MODEL_INI[gros]='model = $ROOM/w/gros.gguf'
+MODEL_INI[petit-precharge]='model = $ROOM/w/petit.gguf'
+"
+_run_room() {  # \$1 = octets disponibles au départ, \$2 = env supplémentaire
+  printf 'gros\npetit-precharge\n' > "$ROOM/loaded"
+  : > "$ROOM/unloaded"
+  echo "$1" > "$ROOM/avail"
+  env -i HOME="$TMP/home" PATH="$ROOM/bin:/usr/bin:/bin" SCRIPT_DIR="$ROOM/repo" ${2:-} \
+    bash -c "set -euo pipefail
+      source '$REPO_DIR/lib/common.sh'
+      source '$REPO_DIR/lib/ini.sh'
+      $ROOM_DECL
+      BENCH_ROOM_TIMEOUT=1
+      _ensure_room_for geant" >/dev/null 2>&1
+  tr '\n' ' ' < "$ROOM/unloaded" | sed 's/ *$//'
+}
+
+# (a) place suffisante (500 Mio pour ~121 Mio estimés) : rien déchargé.
+_ck "garde mémoire : place suffisante" "" "$(_run_room $(( 500 * 1024 * 1024 )))"
+# (b) place insuffisante (50 Mio) : le plus gros NON préchargé part, et lui
+#     seul — une fois 'gros' déchargé, les 130 Mio suffisent, le préchargé reste.
+_ck "garde mémoire : le plus gros non préchargé" "gros" "$(_run_room $(( 50 * 1024 * 1024 )))"
+# (c) BENCH_NO_UNLOAD=1 : garde désactivée, rien déchargé malgré le manque.
+_ck "garde mémoire : BENCH_NO_UNLOAD=1" "" "$(_run_room $(( 50 * 1024 * 1024 )) BENCH_NO_UNLOAD=1)"
+
 # 5. Étiquette utilisable en colonne TSV : ni espace, ni tabulation.
 etiquette="$(_run '_llama_build')"
 if [[ "$etiquette" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -134,5 +232,5 @@ else
   echo "[FAIL] étiquette impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur et garde-fou moteur/ini conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini et refus de --update-fork conformes. ──"
 exit "$rc"

@@ -136,6 +136,17 @@ cmd_update() {
   warn "Un restart du service sera proposé en fin de run (poids mmap'és sur l'ancien inode sinon)."
 
   cmd_setup
+
+  # Suivi du moteur : les modèles viennent d'être mis à jour, le fork qui les
+  # sert ne l'est pas par cette commande. Simple rappel — rien n'est lancé
+  # automatiquement, ni mise à jour, ni restart, ni mesure (cf. lib/fork.sh).
+  # Étiquette non numérique = fork (_llama_build) ; "bNNNNN" = paquet Arch.
+  local etiquette
+  etiquette="$(_llama_build)"
+  if [[ ! "$etiquette" =~ ^b[0-9]+(-[0-9]+)?$ && "$etiquette" != "?" ]]; then
+    info "Moteur : fork strix-llama.cpp $etiquette ; pour le mettre à jour :"
+    info "  ./setup-llm.sh --update-fork"
+  fi
 }
 
 # =============================================================================

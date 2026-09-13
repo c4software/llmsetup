@@ -117,45 +117,58 @@ _fork_status() {
 }
 
 # =============================================================================
-# --setup-fork : installe OU met à jour. Clone si absent, sinon git pull
-# --ff-only (une divergence locale doit se voir, pas se faire écraser), puis
-# rebuild et liens. Ne redémarre pas le service : le rappel suffit, un restart
-# recharge tous les modèles préchargés.
+# Briques communes à --setup-fork et --update-fork : mise à jour du clone,
+# construction des quatre cibles, pose des liens. Une seule implémentation de
+# chaque étape, deux commandes qui les enchaînent différemment.
 # =============================================================================
 
-cmd_setup_fork() {
+# Outils nécessaires à toute opération sur le fork.
+_fork_tools() {
   command -v git >/dev/null   || error "git introuvable"
   command -v cmake >/dev/null || error "cmake introuvable (paru -S cmake)"
+}
 
-  local avant="" apres=""
-  if [[ -d "$FORK_DIR/.git" ]]; then
-    avant="$(git -C "$FORK_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
-    # Arbre sale : `git pull` échouerait de toute façon (ou pire, réussirait en
-    # gardant des modifications locales dans le build), et le message de git
-    # est obscur. On le dit ici, on ne nettoie jamais à la place de l'humain.
-    if [[ -n "$(git -C "$FORK_DIR" status --porcelain 2>/dev/null)" ]]; then
-      warn "Modifications locales dans $FORK_DIR :"
-      git -C "$FORK_DIR" status --short | sed 's/^/  /'
-      error "Arbre sale — committer, remiser ou annuler à la main avant --setup-fork."
+# Commit court du clone ("?" si illisible).
+_fork_head() {
+  git -C "$FORK_DIR" rev-parse --short HEAD 2>/dev/null || echo '?'
+}
+
+# Les quatre liens de $FORK_BIN_DIR pointent-ils bien dans le build du fork ?
+# Sert à --update-fork : mettre à jour un dépôt dont le moteur en place ne vient
+# pas (paquet Arch, ou autre build) n'a aucun effet visible et tromperait.
+# Remplit FORK_LINKS_KO avec les binaires fautifs.
+_fork_links_ok() {
+  FORK_LINKS_KO=()
+  local b cible
+  for b in "${FORK_BINS[@]}"; do
+    cible="$(realpath "$FORK_BIN_DIR/$b" 2>/dev/null || true)"
+    if [[ -z "$cible" || "$cible" != "$FORK_DIR/build/"* ]]; then
+      FORK_LINKS_KO+=("$b")
     fi
-    info "Mise à jour de $FORK_DIR (commit actuel $avant)..."
-    git -C "$FORK_DIR" pull --ff-only \
-      || error "git pull --ff-only en échec — dépôt divergent ? Régler à la main dans $FORK_DIR"
-  else
-    [[ -e "$FORK_DIR" ]] && error "$FORK_DIR existe mais n'est pas un dépôt git"
-    info "Clone de $FORK_REPO dans $FORK_DIR..."
-    mkdir -p "$(dirname "$FORK_DIR")"
-    git clone "$FORK_REPO" "$FORK_DIR" || error "Clone en échec"
-  fi
-  apres="$(git -C "$FORK_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
-  if [[ -n "$avant" && "$avant" == "$apres" ]]; then
-    info "Commit inchangé : $apres (rebuild quand même, cmake ne refait que le nécessaire)."
-  else
-    info "Commit : ${avant:-néant} → $apres"
-  fi
+  done
+  [[ ${#FORK_LINKS_KO[@]} -eq 0 ]]
+}
 
-  # Vulkan uniquement : c'est le backend de tous les modèles retenus
-  # (bench-devices.conf) ; ROCm reste servi par le paquet Arch si besoin.
+# git pull --ff-only sur un clone existant. $1 = commande appelante, citée dans
+# le message d'arbre sale.
+# Arbre sale : `git pull` échouerait de toute façon (ou pire, réussirait en
+# gardant des modifications locales dans le build), et le message de git est
+# obscur. On le dit ici, on ne nettoie jamais à la place de l'humain.
+_fork_pull() {
+  local appelant="${1:---setup-fork}"
+  if [[ -n "$(git -C "$FORK_DIR" status --porcelain 2>/dev/null)" ]]; then
+    warn "Modifications locales dans $FORK_DIR :"
+    git -C "$FORK_DIR" status --short | sed 's/^/  /'
+    error "Arbre sale — committer, remiser ou annuler à la main avant $appelant."
+  fi
+  git -C "$FORK_DIR" pull --ff-only \
+    || error "git pull --ff-only en échec — dépôt divergent ? Régler à la main dans $FORK_DIR"
+}
+
+# Configuration cmake + construction des quatre cibles.
+# Vulkan uniquement : c'est le backend de tous les modèles retenus
+# (bench-devices.conf) ; ROCm reste servi par le paquet Arch si besoin.
+_fork_build() {
   info "Configuration cmake (Vulkan, Release, CURL)..."
   cmake -B "$FORK_DIR/build" -S "$FORK_DIR" \
     -DGGML_VULKAN=ON -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=ON \
@@ -180,7 +193,10 @@ cmd_setup_fork() {
       warn "  et --unset-fork pour revenir au paquet en attendant."
       error "Construction en échec"
     }
+}
 
+# Pose (ou repose) les quatre liens du fork dans $FORK_BIN_DIR.
+_fork_links() {
   info "Pose des liens dans $FORK_BIN_DIR..."
   mkdir -p "$FORK_BIN_DIR"
   local b
@@ -189,6 +205,41 @@ cmd_setup_fork() {
     ln -sfn "$FORK_DIR/build/bin/$b" "$FORK_BIN_DIR/$b"
     info "  $b → $FORK_DIR/build/bin/$b"
   done
+}
+
+# =============================================================================
+# --setup-fork : installe OU met à jour. Clone si absent, sinon git pull
+# --ff-only (une divergence locale doit se voir, pas se faire écraser), puis
+# rebuild et liens. Ne redémarre pas le service : le rappel suffit, un restart
+# recharge tous les modèles préchargés.
+#
+# Le suivi d'amont au quotidien passe par --update-fork, qui exige un fork déjà
+# en place et s'arrête si rien n'a bougé.
+# =============================================================================
+
+cmd_setup_fork() {
+  _fork_tools
+
+  local avant="" apres=""
+  if [[ -d "$FORK_DIR/.git" ]]; then
+    avant="$(_fork_head)"
+    info "Mise à jour de $FORK_DIR (commit actuel $avant)..."
+    _fork_pull --setup-fork
+  else
+    [[ -e "$FORK_DIR" ]] && error "$FORK_DIR existe mais n'est pas un dépôt git"
+    info "Clone de $FORK_REPO dans $FORK_DIR..."
+    mkdir -p "$(dirname "$FORK_DIR")"
+    git clone "$FORK_REPO" "$FORK_DIR" || error "Clone en échec"
+  fi
+  apres="$(_fork_head)"
+  if [[ -n "$avant" && "$avant" == "$apres" ]]; then
+    info "Commit inchangé : $apres (rebuild quand même, cmake ne refait que le nécessaire)."
+  else
+    info "Commit : ${avant:-néant} → $apres"
+  fi
+
+  _fork_build
+  _fork_links
 
   echo ""
   _fork_status
@@ -197,6 +248,63 @@ cmd_setup_fork() {
   warn "  systemctl --user restart $SERVICE_NAME"
   warn "Mesures postérieures = nouvelle série, non comparable aux campagnes Arch."
   warn "Ne jamais déplacer $FORK_DIR (RUNPATH absolu) : relancer --setup-fork après."
+}
+
+# =============================================================================
+# --update-fork : suivi d'amont, à lancer juste après un --update. Ne fait QUE
+# la mise à jour du moteur déjà en place : pas de clone, pas de restart, pas de
+# mesure. Refuse si le fork n'est pas installé ou n'est pas le moteur résolu
+# (--setup-fork est là pour ça), s'arrête sans rebuild si rien n'a bougé en
+# amont, et se termine sur le rappel de l'enchaînement (restart, puis --bench à
+# la main quand l'humain le décide : chaque bump ouvre une nouvelle série de
+# mesures étiquetée au commit).
+# =============================================================================
+
+cmd_update_fork() {
+  # Les deux refus d'abord : ils ne dépendent que de l'état du disque, et une
+  # machine sans cmake doit quand même se voir renvoyer vers --setup-fork.
+  [[ -d "$FORK_DIR/.git" ]] \
+    || error "$FORK_DIR n'est pas un clone du fork — lancer --setup-fork d'abord."
+
+  if ! _fork_links_ok; then
+    warn "Liens de $FORK_BIN_DIR ne pointant pas dans $FORK_DIR/build :"
+    local b
+    for b in "${FORK_LINKS_KO[@]}"; do
+      warn "  $b → $(realpath "$FORK_BIN_DIR/$b" 2>/dev/null || echo 'absent')"
+    done
+    warn "Mettre à jour un dépôt dont le moteur en place ne vient pas ne changerait rien."
+    error "Fork non installé comme moteur — lancer --setup-fork d'abord."
+  fi
+
+  _fork_tools
+
+  local avant apres n
+  avant="$(_fork_head)"
+  info "Suivi d'amont sur $FORK_DIR (commit actuel $avant)..."
+  _fork_pull --update-fork
+  apres="$(_fork_head)"
+
+  if [[ "$avant" == "$apres" ]]; then
+    info "Rien de nouveau en amont : toujours $apres."
+    info "Aucun rebuild, aucun lien touché, rien à remesurer."
+    return 0
+  fi
+
+  n="$(git -C "$FORK_DIR" rev-list --count "$avant..$apres" 2>/dev/null || echo '?')"
+  info "Commit : $avant → $apres ($n commit(s) d'amont)"
+
+  _fork_build
+  _fork_links
+
+  echo ""
+  _fork_status
+  echo ""
+  warn "Rien n'est lancé automatiquement. Enchaînement :"
+  warn "  1. redémarrer le service : systemctl --user restart $SERVICE_NAME"
+  warn "  2. nouvelle série de mesures : lancer ./setup-llm.sh --bench à la main"
+  warn "     quand vous voulez — aucun bench n'est déclenché ici."
+  warn "Le moteur a changé de commit : les mesures qui suivent portent l'étiquette"
+  warn "  $(_llama_build) et forment une série à part des précédentes."
 }
 
 # =============================================================================

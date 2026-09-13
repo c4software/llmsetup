@@ -16,6 +16,38 @@ Lire `AGENTS.md` et `ARCHITECTURE.md` avant d'éditer. Le bloc de
 sont la connaissance métier et doivent citer les mesures (date, device,
 quant) qui justifient chaque réglage.
 
+## Le moteur d'abord : fork ou paquet Arch
+
+Depuis le 12/09/2026 le service tourne sur le fork
+[halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp)
+(`~/llm/strix-llama.cpp`, quatre liens dans `~/.local/bin` que l'unité
+systemd met en tête du PATH), pas sur le paquet Arch `llama-cpp`.
+`./setup-llm.sh --setup-fork` installe ET met à jour (clone ou
+`git pull --ff-only`, build, liens) ; `--update-fork` ne fait que le suivi
+d'amont d'un fork déjà en place (à lancer après un `--update`, il s'arrête
+sans rebuild si rien n'a bougé) ; `--unset-fork` retire les liens et rend la
+main au paquet ; `--list-devices` dit quel binaire répond réellement. Aucune
+des trois ne redémarre le service ni ne lance de mesure.
+
+Trois conséquences pour toute la procédure ci-dessous :
+
+- **Comparabilité** : les mesures faites sous le fork portent l'étiquette
+  `strix-<commit>` dans la colonne build des journaux (`_llama_build`), les
+  campagnes du paquet portent `bNNNNN`. Deux séries distinctes, jamais
+  comparées à la décimale : le dire dans chaque récap, et garder la valeur de
+  l'autre série entre parenthèses plutôt que de la remplacer.
+- **Clés propres au fork** (`FORK_ONLY_KEYS`, `lib/fork.sh`) : `ngram-on-disk`,
+  `reasoning-budget-enable` / `-soft-ratio` / `-soft2-ratio` /
+  `-grace-tokens`, `spec-draft-adaptive`, `spec-prefill*`. Le paquet Arch
+  refuse toute clé inconnue et c'est le **routeur entier** qui ne démarre pas,
+  pas seulement le modèle fautif. En poser une dans un bloc verrouille donc le
+  parc sur le fork ; `--start` le signale au lieu de laisser llama-server
+  échouer. Pour revenir au paquet : retirer ces lignes de `lib/models.sh`,
+  puis `--preload`.
+- **Ne pas proposer `spec-prefill*`** : mesuré le 12-13/09/2026 sur
+  qwen3.8-27b, il triple le prefill mais met le cache de prompt à 0 %, même
+  sur une requête identique : perdant en boucle agentic, retiré.
+
 ## 1. Valider les informations de base (fiche du modèle)
 
 Demander ou récupérer la fiche du modèle. Deux sources, à croiser :
@@ -42,7 +74,29 @@ En extraire et vérifier :
 | Thinking : défaut, kwargs de désactivation | template chat | `chat-template-kwargs`, `reasoning` |
 | État récurrent (GDN, conv, Mamba) ou SWA | architecture | `cache-reuse 0`, `swa-full`, `ctx-checkpoints` |
 | Vision (mmproj) | Files | texte seul sauf besoin, incompatible MTP |
+| Drafter externe (DFlash, Eagle, sidecar MTP) | Files, repo `-DFlash`/`MTP/` | `download_hf` supplémentaire, `spec-draft-model` |
 | Date de dernier upload, repo squashé | commits HF | note « prévoir un --update » |
+
+Trois façons de déclarer un fichier, toutes dans le bloc :
+
+- `download_hf <dossier> <repo> VAR=<fichier>` : un ou plusieurs fichiers d'un
+  repo. `<fichier>` peut être en sous-dossier (`MTP/x.gguf`), recréé tel quel.
+  Plusieurs appels peuvent viser le **même dossier modèle** depuis des repos
+  différents : c'est ainsi que se déclare un drafter externe (DFlash 2 de
+  z-lab dans `~/models/qwen3.8-27b/`, sidecar MTP d'unsloth dans `MTP/`) ;
+- `download_hf_shards <dossier> <repo> VAR=<shard 00001>` : le glob hf est
+  dérivé du sous-dossier de quant, changer de quant = changer la seule entrée ;
+- `derive_gguf <dossier> VAR=<fichier produit> <source> <script>` : fichier
+  qu'aucun repo ne porte, calculé en local à partir d'un fichier **déjà
+  déclaré plus haut**. `--setup` joue la dérivation après les téléchargements,
+  et la refait si la source a bougé. Cas unique aujourd'hui : le sidecar MTP
+  de Qwen3.8-Flash-Next renommé par `tools/mtp-rename-hc-head.py` (le fork lit
+  `output_hc_*`, unsloth range sous `blk.<n>.nextn.hc_head_*` ; sans renommage
+  le modèle entier ne charge pas). Le script importe le `gguf-py` du fork,
+  donc rien à dériver sans fork installé.
+
+Les trois alimentent `KNOWN_FILES` (donc `--cleanup`) : un fichier déclaré est
+protégé, un fichier qui cesse de l'être devient un orphelin supprimable.
 
 Critère de passage : le bloc `lib/models.sh` est écrit (commentaire métier
 compris), `bash -n lib/models.sh` passe, et le ini généré n'a changé que
@@ -62,10 +116,24 @@ s'il y en a un). Puis `./setup-llm.sh --setup` ou
 
 Deux questions indépendantes :
 
-1. **Le GGUF porte-t-il une tête MTP ?** La fiche le dit (« MTP for fast
-   inference », repo `-MTP` séparé, ou `nextn`/`mtp` dans les metadata).
-   Si oui, la section spéculative s'appelle `<clé>-mtp` (ou
-   `<clé>-mtp-nothink`) : `_preload_sanity` en dérive ses garde-fous.
+1. **D'où vient le draft ?** Trois sources, et le `spec-type` qui va avec :
+   - tête MTP **embarquée** dans le GGUF principal (« MTP for fast
+     inference », `nextn`/`mtp` dans les metadata) : `spec-type = draft-mtp`,
+     rien d'autre à déclarer ;
+   - tête MTP en **sidecar** (repo `-MTP` séparé ou sous-dossier `MTP/`) :
+     `download_hf` du sidecar + `spec-draft-model`, et sur le fork le
+     renommage par `derive_gguf` (cf. étape 1) ;
+   - **drafter externe** (DFlash 2 de z-lab pour Qwen3.8-27B, Eagle…) :
+     `download_hf` dans le dossier du modèle, `spec-type = draft-dflash`,
+     `spec-draft-model = $…_DFLASH_PATH`, `spec-draft-n-max` selon la carte du
+     drafter (7 pour DFlash 2). Le GGUF devient nécessaire au démarrage du
+     modèle : ne pas le retirer du dossier.
+
+   Le nom de la section porte un **suffixe explicite** disant quel drafter est
+   servi : `<clé>-mtp-nothink`, `<clé>-dflash-nothink`. Les garde-fous de
+   `_preload_sanity` reposent sur la ligne `model =` identique et sur la
+   convention de dossiers `<clé>` / `<clé>-mtp`, pas sur ce suffixe : il est
+   là pour le lecteur, et il se renomme quand le drafter change (cf. Clôture).
 2. **Veut-on la spéculation sur ce modèle ?** Contraintes à respecter :
    `parallel = 1` obligatoire, `cache-reuse = 0`, pas de mmproj. Sur une
    architecture à état récurrent (GDN des Qwen3.5+, conv LFM2), le rollback
@@ -75,14 +143,23 @@ Deux questions indépendantes :
 
 Si MTP : `spec-type = draft-mtp`, `spec-draft-n-max = 4` en valeur de
 départ. Si on veut aussi les n-grams (modèle utilisé en édition de code,
-où le prompt se ré-émet) : `spec-type = ngram-map-k,draft-mtp`,
-`spec-ngram-map-k-size-m = 7`, `spec-ngram-map-k-min-hits = 2`, à régler à
-l'étape 5.
+où le prompt se ré-émet) : `spec-type = ngram-map-k,draft-mtp` (ou
+`ngram-map-k,draft-dflash`), `spec-ngram-map-k-size-m = 7`,
+`spec-ngram-map-k-min-hits = 2`, à régler à l'étape 5.
+
+Piège du **découpage mat-vec du fork** : sa PR #27 découpe les mat-vec batchés en
+colonnes 4/2/1, sur les tenseurs q8_0 et q6_K seulement, donc sur un
+UD-Q4_K_XL aussi (110 tenseurs q8_0, 56 q6_K). Le batch de vérification vaut
+`n-max + 1` : à 7 colonnes il se découpe en 4+2+1, le pire cas (-7,4 % mesuré
+au llama-bench du 13/09/2026, pp7 68,9 contre 74,4 t/s). Choisir un n-max dont
+le batch évite ce cas : 4 (batch 5) ou 7 (batch 8 = 4+4), pas 6 (batch 7).
+`GGML_VK_MMV_NO_SPLIT=1` annule la pénalité mais désactive le découpage pour
+tout le parc : non retenu.
 
 Critère de passage : après restart, `curl localhost:8009/v1/models` montre
 le `--spec-type` attendu dans `status.args`, et un premier
 `./setup-llm.sh --spec-test <modèle> 2` affiche une acceptance (pas
-« n/a ») : la tête MTP est bien chargée.
+« n/a ») : le drafter (tête MTP, sidecar ou GGUF externe) est bien chargé.
 
 ## 3. Device : ROCm0 ou Vulkan0 (--bench-devices)
 
@@ -127,6 +204,12 @@ DEV=Vulkan0,ROCm0 tools/bench-depth.sh ~/models/<dossier>/<gguf>    # 0 / 16k / 
 systemctl --user start llama-server
 ```
 
+Le device est mesuré avec le moteur en place : un `--setup-fork`,
+`--update-fork` ou `--unset-fork` change les noyaux et rouvre la question
+(comme un changement de quant). Le fork ne construit que Vulkan : sur lui,
+ROCm0 reste servi par les binaires du paquet Arch, à ne pas mélanger dans une
+même campagne.
+
 Critère de passage : une ligne dans `bench-devices.conf` (écrite par la
 commande, y compris quand un seul device est valide), un texte généré
 lisible sur ce device, et la raison notée dans le bloc si l'autre device
@@ -147,10 +230,18 @@ Sur un `spec-type` en liste (n-gram + MTP) la commande mesure en
 `draft-mtp` seul le temps du réglage (`SPEC_TYPE_FORCE`), la liste revient
 au restart final.
 
+Attention, ce forçage vaut `draft-mtp` quelle que soit la liste. Sur un modèle
+servi par un **drafter externe** (`ngram-map-k,draft-dflash`), `--spec-tune`
+mesurerait donc la tête MTP et non le drafter réellement servi. Y régler le n-max par
+`--spec-ab` (`spec-draft-n-max=4` contre `=7`…), et reporter le retenu dans
+`lib/models.sh` avec ses chiffres.
+
 Critère de passage : `spec-nmax.conf` contient la ligne du modèle, et le
-commentaire du bloc cite les t/s par k, la date et le device. Relancer
-après tout changement de quant, de build llama.cpp ou de device (la courbe
-dépend du backend : 27B Q4, optimum 4 sur ROCm0 et 6 sur Vulkan0).
+commentaire du bloc cite les t/s par k, la date, le device et l'étiquette de
+moteur. Relancer après tout changement de quant, de moteur (build `bNNNNN` ou
+commit `strix-<commit>`) ou de device : la courbe dépend du backend (27B Q4,
+optimum 4 sur ROCm0 et 6 sur Vulkan0) et le découpage mat-vec du fork a fait
+passer ce même modèle de 6 à 4 (+6,8 %, 13/09/2026).
 
 ## 5. spec-ngram-tune (longueur de draft n-gram)
 
@@ -198,15 +289,19 @@ table affichée. Une courbe défavorable n'interdit rien : elle abaisse
 l'attente, et la mesure tranche.
 
 Toute autre comparaison (min-hits, size-n, `ngram-map-k4v` contre
-`ngram-map-k`, une taille que le tune ne propose pas, une référence sans
-spéculation) passe par `--spec-ab` : une variante = des surcharges
-`clé=val;clé=val` du corps ini, le service redémarre entre deux, même prompt
-et même nombre de passes, bilan comparé, rien d'écrit dans les conf.
+`ngram-map-k`, une taille que le tune ne propose pas, un n-max de drafter
+externe, un drafter contre un autre, une référence sans spéculation) passe par
+`--spec-ab` : une variante = des surcharges `clé=val;clé=val` du corps ini
+(`base` = la configuration courante), et pour chacune ini régénéré, restart,
+`--spec-test`, puis bilan comparé et **retour à la configuration courante**,
+Ctrl-C compris. Rien n'est écrit dans les conf : le choix se reporte à la main
+dans `lib/models.sh`, avec ses chiffres.
 
 ```bash
 ./setup-llm.sh --spec-ab <modèle> 4 - base "spec-ngram-map-k-min-hits=1" "spec-ngram-map-k-min-hits=3"
 ./setup-llm.sh --spec-ab <modèle> 4 - "spec-type=none" base "spec-ngram-map-k-size-m=15"
 ./setup-llm.sh --spec-ab <modèle> 4 - base "spec-type=ngram-map-k4v,draft-mtp;spec-ngram-map-k4v-size-m=47"
+./setup-llm.sh --spec-ab <modèle> 4 - base "spec-draft-n-max=4"   # n-max d'un drafter externe
 ```
 
 (C'est la forme outillée de ce qui a été fait à la main pour DeepSeek le
@@ -233,29 +328,42 @@ service dans son état normal, puis selon le rôle du modèle :
 ```
 
 `--bench` écrit dans `logs/bench.log` et signale tout écart de plus de 5 %
-avec le run précédent du même GGUF/device : à relancer après chaque mise à
-jour de llama-cpp.
+avec le run précédent du même GGUF/device : à relancer après chaque changement
+de moteur (paquet ou commit du fork). Le comparateur ne sait pas qu'un réglage
+a changé entre deux runs : une « régression » annoncée après un retrait
+d'option se justifie dans le récap, elle ne se corrige pas.
+
+Piège de l'**OOM du routeur** sur une suite de gros modèles (`--bench all`) : la
+politique LRU ignore la taille des modèles, et `--models-max` (préchargés + 1)
+autorise deux géants résidents à la fois. Le routeur a été tué deux fois par
+l'OOM killer le 13/09/2026 (Laguna 73 Go chargé pendant que gpt-oss 59 Go
+tenait encore, puis DeepSeek 104 Go). Décharger explicitement le précédent
+(`POST /models/unload` du routeur) ou ordonner la suite du plus petit au plus
+gros. Le service se relance seul, mais la mesure en cours est perdue.
 
 Puis rassembler les chiffres dans un tableau unique, à coller dans le message
 de commit, le README ou un artefact partagé. Toujours préciser machine,
-build llama.cpp, quant, device et date : un chiffre sans ces cinq colonnes
-n'est pas comparable.
+moteur (`bNNNNN` ou `strix-<commit>`), quant, device et date : un chiffre sans
+ces cinq colonnes n'est pas comparable.
 
 ```markdown
-### qwen3.8-27b-mtp-nothink : Qwen3.8-27B-UD-Q4_K_XL.gguf (17 Go), bigchuck (Ryzen AI MAX+ 395), llama.cpp b10433, 21/08/2026
+### qwen3.8-27b-dflash-nothink : Qwen3.8-27B-UD-Q4_K_XL.gguf (17 Go), bigchuck (Ryzen AI MAX+ 395), fork strix-0007bc6, 13/09/2026
 
 | Configuration | Device | Prompt t/s | Gen t/s | Acceptance | Source |
 |---|---|---|---|---|---|
-| draft-mtp, n-max 4 | ROCm0 | n/c | 25,5 | n/c | --spec-tune du 15/08 (spec-test.txt) |
-| draft-mtp, n-max 4 | Vulkan0 | 220 | 31,4 | 0,82 | --spec-test (spec-test.txt) |
-| ngram-map-k 7 + draft-mtp 4 | Vulkan0 | 277 | 44,0 | 0,94 | --spec-ngram-tune, 4 passes (spec-refactor.txt) |
-| ngram-map-k 47 + draft-mtp 4 | Vulkan0 | 274 | 47,4 | 0,73 | --spec-ngram-tune, 4 passes (spec-refactor.txt) |
+| ngram 47 + draft-mtp, n-max 6 | Vulkan0 | n/c | 53,8 | 0,67 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 47 + draft-mtp, n-max 4 | Vulkan0 | n/c | 57,6 | 0,71 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 47 + draft-dflash, n-max 7 | Vulkan0 | n/c | 64,5 | 0,67 | --spec-ab, 4 passes (spec-refactor.txt) |
+| draft-dflash seul, n-max 7 | Vulkan0 | n/c | 47,0 | 0,96 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 47 + draft-dflash, n-max 7 | Vulkan0 | 359 | 32,6 | 0,595 | --bench, 3 passes (bench-task) |
 
-Retenu : ngram-map-k 47 + draft-mtp 4 sur Vulkan0 (spec-ngram.conf, spec-nmax.conf, bench-devices.conf).
+Retenu : ngram-map-k 47 + draft-dflash 7 sur Vulkan0 (spec-ngram.conf, bench-devices.conf,
+spec-draft-n-max dans lib/models.sh). Paquet Arch b10433, même GGUF, ancien réglage MTP :
+261 / 29,5 / 0,65 (autre série, citée pour situer, pas pour comparer à la décimale).
 ```
 
-(exemple réel ; « n/c » = non conservé, le journal de l'époque n'a pas
-été gardé : c'est précisément ce que le tableau évite pour la suite.)
+(exemple réel ; « n/c » = non conservé : `--spec-ab` ne journalise pas le
+prefill, c'est `--bench` qui le donne.)
 
 Règles du tableau :
 
@@ -263,10 +371,13 @@ Règles du tableau :
   passe ;
 - le prompt de mesure dans la colonne Source : `spec-test.txt` et
   `spec-refactor.txt` ne se comparent pas entre eux ;
+- une seule série de moteur par tableau ; la valeur de l'autre série se cite
+  entre parenthèses ou en note, jamais dans la même colonne ;
 - la dernière ligne dit ce qui est retenu et dans quel `.conf` ;
-- les mêmes chiffres vont, résumés, dans le commentaire du bloc
-  `lib/models.sh` (date, device, quant), c'est là que les lecteurs
-  suivants les chercheront.
+- les mêmes chiffres vont, résumés, à trois endroits versionnés : le
+  commentaire du bloc `lib/models.sh` (date, moteur, device, quant), la table
+  « Parc au <date> » du README, et la section « Paquet Arch contre fork »
+  quand la mesure oppose les deux séries.
 
 Sources des chiffres : `logs/spec-tests.log` (TSV, colonnes spec-type et
 prompt), `logs/spec-batch.log` / `.tsv` (courbes), sortie de `--bench` et
@@ -323,11 +434,21 @@ sortie complète avant de conclure, pas seulement la dernière ligne.
 
 ## Clôture
 
-- `./tests/py-golden.sh` si un `py/*.py` a bougé, `bash -n` sur les
-  fichiers touchés (`sh -n` sur `bench-agentic/*.sh`).
+- `./tests/py-golden.sh` si un `py/*.py` a bougé, `./tests/sh-unit.sh` si
+  `_llama_bin` / `_llama_build` (lib/common.sh) ou `FORK_ONLY_KEYS` /
+  `_fork_keys_guard` (lib/fork.sh) ont bougé, `bash -n` sur les fichiers
+  touchés (`sh -n` sur `bench-agentic/*.sh`).
 - Commit par étape (bloc, puis réglages mesurés), message avec les
-  chiffres. Les `.conf` et logs restent locaux (.gitignore) : ce qui doit
-  survivre à la machine va dans le commentaire du bloc.
+  chiffres et l'étiquette de moteur. Les `.conf` et logs restent locaux
+  (.gitignore) : ce qui doit survivre à la machine va dans le commentaire du
+  bloc.
+- **Renommer une section** (changement de drafter : `-mtp-nothink` →
+  `-dflash-nothink`) casse les `.conf` non versionnés de la machine de mesure,
+  indexés par nom de section : renommer la clé dans `spec-nmax.conf`,
+  `spec-ngram.conf` et `preload.conf` sur bigchuck, sans quoi le modèle repart
+  silencieusement sur les valeurs par défaut du script (et sort du
+  préchargement). `bench-devices.conf` est indexé par dossier de GGUF : il
+  n'est pas concerné.
 - Si le modèle remplace un autre : le retirer de `lib/models.sh`, noter la
   date dans le commentaire `KNOWN_FILES`, et signaler que
   `./setup-llm.sh --cleanup` purgera l'ancien GGUF (ne pas le lancer

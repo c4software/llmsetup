@@ -71,6 +71,8 @@ cmd_bench_parallel() {
   info "bench-parallel '$preset' — parallel serveur = $par$( [[ -n "$par_srv" ]] || echo " (script)" ), salves de 1 puis $n requêtes, $passes passe(s) chacune"
   (( n > par )) && warn "n ($n) > parallel ($par) : les requêtes au-delà font la queue, l'agrégat ne montera pas."
   # chauffe : charge le modèle et amorce le cache de prompt
+  # (garde mémoire d'abord : c'est elle qui déclenche le chargement)
+  _ensure_room_for "$preset"
   local body
   body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 16 1 "$SCRIPT_DIR/prompts/spec-test.txt")"
   curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body" -o /dev/null || true

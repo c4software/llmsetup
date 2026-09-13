@@ -64,6 +64,8 @@ PY
   local -a fichiers=("$ctx $task" "$ctx $tmp/task-suite.txt" "$tmp/ctx-edit.txt $task" "$ctx $task")
   local -a parts=() pms=()
   local i body out line pn cn ms
+  # Garde mémoire (lib/common.sh) : la requête « froide » charge le modèle.
+  _ensure_room_for "$preset"
   for i in 0 1 2 3; do
     # shellcheck disable=SC2086
     body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 48 42 ${fichiers[$i]})"

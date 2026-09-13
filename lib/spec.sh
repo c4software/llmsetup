@@ -246,6 +246,9 @@ cmd_spec_test() {
   # sampling), tout en gardant plusieurs trajectoires distinctes dans un run
   # (une seule seed sur-représenterait un cas particulier).
   local body i out
+  # Garde mémoire (lib/common.sh) : la passe 1 charge le modèle s'il ne l'est
+  # pas — faire la place avant, plutôt que laisser le routeur évincer en LRU.
+  _ensure_room_for "$preset"
 
   local -a gens=() accs=()
   local sum_dn=0 sum_da=0 sum_pn=0

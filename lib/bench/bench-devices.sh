@@ -76,6 +76,8 @@ BENCH_SANITY_ATTENDU="LAMPADAIRE-2719"
 _bench_sanity_one() {
   # $1 modèle → 0 si juste, 1 sinon (ligne lisible affichée)
   local preset="$1" body out
+  # Garde mémoire : cette requête charge le modèle si besoin (lib/common.sh)
+  _ensure_room_for "$preset"
   # 400 tokens : un modèle qui pense d'abord doit pouvoir finir
   body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 400 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
   out="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body")" \

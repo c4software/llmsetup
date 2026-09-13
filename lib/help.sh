@@ -70,6 +70,18 @@ Commandes :
                            faites sous le fork forment une série à part
                            (étiquette strix-<commit>), non comparable aux campagnes
                            du paquet Arch
+  --update-fork            Moteur : suivi d'amont du fork, à lancer juste après
+                           un --update. Ne fait QUE la mise à jour du fork déjà
+                           installé (git pull --ff-only, ancien et nouveau commit,
+                           nombre de commits, rebuild des quatre cibles, liens
+                           reposés) ; s'arrête sans rebuild si rien n'a bougé, et
+                           refuse si le fork n'est pas le moteur en place
+                           (--setup-fork d'abord). Ne redémarre pas le service et
+                           ne lance aucune mesure : enchaînement recommandé
+                           --update → --update-fork → systemctl --user restart
+                           $SERVICE_NAME → --bench à la main. ⚠ Chaque bump du
+                           fork ouvre une nouvelle série de mesures, étiquetée au
+                           commit (strix-<commit>)
   --unset-fork             Retire les quatre liens : retour au paquet Arch au
                            prochain restart. ⚠ Retirer d'abord de lib/models.sh
                            les clés ini propres au fork (ngram-on-disk,
@@ -142,6 +154,8 @@ Workflow typique :
   systemctl --user start $SERVICE_NAME ; journalctl --user -u $SERVICE_NAME -f
   ./setup-llm.sh --bench all          # perfs de tous les modèles présents
   ./setup-llm.sh --update qwen3.8-27b # après un re-upload unsloth
+  ./setup-llm.sh --update-fork        # puis le moteur : fork à jour, rebuild, liens
+                                      # (restart du service et --bench restent à la main)
   ./setup-llm.sh --spec-test          # décode réel d'un modèle MTP (choix interactif)
   ./setup-llm.sh --spec-tune          # règle spec-draft-n-max tout seul (2,4,6)
   ./setup-llm.sh --spec-ngram-tune    # règle la longueur de draft n-gram

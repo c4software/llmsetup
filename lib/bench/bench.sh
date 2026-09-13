@@ -23,15 +23,21 @@
 #
 # NB : chaque modèle non chargé est chargé par le routeur à la 1re requête
 # (LRU --models-max) — sur --bench all, prévoir les temps de chargement.
-# ⚠ Le bench ne décharge RIEN : c'est le routeur qui évince, en LRU, sans
-#   connaître la taille des modèles. Sur une suite de géants, la somme du
-#   sortant et de l'entrant peut dépasser la mémoire de la machine : campagne
-#   du 13/09/2026, routeur tué deux fois par l'OOM du noyau (Laguna 73 Go
-#   chargé pendant que gpt-oss 59 Go tenait encore ; puis DeepSeek 104 Go après
-#   éviction de lfm2.5, le LRU, au lieu de Laguna). Le service se relance seul
-#   (Restart=on-failure), la mesure en cours est perdue. Parade côté opérateur,
-#   pas côté code : décharger le précédent (POST /models/unload) ou ordonner la
-#   suite du plus petit au plus gros.
+# ⚠ Le routeur évince en LRU, sans connaître la taille des modèles. Sur une
+#   suite de géants, la somme du sortant et de l'entrant peut dépasser la
+#   mémoire de la machine : campagne du 13/09/2026, routeur tué deux fois par
+#   l'OOM du noyau (Laguna 73 Go chargé pendant que gpt-oss 59 Go tenait
+#   encore ; puis DeepSeek 104 Go après éviction de lfm2.5, le LRU, au lieu de
+#   Laguna). Le service se relance seul (Restart=on-failure), la mesure en
+#   cours est perdue.
+#   Parade, depuis le 13/09/2026 : _ensure_room_for (lib/common.sh), appelé au
+#   début de _bench_one. Avant la 1re requête d'un modèle non chargé, il
+#   estime sa taille (GGUF + drafter + 10 % de marge KV), lit la mémoire
+#   disponible (free) et décharge par l'API (POST /models/unload) les plus gros
+#   modèles chargés — jamais un préchargé, sauf si c'est le seul déchargement
+#   possible (et il le dit). Jamais de restart : si la place manque encore, il
+#   avertit et laisse le routeur faire. BENCH_NO_UNLOAD=1 rend au bench son
+#   ancien comportement strictement passif.
 # Le choix du device par modèle reste celui de bench-devices.conf
 # (--bench-devices pour le comparer automatiquement, édition manuelle sinon) ;
 # le réglage MTP passe par --spec-test/--spec-tune.
@@ -59,6 +65,11 @@ _bench_one() {
   [[ -f "$task_file" ]] || error "Prompt manquant : $task_file"
 
   info "=== $preset ($passes passes, long contexte en passe 1) ==="
+
+  # Garde mémoire (lib/common.sh) : si le modèle n'est pas chargé, faire la
+  # place AVANT la 1re requête, sinon le routeur charge par-dessus ce qui
+  # tient encore et le noyau tue le tout (OOM du 13/09/2026, cf. en-tête).
+  _ensure_room_for "$preset"
 
   local body out pp="" pp_mark="" acc="-" i
   local -a gens=() accs=()

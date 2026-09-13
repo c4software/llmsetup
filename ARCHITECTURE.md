@@ -33,7 +33,8 @@ common → models → ini → preload → setup → fork → bench → bench-dev
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
   `_dl`, `_dl_shard`, `_maybe_restart_service`, `_llama_build` : version
-  courte de llama.cpp, journalisée partout) et **toutes les variables
+  courte de llama.cpp, journalisée partout ; `_ensure_room_for` : garde
+  mémoire avant chargement d'un modèle, cf. plus bas) et **toutes les variables
   globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `BENCH_CONF`,
   `PRELOAD_CONF`, `SPEC_TEST_URL`, `LOG_DIR` (+ migration des journaux de la
   racine), `SPEC_LOG`, `BENCH_LOG`, `SPEC_CONF`, `SPEC_NGRAM_CONF`, `SERVICE_NAME`,
@@ -67,10 +68,14 @@ common → models → ini → preload → setup → fork → bench → bench-dev
 - `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
-- `fork.sh` : moteur. `cmd_setup_fork` (clone ou `git pull --ff-only` de
-  `halo-box/strix-llama.cpp` dans `~/llm/strix-llama.cpp`, build cmake Vulkan,
-  liens dans `~/.local/bin` — la même commande installe et met à jour),
-  `cmd_unset_fork` (retrait des liens, retour au paquet Arch), `_fork_status`
+- `fork.sh` : moteur. Briques communes `_fork_pull` (refus sur arbre sale,
+  `git pull --ff-only`), `_fork_build` (cmake Vulkan, quatre cibles),
+  `_fork_links` (liens dans `~/.local/bin`). `cmd_setup_fork` (clone ou pull de
+  `halo-box/strix-llama.cpp` dans `~/llm/strix-llama.cpp`, build, liens : la
+  même commande installe et remet à niveau), `cmd_update_fork` (suivi d'amont
+  seul : refuse sans clone ou sans liens, pull, rebuild seulement s'il y a du
+  nouveau, rappelle le restart ; ne lance jamais de bench, `--update` renvoie
+  vers elle en fin de run), `cmd_unset_fork` (retrait des liens, retour au paquet Arch), `_fork_status`
   (binaire résolu + version, affiché aussi par `--list-devices`), `FORK_ONLY_KEYS`
   + `_fork_keys_guard` (clés ini que seul le fork comprend ; appelé par
   `cmd_start` : un moteur upstream sur un ini qui en porte une ne démarre pas
@@ -79,7 +84,8 @@ common → models → ini → preload → setup → fork → bench → bench-dev
   portent un RUNPATH absolu : déplacer le dépôt impose un rebuild. Les mesures
   faites sous le fork forment une série à part (`_llama_build` les étiquette
   `strix-<commit>` au lieu de `bNNNNN`).
-- `bench/bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`), les
+- `bench/bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`, précédée
+  de la garde mémoire `_ensure_room_for`), les
   sélections (`_bench_presets`, `_bench_select_presets`, `_bench_select_one`)
   et `cmd_bench` (mesure du serveur en l'état, journal `logs/bench.log` +
   comparaison au run précédent). Une mesure = un module `bench/bench-*.sh` qui
@@ -279,6 +285,39 @@ de ROCm (+16 %) ne compense pas son décode plus lent (-27 %) : sur ce
 profil, le décode domine dès que GEN/décode dépasse largement
 PP/prefill, ce qui est le cas de tous les modèles denses de ce parc.
 
+## Garde mémoire avant chargement (`_ensure_room_for`)
+
+Le routeur charge un modèle à la première requête et évince en LRU, sans
+regarder les tailles : sur 124 Go de RAM unifiée, évincer lfm2.5 (3 Go) pour
+faire entrer DeepSeek (104 Go) pendant que Laguna (73 Go) tient encore finit
+par l'OOM killer (deux routeurs tués le 13/09/2026, mesures perdues, service
+coupé le temps du `Restart=on-failure`).
+
+`_ensure_room_for <modèle>` (lib/common.sh) est donc appelé avant la première
+requête de chaque mesure (`_bench_one`, `_bench_sanity_one`, `cmd_bench_cache`,
+`cmd_bench_parallel`, `cmd_spec_test` — donc aussi `--bench-devices` et
+`--spec-ab`). Dans l'ordre :
+
+1. taille estimée du modèle = somme des GGUF de sa ligne `model =` (shards
+   compris : le ini ne nomme que le premier, le routeur charge la série) plus
+   son `spec-draft-model`, majorée de `BENCH_ROOM_MARGE_PCT` % (défaut 10) pour
+   le KV. La taille disque est une borne **basse** assumée : la garde doit être
+   du bon ordre de grandeur, pas juste ;
+2. mémoire disponible = colonne `available` de `free -b` ;
+3. tant qu'elle manque : déchargement par `POST /models/unload` du plus gros
+   modèle chargé (`GET /models`, `status.value = loaded`) qui n'est pas dans
+   `preload.conf` — un préchargé seulement s'il ne reste que lui, avec un
+   `warn` ; puis attente courte (`BENCH_ROOM_TIMEOUT`, défaut 30 s) que `free`
+   reflète la libération, le routeur répondant avant que le noyau rende les
+   pages ;
+4. place toujours introuvable = `warn` et chargement tenté quand même.
+
+Jamais de restart, rien d'écrit, et `BENCH_NO_UNLOAD=1` désactive tout : la
+mesure redevient strictement passive. Limite connue : le modèle chargé est
+mmap'é, donc une partie de ses pages est comptée par `free` comme cache
+récupérable — la garde sous-estime plutôt qu'elle ne surestime la place, d'où
+la marge et le `warn` final.
+
 ## Journaux de mesure (`logs/`)
 
 Tous locaux (.gitignore), TSV en append, une ligne par mesure, toujours avec
@@ -324,6 +363,10 @@ en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 - `--cleanup` piloté uniquement par `KNOWN_FILES`.
 - Restart requis après toute régénération du ini (routeur = lecture au boot).
 - Mesures spec : l'état réel vient de `/v1/models`, jamais du script/ini.
+- Une mesure ne redémarre pas le routeur pour faire de la place : la garde
+  mémoire (`_ensure_room_for`) ne décharge que par l'API, jamais un modèle
+  préchargé tant qu'un autre peut partir, et n'échoue jamais une campagne —
+  place introuvable = `warn` puis chargement tenté quand même.
 - `spec-type` peut être une liste : tester l'appartenance
   (`_preset_has_spec_type`), jamais un grep ancré sur `= draft-mtp`.
 - Les lignes existantes des journaux (`logs/*.log`) restent lisibles : toute

@@ -48,11 +48,33 @@ construit localement dans `~/llm/strix-llama.cpp` et exposé par quatre liens
 `~/.local/bin`, que l'unité systemd met en tête du PATH.
 
 ```bash
-./setup-llm.sh --setup-fork   # installe ET met à jour (clone ou git pull --ff-only, build, liens)
+./setup-llm.sh --setup-fork   # installe (clone ou git pull --ff-only, build, liens)
+./setup-llm.sh --update-fork  # suivi d'amont du fork déjà en place
 systemctl --user restart llama-server
 ./setup-llm.sh --list-devices # quel binaire répond, et sa version
 ./setup-llm.sh --unset-fork   # retire les liens : retour au paquet Arch
 ```
+
+`--setup-fork` installe ou réinstalle (il clone si besoin et reconstruit
+toujours) ; `--update-fork` est la commande de suivi au quotidien, à lancer
+**juste après un `--update`** : elle refuse d'agir si le fork n'est pas cloné ou
+si les liens de `~/.local/bin` ne viennent pas de lui (« lancer --setup-fork
+d'abord »), refuse un arbre sale, affiche l'ancien et le nouveau commit avec le
+nombre de commits récupérés, et s'arrête sans rebuild si rien n'a bougé en
+amont. Ni l'une ni l'autre ne redémarre le service et aucune ne lance de
+mesure. Enchaînement recommandé :
+
+```bash
+./setup-llm.sh --update                      # 1. modèles
+./setup-llm.sh --update-fork                 # 2. moteur (rebuild + liens si bump)
+systemctl --user restart llama-server        # 3. appliquer
+./setup-llm.sh --bench all                   # 4. mesures, à la main, quand on veut
+```
+
+`--update` se termine d'ailleurs sur un rappel de l'étape 2 quand le moteur
+résolu est le fork. Chaque bump du fork ouvre une **nouvelle série de mesures**,
+étiquetée au commit (`strix-<commit>` en colonne build) : les chiffres d'avant
+et d'après un `--update-fork` ne se comparent pas directement.
 
 Le paquet Arch reste installé, c'est lui qui reprend la main sans les liens.
 Deux pièges :
@@ -118,7 +140,7 @@ recevable.
 | `--update [modèle]` | Comme `--setup`, mais laisse `hf` comparer les etags : seul ce qui a bougé est retéléchargé |
 | `--cleanup [--yes]` | Supprime les dossiers et GGUF orphelins (dry-run par défaut) |
 | `--preload` | Re-sélectionne les modèles always-on et régénère le ini |
-| `--bench [modèle\|all] [n]` | Mesure le serveur tel qu'il tourne : prefill, décode médian, acceptance MTP, tableau récapitulatif. N'écrit rien |
+| `--bench [modèle\|all] [n]` | Mesure le serveur tel qu'il tourne : prefill, décode médian, acceptance MTP, tableau récapitulatif. N'écrit rien ; avant de charger un modèle, décharge les plus gros modèles résidents si la RAM ne suffit pas (`BENCH_NO_UNLOAD=1` pour désactiver) |
 | `--bench-devices [modèle] [devices] [n]` | Compare les devices d'un modèle (défaut Vulkan0,ROCm0) : bench avec restart par device, verdict par temps de tour simulé, vainqueur écrit dans `bench-devices.conf` (détail dans ARCHITECTURE.md) |
 | `--bench-parallel [modèle] [n] [passes]` | Débit sous `n` requêtes simultanées (défaut : le `parallel` du modèle) : agrégé et décode par requête contre 1 requête ; montre ce que vaut `parallel = N` et la file d'attente au-delà |
 | `--bench-cache [modèle]` | Efficacité du cache de prompt sur le pattern agentic (contexte froid, tour suivant, édition au premier tiers, requête identique) : part du prompt servie du cache et prefill à chaque fois ; c'est la mesure de `cache-ram` / `ctx-checkpoints` / `cache-reuse` |
@@ -126,6 +148,7 @@ recevable.
 | `--bench-agentic [modèle] [passes]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels) |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
 | `--setup-fork` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin` (voir « Moteur ») |
+| `--update-fork` | Suivi d'amont du moteur, juste après un `--update` : met à jour le fork **déjà installé** (`git pull --ff-only`, commits avant/après, rebuild et liens), s'arrête si rien n'a bougé, ne redémarre rien et ne mesure rien (voir « Moteur ») |
 | `--unset-fork` | Retire les liens du fork : retour au paquet Arch au prochain restart |
 | `--list-devices` | Moteur résolu (paquet Arch ou fork) avec sa version, backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
@@ -181,13 +204,20 @@ Comparabilité : les chiffres dépendent des prompts de `prompts/`. Modifier
 `bench-context.txt` ou `bench-task.txt` invalide la comparaison avec les
 tableaux antérieurs ; ne jamais les toucher au détour d'un autre changement.
 
-**⚠ `--bench all` et les géants.** Le bench ne décharge rien : c'est le routeur
-qui charge à la demande et évince en LRU, sans connaître la taille des modèles.
-Enchaîner plusieurs modèles de 60 à 104 Go avec `--models-max 2` (préchargé + 1)
-peut donc demander plus que les 124 Go de la machine : pendant la campagne du
-13/09/2026 l'OOM killer a tué le routeur deux fois (détail plus bas, « Paquet
-Arch contre fork »). Décharger explicitement le modèle précédent
-(`POST /models/unload`) ou ordonner la suite du plus petit au plus gros.
+**⚠ `--bench all` et les géants.** Le routeur charge à la demande et évince en
+LRU, sans connaître la taille des modèles. Enchaîner plusieurs modèles de 60 à
+104 Go avec `--models-max 2` (préchargé + 1) peut donc demander plus que les
+124 Go de la machine : pendant la campagne du 13/09/2026 l'OOM killer a tué le
+routeur deux fois (détail plus bas, « Paquet Arch contre fork »). Depuis, une
+garde mémoire précède chaque chargement : le script estime la taille du modèle
+à charger (GGUF + drafter, plus 10 % de marge pour le KV), lit la mémoire
+disponible (`free`) et décharge par l'API (`POST /models/unload`) les plus gros
+modèles résidents jusqu'à ce que la place y soit — jamais un préchargé de
+`preload.conf`, sauf s'il n'y a rien d'autre à décharger, et alors il le dit.
+Aucun restart : si la place manque encore, le script avertit et laisse le
+routeur faire. Elle vaut pour `--bench`, `--bench-devices`, `--bench-cache`,
+`--bench-parallel`, `--spec-test` et `--spec-ab` ; `BENCH_NO_UNLOAD=1` la
+désactive (mesure strictement passive), `BENCH_ROOM_MARGE_PCT` change la marge.
 
 Chaque `--bench` est journalisé dans `logs/bench.log` avec le build de
 llama.cpp et comparé au run précédent du même modèle, GGUF et device : un

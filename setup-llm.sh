@@ -63,6 +63,7 @@ case "${1:-}" in
   --bench-load)        cmd_bench_load "${2:-}" ;;
   --preload)           cmd_preload ;;
   --setup-fork)        cmd_setup_fork ;;
+  --update-fork)       cmd_update_fork ;;
   --unset-fork)        cmd_unset_fork ;;
   --list-devices)      cmd_list_devices ;;
   --spec-test)         cmd_spec_test "${2:-}" "${3:-}" "${4:-}" ;;

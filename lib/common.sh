@@ -257,3 +257,191 @@ SERVICE_NAME="llama-server"
 # Service systemd USER : piloté par systemctl --user, démarre au
 # boot sans session via loginctl enable-linger (posé par --install-service)
 SERVICE_FILE="$HOME/.config/systemd/user/${SERVICE_NAME}.service"
+
+# =============================================================================
+# GARDE MÉMOIRE — faire de la place avant de charger un modèle
+#
+# Le routeur charge à la demande et évince en LRU, sans connaître la taille
+# des modèles : sur une suite de géants (--bench all), la somme du sortant et
+# de l'entrant dépasse la RAM. Campagne du 13/09/2026 sur une machine de
+# 124 Go : OOM killer sur le routeur deux fois (Laguna 73 Go chargé pendant
+# que gpt-oss 59 Go tenait encore ; puis DeepSeek 104 Go après éviction de
+# lfm2.5, le LRU, 3 Go, au lieu de Laguna). Le service se relance seul
+# (Restart=on-failure) mais la mesure est perdue et le service coupé.
+#
+# La parade : avant la première requête à un modèle non chargé, estimer ce
+# qu'il va prendre et décharger explicitement (POST /models/unload) les plus
+# gros modèles chargés tant que la mémoire disponible ne suffit pas. Jamais de
+# restart : le routeur reste debout, seuls des modèles en sortent.
+# Estimation = somme des GGUF (shards compris) + drafter spec-draft-model,
+# plus une marge pour le KV. La taille disque est une borne BASSE (le KV et
+# les buffers de calcul s'ajoutent), volontairement : mieux vaut décharger un
+# modèle de trop que se faire tuer. Elle n'a pas à être juste, elle a à être
+# du bon ordre de grandeur.
+# BENCH_NO_UNLOAD=1 désactive toute la garde (mesure passive stricte).
+# BENCH_ROOM_MARGE_PCT : marge en % au-dessus de la taille disque (défaut 10).
+# =============================================================================
+
+BENCH_ROOM_MARGE_PCT="${BENCH_ROOM_MARGE_PCT:-10}"
+# Attente max (s) que `free` reflète un déchargement : le routeur répond
+# success avant que le noyau ait rendu les pages.
+BENCH_ROOM_TIMEOUT="${BENCH_ROOM_TIMEOUT:-30}"
+
+# Octets → Gio lisible (affichage des messages de la garde mémoire)
+_gio() {
+  awk -v b="${1:-0}" 'BEGIN{printf "%.1f Go", b/1073741824}'
+}
+
+# Fichiers de poids d'un modèle : sa ligne "model =" (un premier shard entraîne
+# toute la série, que le routeur charge en entier) et son "spec-draft-model ="
+# s'il en a un. Un fichier absent est ignoré (le modèle ne chargera pas non
+# plus). Sortie : un chemin par ligne.
+_model_files() {
+  local body="${MODEL_INI[$1]:-}" p f
+  [[ -n "$body" ]] || return 0
+  while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    if [[ "$p" =~ ^(.*)-00001-of-([0-9]+)\.gguf$ ]]; then
+      for f in "${BASH_REMATCH[1]}"-*-of-"${BASH_REMATCH[2]}".gguf; do
+        [[ -f "$f" ]] && echo "$f"
+      done
+    else
+      [[ -f "$p" ]] && echo "$p"
+    fi
+  done < <(echo "$body" | sed -n 's/^\(model\|spec-draft-model\)[[:space:]]*=[[:space:]]*//p')
+  return 0
+}
+
+# Taille sur disque d'un modèle, en octets (0 si aucun fichier trouvé).
+_model_size_bytes() {
+  local total
+  total="$(_model_files "$1" | tr '\n' '\0' \
+    | xargs -0 -r stat -Lc '%s' 2>/dev/null \
+    | awk '{s+=$1} END{printf "%.0f", s+0}')"
+  echo "${total:-0}"
+}
+
+# Mémoire disponible en octets (colonne "available" de free, celle qui compte :
+# elle inclut le cache de pages récupérable).
+_mem_available_bytes() {
+  free -b 2>/dev/null | awk '/^Mem:/{print $7; found=1} END{if(!found) print 0}'
+}
+
+# Modèles actuellement chargés côté routeur (status.value = loaded), un par
+# ligne. Silencieux si le routeur ne répond pas : la garde s'efface alors.
+_router_loaded_models() {
+  curl -s --max-time 10 "$SPEC_TEST_URL/models" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for m in d.get("data", []):
+    st = m.get("status") or {}
+    if st.get("value") == "loaded":
+        print(m.get("id", ""))
+' 2>/dev/null || true
+}
+
+# Déchargement d'un modèle par l'API du routeur. 0 si la réponse dit success.
+_router_unload() {
+  local out
+  out="$(curl -s --max-time 120 -X POST "$SPEC_TEST_URL/models/unload" \
+    -H 'Content-Type: application/json' -d "{\"model\": \"$1\"}" 2>/dev/null || true)"
+  [[ "$out" == *'"success"'*'true'* ]]
+}
+
+# _ensure_room_for <modèle> — à appeler AVANT la première requête d'une mesure.
+# Ne rend jamais la main en erreur : une garde qui échoue laisse le routeur
+# faire comme avant, elle ne doit pas interrompre une campagne.
+_ensure_room_for() {
+  local cible="$1"
+  [[ "${BENCH_NO_UNLOAD:-0}" == "0" ]] || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  command -v free >/dev/null 2>&1 || return 0
+
+  local besoin
+  besoin="$(_model_size_bytes "$cible")"
+  # Pas de poids sur disque : rien d'estimable, on laisse le routeur décider.
+  [[ "$besoin" -gt 0 ]] || return 0
+  besoin=$(( besoin + besoin * BENCH_ROOM_MARGE_PCT / 100 ))
+
+  # (tableau éventuellement vide : jamais "${x[@]}" sans garde, unbound sous
+  #  set -u en bash 4.3)
+  local -a charges=()
+  mapfile -t charges < <(_router_loaded_models)
+  local m
+  if [[ ${#charges[@]} -gt 0 ]]; then
+    for m in "${charges[@]}"; do
+      # Déjà chargé : le routeur ne rechargera rien, pas de place à faire.
+      [[ "$m" == "$cible" ]] && return 0
+    done
+  fi
+
+  local dispo
+  dispo="$(_mem_available_bytes)"
+  [[ "$dispo" -gt 0 ]] || return 0
+  if [[ "$dispo" -ge "$besoin" ]]; then
+    return 0
+  fi
+
+  load_preload_conf
+  info "Garde mémoire : '$cible' demande ~$(_gio "$besoin") (poids + $BENCH_ROOM_MARGE_PCT % de marge KV), disponible $(_gio "$dispo") — déchargement des plus gros modèles chargés."
+
+  local tours=0
+  while [[ "$dispo" -lt "$besoin" ]]; do
+    tours=$(( tours + 1 ))
+    if [[ "$tours" -gt 12 ]]; then break; fi
+    mapfile -t charges < <(_router_loaded_models)
+    # Candidats triés du plus gros au plus petit : d'abord les modèles chargés
+    # à la demande, les préchargés seulement en dernier recours (les décharger
+    # coûte leur rechargement au prochain usage, et c'est un choix utilisateur).
+    local -a libres=() gardes=()
+    for m in ${charges[@]+"${charges[@]}"}; do
+      [[ -n "$m" && "$m" != "$cible" ]] || continue
+      if [[ -n "${PRELOADED[$m]:-}" ]]; then
+        gardes+=("$(_model_size_bytes "$m")|$m")
+      else
+        libres+=("$(_model_size_bytes "$m")|$m")
+      fi
+    done
+    local choisi="" taille="" precharge=0
+    if [[ ${#libres[@]} -gt 0 ]]; then
+      choisi="$(printf '%s\n' "${libres[@]}" | sort -t'|' -k1,1nr | head -1)"
+    elif [[ ${#gardes[@]} -gt 0 ]]; then
+      choisi="$(printf '%s\n' "${gardes[@]}" | sort -t'|' -k1,1nr | head -1)"
+      precharge=1
+    fi
+    if [[ -z "$choisi" ]]; then
+      warn "Garde mémoire : plus rien à décharger, il manque $(_gio $(( besoin - dispo ))) pour '$cible' — chargement tenté quand même (le routeur fera ce qu'il peut, risque d'OOM)."
+      return 0
+    fi
+    taille="${choisi%%|*}"; m="${choisi#*|}"
+    if [[ "$precharge" -eq 1 ]]; then
+      warn "Garde mémoire : '$m' est PRÉCHARGÉ (preload.conf) mais c'est le seul déchargement possible — il sera rechargé au prochain restart du service."
+    fi
+    info "Garde mémoire : déchargement de '$m' ($(_gio "$taille")) pour libérer la place de '$cible'."
+    if ! _router_unload "$m"; then
+      warn "Garde mémoire : le routeur a refusé de décharger '$m' — on continue sans."
+      return 0
+    fi
+    # Le routeur répond avant que le noyau ait rendu les pages : attendre que
+    # `free` le reflète, sans bloquer une campagne si ça ne vient pas. On
+    # n'attend pas la taille entière (une partie peut rester en cache de
+    # pages) : la moitié suffit à dire que la libération a bien eu lieu.
+    local t=0 attendu=$(( dispo + taille / 2 ))
+    while [[ "$t" -lt "$BENCH_ROOM_TIMEOUT" ]]; do
+      dispo="$(_mem_available_bytes)"
+      if [[ "$dispo" -ge "$besoin" || "$dispo" -ge "$attendu" ]]; then break; fi
+      sleep 1; t=$(( t + 1 ))
+    done
+    dispo="$(_mem_available_bytes)"
+  done
+
+  if [[ "$dispo" -lt "$besoin" ]]; then
+    warn "Garde mémoire : après déchargement, disponible $(_gio "$dispo") < $(_gio "$besoin") estimés pour '$cible' — chargement tenté quand même (risque d'OOM sur le routeur)."
+  else
+    info "Garde mémoire : disponible $(_gio "$dispo") — place faite pour '$cible'."
+  fi
+  return 0
+}
