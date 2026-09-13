@@ -100,7 +100,64 @@ cmd_setup() {
   info "Mesurer les perfs → ./setup-llm.sh --bench [modèle|all]"
   info "Devices exposés → ./setup-llm.sh --list-devices"
 
+  _setup_propose_fork
+
   _maybe_restart_service
+}
+
+# Proposition du moteur, en fin de --setup (et donc de --update). Isolée de
+# cmd_setup pour être testable seule (tests/sh-unit.sh) : cmd_setup fait paru,
+# hf et réseau, cette fonction ne lit que l'état du disque.
+#
+# Le fork strix-llama.cpp n'est pas un agrément : le parc est réglé pour lui
+# (FORK_ONLY_KEYS dans le ini, sidecar MTP de Flash-Next), et --start REFUSE de
+# démarrer le paquet Arch sur un ini qui porte ces clés (_fork_keys_guard). Un
+# --setup qui s'arrête au paquet laisse donc une machine qui ne démarre pas :
+# d'où la question, défaut OUI, contrairement à la proposition ROCm (défaut
+# non, simple option de mesure).
+#
+# Le paquet Arch reste installé dans tous les cas : c'est le repli (--unset-fork)
+# et le seul chemin vers ROCm0.
+#
+# Note d'ordre de source : lib/setup.sh est sourcé AVANT lib/fork.sh, mais
+# l'appel n'a lieu qu'à l'exécution, quand cmd_setup_fork et _fork_links_ok
+# existent. Aucune variable de fork.sh n'est lue avant cet appel.
+_setup_propose_fork() {
+  local etiquette reply
+  etiquette="$(_llama_build)"
+
+  # Fork en place = étiquette non numérique (cf. _llama_build) ET les quatre
+  # liens de ~/.local/bin pointant dans son build (_fork_links_ok) : un moteur
+  # étiqueté "?" ou "bNNNNN" est le paquet, des liens partiels ne sont pas un
+  # fork installé.
+  if [[ ! "$etiquette" =~ ^b[0-9]+(-[0-9]+)?$ && "$etiquette" != "?" ]] \
+     && _fork_links_ok; then
+    info "Moteur : fork strix-llama.cpp $etiquette ; suivi d'amont par ./setup-llm.sh --update-fork"
+    return 0
+  fi
+
+  echo ""
+  warn "Moteur : le fork strix-llama.cpp n'est pas en place (résolu : $etiquette)."
+  warn "  Les réglages du parc en dépendent : clés ini que seul le fork comprend"
+  warn "  (${#FORK_ONLY_KEYS[@]} au total, dont ${FORK_ONLY_KEYS[0]} et reasoning-budget-*) et sidecar MTP de"
+  warn "  Flash-Next ; --start refuse de démarrer le paquet Arch sur un ini qui en"
+  warn "  porte une, car c'est le routeur ENTIER qui échouerait."
+
+  if [[ ! -t 0 ]]; then
+    warn "Entrée non interactive — rien n'est installé. À lancer :"
+    warn "  ./setup-llm.sh --setup-fork"
+    return 0
+  fi
+
+  reply=""
+  read -r -p "Installer le fork strix-llama.cpp comme moteur maintenant ? [O/n] " reply
+  reply="${reply:-o}"
+  if [[ "$reply" =~ ^[oOyY]$ ]]; then
+    cmd_setup_fork
+  else
+    info "Fork non installé — le paquet Arch reste le moteur."
+    info "  (l'installer plus tard : ./setup-llm.sh --setup-fork)"
+  fi
 }
 
 # =============================================================================
@@ -135,18 +192,12 @@ cmd_update() {
   warn "Prévoir 2× la taille du plus gros fichier remplacé (écriture en .incomplete puis move)."
   warn "Un restart du service sera proposé en fin de run (poids mmap'és sur l'ancien inode sinon)."
 
-  cmd_setup
-
   # Suivi du moteur : les modèles viennent d'être mis à jour, le fork qui les
-  # sert ne l'est pas par cette commande. Simple rappel — rien n'est lancé
-  # automatiquement, ni mise à jour, ni restart, ni mesure (cf. lib/fork.sh).
-  # Étiquette non numérique = fork (_llama_build) ; "bNNNNN" = paquet Arch.
-  local etiquette
-  etiquette="$(_llama_build)"
-  if [[ ! "$etiquette" =~ ^b[0-9]+(-[0-9]+)?$ && "$etiquette" != "?" ]]; then
-    info "Moteur : fork strix-llama.cpp $etiquette ; pour le mettre à jour :"
-    info "  ./setup-llm.sh --update-fork"
-  fi
+  # sert ne l'est pas par cette commande. Le rappel (--update-fork si le fork
+  # est en place, proposition d'installation sinon) est émis par
+  # _setup_propose_fork, appelé en fin de cmd_setup — rien n'est lancé
+  # automatiquement ici, ni mise à jour du moteur, ni restart, ni mesure.
+  cmd_setup
 }
 
 # =============================================================================

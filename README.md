@@ -39,6 +39,11 @@ de conf locaux à côté du script (non versionnés, propres à la machine). Le 
 systemctl --user start llama-server
 ```
 
+En fin de `--setup`, si le fork strix-llama.cpp n'est pas le moteur résolu, son
+installation est **proposée** (défaut oui, `--setup-fork` derrière ; en entrée
+non interactive rien n'est fait et la commande est rappelée) : les réglages du
+parc en dépendent, voir ci-dessous.
+
 ## Moteur : fork strix-llama.cpp
 
 Depuis le 12/09/2026 le service ne tourne plus sur le paquet Arch `llama-cpp`
@@ -55,8 +60,10 @@ systemctl --user restart llama-server
 ./setup-llm.sh --unset-fork   # retire les liens : retour au paquet Arch
 ```
 
-`--setup-fork` installe ou réinstalle (il clone si besoin et reconstruit
-toujours) ; `--update-fork` est la commande de suivi au quotidien, à lancer
+`--setup` propose lui-même `--setup-fork` en fin de run quand le moteur résolu
+n'est pas le fork (défaut oui), et rappelle sinon son étiquette et
+`--update-fork`. `--setup-fork` installe ou réinstalle (il clone si besoin et
+reconstruit toujours) ; `--update-fork` est la commande de suivi au quotidien, à lancer
 **juste après un `--update`** : elle refuse d'agir si le fork n'est pas cloné ou
 si les liens de `~/.local/bin` ne viennent pas de lui (« lancer --setup-fork
 d'abord »), refuse un arbre sale, et s'arrête sans rebuild si rien n'a bougé en
@@ -146,7 +153,7 @@ recevable.
 
 | Commande | Rôle |
 |---|---|
-| `--setup` | Installe les dépendances, propose ROCm, télécharge les GGUF manquants, sélectionne le préchargement, génère le ini |
+| `--setup` | Installe les dépendances, propose ROCm, télécharge les GGUF manquants, sélectionne le préchargement, génère le ini, propose le fork s'il n'est pas le moteur |
 | `--update [modèle]` | Comme `--setup`, mais laisse `hf` comparer les etags : seul ce qui a bougé est retéléchargé |
 | `--cleanup [--yes]` | Supprime les dossiers et GGUF orphelins (dry-run par défaut) |
 | `--preload` | Re-sélectionne les modèles always-on et régénère le ini |

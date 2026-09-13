@@ -27,7 +27,9 @@ systemd met en tête du PATH), pas sur le paquet Arch `llama-cpp`.
 d'amont d'un fork déjà en place (à lancer après un `--update`, il s'arrête
 sans rebuild si rien n'a bougé) ; `--unset-fork` retire les liens et rend la
 main au paquet ; `--list-devices` dit quel binaire répond réellement. Aucune
-des trois ne redémarre le service ni ne lance de mesure.
+des trois ne redémarre le service ni ne lance de mesure. `--setup` propose
+lui-même l'installation du fork (défaut oui) quand il n'est pas le moteur
+résolu, et rappelle `--update-fork` sinon.
 
 Trois conséquences pour toute la procédure ci-dessous :
 

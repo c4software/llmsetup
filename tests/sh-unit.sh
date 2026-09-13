@@ -255,6 +255,54 @@ else
   echo "[FAIL] update-fork : clone à jour, code $grc, sortie : $out"; rc=1
 fi
 
+# 4quinquies. Proposition du fork en fin de --setup (_setup_propose_fork,
+# lib/setup.sh). Isolée de cmd_setup exprès : celui-ci fait paru, hf et réseau,
+# la proposition ne lit que l'état du disque. Deux cas contractuels — le fork
+# déjà en place ne doit RIEN demander, et une entrée non interactive ne doit
+# rien installer mais nommer --setup-fork. cmd_setup_fork est surchargée après
+# le source (résolution à l'appel) pour tracer un appel sans rien construire.
+SH="$TMP/shome"
+mkdir -p "$SH/.local/bin" "$SH/llm/strix-llama.cpp/build/bin"
+for b in llama-server llama-bench llama-cli llama-quantize; do
+  cp "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$SH/llm/strix-llama.cpp/build/bin/$b"
+  chmod +x "$SH/llm/strix-llama.cpp/build/bin/$b"
+done
+
+_run_propose() {  # stdin fermé = entrée non interactive
+  env -i HOME="$SH" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
+    bash -c "set -euo pipefail
+      source '$REPO_DIR/lib/common.sh'
+      source '$REPO_DIR/lib/fork.sh'
+      source '$REPO_DIR/lib/setup.sh'
+      cmd_setup_fork() { echo 'APPEL cmd_setup_fork'; }
+      _setup_propose_fork" </dev/null 2>&1
+}
+
+# (a) fork en place (étiquette strix-<commit> ET les quatre liens dans son
+#     build) : aucune question, aucun appel, juste le rappel --update-fork.
+for b in llama-server llama-bench llama-cli llama-quantize; do
+  ln -sfn "$SH/llm/strix-llama.cpp/build/bin/$b" "$SH/.local/bin/$b"
+done
+out="$(_run_propose)"; grc=$?
+if [[ "$grc" -eq 0 && "$out" == *"strix-0007bc6"* && "$out" == *"--update-fork"* \
+      && "$out" != *"Installer le fork"* && "$out" != *"APPEL cmd_setup_fork"* ]]; then
+  echo "[OK]   setup : fork en place ⇒ pas de question, rappel --update-fork"
+else
+  echo "[FAIL] setup : fork en place, code $grc, sortie : $out"; rc=1
+fi
+
+# (b) pas de fork (aucun lien, moteur = paquet b10809) en entrée non
+#     interactive : rien n'est installé, --setup-fork est indiqué.
+rm -f "$SH/.local/bin/llama-server" "$SH/.local/bin/llama-bench" \
+      "$SH/.local/bin/llama-cli" "$SH/.local/bin/llama-quantize"
+out="$(_run_propose)"; grc=$?
+if [[ "$grc" -eq 0 && "$out" == *"./setup-llm.sh --setup-fork"* \
+      && "$out" != *"APPEL cmd_setup_fork"* ]]; then
+  echo "[OK]   setup : sans fork, non interactif ⇒ --setup-fork indiqué, rien lancé"
+else
+  echo "[FAIL] setup : sans fork non interactif, code $grc, sortie : $out"; rc=1
+fi
+
 # 4ter. Garde mémoire _ensure_room_for (lib/common.sh) : avant de laisser le
 # routeur charger un modèle, décharger les plus gros modèles chargés tant que
 # `free` ne montre pas la place. Testée sur de faux `free` et `curl` et des
@@ -338,5 +386,5 @@ else
   echo "[FAIL] étiquette impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire et --update-fork (refus, changelog, confirmation) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire, --update-fork (refus, changelog, confirmation) et proposition du fork en fin de --setup conformes. ──"
 exit "$rc"

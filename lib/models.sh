@@ -78,8 +78,9 @@ _GROUPE_EN_ATTENTE=""
 #  13/09/2026 car plus utilisé : qwopus3.6-27b-coder-mtp (ses mesures restent
 #  dans logs/)
 #  → ./setup-llm.sh --cleanup les purge)
-# (revenu le 12/09/2026 : qwen3.5-2b, non plus comme modèle servi mais comme
-#  estimateur de speculative prefill du 27B thinking — déclaré sans section ini)
+# (qwen3.5-2b : revenu le 12/09/2026 comme estimateur de speculative prefill du
+#  27B thinking (jamais servi, sans section ini), retiré à nouveau le
+#  13/09/2026 (spec-prefill abandonné) — à purger par --cleanup)
 KNOWN_FILES=()
 
 # download_hf <dossier> <repo> VAR=<fichier> [VAR=<fichier>...]
@@ -428,18 +429,6 @@ download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
 download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
   QWEN38_27B_DFLASH_PATH="Qwen3.8-27B-DFlash2-Q8_0.gguf"
 
-# Qwen3.5-2B UD-Q4_K_XL (1,3 Go) — PAS un modèle servi : aucune section ini, il
-# n'est déclaré que pour être téléchargé et protégé de --cleanup, comme le
-# drafter DFlash de Laguna. Unique rôle : ESTIMATEUR de speculative prefill du
-# modèle thinking ci-dessous (spec-prefill-draft-model). Il avait été retiré du
-# parc le 15/08/2026 faute d'usage ; il revient pour ça seulement.
-# L'estimateur doit être un petit modèle SÉPARÉ au MÊME vocabulaire que la
-# cible (doc du fork, docs/speculative-prefill.md) : les têtes MTP, DFlash2,
-# DSpark et Eagle3 dépendent de leur cible et le serveur refuse de les réutiliser
-# ici. Téléchargé sur bigchuck le 12/09/2026.
-download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
-  QWEN35_2B_PATH="Qwen3.5-2B-UD-Q4_K_XL.gguf"
-
 # Qwen3.8-27B thinking — reasoning_effort medium (défaut modèle = xhigh), tool-calling jinja
 # Mesuré --bench 21/08/2026 (Vulkan0, b10433) : prefill 215 t/s, décode 12,1 t/s
 #   (cohérent avec les 12,3 t/s bruts de llama-bench, cf. profondeur ci-dessus).
@@ -454,7 +443,7 @@ download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
 #   ces lignes à la main puis --preload : le dépôt ne gère pas deux moteurs, il
 #   refuse seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
 # spec-prefill : option du fork strix-llama.cpp (port de la PR upstream #27692,
-#   docs/speculative-prefill.md). L'estimateur Qwen3.5-2B prefille le prompt,
+#   docs/speculative-prefill.md). Un petit modèle estimateur prefille le prompt,
 #   décode quelques tokens de lookahead, et son attention sur le prompt sert à
 #   ne garder que la fraction p des chunks les mieux notés — le gros modèle ne
 #   prefille que ceux-là. LOSSY : les tokens élagués sont PERDUS, ce n'est pas
@@ -479,6 +468,9 @@ download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
 #     croissant, tout est repayé à chaque tour (12 772 tokens re-prefillés
 #     au scénario edit). Perdant contre un cache à 62 % ; les trois clés sont
 #     retirées, à ré-essayer si le fork rend le cache compatible.
+#   L'estimateur (Qwen3.5-2B UD-Q4_K_XL, seul rôle de ce GGUF) n'est donc plus
+#     téléchargé depuis le 13/09/2026 : sa déclaration a été retirée, --cleanup
+#     purge ~/models/qwen3.5-2b. Le ré-essai imposerait de la remettre.
 #   ⚠ Clés inconnues du paquet Arch (vérifié le 12/09/2026 : aucune ligne
 #   spec-prefill dans /usr/bin/llama-server --help) : FORK_ONLY_KEYS, lib/fork.sh.
 # DRAFTER DFLASH 2 (z-lab, cf. la déclaration QWEN38_27B_DFLASH_PATH) sur la

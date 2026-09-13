@@ -15,6 +15,10 @@ Commandes :
   --setup                  Installe les dépendances (paru), propose le runtime ROCm
                            + ggml-hip, télécharge les GGUF manquants, sélection
                            interactive du préchargement, génère $CONFIG_DIR/models.ini
+                           et, si le fork strix-llama.cpp n'est pas le moteur résolu,
+                           propose de l'installer (défaut oui : les réglages du parc
+                           en dépendent ; en entrée non interactive, rien n'est fait
+                           et --setup-fork est rappelé)
   --update [modèle]        Comme --setup mais laisse hf comparer les etags et ne
                            retélécharge que ce qui a bougé en amont
                            (modèle = dossier sous $MODELS_BASE, ex. qwen3.8-27b)

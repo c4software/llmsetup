@@ -65,7 +65,10 @@ common → models → ini → preload → setup → fork → bench → bench-dev
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
   dossiers `<clé>`/`<clé>-mtp`), `cmd_preload`.
-- `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements),
+- `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements,
+  puis `_setup_propose_fork` : proposition d'installer le fork quand il n'est
+  pas le moteur résolu — défaut oui, rien en entrée non interactive, isolée de
+  `cmd_setup` pour être testable sans réseau),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
 - `fork.sh` : moteur. Briques communes `_fork_pull` (refus sur arbre sale,
