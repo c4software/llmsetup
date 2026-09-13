@@ -429,87 +429,18 @@ download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
 download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
   QWEN38_27B_DFLASH_PATH="Qwen3.8-27B-DFlash2-Q8_0.gguf"
 
-# Qwen3.8-27B thinking — reasoning_effort medium (défaut modèle = xhigh), tool-calling jinja
-# Mesuré --bench 21/08/2026 (Vulkan0, b10433) : prefill 215 t/s, décode 12,1 t/s
-#   (cohérent avec les 12,3 t/s bruts de llama-bench, cf. profondeur ci-dessus).
-# reasoning-budget-* : options du fork strix-llama.cpp (cf. lib/fork.sh) —
-#   plafond de tokens de réflexion, avertissement doux à 70 % du budget, et
-#   128 tokens de grâce pour finir le paragraphe avant la coupure dure. Le
-#   modèle thinking est le seul à en avoir l'usage ici (12 t/s : un raisonnement
-#   qui part en boucle coûte des minutes). Budget à affiner à l'usage.
-#   ⚠ Le paquet Arch b10809 connaît reasoning-budget mais PAS -enable,
-#   -soft-ratio ni -grace-tokens : une clé inconnue fait échouer le démarrage du
-#   routeur entier (vérifié le 12/09/2026). Revenir au paquet impose de retirer
-#   ces lignes à la main puis --preload : le dépôt ne gère pas deux moteurs, il
-#   refuse seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
-# spec-prefill : option du fork strix-llama.cpp (port de la PR upstream #27692,
-#   docs/speculative-prefill.md). Un petit modèle estimateur prefille le prompt,
-#   décode quelques tokens de lookahead, et son attention sur le prompt sert à
-#   ne garder que la fraction p des chunks les mieux notés — le gros modèle ne
-#   prefille que ceux-là. LOSSY : les tokens élagués sont PERDUS, ce n'est pas
-#   une accélération sans perte comme le MTP ou les n-grams.
-#   Mesuré PAR LE FORK sur ce modèle exact (Qwen3.8-27B-UD-Q4_K_XL, Vulkan0,
-#   médiane de 3) : TTFT 12 992 → 5 199 ms à p 0,30 sur 3 131 tokens (x2,5), et
-#   décode inchangé (11,1 à 11,6 t/s sur toutes les cellules). Le gain monte
-#   avec la longueur du prompt (x2,35 à 1,5 k, x2,81 à 12 k).
-#   p 0,30 = défaut de l'option et valeur raisonnable selon la doc ; 0,15 tient
-#   encore un needle, en dessous de 0,10 c'est risqué quand les indices sont
-#   répartis dans le contexte.
-#   ⚠ Ne JAMAIS poser spec-prefill-ctx, -device ou -ngl seuls : chacun met
-#   enabled = true en effet de bord et le serveur sort sur « speculative prefill
-#   enabled but no draft model was provided ».
-#   MESURÉ ICI le 12-13/09/2026 (strix-0007bc6, Vulkan0, p 0,30) et NON RETENU :
-#   --bench : prefill 759 t/s (n=1365, contre 239 sans, l'estimateur garde
-#     401 tokens sur 1361), décode 12,2 t/s inchangé.
-#   --bench-agentic 2 passes : 11/11 PASS, prefill 345 t/s, décode 12,3.
-#   --bench-cache : 0 % de cache sur les quatre requêtes, MÊME la requête
-#     identique (1,7 s de prefill à chaque fois). Le prefill spéculatif
-#     court-circuite le cache de prompt : en boucle agentic à contexte
-#     croissant, tout est repayé à chaque tour (12 772 tokens re-prefillés
-#     au scénario edit). Perdant contre un cache à 62 % ; les trois clés sont
-#     retirées, à ré-essayer si le fork rend le cache compatible.
-#   L'estimateur (Qwen3.5-2B UD-Q4_K_XL, seul rôle de ce GGUF) n'est donc plus
-#     téléchargé depuis le 13/09/2026 : sa déclaration a été retirée, --cleanup
-#     purge ~/models/qwen3.5-2b. Le ré-essai imposerait de la remettre.
-#   ⚠ Clés inconnues du paquet Arch (vérifié le 12/09/2026 : aucune ligne
-#   spec-prefill dans /usr/bin/llama-server --help) : FORK_ONLY_KEYS, lib/fork.sh.
-# DRAFTER DFLASH 2 (z-lab, cf. la déclaration QWEN38_27B_DFLASH_PATH) sur la
-#   section thinking : --spec-ab du 13/09/2026 (strix-0007bc6, spec-test.txt,
-#   3 passes, reasoning_effort medium) : sans spéculation 12,3 t/s ;
-#   draft-dflash seul n-max 7 = 24,5 t/s (+99 %, acceptance 0,42) ;
-#   ngram-map-k 47 + draft-dflash = 24,3 (le n-gram n'apporte rien sur du
-#   raisonnement, il est laissé de côté ici). Distribution cible préservée
-#   par DFlash. Non mesuré sur le paquet Arch.
-# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
-#   349 t/s, décode 21,7 t/s, acceptance 0,35, contre 215 / 12,1 sans
-#   spéculation au paquet b10433, soit +62 % de prefill et +79 % de décode.
-#   Le comparateur du dépôt affiche « prefill 759 -> 349 régression » : les
-#   759 t/s du 12/09 étaient mesurés avec spec-prefill-p 0,30, option retirée
-#   depuis (cache de prompt à 0 %) ; 349 est la première mesure du réglage
-#   réellement servi, ce n'est pas une régression.
-llama_model qwen3.8-27b "
-model                = $QWEN38_27B_PATH
-ctx-size             = 131072
-cache-ram            = 4096
-temp                 = 1.0
-top-k                = 20
-top-p                = 0.95
-min-p                = 0.0
-chat-template-kwargs = {\"reasoning_effort\":\"medium\"}
-cache-type-v         = q8_0
-reasoning-budget-enable       = true
-reasoning-budget              = 4096
-reasoning-budget-soft-ratio   = 0.7
-reasoning-budget-grace-tokens = 128
-spec-type            = draft-dflash
-spec-draft-model     = $QWEN38_27B_DFLASH_PATH
-spec-draft-n-max     = 7
-jinja                = true
-parallel             = 1
-swa-full             = true
-ctx-checkpoints      = 128"
-
 # Qwen3.8-27B-DFlash nothink : spéculation n-gram + drafter DFlash 2, n-max 7.
+#   Section thinking `qwen3.8-27b` RETIRÉE le 13/09/2026 : même GGUF,
+#   reasoning_effort medium, reasoning-budget 4096, draft-dflash 7 seul :
+#   349 / 21,7 t/s, acceptance 0,35 sur le fork strix-0007bc6 (contre
+#   215 / 12,1 au paquet b10433), jamais préchargée et moitié moins vite que
+#   cette section. Ses commentaires (reasoning-budget, spec-prefill essayé et
+#   retiré, DFlash 2 sur du raisonnement) sont dans docs/HISTORIQUE.md,
+#   section « Qwen3.8-27B thinking : section retirée le 13/09/2026 ». Pour la
+#   ravoir : sampling thinking (temp 1.0 / top-p 0.95 / min-p 0, sans
+#   presence-penalty), chat-template-kwargs reasoning_effort medium, spec-type
+#   draft-dflash seul (le n-gram n'apporte rien sur du raisonnement),
+#   parallel 1, et ne pas la précharger en même temps que celle-ci.
 #   Renommé depuis qwen3.8-27b-mtp-nothink le 13/09/2026 : le suffixe -mtp
 #   désignait la tête MTP embarquée, remplacée ici par le drafter externe
 #   $QWEN38_27B_DFLASH_PATH (déclaré plus haut). Détail en bas de ce bloc.
@@ -521,8 +452,10 @@ ctx-checkpoints      = 128"
 #   c'était k2=22,2 / k4=25,5 / k6=26,0 → 4 : l'optimum dépend du device,
 #   re-régler après chaque bascule. La tête MTP reste dans le GGUF et reste
 #   utilisable (spec-type draft-mtp) si le drafter venait à manquer.
-# Même GGUF que le modèle thinking ci-dessus (tête MTP embarquée) — ne PAS
-#   précharger les deux en même temps (~16 Go chargés deux fois).
+# La tête MTP reste embarquée dans ce GGUF (cf. l'en-tête du bloc) : une
+#   section thinking sur le même fichier, comme celle retirée le 13/09/2026,
+#   ne doit PAS être préchargée en même temps (~16 Go chargés deux fois,
+#   _preload_sanity le signale).
 # Historique : Q6/n-max 2 = 16 t/s ; Q4/n-max 2 = 22 ; Q4/n-max 4 = 25,5 (ROCm0) ;
 #   Q4/n-max 4 = 31,8 et n-max 6 = 33,1 (Vulkan0) ; + ngram-map-k size_m 47 =
 #   47,4 sur refactor (mesuré avec n-max 4, avant ce réglage).
