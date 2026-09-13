@@ -314,8 +314,8 @@ le cas n-gram) ne se comparent pas entre elles.
 | lfm2.5-2.6b | Q8_0 (2,7 Go) | Vulkan0 (mesuré) | parallel 4 | **3048** (2279 au paquet b10433) | **70,8** (67,7 au paquet ; 205 agrégés à 4 requêtes, x3,06) | fork strix-0007bc6, 13/09/2026 ; cache tour suivant 62 % ; chargement 0,5 s, TTFT 27 ms |
 | qwen3.5-9b | UD-Q6_K_XL (8,2 Go) | Vulkan0 (mesuré) | parallel 4 | **971** (837 au paquet b10433) | **25,7** (25,7 au paquet ; 78,6 agrégés à 4, x3,06) | fork strix-0007bc6, 13/09/2026 ; cache 62 % ; chargement 1,9 s |
 | ornith-1.5-35b-a3b | Q4_K_M (22 Go) | Vulkan0 (mesuré : ROCm0 931 / 57,6) | parallel 4, sans spéculation | **1129** (974 au paquet b10566) | **73,3** (70,7 au paquet ; 136,8 agrégés à 4, x1,93) | fork strix-0007bc6, 13/09/2026 ; cache 62 % ; remplace les trois Qwen3.6-35B-A3B le 28/08/2026 |
-| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | **draft-dflash 7** (DFlash 2 z-lab, retenu le 13/09/2026 sur le fork ; spec-prefill essayé et retiré, cache de prompt à 0 %) | 215 au paquet b10433 (289 → 183 à 32k en llama-bench) ; pas de mesure fork sans spec-prefill | **24,5** (spec-test, +99 %) (12,1 sans spéculation ; --bench à refaire) | paquet b10433, 21/08/2026 (seul modèle non re-mesuré sur le fork) ; reasoning-budget 4096 (fork) ; spec-prefill lossy et incompatible avec le cache de prompt, perdant en agentic |
-| qwen3.8-27b-dflash-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + **draft-dflash 7** (drafter DFlash 2 z-lab, 2,0 Go ; remplace la tête MTP le 13/09/2026 : le batch de vérification 8 se découpe en 4+4 et échappe au pire cas du découpage mat-vec) | **360** (261 au paquet b10433) | **à mesurer par `--bench`** sur ce réglage (26,6 acc. 0,59 en MTP n-max 6 ; 29,5 acc. 0,65 au paquet) ; **64,5** (refactor, acc. 0,67) et **35,9** (générique, acc. 0,70) en `--spec-ab` | fork strix-0007bc6, 13/09/2026 ; DFlash 2 bat la tête MTP sur les deux prompts (+12 % en refactor, +18 % en générique) et annule le retrait de décode du fork ; réglage non mesuré sur le paquet Arch ; chargement 4,4 s |
+| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | **draft-dflash 7** (DFlash 2 z-lab, retenu le 13/09/2026 sur le fork ; spec-prefill essayé et retiré, cache de prompt à 0 %) | **349** (215 au paquet b10433 ; 289 → 183 à 32k en llama-bench) | **21,7** (acc. 0,35 ; 12,1 sans spéculation au paquet, +79 %) | fork strix-0007bc6, 13/09/2026 ; reasoning-budget 4096 (fork) ; spec-prefill lossy et incompatible avec le cache de prompt, perdant en agentic |
+| qwen3.8-27b-dflash-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + **draft-dflash 7** (drafter DFlash 2 z-lab, 2,0 Go ; remplace la tête MTP le 13/09/2026 : le batch de vérification 8 se découpe en 4+4 et échappe au pire cas du découpage mat-vec) | **359** (261 au paquet b10433) | **32,6** (acc. 0,595 ; 29,5 acc. 0,65 au paquet, +11 % ; 26,6 acc. 0,59 en MTP n-max 6 sur le fork, +23 %) ; **64,5** (refactor, acc. 0,67) et **35,9** (générique, acc. 0,70) en `--spec-ab` | fork strix-0007bc6, 13/09/2026 ; DFlash 2 bat la tête MTP sur les deux prompts (+12 % en refactor, +18 % en générique) et annule le retrait de décode du fork ; réglage non mesuré sur le paquet Arch ; chargement 4,4 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) | Vulkan0 (mesuré) | ngram-map-k 7 | **205** (110 au paquet b10433) | **19,9** (acc. 0,65 ; 12,3 au paquet) | fork strix-0007bc6, 13/09/2026, plus gros gain de décode du parc (+62 %) ; ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) ; reasoning-budget 6144 (fork) |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) | Vulkan0 (mesuré, ROCm0 exclu) | ngram-map-k 47 (compromis : +47 % refactor, -5 % générique) | **763** (468 au paquet b10433) | **48,7** (bench, acc. 0,27 ; 43,7 au paquet) ; 68,7 (refactor, paquet) | fork strix-0007bc6, 13/09/2026 ; ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | **599** (333 au paquet b10548) | **52,9** (bench, acc. 0,57 ; 51,9 au paquet) ; 59,8 (refactor, paquet) | fork strix-0007bc6, 13/09/2026 ; cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
@@ -346,8 +346,8 @@ Colonne « fork » : campagne `--bench` 3 passes, Vulkan0, `strix-0007bc6`, les
 | lfm2.5-2.6b | 2279 / 67,7 (b10433, 21/08) | 3048 / 70,8 (13/09) | +33,7 % | +4,6 % | bench.log du 02/09 (b10621) donnait déjà 2743 / 69,4 : l'essentiel de l'écart de prefill vient du build, pas du fork (+11 % sur cette base) |
 | qwen3.5-9b | 837 / 25,7 (b10433, 21/08) | 971 / 25,7 (13/09) | +16,0 % | 0 % | décode identique au dixième ; bench.log 02/09 (b10621) 25,59, prefill inexploitable (67, contaminé par le cache) |
 | ornith-1.5-35b-a3b | 974 / 70,7 (b10566, 28/08) | 1129 / 73,3 (13/09) | +15,9 % | +3,7 % | sans spéculation des deux côtés |
-| qwen3.8-27b (thinking) | 215 / 12,1 (b10433, 21/08) | réglage différent : draft-dflash 7, spec-test 24,5 t/s acc. 0,42 contre 12,3 sans (13/09) ; --bench à refaire | n/a | +99 % (spec-test) | seule mesure fork disponible : 759 / 12,2 le 12/09 à 23:15, mais avec `spec-prefill-p` 0,30, option retirée depuis (cache de prompt à 0 %) ; bench.log 02/09 (b10621) : 239 / 12,13 |
-| qwen3.8-27b-dflash-nothink | 261 / 29,5 / acc. 0,65 (b10433, 21/08) | 360 / 26,6 / acc. 0,59 (13/09, ancien réglage MTP n-max 6) | +37,9 % | -9,8 % en MTP, **réglage changé depuis** | le seul écart de décode négatif du parc **s'expliquait** par le découpage des mat-vec batchés du fork (colonnes 4/2/1, restreint à q8_0 et q6_K par sa PR #27 ; le UD-Q4_K_XL porte 110 tenseurs q8_0 et 56 q6_K), à son pire cas au batch de vérification 7 = n-max 6 + 1, découpé en 4+2+1. llama-bench du 13/09 (Vulkan0, `-b 8 -ub 8 -r 3`) : pp7 68,9 t/s contre 74,4 avec `GGML_VK_MMV_NO_SPLIT=1` et 74,5 au paquet b10809 (-7,4 %), pp5 54,2 contre 56,9 (-4,7 %), pp4 47,8 contre 47,7 (aucune pénalité). Le réglage du fork n'est plus celui du paquet : **ngram 47 + draft-dflash n-max 7** (drafter DFlash 2 z-lab), qui bat la tête MTP sur les deux prompts en `--spec-ab` du 13/09 (4 passes, décode médian hors 1re passe). Sur spec-refactor.txt : 64,5 t/s acc. 0,67 contre 57,6 / 0,71 en MTP n-max 4 et 53,8 / 0,67 en n-max 6 ; spec-test.txt : 35,9 / 0,70 contre 30,5 / 0,65 en MTP n-max 4 (draft-dflash seul : 47,0 / 0,96 en refactor, 37,0 / 0,77 en générique). Le batch de vérification vaut alors 8, découpé en 4+4 : le pire cas du découpage est contourné. `--bench` sur ce réglage à venir, les 26,6 t/s ci-contre valent pour l'ancien MTP |
+| qwen3.8-27b (thinking) | 215 / 12,1 (b10433, 21/08) | 349 / 21,7 / acc. 0,35 (13/09, draft-dflash 7, reasoning_effort medium) | +62,3 % | +79,3 % | réglage différent des deux côtés : le paquet tournait sans spéculation, le fork avec le drafter DFlash 2. Le comparateur du dépôt affiche « prefill 759 → 349 régression » : les 759 t/s du 12/09 à 23:15 portaient `spec-prefill-p` 0,30, option retirée depuis (cache de prompt à 0 %) ; 349 est la première mesure du réglage réellement servi, ce n'est pas une régression. Référence sans spéculation sur le paquet : bench.log 02/09 (b10621) 239 / 12,13 ; `--spec-test` du 13/09 : 24,5 t/s contre 12,3 sans |
+| qwen3.8-27b-dflash-nothink | 261 / 29,5 / acc. 0,65 (b10433, 21/08) | 359 / 32,6 / acc. 0,595 (13/09, réglage retenu : ngram 47 + draft-dflash 7) | +37,5 % | +10,5 % | le décode du fork passe au gain net avec le drafter DFlash 2. Sur l'ancien réglage MTP n-max 6, le même fork donnait 360 / 26,6 / 0,59, soit -9,8 % de décode : DFlash 2 gagne +22,6 % sur cette base. Ce seul écart de décode négatif du parc **s'expliquait** par le découpage des mat-vec batchés du fork (colonnes 4/2/1, restreint à q8_0 et q6_K par sa PR #27 ; le UD-Q4_K_XL porte 110 tenseurs q8_0 et 56 q6_K), à son pire cas au batch de vérification 7 = n-max 6 + 1, découpé en 4+2+1. llama-bench du 13/09 (Vulkan0, `-b 8 -ub 8 -r 3`) : pp7 68,9 t/s contre 74,4 avec `GGML_VK_MMV_NO_SPLIT=1` et 74,5 au paquet b10809 (-7,4 %), pp5 54,2 contre 56,9 (-4,7 %), pp4 47,8 contre 47,7 (aucune pénalité). Le réglage du fork n'est plus celui du paquet : **ngram 47 + draft-dflash n-max 7** (drafter DFlash 2 z-lab), qui bat la tête MTP sur les deux prompts en `--spec-ab` du 13/09 (4 passes, décode médian hors 1re passe). Sur spec-refactor.txt : 64,5 t/s acc. 0,67 contre 57,6 / 0,71 en MTP n-max 4 et 53,8 / 0,67 en n-max 6 ; spec-test.txt : 35,9 / 0,70 contre 30,5 / 0,65 en MTP n-max 4 (draft-dflash seul : 47,0 / 0,96 en refactor, 37,0 / 0,77 en générique). Le batch de vérification vaut alors 8, découpé en 4+4 : le pire cas du découpage est contourné, ce que le `--bench` du 13/09 confirme (32,6 t/s) |
 | qwen3.8-flash-next-mtp-nothink | 197 / 25,9 / acc. 0,75 (b10809, 05/09) | 414 / 30,9 / acc. 0,80 en n-gram seul avec `ngram-on-disk` (12/09) | +110,2 % | +19,3 % | à réglage égal (n-gram seul) ; sur spec-refactor.txt le paquet fait 54,0 en n-gram seul |
 | qwen3.8-flash-next-mtp-nothink (n-gram + draft-mtp 4) | impossible sur le paquet | 383 / 50,0 / acc. 0,87 (12/09) | +94,4 % contre le paquet en n-gram seul | +93,1 % contre le paquet en n-gram seul | le MTP n'existe pas sur le paquet (sidecar refusé) ; `--spec-tune` draft-mtp seul k2/4/6/8 = 43,0 / **50,7** / 49,5 / 32,7 ; `--spec-test` mixte 48,8 acc. 0,86 |
 | qwen3-coder-next | 468 / 43,7 (b10433, 21/08) | 763 / 48,7 / acc. 0,27 (13/09) | +63,0 % | +11,4 % | acceptance n-gram inchangée (0,29 au paquet) : le gain vient du moteur, pas de la spéculation |
@@ -360,19 +360,17 @@ d'origine, qui arrondissait un autre run du même jour : qwen3-coder-next 468 au
 lieu de 457, laguna-s-2.1 255 au lieu de 247. C'est `logs/bench.log` qui fait foi.
 
 Bilan. Le fork gagne le prefill sur tout le parc, de +16 % (qwen3.5-9b,
-ornith) à +86 % (DeepSeek V4), et gagne nettement le décode partout où la
-spéculation change de régime : DeepSeek +62 %, qwen3-coder-next +12 %, et
-Qwen3.8-Flash-Next dont le MTP n'existe tout simplement pas sur le paquet
-(50,0 t/s contre 25,9, +93 %). Ailleurs il est neutre : le décode des petits
-modèles, de gpt-oss et de Laguna bouge de moins de 5 % dans un sens ou dans
-l'autre, soit la dispersion normale des passes. Le seul écart négatif était le
-27B en `--bench` (-10 %, acceptance 0,59 contre 0,65) : ce n'était pas de la
-dispersion, mais le découpage mat-vec du fork au batch de vérification 7. Il
-passe au gain net avec le drafter DFlash 2 en n-max 7, qui bat la tête MTP de
-+12 % en refactor (64,5 contre 57,6 t/s) et de +18 % en générique (35,9 contre
-30,5) et dont le batch de vérification 8 se découpe en 4+4, hors du pire cas.
-Le fork ne perd donc nulle part, et il apporte le sidecar MTP de Flash-Next et
-les clés que le paquet ne sait pas charger.
+ornith) à +110 % (Qwen3.8-Flash-Next), sans exception. Il gagne nettement le
+décode partout où la spéculation change de régime : DeepSeek V4 +62 %,
+qwen3-coder-next +12 %, Qwen3.8-Flash-Next dont le MTP n'existe pas sur le
+paquet +93 %, qwen3.8-27b-dflash-nothink avec le drafter DFlash 2 +11 % contre
+le paquet et +23 % contre la tête MTP sur le fork, et qwen3.8-27b thinking
++79 % avec le même drafter contre un paquet sans spéculation. Ailleurs il est
+neutre, le décode des petits modèles, de gpt-oss et de Laguna bougeant de moins
+de 5 % dans un sens ou dans l'autre, soit la dispersion normale des passes :
+depuis le passage du 27B nothink au drafter DFlash 2, plus aucun écart négatif
+ne subsiste, et le fork apporte en plus le sidecar MTP de Flash-Next et les
+clés que le paquet ne sait pas charger.
 
 Trois mesures du fork n'entrent pas dans le tableau. Le draft adaptatif
 (`spec-draft-adaptive`) rend 2 % de moins que le draft fixe sur les deux 27B MTP
@@ -399,6 +397,26 @@ Les deux séries ne se comparent pas à la décimale : builds et jours différen
 et les passes MTP sont dispersées. Détail des runs dans `logs/bench.log` et
 `logs/spec-tests.log` sur bigchuck.
 
+#### Parc au 13/09/2026 : réglages et perfs sur le fork
+
+Une ligne par section servie du `models.ini`. Réglages exacts dans
+`lib/models.sh` ; toutes les mesures sont celles du fork strix-0007bc6
+(Vulkan0, `--bench` 3 passes, les 12 et 13/09/2026), la valeur du paquet Arch
+entre parenthèses. Acceptance vide = pas de spéculation.
+
+| Modèle (section) | Quant et taille | Device | Réglage spéculatif | Prefill t/s | Décode t/s | Acceptance |
+|---|---|---|---|---|---|---|
+| lfm2.5-2.6b | Q8_0, 2,7 Go | Vulkan0 | aucun, parallel 4 (KV f16) | **3048** (2279) | **70,8** (67,7) | — |
+| qwen3.5-9b | UD-Q6_K_XL, 8,2 Go | Vulkan0 | aucun, parallel 4 | **971** (837) | **25,7** (25,7) | — |
+| ornith-1.5-35b-a3b | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | **1129** (974) | **73,3** (70,7) | — |
+| qwen3.8-27b (thinking) | UD-Q4_K_XL, 17 Go | Vulkan0 | spec-type `draft-dflash`, drafter DFlash 2 z-lab Q8_0 (2,0 Go), n-max 7, reasoning-budget 4096 (soft 0,7, grâce 128), parallel 1 | **349** (215) | **21,7** (12,1) | 0,35 |
+| qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | **359** (261) | **32,6** (29,5 en MTP n-max 6) | 0,595 (0,65 en MTP) |
+| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | **383** (197 en n-gram seul) | **50,0** (25,9 en n-gram seul) | 0,87 (0,75) |
+| qwen3-coder-next | UD-Q4_K_XL, 47 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 47, min-hits 2, parallel 1 | **763** (468) | **48,7** (43,7) | 0,27 |
+| gpt-oss | UD-Q4_K_XL, 59 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 | **599** (333) | **52,9** (51,9) | 0,57 |
+| laguna-s-2.1 | UD-Q4_K_XL, 73 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 (DFlash refusé par le fork) | **346** (255) | **29,6** (30,3) | 0,80 |
+| deepseek-v4-flash | UD-IQ3_XXS, 104 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 | **205** (110) | **19,9** (12,3) | 0,65 |
+
 ### Spéculation
 
 | Modèle | GGUF | Device | Configuration | Gen t/s | Acceptance | Prompt |
@@ -418,6 +436,8 @@ et les passes MTP sont dispersées. Détail des runs dans `logs/bench.log` et
 | | | | ngram-map-k 47 + mtp 4 / draft-mtp seul | 30,5 / 29,7 | 0,65 / 0,74 | spec-test : référence MTP en générique |
 | | | | **ngram-map-k 47 + draft-dflash 7** (retenu) | **35,9** | 0,70 | spec-test : +18 % contre le MTP |
 | | | | draft-dflash 7 seul | 37,0 | 0,77 | spec-test : 3 % devant la liste en générique pur (peu de hits n-gram), la liste est gardée pour le régime agentic |
+| | | | **ngram-map-k 47 + draft-dflash 7** (retenu) | **32,6** | 0,595 | `--bench` du 13/09/2026 (bench-task, 3 passes, prefill 359 t/s) : réglage servi, +11 % contre le paquet (29,5 / 0,65) et +23 % contre le MTP n-max 6 du fork (26,6 / 0,59) |
+| qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0, fork (13/09) | **draft-dflash 7** (retenu, reasoning_effort medium) | **21,7** | 0,35 | `--bench` du 13/09/2026 (bench-task, 3 passes, prefill 349 t/s) : +79 % contre le paquet sans spéculation (12,1) ; `--spec-test` 24,5 contre 12,3 sans |
 | qwen3.6-35b-a3b-mtp-nothink (retiré le 28/08/2026) | UD-Q4_K_XL (MoE) | Vulkan0 | ngram-map-k 7 + mtp 4 | 110,3 | 0,93 | spec-refactor |
 | | | | ngram-map-k 47 + mtp 4 | 105,3 | 0,71 | spec-refactor |
 | qwen3-coder-next | UD-Q4_K_XL (MoE, GDN) | Vulkan0 | sans spéculation | 46,8 | | spec-refactor |

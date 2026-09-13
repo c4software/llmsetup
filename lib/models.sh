@@ -487,7 +487,14 @@ download_hf qwen3.5-2b "unsloth/Qwen3.5-2B-GGUF" \
 #   draft-dflash seul n-max 7 = 24,5 t/s (+99 %, acceptance 0,42) ;
 #   ngram-map-k 47 + draft-dflash = 24,3 (le n-gram n'apporte rien sur du
 #   raisonnement, il est laissé de côté ici). Distribution cible préservée
-#   par DFlash. Non mesuré sur le paquet Arch. --bench à refaire.
+#   par DFlash. Non mesuré sur le paquet Arch.
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+#   349 t/s, décode 21,7 t/s, acceptance 0,35, contre 215 / 12,1 sans
+#   spéculation au paquet b10433, soit +62 % de prefill et +79 % de décode.
+#   Le comparateur du dépôt affiche « prefill 759 -> 349 régression » : les
+#   759 t/s du 12/09 étaient mesurés avec spec-prefill-p 0,30, option retirée
+#   depuis (cache de prompt à 0 %) ; 349 est la première mesure du réglage
+#   réellement servi, ce n'est pas une régression.
 llama_model qwen3.8-27b "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
@@ -630,8 +637,11 @@ ctx-checkpoints      = 128"
 #   ⚠ Non mesuré sur le paquet Arch : b10809 expose bien draft-dflash (la
 #   carte du modèle renvoie à la PR mainline #27342), mais ce réglage n'y a
 #   jamais tourné, les chiffres ci-dessus sont ceux du fork seulement.
-#   --bench (bench-task) à refaire sur ce réglage : les 26,6 t/s du 13/09
-#   valent pour l'ancien MTP n-max 6.
+#   Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) :
+#   prefill 359 t/s, décode 32,6 t/s, acceptance 0,595, contre 261 / 29,5 /
+#   0,65 au paquet b10433 (+11 % de décode) et 360 / 26,6 / 0,59 en MTP
+#   n-max 6 sur le même fork (+23 %). Le retrait de décode du fork est annulé,
+#   le réglage passe au gain net des deux côtés.
 # swa-full : inopérant sur cette architecture (le journal du serveur dit
 #   « swa_full is not supported by this model »). La clé est gardée telle
 #   quelle : elle ne coûte rien et redeviendra utile si l'arch est supportée.
