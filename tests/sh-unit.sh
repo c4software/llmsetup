@@ -267,6 +267,66 @@ else
   echo "[FAIL] update-fork : clone à jour, code $grc, sortie : $out"; rc=1
 fi
 
+# 4sexies. Épinglage du moteur (--setup-fork <commit>, fork.conf). Un sync
+# d'amont peut faire régresser un modèle (13/09/2026 : 6548035 / b10917 fait
+# tomber pp7 de 69 à 58 t/s sur Qwen3.8-27B) : il faut revenir à un commit connu
+# et Y RESTER, sans que --update-fork le fasse avancer au prochain passage.
+# Même dépôt jetable que 4quater, toujours FORK_SKIP_BUILD=1 (ni cmake ni liens).
+_run_fork_cmd() {  # $1 = appel bash ; stdin fermé = entrée non interactive
+  env -i HOME="$FH" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
+      FORK_SKIP_BUILD=1 \
+    bash -c "set -euo pipefail
+      source '$REPO_DIR/lib/common.sh'
+      source '$REPO_DIR/lib/fork.sh'
+      $1" </dev/null 2>&1
+}
+
+FORK_CONF_TEST="$TMP/repo/fork.conf"
+premier="$(git -C "$FCLONE" rev-parse --short "$(git -C "$FCLONE" rev-list --max-parents=0 HEAD)")"
+sommet="$(_head_clone)"
+
+# (a) épinglage : HEAD détaché sur le commit demandé, fork.conf écrit avec la
+#     raison. C'est le geste de secours, il doit marcher en une commande.
+out="$(_run_fork_cmd "cmd_setup_fork '$premier' 'regression pp7 sur 27B'")"; grc=$?
+if [[ "$grc" -eq 0 && "$(_head_clone)" == "$premier" ]] \
+   && ! git -C "$FCLONE" symbolic-ref -q HEAD >/dev/null \
+   && grep -q "^pin = $premier$" "$FORK_CONF_TEST" 2>/dev/null \
+   && grep -q "^raison = regression pp7 sur 27B$" "$FORK_CONF_TEST"; then
+  echo "[OK]   setup-fork <commit> : HEAD détaché sur $premier, fork.conf écrit"
+else
+  echo "[FAIL] setup-fork <commit> : code $grc, HEAD $(_head_clone) (attendu $premier)"
+  echo "$out" | sed 's/^/       /'
+  [[ -f "$FORK_CONF_TEST" ]] && sed 's/^/       conf: /' "$FORK_CONF_TEST"; rc=1
+fi
+
+# (b) --update-fork sur un moteur épinglé : il dit l'épinglage, montre quand
+#     même ce qui attend en amont (c'est ainsi qu'on verra passer le correctif),
+#     ne demande RIEN et ne bouge pas d'un commit.
+out="$(_run_fork_cmd "cmd_update_fork")"; grc=$?
+if [[ "$grc" -eq 0 && "$out" == *"épinglé sur $premier"* \
+      && "$out" == *"regression pp7 sur 27B"* \
+      && "$out" == *"Merge pull request #47"* \
+      && "$out" == *"--setup-fork"* \
+      && "$out" != *"FORK_UPDATE_YES"* \
+      && "$(_head_clone)" == "$premier" ]]; then
+  echo "[OK]   update-fork : épinglé ⇒ changelog affiché, aucune question, HEAD figé"
+else
+  echo "[FAIL] update-fork épinglé : code $grc, HEAD $(_head_clone) (attendu $premier)"
+  echo "$out" | sed 's/^/       /'; rc=1
+fi
+
+# (c) --setup-fork sans argument : dépingle et revient au sommet de la branche.
+out="$(_run_fork_cmd "cmd_setup_fork")"; grc=$?
+if [[ "$grc" -eq 0 && "$(_head_clone)" == "$sommet" \
+      && "$(git -C "$FCLONE" rev-parse --abbrev-ref HEAD)" == "master" ]] \
+   && ! grep -q "^pin = " "$FORK_CONF_TEST"; then
+  echo "[OK]   setup-fork sans argument : épinglage retiré, retour au sommet de master"
+else
+  echo "[FAIL] setup-fork sans argument : code $grc, HEAD $(_head_clone) (attendu $sommet)"
+  echo "$out" | sed 's/^/       /'
+  [[ -f "$FORK_CONF_TEST" ]] && sed 's/^/       conf: /' "$FORK_CONF_TEST"; rc=1
+fi
+
 # 4quinquies. Proposition du fork en fin de --setup (_setup_propose_fork,
 # lib/setup.sh). Isolée de cmd_setup exprès : celui-ci fait paru, hf et réseau,
 # la proposition ne lit que l'état du disque. Deux cas contractuels — le fork
@@ -398,5 +458,5 @@ else
   echo "[FAIL] étiquette impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire, --update-fork (refus, changelog, confirmation) et proposition du fork en fin de --setup conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire, --update-fork (refus, changelog, confirmation), épinglage du moteur (fork.conf) et proposition du fork en fin de --setup conformes. ──"
 exit "$rc"

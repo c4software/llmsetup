@@ -62,7 +62,7 @@ case "${1:-}" in
   --bench-sanity)      cmd_bench_sanity "${2:-}" ;;
   --bench-load)        cmd_bench_load "${2:-}" ;;
   --preload)           cmd_preload ;;
-  --setup-fork)        cmd_setup_fork ;;
+  --setup-fork)        cmd_setup_fork "${2:-}" "${3:-}" ;;
   --update-fork)       cmd_update_fork ;;
   --unset-fork)        cmd_unset_fork ;;
   --list-devices)      cmd_list_devices ;;

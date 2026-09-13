@@ -62,6 +62,26 @@ systemctl --user restart llama-server
 ./setup-llm.sh --unset-fork   # retire les liens : retour au paquet Arch
 ```
 
+**Épingler un commit.** Une resynchronisation d'amont peut faire régresser un
+modèle sans rien casser ailleurs (13/09/2026 : le passage à `6548035`, sync
+b10917, fait tomber le prefill batché de Qwen3.8-27B de 69 à 58 t/s en pp7 et
+de 79 à 52 en pp8, alors que `0007bc6` était bon). On revient alors à un commit
+connu et on y reste tant que l'amont n'est pas corrigé :
+
+```bash
+./setup-llm.sh --setup-fork 0007bc6 "sync b10917 : régression pp7/pp8 sur Qwen3.8-27B"
+./setup-llm.sh --setup-fork   # sans argument : dépingle et reprend la branche
+```
+
+L'argument est un commit, un tag ou une branche : `git fetch`, puis `checkout`
+détaché (commit, tag) ou suivi de branche (`checkout` + `pull --ff-only`),
+rebuild et liens comme d'habitude. L'épinglage est écrit dans `fork.conf`
+(local, non versionné, `pin = <commit>` et `raison = <texte>` facultative, aussi
+prise dans `$FORK_PIN_REASON`). Tant qu'il tient, `--update-fork` ne tire plus
+rien : il annonce le commit épinglé et sa raison, montre quand même le changelog
+en attente en amont (pour voir passer le correctif) et rappelle la commande de
+reprise. `--list-devices` et la fin de `--setup` affichent l'épinglage.
+
 `--update-fork` est la commande de suivi au quotidien, à lancer juste après un
 `--update` : elle refuse d'agir si le fork n'est pas cloné ou si les liens ne
 viennent pas de lui, refuse un arbre sale, `git fetch` seulement, affiche le
@@ -101,8 +121,8 @@ pour un build upstream). Les deux séries ne se comparent pas
 | `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : un device qui répond faux est exclu de `--bench-devices`, en plus du garde-fou anti-charabia |
 | `--bench-agentic [modèle] [passes]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels) |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
-| `--setup-fork` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin` (voir « Moteur ») |
-| `--update-fork` | Suivi d'amont du moteur, juste après un `--update` : `git fetch`, changelog des commits reçus et confirmation, puis mise à jour du fork **déjà installé** (`git pull --ff-only`, rebuild et liens), s'arrête si rien n'a bougé, ne redémarre rien et ne mesure rien (voir « Moteur ») |
+| `--setup-fork [commit] [raison]` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin`. Avec un commit (ou tag, ou branche) : épingle le moteur dessus et l'écrit dans `fork.conf` ; sans argument, dépingle et reprend la branche (voir « Moteur ») |
+| `--update-fork` | Suivi d'amont du moteur, juste après un `--update` : `git fetch`, changelog des commits reçus et confirmation, puis mise à jour du fork **déjà installé** (`git pull --ff-only`, rebuild et liens), s'arrête si rien n'a bougé, ne redémarre rien et ne mesure rien. Si le moteur est épinglé (`fork.conf`), ne tire rien et se contente du changelog en attente (voir « Moteur ») |
 | `--unset-fork` | Retire les liens du fork : retour au paquet Arch au prochain restart |
 | `--list-devices` | Moteur résolu (paquet Arch ou fork) avec sa version, backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
@@ -242,6 +262,7 @@ batch de 7), contournée par modèle et signalée en amont :
 |---|---|
 | `bench-devices.conf` | clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par `--bench-devices`, édition manuelle OK |
 | `preload.conf` | modèles préchargés, un par ligne |
+| `fork.conf` | épinglage du moteur : `pin = <commit>` et `raison = <texte>`, écrit par `--setup-fork <commit>`, retiré par `--setup-fork` sans argument |
 | `spec-nmax.conf` | modèle = spec-draft-n-max retenu par les mesures |
 | `spec-ngram.conf` | modèle = spec-ngram-map-k-size-m retenu par les mesures |
 | `logs/spec-tests.log` | journal TSV des runs `--spec-test` |

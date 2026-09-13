@@ -132,7 +132,11 @@ _setup_propose_fork() {
   # fork installé.
   if [[ ! "$etiquette" =~ ^b[0-9]+(-[0-9]+)?$ && "$etiquette" != "?" ]] \
      && _fork_links_ok; then
-    info "Moteur : fork strix-llama.cpp $etiquette ; suivi d'amont par ./setup-llm.sh --update-fork"
+    if _fork_pin_read; then
+      info "Moteur : fork strix-llama.cpp $etiquette, épinglé sur $FORK_PIN${FORK_PIN_RAISON:+ ($FORK_PIN_RAISON)} ; --update-fork ne tire rien tant que l'épinglage tient"
+    else
+      info "Moteur : fork strix-llama.cpp $etiquette ; suivi d'amont par ./setup-llm.sh --update-fork"
+    fi
     return 0
   fi
 

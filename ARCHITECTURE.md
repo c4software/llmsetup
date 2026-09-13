@@ -15,6 +15,10 @@ generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
                           ⚠ lu AU DÉMARRAGE SEULEMENT → restart requis
 ```
 
+À part, hors de ce flux : `fork.conf` (épinglage du moteur — `pin = <commit>`,
+`raison = <texte>`), lu par `lib/fork.sh` seul. Il ne touche pas au ini, il
+décide quel commit du fork est construit et bloque le suivi d'amont.
+
 Le script ne parle jamais directement aux GGUF pour mesurer : `--bench` et
 `--spec-test` passent par l'API du serveur **tel qu'il tourne**
 (`/v1/chat/completions`, `/v1/models`). Toute mesure dépendant d'un paramètre
@@ -73,12 +77,22 @@ common → models → ini → preload → setup → fork → bench → bench-dev
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
 - `fork.sh` : moteur. Briques communes `_fork_pull` (refus sur arbre sale,
   `git pull --ff-only`), `_fork_build` (cmake Vulkan, quatre cibles),
-  `_fork_links` (liens dans `~/.local/bin`). `cmd_setup_fork` (clone ou pull de
-  `halo-box/strix-llama.cpp` dans `~/llm/strix-llama.cpp`, build, liens : la
-  même commande installe et remet à niveau), `cmd_update_fork` (suivi d'amont
+  `_fork_links` (liens dans `~/.local/bin`), `_fork_arbre_propre` (refus commun
+  au pull et au checkout d'épinglage). `cmd_setup_fork [commit] [raison]` (clone
+  ou pull de `halo-box/strix-llama.cpp` dans `~/llm/strix-llama.cpp`, build,
+  liens : la même commande installe et remet à niveau ; avec une référence, elle
+  ÉPINGLE le moteur dessus — `_fork_fetch_ref` puis `_fork_checkout`, détaché
+  sur un commit ou un tag, suivi de branche sur une branche — et l'écrit dans
+  `fork.conf` ; sans argument, elle retire l'épinglage et revient sur la
+  branche), `cmd_update_fork` (suivi d'amont
   seul : refuse sans clone ou sans liens, pull, rebuild seulement s'il y a du
   nouveau, rappelle le restart ; ne lance jamais de bench, `--update` renvoie
-  vers elle en fin de run), `cmd_unset_fork` (retrait des liens, retour au paquet Arch), `_fork_status`
+  vers elle en fin de run ; sur un moteur épinglé, ne tire ni ne demande rien,
+  affiche le commit épinglé, sa raison et le changelog en attente),
+  `FORK_CONF` + `_fork_pin_read` / `_fork_pin_write` / `_fork_pin_clear`
+  (épinglage : `pin = <commit>`, `raison = <texte>` facultative, aussi prise
+  dans `$FORK_PIN_REASON` ; relu par `_fork_status` et `_setup_propose_fork`),
+  `cmd_unset_fork` (retrait des liens, retour au paquet Arch), `_fork_status`
   (binaire résolu + version, affiché aussi par `--list-devices`), `FORK_ONLY_KEYS`
   + `_fork_keys_guard` (clés ini que seul le fork comprend ; appelé par
   `cmd_start` : un moteur upstream sur un ini qui en porte une ne démarre pas

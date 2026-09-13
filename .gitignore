@@ -2,6 +2,7 @@
 plans/
 /bench-devices.conf
 /preload.conf
+/fork.conf
 /spec-nmax.conf
 /spec-ngram.conf
 /logs/

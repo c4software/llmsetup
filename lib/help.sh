@@ -63,7 +63,8 @@ Commandes :
                            Temps de chargement + 1er token après restart, puis TTFT
                            à chaud — ce que coûte un modèle à la demande (preload,
                            bascule LRU). Journal logs/bench-load.log
-  --setup-fork             Moteur : installe OU met à jour le fork
+  --setup-fork [commit] [raison]
+                           Moteur : installe OU met à jour le fork
                            https://github.com/halo-box/strix-llama.cpp dans
                            ~/llm/strix-llama.cpp (clone, sinon git pull --ff-only),
                            construit (cmake Vulkan/Release/CURL : llama-server,
@@ -73,7 +74,14 @@ Commandes :
                            résolue ; ne redémarre pas le service. ⚠ Les mesures
                            faites sous le fork forment une série à part
                            (étiquette strix-<commit>), non comparable aux campagnes
-                           du paquet Arch
+                           du paquet Arch.
+                           Avec un argument (commit, tag ou branche) : ÉPINGLE le
+                           moteur dessus (fetch, checkout détaché sur un commit ou
+                           un tag, suivi de branche sur une branche) et l'écrit
+                           dans fork.conf, avec une raison facultative en 2e
+                           argument (ou \$FORK_PIN_REASON). Tant que l'épinglage
+                           tient, --update-fork ne tire plus rien. Sans argument :
+                           l'épinglage est retiré et la branche reprise
   --update-fork            Moteur : suivi d'amont du fork, à lancer juste après
                            un --update. Ne fait QUE la mise à jour du fork déjà
                            installé : git fetch, changelog des commits reçus
@@ -90,7 +98,11 @@ Commandes :
                            --update → --update-fork → systemctl --user restart
                            $SERVICE_NAME → --bench à la main. ⚠ Chaque bump du
                            fork ouvre une nouvelle série de mesures, étiquetée au
-                           commit (strix-<commit>)
+                           commit (strix-<commit>). Si fork.conf porte un
+                           épinglage : rien n'est tiré ni demandé, la commande
+                           annonce le commit épinglé et sa raison, montre quand
+                           même le changelog en attente et rappelle --setup-fork
+                           sans argument pour reprendre le suivi
   --unset-fork             Retire les quatre liens : retour au paquet Arch au
                            prochain restart. ⚠ Retirer d'abord de lib/models.sh
                            les clés ini propres au fork (ngram-on-disk,
@@ -145,6 +157,8 @@ Fichiers (à côté du script, locaux, non versionnés) :
   bench-devices.conf       clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par
                            --bench-devices, édition manuelle OK
   preload.conf             modèles préchargés, un par ligne
+  fork.conf                épinglage du moteur (pin = commit, raison = texte),
+                           écrit par --setup-fork <commit>
   logs/spec-tests.log      journal des --spec-test (TSV), base de l'analyse n-max
   logs/bench.log           journal des --bench (TSV, avec le build llama.cpp),
                            comparé automatiquement au run précédent

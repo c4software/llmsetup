@@ -31,6 +31,17 @@ FORK_BIN_DIR="$HOME/.local/bin"
 # (courbes de batch, --list-devices), llama-cli et llama-quantize.
 FORK_BINS=(llama-server llama-bench llama-cli llama-quantize)
 
+# Épinglage du moteur : fichier local à côté du script (même statut que
+# spec-nmax.conf — choix utilisateur, non versionné, édition manuelle OK).
+# Format : "pin = <commit|tag|branche>" et, facultatif, "raison = <texte>".
+# Pourquoi : un sync d'amont peut faire régresser un modèle sans rien casser
+# ailleurs (13/09/2026 : le passage à 6548035, sync b10917, fait tomber le
+# prefill batché de Qwen3.8-27B de 69 à 58 t/s en pp7 et de 79 à 52 en pp8,
+# alors que 0007bc6 était bon). Il faut alors pouvoir revenir à un commit connu
+# et Y RESTER tant que l'amont n'est pas corrigé : tant que le pin est là,
+# --update-fork ne tire plus rien, il se contente de montrer ce qui attend.
+FORK_CONF="$SCRIPT_DIR/fork.conf"
+
 # Clés de models.ini que SEUL le fork comprend. llama-server refuse toute clé
 # inconnue et l'échec n'est pas local au modèle fautif : c'est le ROUTEUR
 # ENTIER qui ne démarre pas (« failed to initialize router models: option
@@ -104,6 +115,54 @@ _fork_keys_guard() {
   error "Démarrage refusé : moteur upstream et clés de fork dans le ini."
 }
 
+# _fork_pin_read — remplit FORK_PIN et FORK_PIN_RAISON depuis $FORK_CONF, et
+# renvoie 0 seulement si un pin est présent. Une ligne "pin =" vide, un fichier
+# absent ou une valeur qui n'a pas la forme d'une référence git valent
+# « pas d'épinglage » : la conf est éditable à la main, elle ne doit jamais
+# faire échouer une commande.
+_fork_pin_read() {
+  FORK_PIN=""; FORK_PIN_RAISON=""
+  [[ -f "$FORK_CONF" ]] || return 1
+  local ligne cle val
+  while IFS= read -r ligne; do
+    [[ "$ligne" =~ ^[[:space:]]*($|\;|\#) ]] && continue
+    [[ "$ligne" == *=* ]] || continue
+    cle="${ligne%%=*}"; cle="${cle// /}"
+    val="${ligne#*=}"; val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
+    case "$cle" in
+      pin)    FORK_PIN="$val" ;;
+      raison) FORK_PIN_RAISON="$val" ;;
+    esac
+  done < "$FORK_CONF"
+  [[ "$FORK_PIN" =~ ^[A-Za-z0-9._/-]+$ ]] || FORK_PIN=""
+  [[ -n "$FORK_PIN" ]]
+}
+
+# _fork_pin_write <ref> [raison] — pose l'épinglage. Le fichier est réécrit en
+# entier (deux clés seulement) : pas de fusion avec l'existant à faire.
+_fork_pin_write() {
+  local ref="$1" raison="${2:-}"
+  {
+    _fork_conf_entete
+    echo "pin = $ref"
+    [[ -n "$raison" ]] && echo "raison = $raison"
+  } > "$FORK_CONF"
+  return 0
+}
+
+# Retire l'épinglage sans supprimer le fichier : l'en-tête reste, il documente
+# la commande à lancer pour épingler de nouveau.
+_fork_pin_clear() {
+  _fork_conf_entete > "$FORK_CONF"
+}
+
+_fork_conf_entete() {
+  echo "; fork.conf — épinglage du moteur strix-llama.cpp (local, non versionné)"
+  echo "; écrit par ./setup-llm.sh --setup-fork <commit> [raison] ; édition manuelle OK"
+  echo "; tant qu'une ligne pin est présente, --update-fork ne tire plus rien."
+  echo "; reprendre le suivi de la branche : ./setup-llm.sh --setup-fork (sans argument)"
+}
+
 # Version résolue du moteur, telle que la voient le service et les mesures.
 # Affichée par --setup-fork, --unset-fork et --list-devices.
 _fork_status() {
@@ -118,6 +177,10 @@ _fork_status() {
   [[ -L "$bin" ]] && info "  → $(realpath "$bin" 2>/dev/null)"
   info "  $ver"
   info "  Étiquette des journaux : $(_llama_build)"
+  if _fork_pin_read; then
+    info "  Épinglé sur $FORK_PIN${FORK_PIN_RAISON:+ ($FORK_PIN_RAISON)} — $FORK_CONF"
+    info "  Reprendre le suivi de la branche : ./setup-llm.sh --setup-fork (sans argument)"
+  fi
   return 0
 }
 
@@ -167,15 +230,46 @@ _fork_links_ok() {
 # Arbre sale : `git pull` échouerait de toute façon (ou pire, réussirait en
 # gardant des modifications locales dans le build), et le message de git est
 # obscur. On le dit ici, on ne nettoie jamais à la place de l'humain.
+# Refus commun à _fork_pull et au checkout d'un épinglage : un `git checkout`
+# sur arbre sale emporte les modifications locales dans le nouvel état sans le
+# dire, exactement le genre de silence qu'on ne veut pas sur le moteur.
+_fork_arbre_propre() {
+  local appelant="${1:---setup-fork}"
+  [[ -n "$(git -C "$FORK_DIR" status --porcelain 2>/dev/null)" ]] || return 0
+  warn "Modifications locales dans $FORK_DIR :"
+  git -C "$FORK_DIR" status --short | sed 's/^/  /'
+  error "Arbre sale — committer, remiser ou annuler à la main avant $appelant."
+}
+
 _fork_pull() {
   local appelant="${1:---setup-fork}"
-  if [[ -n "$(git -C "$FORK_DIR" status --porcelain 2>/dev/null)" ]]; then
-    warn "Modifications locales dans $FORK_DIR :"
-    git -C "$FORK_DIR" status --short | sed 's/^/  /'
-    error "Arbre sale — committer, remiser ou annuler à la main avant $appelant."
-  fi
+  _fork_arbre_propre "$appelant"
   git -C "$FORK_DIR" pull --ff-only \
     || error "git pull --ff-only en échec — dépôt divergent ? Régler à la main dans $FORK_DIR"
+}
+
+# _fork_checkout <ref> — pose l'arbre sur la référence demandée par
+# --setup-fork. Deux cas, volontairement distincts :
+#   - une BRANCHE (origin/<ref> existe) : checkout de la branche puis pull
+#     ff-only, donc le suivi normal, simplement sur une autre branche ;
+#   - tout le reste (commit, tag) : checkout détaché, et c'est bien le but —
+#     l'arbre ne doit plus avancer tout seul.
+# Une référence introuvable est une erreur franche : mieux vaut refuser que
+# reconstruire silencieusement le commit déjà en place.
+_fork_checkout() {
+  local ref="$1"
+  if git -C "$FORK_DIR" rev-parse --verify -q "refs/remotes/origin/$ref" >/dev/null 2>&1; then
+    info "$ref est une branche du fork — suivi de branche (checkout + pull ff-only)."
+    git -C "$FORK_DIR" checkout "$ref" \
+      || error "git checkout $ref en échec — régler à la main dans $FORK_DIR"
+    _fork_pull --setup-fork
+    return 0
+  fi
+  git -C "$FORK_DIR" rev-parse --verify -q "${ref}^{commit}" >/dev/null 2>&1 \
+    || error "Référence introuvable dans $FORK_DIR : $ref (commit, tag ou branche du fork attendu)"
+  info "$ref n'est pas une branche — checkout détaché (l'arbre n'avancera plus seul)."
+  git -C "$FORK_DIR" checkout --detach "$ref" \
+    || error "git checkout --detach $ref en échec — régler à la main dans $FORK_DIR"
 }
 
 # Branche suivie du clone. Un clone en état détaché (git checkout <commit>)
@@ -211,6 +305,22 @@ _fork_fetch() {
     git -C "$FORK_DIR" fetch origin "$branche" \
       || error "git fetch en échec — réseau, ou dépôt à régler à la main dans $FORK_DIR"
   fi
+}
+
+# _fork_fetch_ref <ref> — rapatrie de quoi résoudre une référence QUELCONQUE
+# (commit, tag ou branche) donnée à --setup-fork, sans toucher l'arbre.
+# Différence avec _fork_fetch : la cible d'un épinglage est le plus souvent un
+# commit ANCIEN, donc en arrière de HEAD ; un clone superficiel ne le contient
+# pas et aucun --deepen borné ne garantit de l'atteindre, d'où --unshallow.
+_fork_fetch_ref() {
+  local ref="$1"
+  if [[ "$(git -C "$FORK_DIR" rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+    info "Clone superficiel — dépliage complet pour atteindre $ref..."
+    git -C "$FORK_DIR" fetch --unshallow --tags origin 2>/dev/null || true
+  fi
+  git -C "$FORK_DIR" fetch --tags origin 2>/dev/null \
+    || git -C "$FORK_DIR" fetch origin \
+    || error "git fetch en échec — réseau, ou dépôt à régler à la main dans $FORK_DIR"
 }
 
 # Prépare le remote `upstream` (llama.cpp officiel) et le rapatrie, pour
@@ -379,28 +489,62 @@ _fork_links() {
 }
 
 # =============================================================================
-# --setup-fork : installe OU met à jour. Clone si absent, sinon git pull
-# --ff-only (une divergence locale doit se voir, pas se faire écraser), puis
-# rebuild et liens. Ne redémarre pas le service : le rappel suffit, un restart
-# recharge tous les modèles préchargés.
+# --setup-fork [commit] [raison] : installe OU met à jour. Clone si absent,
+# sinon git pull --ff-only (une divergence locale doit se voir, pas se faire
+# écraser), puis rebuild et liens. Ne redémarre pas le service : le rappel
+# suffit, un restart recharge tous les modèles préchargés.
+#
+# Avec un argument (commit, tag ou branche), la commande ÉPINGLE le moteur sur
+# cette référence : fetch, checkout (détaché sur un commit ou un tag, suivi de
+# branche sur une branche), puis fork.conf écrit. Sans argument, elle retire un
+# épinglage éventuel et revient sur la branche. La raison, facultative, se
+# donne en deuxième argument ou par $FORK_PIN_REASON ; elle n'est là que pour
+# être relue des mois plus tard (« pourquoi sommes-nous bloqués ici ? »).
 #
 # Le suivi d'amont au quotidien passe par --update-fork, qui exige un fork déjà
-# en place et s'arrête si rien n'a bougé.
+# en place, s'arrête si rien n'a bougé, et ne tire plus rien tant qu'un
+# épinglage est posé.
 # =============================================================================
 
 cmd_setup_fork() {
+  local ref="${1:-}" raison="${2:-${FORK_PIN_REASON:-}}"
   _fork_tools
 
-  local avant="" apres=""
+  local avant="" apres="" branche=""
   if [[ -d "$FORK_DIR/.git" ]]; then
     avant="$(_fork_head)"
-    info "Mise à jour de $FORK_DIR (commit actuel $avant)..."
-    _fork_pull --setup-fork
+    if [[ -n "$ref" ]]; then
+      info "Épinglage de $FORK_DIR sur $ref (commit actuel $avant)..."
+      _fork_arbre_propre --setup-fork
+      _fork_fetch_ref "$ref"
+      _fork_checkout "$ref"
+      _fork_pin_write "$ref" "$raison"
+      info "Épinglage écrit dans $FORK_CONF : pin = $ref${raison:+ (raison : $raison)}"
+      info "  --update-fork ne tirera plus rien tant que cette ligne est là."
+    else
+      if _fork_pin_read; then
+        branche="$(_fork_branche)"
+        info "Épinglage en place (pin = $FORK_PIN${FORK_PIN_RAISON:+, $FORK_PIN_RAISON}) — retrait et retour sur $branche."
+        _fork_arbre_propre --setup-fork
+        git -C "$FORK_DIR" checkout "$branche" \
+          || error "git checkout $branche en échec — régler à la main dans $FORK_DIR"
+        _fork_pin_clear
+        info "Épinglage retiré de $FORK_CONF : le suivi d'amont reprend (--update-fork)."
+      fi
+      info "Mise à jour de $FORK_DIR (commit actuel $avant)..."
+      _fork_pull --setup-fork
+    fi
   else
     [[ -e "$FORK_DIR" ]] && error "$FORK_DIR existe mais n'est pas un dépôt git"
     info "Clone de $FORK_REPO dans $FORK_DIR..."
     mkdir -p "$(dirname "$FORK_DIR")"
     git clone "$FORK_REPO" "$FORK_DIR" || error "Clone en échec"
+    if [[ -n "$ref" ]]; then
+      _fork_fetch_ref "$ref"
+      _fork_checkout "$ref"
+      _fork_pin_write "$ref" "$raison"
+      info "Épinglage écrit dans $FORK_CONF : pin = $ref${raison:+ (raison : $raison)}"
+    fi
   fi
   apres="$(_fork_head)"
   if [[ -n "$avant" && "$avant" == "$apres" ]]; then
@@ -409,8 +553,10 @@ cmd_setup_fork() {
     info "Commit : ${avant:-néant} → $apres"
     # Même affichage que --update-fork, mais APRÈS coup : --setup-fork installe
     # ou remet à niveau sans rien demander, le changelog n'est ici qu'un compte
-    # rendu de ce qui vient d'être tiré (rien à afficher sur un premier clone).
-    [[ -n "$avant" ]] && _fork_changelog "$avant" "$apres"
+    # rendu de ce qui vient d'être tiré (rien à afficher sur un premier clone,
+    # ni sur un épinglage qui RECULE — avant..apres est alors vide).
+    [[ -n "$avant" ]] && git -C "$FORK_DIR" merge-base --is-ancestor "$avant" "$apres" 2>/dev/null \
+      && _fork_changelog "$avant" "$apres"
   fi
 
   _fork_build
@@ -461,6 +607,31 @@ cmd_update_fork() {
   local avant apres branche n
   avant="$(_fork_head)"
   branche="$(_fork_branche)"
+
+  # Épinglage : le moteur est volontairement bloqué sur un commit connu (cf.
+  # FORK_CONF). On ne tire rien, on ne demande rien — mais on montre quand même
+  # ce qui attend en amont, seul moyen de voir passer le correctif qui
+  # permettra de dépingler.
+  if _fork_pin_read; then
+    info "Fork épinglé sur $FORK_PIN${FORK_PIN_RAISON:+ ($FORK_PIN_RAISON)} — commit en place $avant."
+    _fork_fetch "$branche"
+    apres="$(git -C "$FORK_DIR" rev-parse --short "origin/$branche" 2>/dev/null || echo '?')"
+    if [[ "$apres" == '?' ]]; then
+      warn "origin/$branche introuvable après fetch — changelog non affichable."
+    elif [[ "$avant" == "$apres" ]]; then
+      info "Rien de nouveau en amont : l'épinglage ne retient rien pour l'instant."
+    else
+      n="$(git -C "$FORK_DIR" rev-list --count "$avant..$apres" 2>/dev/null || echo '?')"
+      echo ""
+      info "En attente derrière l'épinglage : $avant → $apres, $n commits"
+      _fork_changelog "$avant" "$apres"
+    fi
+    echo ""
+    info "Rien n'a été tiré, rien n'a été reconstruit (épinglage actif, $FORK_CONF)."
+    info "Pour reprendre le suivi : ./setup-llm.sh --setup-fork (sans argument)"
+    return 0
+  fi
+
   info "Suivi d'amont sur $FORK_DIR (commit actuel $avant, branche $branche)..."
 
   # Fetch seul : l'arbre de travail n'est pas touché tant que rien n'est
