@@ -423,7 +423,9 @@ optimizations for qwen » (#28457) et « vulkan: tune mat-vec rows for batched
 inference on Strix Halo » (#27909). Retour à 0007bc6 le jour même (pp7 68,5,
 pp8 77,9 retrouvés), fork épinglé par `fork.conf` tant que l'amont n'est pas
 corrigé ; à re-tester à chaque `--update-fork` (le changelog s'affiche sans
-rien faire tant que l'épinglage est en place).
+rien faire tant que l'épinglage est en place). Signalé en amont le 13/09/2026 :
+[issue #51](https://github.com/halo-box/strix-llama.cpp/issues/51) (table des
+quatre bras, commits candidats, bisect proposé).
 
 ## Choix du device (--bench-devices) : méthode et exemples datés
 
