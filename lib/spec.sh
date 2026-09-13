@@ -756,8 +756,8 @@ cmd_spec_ngram_tune() {
 #   prompt : fichier de prompts/ ou "-" pour spec-refactor.txt.
 #
 # Exemples :
-#   --spec-ab qwen3.8-27b-dflash-nothink 4 - base "spec-ngram-map-k-min-hits=1" "spec-ngram-map-k-min-hits=3"
-#   --spec-ab qwen3.8-27b-dflash-nothink 4 - base "spec-type=ngram-map-k4v,draft-mtp;spec-ngram-map-k4v-size-m=47"
+#   --spec-ab qwen3.8-27b 4 - base "spec-ngram-map-k-min-hits=1" "spec-ngram-map-k-min-hits=3"
+#   --spec-ab qwen3.8-27b 4 - base "spec-type=ngram-map-k4v,draft-mtp;spec-ngram-map-k4v-size-m=47"
 #   --spec-ab deepseek-v4-flash 4 - "spec-type=none" base "spec-ngram-map-k-size-m=15"
 #
 # Chaque variante : ini régénéré avec la surcharge, restart, --spec-test, puis

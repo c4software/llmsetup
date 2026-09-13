@@ -297,7 +297,7 @@ modèle est linéaire (pas de dépendance du prefill à la taille du contexte
 ni du décode à la profondeur), et l'acceptance MTP n'entre pas dans la
 formule, elle est déjà incluse dans le décode mesuré.
 
-Exemple (qwen3.8-27b-mtp-nothink, 2026-08-16) : Vulkan0 307 pp / 29,9 tg
+Exemple (qwen3.8-27b, alors nommé qwen3.8-27b-mtp-nothink, 2026-08-16) : Vulkan0 307 pp / 29,9 tg
 donne 106,7 s ; ROCm0 356 pp / 21,8 tg donne 143,3 s. Le gain de prefill
 de ROCm (+16 %) ne compense pas son décode plus lent (-27 %) : sur ce
 profil, le décode domine dès que GEN/décode dépasse largement

@@ -7,9 +7,8 @@ modele	prefill_paquet	prefill_fork	decode_paquet	decode_fork	acceptance_paquet	a
 lfm2.5-2.6b	2279	3048	67.7	70.8			aucun, parallel 4 (KV f16)	b10433 21/08/2026 contre strix-0007bc6 13/09/2026
 qwen3.5-9b	837	971	25.7	25.7			aucun, parallel 4	b10433 21/08/2026 contre strix-0007bc6 13/09/2026
 ornith-1.5-35b-a3b	974	1129	70.7	73.3			aucun, parallel 4 (cache-type-v q8_0)	b10566 28/08/2026 contre strix-0007bc6 13/09/2026
-qwen3.8-27b	215	349	12.1	21.7		0.35	draft-dflash 7 sur le fork, aucune speculation sur le paquet	b10433 21/08/2026 contre strix-0007bc6 13/09/2026
-qwen3.8-27b-dflash-nothink	261	359	29.5	32.6	0.65	0.595	ngram-map-k 47 + draft-dflash 7 (MTP n-max 6 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 13/09/2026
-qwen3.8-flash-next-mtp-nothink	197	383	25.9	50.0	0.75	0.87	ngram-map-k 7 + draft-mtp 4 et ngram-on-disk (n-gram seul sur le paquet)	b10809 05/09/2026 contre strix-0007bc6 12/09/2026
+qwen3.8-27b	261	359	29.5	32.6	0.65	0.595	ngram-map-k 47 + draft-dflash 7 (MTP n-max 6 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 13/09/2026
+qwen3.8-flash-next	197	383	25.9	50.0	0.75	0.87	ngram-map-k 7 + draft-mtp 4 et ngram-on-disk (n-gram seul sur le paquet)	b10809 05/09/2026 contre strix-0007bc6 12/09/2026
 qwen3-coder-next	468	763	43.7	48.7	0.29	0.27	ngram-map-k 47, min-hits 2	b10433 21/08/2026 contre strix-0007bc6 13/09/2026
 gpt-oss	333	599	51.9	52.9		0.57	ngram-map-k 7, min-hits 2	b10548 21/08/2026 contre strix-0007bc6 13/09/2026
 laguna-s-2.1	255	346	30.3	29.6	0.835	0.80	ngram-map-k 7, min-hits 2 (DFlash refuse)	b10548 21/08/2026 contre strix-0007bc6 13/09/2026

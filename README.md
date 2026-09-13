@@ -214,7 +214,10 @@ Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 
 ## Parc au 13/09/2026
 
-Une ligne par section servie du `models.ini`. Réglages exacts dans
+Une ligne par section servie du `models.ini`, nommée par le nom de base du
+modèle seul (le drafter et le mode thinking ne sont plus dans le nom depuis le
+13/09/2026 ; la section thinking du 27B, deux fois plus lente sur le même GGUF,
+a été retirée le même jour, cf. `docs/HISTORIQUE.md`). Réglages exacts dans
 `lib/models.sh` ; toutes les mesures sont celles du fork strix-0007bc6
 (Vulkan0, `--bench` 3 passes, les 12 et 13/09/2026). Acceptance vide = pas de
 spéculation. La dernière colonne situe le décode contre la dernière mesure du
@@ -226,9 +229,8 @@ ordre de grandeur, pas une comparaison à la décimale.
 | lfm2.5-2.6b | Q8_0, 2,7 Go | Vulkan0 | aucun, parallel 4 (KV f16) | 3048 | 70,8 | — | +4,6 % |
 | qwen3.5-9b | UD-Q6_K_XL, 8,2 Go | Vulkan0 | aucun, parallel 4 | 971 | 25,7 | — | 0 % |
 | ornith-1.5-35b-a3b | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
-| qwen3.8-27b (thinking) | UD-Q4_K_XL, 17 Go | Vulkan0 | spec-type `draft-dflash`, drafter DFlash 2 z-lab Q8_0 (2,0 Go), n-max 7, reasoning-budget 4096 (soft 0,7, grâce 128), parallel 1 | 349 | 21,7 | 0,35 | +79 % (paquet sans spéculation) |
-| qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |
-| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
+| qwen3.8-27b (nothink) | UD-Q4_K_XL, 17 Go | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0 (2,0 Go), n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |
+| qwen3.8-flash-next (nothink) | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 47, min-hits 2, parallel 1 | 763 | 48,7 | 0,27 | +11 % |
 | gpt-oss | UD-Q4_K_XL, 59 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 | 599 | 52,9 | 0,57 | +2 % |
 | laguna-s-2.1 | UD-Q4_K_XL, 73 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 (DFlash refusé par le fork) | 346 | 29,6 | 0,80 | -2 % |
@@ -246,7 +248,7 @@ Ces trois figures sont générées par `python3 py/perf_graphs.py` depuis
 
 Ce que le fork apporte : le prefill sur tout le parc (+16 à +110 %), le décode
 partout où la spéculation change de régime (DeepSeek V4 +62 %, Flash-Next dont
-le MTP n'existe pas sur le paquet +93 %, les deux 27B via DFlash 2), et
+le MTP n'existe pas sur le paquet +93 %, le 27B via DFlash 2), et
 `ngram-on-disk` (Flash-Next chargé en 72 Go au lieu d'environ 100, à perfs
 égales). Écartés après mesure : le speculative prefill (lossy, cache de prompt à
 0 %), le draft adaptatif (2 % sous le draft fixe), le DFlash de Laguna S 2.1
@@ -309,7 +311,8 @@ parallel         = 4"
   téléchargements si le fichier manque ou si la source a bougé. Unique cas : le
   sidecar MTP de Qwen3.8-Flash-Next renommé pour le fork ;
 - `llama_model <section> "<corps ini>"` déclare la section ; deux sections
-  peuvent partager le même `*_PATH` (cas Qwen3.8-27B), et les garde-fous de
+  peuvent partager le même `*_PATH` (cas des deux sections Qwen3.8-27B jusqu'au
+  13/09/2026), et les garde-fous de
   préchargement en dérivent ;
 - `groupe "; --- titre ---"` avant le premier `llama_model` d'une famille.
 
