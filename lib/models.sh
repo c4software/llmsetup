@@ -399,7 +399,7 @@ groupe "; --- Famille 27B (Qwen3.8 — un seul GGUF, tête MTP embarquée) ---"
 # Quant UD-Q4_K_XL (~16 Go, quant par défaut du guide llama.cpp unsloth) :
 #   ~26 % de poids en moins que le Q6 à relire par token → décode ×1,3-1,5
 #   (Q6 : 8,5 t/s brut / 16 t/s MTP ; Q4 mesuré : 25,5 t/s MTP sur ROCm0 le
-#   15/08, 31,4 t/s MTP sur Vulkan0 le 21/08 — cf. modèle mtp-nothink).
+#   15/08, 31,4 t/s MTP sur Vulkan0 le 21/08 — cf. modèle dflash-nothink).
 #   Coût : ~1-2 pts de top-1 vs Q6 (analyse Dynamic V3 : l'IQ2_XXS de 9 Go
 #   garde déjà 82,5 %, la courbe Q4→Q6 est écrasée en haut). Repasser en
 #   UD-Q6_K_XL ici + --update qwen3.8-27b si le thinking long en pâtit.
@@ -421,7 +421,10 @@ download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
 # 13/09/2026 ; --spec-ab du même jour sur le fork (spec-refactor, 4 passes) :
 # ngram-map-k 47 + draft-dflash n-max 7 = 64,5 t/s (+20 % contre MTP n-max 6,
 # +12 % contre MTP n-max 4), draft-dflash seul 47,0 (acceptance 0,96).
-# Réglage à trancher sur spec-test.txt et --bench avant de remplacer le MTP.
+# RETENU le 13/09/2026 : il remplace la tête MTP dans le modèle
+# qwen3.8-27b-dflash-nothink ci-dessous (mesures des deux prompts dans son
+# commentaire), d'où le renommage du modèle. Le GGUF devient nécessaire au
+# démarrage de ce modèle : ne pas le retirer de ~/models/qwen3.8-27b/.
 download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
   QWEN38_27B_DFLASH_PATH="Qwen3.8-27B-DFlash2-Q8_0.gguf"
 
@@ -497,13 +500,18 @@ parallel             = 1
 swa-full             = true
 ctx-checkpoints      = 128"
 
-# Qwen3.8-27B-MTP nothink — spéculation MTP, n-max 6 (mesuré --spec-tune
-#   Q4/Vulkan0 21/08/2026, draft-mtp seul, spec-test.txt, 4 passes :
-#   k2=26,8 / k4=31,8 / k6=33,1 t/s, acceptance 0,95 / 0,85 / 0,75 ; le modèle
-#   α prédit 33,8 à k8, <2 % → 6 est l'optimum. 4 est à 4 % en dessous, hors
-#   tolérance). Sur ROCm0 le 15/08 c'était k2=22,2 / k4=25,5 / k6=26,0 → 4 :
-#   l'optimum dépend du device, re-régler après chaque bascule.
-#   Bascule manuelle : /model qwen3.8-27b-mtp-nothink
+# Qwen3.8-27B-DFlash nothink : spéculation n-gram + drafter DFlash 2, n-max 7.
+#   Renommé depuis qwen3.8-27b-mtp-nothink le 13/09/2026 : le suffixe -mtp
+#   désignait la tête MTP embarquée, remplacée ici par le drafter externe
+#   $QWEN38_27B_DFLASH_PATH (déclaré plus haut). Détail en bas de ce bloc.
+#   Bascule manuelle : /model qwen3.8-27b-dflash-nothink
+# Historique MTP, n-max 6 (mesuré --spec-tune Q4/Vulkan0 21/08/2026,
+#   draft-mtp seul, spec-test.txt, 4 passes : k2=26,8 / k4=31,8 / k6=33,1 t/s,
+#   acceptance 0,95 / 0,85 / 0,75 ; le modèle α prédit 33,8 à k8, <2 % → 6 est
+#   l'optimum. 4 est à 4 % en dessous, hors tolérance). Sur ROCm0 le 15/08
+#   c'était k2=22,2 / k4=25,5 / k6=26,0 → 4 : l'optimum dépend du device,
+#   re-régler après chaque bascule. La tête MTP reste dans le GGUF et reste
+#   utilisable (spec-type draft-mtp) si le drafter venait à manquer.
 # Même GGUF que le modèle thinking ci-dessus (tête MTP embarquée) — ne PAS
 #   précharger les deux en même temps (~16 Go chargés deux fois).
 # Historique : Q6/n-max 2 = 16 t/s ; Q4/n-max 2 = 22 ; Q4/n-max 4 = 25,5 (ROCm0) ;
@@ -576,7 +584,7 @@ ctx-checkpoints      = 128"
 #   du parc sur le fork. Première mesure du 12/09 à 321 / 25,8 / 0,59,
 #   contre-mesurée le 13/09. Sur spec-refactor.txt (décode seul) : 53,7 t/s
 #   acceptance 0,67 contre 56,1 / 0,80 au paquet, soit -4 %.
-# spec-draft-n-max 4 (était 6) : sur le fork c'est 4, pas 6, et le -10 %
+# Historique du n-max MTP sur le fork : 4 (était 6), parce que le -10 %
 #   ci-dessus s'explique. Le fork découpe les mat-vec batchés en colonnes
 #   (4/2/1), optimisation restreinte à q8_0 et q6_K par sa PR #27, et le
 #   UD-Q4_K_XL porte 110 tenseurs q8_0 et 56 q6_K : elle s'applique donc ici.
@@ -586,14 +594,38 @@ ctx-checkpoints      = 128"
 #   paquet b10809, soit -7,4 % ; pp5 54,2 contre 56,9 (-4,7 %) ; pp4 47,8
 #   contre 47,7 (aucune pénalité). --spec-ab du 13/09 (spec-refactor.txt,
 #   4 passes) : n-max 4 = 57,8 t/s acceptance 0,712 contre 54,1 / 0,668 en
-#   n-max 6, soit +6,8 % ; n-max 7 rend le même chiffre avec une acceptance
-#   moindre ; en draft-mtp seul l'acceptance monte à 0,962 (la tête MTP du fork
-#   est saine, le 0,67 est l'agrégat n-gram + MTP). Revenir à 6 si le découpage
-#   est corrigé en amont.
+#   n-max 6, soit +6,8 % ; en draft-mtp seul l'acceptance monte à 0,962 (la
+#   tête MTP du fork est saine, le 0,67 est l'agrégat n-gram + MTP).
+#
+# DRAFTER DFLASH 2 (retenu le 13/09/2026, remplace la tête MTP) : le drafter
+#   officiel z-lab $QWEN38_27B_DFLASH_PATH (2,0 Go, Q8_0, déclaré plus haut)
+#   bat la tête MTP embarquée sur les deux prompts, sur le fork strix-0007bc6.
+#   --spec-ab qwen3.8-27b-mtp-nothink 4, décode médian hors 1re passe :
+#     spec-refactor.txt : ngram 47 + draft-mtp n-max 6 = 53,8 t/s (acc. 0,67) ;
+#       ngram 47 + draft-mtp n-max 4 = 57,6 (0,71) ; ngram 47 + draft-dflash
+#       n-max 7 = 64,5 (0,67) ; draft-dflash seul n-max 7 = 47,0 (0,96).
+#     spec-test.txt (générique, pas de blocs à recopier) : ngram 47 + draft-mtp
+#       n-max 4 = 30,5 (0,65) ; ngram 47 + draft-dflash n-max 7 = 35,9 (0,70) ;
+#       draft-dflash seul n-max 7 = 37,0 (0,77) ; draft-mtp seul = 29,7 (0,74).
+#   Soit +12 % contre le meilleur MTP en refactor et +18 % en générique, la
+#   liste ngram + dflash gagnant partout sauf en générique pur, où le dflash
+#   seul passe devant de 3 % (les hits n-gram y sont rares) : la liste est
+#   gardée, le régime agentic est celui du refactor.
+#   spec-draft-n-max 7 : valeur recommandée par la carte z-lab, et le fork note
+#   que DFlash2 préfère 7. Elle contourne aussi le découpage mat-vec : le
+#   drafter propose 7 tokens, le batch de vérification en vaut 8, découpé en
+#   4+4 : pas de 2 ni de 1, donc pas le pire cas qui coûtait -7,4 % au batch 7.
+#   ngram-map-k size-m 47 et min-hits 2 inchangés (le drafter ne change rien
+#   au régime n-gram, mesuré identique ci-dessus).
+#   ⚠ Non mesuré sur le paquet Arch : b10809 expose bien draft-dflash (la
+#   carte du modèle renvoie à la PR mainline #27342), mais ce réglage n'y a
+#   jamais tourné, les chiffres ci-dessus sont ceux du fork seulement.
+#   --bench (bench-task) à refaire sur ce réglage : les 26,6 t/s du 13/09
+#   valent pour l'ancien MTP n-max 6.
 # swa-full : inopérant sur cette architecture (le journal du serveur dit
 #   « swa_full is not supported by this model »). La clé est gardée telle
 #   quelle : elle ne coûte rien et redeviendra utile si l'arch est supportée.
-llama_model qwen3.8-27b-mtp-nothink "
+llama_model qwen3.8-27b-dflash-nothink "
 model                = $QWEN38_27B_PATH
 ctx-size             = 131072
 cache-ram            = 12288
@@ -605,8 +637,9 @@ presence-penalty     = 1.5
 chat-template-kwargs = {\"enable_thinking\":false}
 cache-type-v         = q8_0
 cache-reuse          = 0
-spec-type            = ngram-map-k,draft-mtp
-spec-draft-n-max     = 4
+spec-type            = ngram-map-k,draft-dflash
+spec-draft-model     = $QWEN38_27B_DFLASH_PATH
+spec-draft-n-max     = 7
 spec-ngram-map-k-size-m   = 47
 spec-ngram-map-k-min-hits = 2
 jinja                = true
