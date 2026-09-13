@@ -145,7 +145,7 @@ Commandes :
                            variante ("clé=val;clé=val" sur le corps ini, ou base)
                            est appliquée au ini, le service redémarré, --spec-test
                            mesuré ; bilan comparé, rien d'écrit. Ex. :
-                           --spec-ab qwen3.8-27b 4 - base \
+                           --spec-ab qwen3.8-27b-dflash-nothink 4 - base \
                              "spec-ngram-map-k-min-hits=1" "spec-type=ngram-map-k4v,draft-mtp"
   --start                  Lance llama-server sur :$SERVER_PORT (défaut sans argument)
   --install-service        Installe/active le service systemd USER $SERVICE_NAME

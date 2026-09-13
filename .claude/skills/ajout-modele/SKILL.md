@@ -131,15 +131,11 @@ Deux questions indépendantes :
      drafter (7 pour DFlash 2). Le GGUF devient nécessaire au démarrage du
      modèle : ne pas le retirer du dossier.
 
-   Le nom de la section est le **nom de base du modèle seul** (`<clé>`, celui
-   du dossier), sans suffixe `-mtp`, `-dflash` ni `-nothink` (unification du
-   13/09/2026) : le drafter servi et le mode thinking se lisent dans le
-   commentaire du bloc, et un changement de drafter ne renomme plus rien. Une
-   seule section par modèle : quand deux réglages se disputent le même GGUF
-   (thinking contre nothink, MTP contre drafter externe), on garde le plus
-   rapide et on consigne l'autre dans le commentaire et docs/HISTORIQUE.md. Les
-   garde-fous de `_preload_sanity` reposent sur la ligne `model =` identique et
-   sur la convention de dossiers `<clé>` / `<clé>-mtp`, pas sur le nom.
+   Le nom de la section porte un **suffixe explicite** disant quel drafter est
+   servi : `<clé>-mtp-nothink`, `<clé>-dflash-nothink`. Les garde-fous de
+   `_preload_sanity` reposent sur la ligne `model =` identique et sur la
+   convention de dossiers `<clé>` / `<clé>-mtp`, pas sur ce suffixe : il est
+   là pour le lecteur, et il se renomme quand le drafter change (cf. Clôture).
 2. **Veut-on la spéculation sur ce modèle ?** Contraintes à respecter :
    `parallel = 1` obligatoire, `cache-reuse = 0`, pas de mmproj. Sur une
    architecture à état récurrent (GDN des Qwen3.5+, conv LFM2), le rollback
@@ -353,7 +349,7 @@ moteur (`bNNNNN` ou `strix-<commit>`), quant, device et date : un chiffre sans
 ces cinq colonnes n'est pas comparable.
 
 ```markdown
-### qwen3.8-27b (alors qwen3.8-27b-dflash-nothink) : Qwen3.8-27B-UD-Q4_K_XL.gguf (17 Go), bigchuck (Ryzen AI MAX+ 395), fork strix-0007bc6, 13/09/2026
+### qwen3.8-27b-dflash-nothink : Qwen3.8-27B-UD-Q4_K_XL.gguf (17 Go), bigchuck (Ryzen AI MAX+ 395), fork strix-0007bc6, 13/09/2026
 
 | Configuration | Device | Prompt t/s | Gen t/s | Acceptance | Source |
 |---|---|---|---|---|---|
@@ -452,18 +448,13 @@ sortie complète avant de conclure, pas seulement la dernière ligne.
   chiffres et l'étiquette de moteur. Les `.conf` et logs restent locaux
   (.gitignore) : ce qui doit survivre à la machine va dans le commentaire du
   bloc.
-- **Renommer une section** (fait pour tout le parc le 13/09/2026 :
-  `qwen3.8-27b-dflash-nothink` → `qwen3.8-27b`,
-  `qwen3.8-flash-next-mtp-nothink` → `qwen3.8-flash-next`) casse les `.conf`
-  non versionnés de la machine de mesure, indexés par nom de section : renommer
-  la clé dans `spec-nmax.conf`, `spec-ngram.conf` et `preload.conf` sur
-  bigchuck, sans quoi le modèle repart silencieusement sur les valeurs par
-  défaut du script (et sort du préchargement). `bench-devices.conf` est indexé
-  par dossier de GGUF : il n'est pas concerné. Le comparateur de `--bench`
-  (`py/bench_compare.py`) est indexé par nom de section lui aussi : la première
-  mesure sous le nouveau nom n'a pas de référence, et sous un nom réutilisé
-  (`qwen3.8-27b` a désigné la section thinking jusqu'au 13/09/2026) il compare
-  à l'ancienne série, lire la date et le réglage avant d'y voir une régression.
+- **Renommer une section** (changement de drafter : `-mtp-nothink` →
+  `-dflash-nothink`) casse les `.conf` non versionnés de la machine de mesure,
+  indexés par nom de section : renommer la clé dans `spec-nmax.conf`,
+  `spec-ngram.conf` et `preload.conf` sur bigchuck, sans quoi le modèle repart
+  silencieusement sur les valeurs par défaut du script (et sort du
+  préchargement). `bench-devices.conf` est indexé par dossier de GGUF : il
+  n'est pas concerné.
 - Si le modèle remplace un autre : le retirer de `lib/models.sh`, noter la
   date dans le commentaire `KNOWN_FILES`, et signaler que
   `./setup-llm.sh --cleanup` purgera l'ancien GGUF (ne pas le lancer

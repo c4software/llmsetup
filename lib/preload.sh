@@ -120,8 +120,7 @@ _preload_sanity() {
   # Doublons de poids, dérivés des déclarations (rien à maintenir en ajoutant
   # un modèle) :
   #   1. plusieurs modèles préchargés sur le même GGUF (ligne "model ="
-  #      identique — ex. deux sections Qwen3.8-27B sur le même GGUF, tête MTP
-  #      embarquée : cas des anciennes sections thinking et nothink) ;
+  #      identique — ex. les deux Qwen3.8-27B, tête MTP embarquée) ;
   #   2. un modèle et sa variante -mtp préchargés ensemble (dossiers <clé> et
   #      <clé>-mtp par convention : mêmes poids sémantiques en deux quants,
   #      ex. 35b-a3b nothink + mtp-nothink).
