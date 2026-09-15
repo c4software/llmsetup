@@ -251,7 +251,7 @@ pas une comparaison à la décimale.
 | qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |
 | qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | Vulkan0 | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 727 | 52,2 | 0,515 | +19 % (paquet en n-gram seul) |
-| gpt-oss | UD-Q4_K_XL, 59 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 ; DFlash z-lab converti, refusé par le fork : biais d'attention, [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61) | 599 | 52,9 | 0,57 | +2 % |
+| gpt-oss | UD-Q4_K_XL, 59 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 ; DFlash z-lab converti, refusé par le fork 0007bc6 (biais d'attention, [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61)) ; patch mesuré le 15/09/2026 avec ngram 7 + DFlash 3 : 54,1 / 59,6 t/s contre 51,2 / 51,0 en isolé, [PR #62](https://github.com/halo-box/strix-llama.cpp/pull/62) en attente | 599 | 52,9 | 0,57 | +2 % |
 | deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 (parallel 2 essayé et retiré le 15/09 : x1,16 de tâches au bench agentic à 2 boucles, latence doublée) | 196 | 28,8 | 0,69 | +134 % (paquet en n-gram seul, 19,9 sur le fork en n-gram seul) |
 
 ![Prefill paquet contre fork](docs/graphs/prefill.svg)
@@ -271,9 +271,14 @@ le MTP n'existe pas sur le paquet +93 %, le 27B via DFlash 2), et
 égales). Écartés après mesure : le speculative prefill (lossy, cache de prompt à
 0 %), le draft adaptatif (2 % sous le draft fixe), le DFlash de Laguna S 2.1
 (drafter refusé ; le modèle lui-même a quitté le parc le 15/09/2026, non utile
-dans l'usage réel, cf. `docs/HISTORIQUE.md`) et celui de gpt-oss (drafter z-lab converti sans erreur mais
-refusé au chargement, ses biais d'attention n'étant pas lus par le loader
-DFlash : [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61)).
+dans l'usage réel, cf. `docs/HISTORIQUE.md`) et, en attente, celui de gpt-oss
+(drafter z-lab converti sans erreur mais refusé au chargement, ses biais
+d'attention n'étant pas lus par le loader DFlash :
+[issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61) ; le patch
+de 25 lignes, mesuré le 15/09/2026 sur un build à part, rend +6 % et +17 % en
+ngram 7 + DFlash 3 sans régression sur les drafters sans biais, et attend en
+[PR #62](https://github.com/halo-box/strix-llama.cpp/pull/62) ; la section
+passera au drafter quand le fork ré-épinglé le portera).
 Contrepartie, le découpage des mat-vec batchés (-7,4 % au batch de 7),
 contournée par modèle et signalée en amont :
 [issue #50](https://github.com/halo-box/strix-llama.cpp/issues/50).
@@ -350,7 +355,7 @@ dans `AGENTS.md`.
 |---|---|
 | `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
 | `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices (`DEV=Vulkan0,ROCm0`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
-| `spec-isolate.sh` | Test isolé d'un réglage spéculatif AVANT sa déclaration dans `lib/models.sh` : `tools/spec-isolate.sh <tag> -- <args llama-server...>` monte un serveur jetable sur `PORT` (8099) avec les arguments bruts, mesure acceptance, prefill, décode et sanité de la sortie (`py/spec_isolate_bench.py`), puis relance le service. Variables : `PORT`, `NP` (salve simultanée en plus), `PASSES`, `PROMPTS`, `MAX_TOKENS`, `OUT`. Refuse de démarrer si un `--bench*` / `--spec*` ou un conteneur `bench-agentic-*` tourne. Sorties dans `logs/spec-isolate/<tag>/`. À confirmer ensuite sur le service par `--spec-ab` |
+| `spec-isolate.sh` | Test isolé d'un réglage spéculatif AVANT sa déclaration dans `lib/models.sh` : `tools/spec-isolate.sh <tag> -- <args llama-server...>` monte un serveur jetable sur `PORT` (8099) avec les arguments bruts, mesure acceptance, prefill, décode et sanité de la sortie (`py/spec_isolate_bench.py`), puis relance le service. Variables : `PORT`, `NP` (salve simultanée en plus), `PASSES`, `PROMPTS`, `MAX_TOKENS`, `OUT`, `LLAMA_BIN_DIR` (binaires d'un build à part du fork, pour mesurer un patch sans toucher au moteur servi). Refuse de démarrer si un `--bench*` / `--spec*` ou un conteneur `bench-agentic-*` tourne. Sorties dans `logs/spec-isolate/<tag>/`. À confirmer ensuite sur le service par `--spec-ab` |
 | `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k, KV q8_0 comme le service), par device, avec le tour simulé de `--bench-devices` recalculé à chaque profondeur : c'est le régime agentic réel, où le classement des devices peut s'inverser. Journal `logs/bench-depth.log` + `.tsv` |
 | `mtp-rename-hc-head.py` | Renomme les trois tenseurs du mixeur final des hyper-connexions d'un sidecar MTP Qwen3.8-Flash-Next (`blk.<n>.nextn.hc_head_*` chez unsloth, convention de la PR mainline #28243) vers les noms que lit le fork strix-llama.cpp (`output_hc_*`). Données recopiées telles quelles. `PYTHONPATH=$HOME/llm/strix-llama.cpp/gguf-py python3 tools/mtp-rename-hc-head.py <in> <out>` ; appelé aussi par `--setup`. Inutile sur un moteur mainline portant #28243 |
 | `py/perf_graphs.py` | Régénère les trois SVG de `docs/graphs/` (prefill, décode, écarts en %) à partir de `docs/perfs.tsv`, en rendu sobre (barres pleines, fond blanc). Aucune dépendance, aucun service : `python3 py/perf_graphs.py [<tsv> [<dossier>]]`. À relancer après toute modification du TSV |
