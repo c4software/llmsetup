@@ -15,6 +15,10 @@
 #   PASSE_NUM=p force le numero de passe des lignes TSV ; defaut : le compteur
 #               local. Sert au mode parallele, ou chaque conteneur ne joue
 #               qu'une passe (PASSES=1) mais porte le numero de la passe reelle.
+#               Pose, il change aussi l'en-tete de passe : « passe 2 » et non
+#               « passe 2/1 », qui n'avait pas de sens (PASSES vaut 1 partout).
+#   INSTANCE=i  numero de l'instance dans la salve parallele, ajoute a
+#               l'en-tete (« passe 2, instance 3 ») ; vide hors salve.
 #   PASSES=0    ne joue aucune passe (conteneur d'appel froid seul).
 set -u
 cd /work
@@ -61,6 +65,7 @@ version=$(pi --version 2>/dev/null | head -1)
 PASSES="${PASSES:-1}"
 FROID="${FROID:-1}"
 PASSE_NUM="${PASSE_NUM:-}"
+INSTANCE="${INSTANCE:-}"
 echo "════ pi $version → $SERVER_URL | modèle $MODEL | $PASSES passe(s) ════"
 rm -rf /work/* 2>/dev/null
 
@@ -77,7 +82,9 @@ p=1
 while [ "$p" -le "$PASSES" ]; do
 PASSE="${PASSE_NUM:-$p}"; export PASSE
 echo
-echo "──── passe $PASSE/$PASSES ────"
+if [ -n "$INSTANCE" ]; then echo "──── passe $PASSE, instance $INSTANCE ────"
+elif [ -n "$PASSE_NUM" ]; then echo "──── passe $PASSE ────"
+else echo "──── passe $PASSE/$PASSES ────"; fi
 rm -rf /work/* 2>/dev/null
 echo "1. Réponse simple (sans outil)"
 t0=$(date +%s.%N); s0=$(snap)

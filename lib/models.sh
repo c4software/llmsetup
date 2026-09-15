@@ -108,8 +108,12 @@ DEFAULT_DEVICE="Vulkan0"
 #     le contexte par slot, la mémoire ou le rendement, pas comme interdit
 #     technique. Campagne multi-slot du 15/09/2026 terminée (fork
 #     strix-0007bc6, Vulkan0, --bench-parallel, solo contre agrégé) :
-#       deepseek-v4-flash   np 2 = x1,22 agrégé  -> PASSÉ À 2 (batch 2x4 = 8,
-#                           pile le seuil ; np 4 = x0,80, batch 16)
+#       deepseek-v4-flash   np 2 = x1,22 agrégé (batch 2x4 = 8, pile le
+#                           seuil ; np 4 = x0,80, batch 16) -> servi à 2 le
+#                           15/09 puis REMIS À 1 le soir même : --bench-agentic
+#                           2 boucles = x1,16 de tâches seulement, décode par
+#                           boucle divisé par deux, ctx par slot divisé par
+#                           deux, aucune concurrence réelle sur ce modèle
 #       ornith-1.5-35b-a3b  np 4 sans spéculation x1,93, 138 t/s agrégés, le
 #                           meilleur du parc en concurrence -> INCHANGÉ ; la
 #                           variante MTP mono-utilisateur est une SECTION à
@@ -1169,8 +1173,8 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   plus gros gain de décode du parc.
 #   Le reasoning-budget ci-dessus n'a pas été atteint sur le test fait
 #   (1678 tokens de pensée).
-# parallel 2 (était 1) depuis le 15/09/2026, sur mesure multi-slot du même jour
-#   (fork strix-0007bc6, Vulkan0, --bench-parallel) : en solo 25,2 / 26,6 /
+# parallel 1 : essayé à 2 le 15/09/2026 et REMIS À 1 le soir même. La mesure
+#   multi-slot le rendait tentant : (fork strix-0007bc6, Vulkan0, --bench-parallel) en solo 25,2 / 26,6 /
 #   25,9 t/s à np 1 / 2 / 4 ; en agrégé np 2 = 32,4 t/s (x1,22, 16,9 t/s par
 #   requête, acceptance 0,63) et np 4 = 20,8 (x0,80, 5,4 t/s par requête).
 #   C'est le SEUL cas du parc où le multi-slot paie, et la raison est
@@ -1192,7 +1196,18 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   salve) : 1 requête 33,6 t/s ; 2 requêtes 39,0 t/s agrégés (x1,16),
 #   19,9 t/s par requête. La commande affiche « Pas de gain d'agrégat » :
 #   c'est son seuil heuristique, x1,16 est un gain réel et le seul du parc en
-#   spéculation. La garde mémoire décharge les autres modèles pour charger
+#   spéculation. MAIS --bench-agentic deepseek-v4-flash 2 2 du 15/09/2026
+#   (mode parallèle du bench, 2 boucles pi simultanées contre la suite jouée
+#   seule, 30 PASS sur 30) tranche contre : temps mur de la suite 116,7 s en
+#   solo contre 202 s à 2 boucles, soit x1,16 de débit de tâches (x1,03 sur
+#   une passe), décode vu par une boucle 14,5 t/s contre 28 à 30 en solo,
+#   décode agrégé 21,4 t/s SOUS le solo (le batch ne compense pas son propre
+#   surcoût), cache de préfixe intact (81 à 87 %). Un orchestrateur et un
+#   sous-agent gagnent 16 % de tâches au prix d'une latence doublée chacun,
+#   et le journal du service n'a jamais montré deux requêtes simultanées sur
+#   ce modèle : le seul effet certain du parallel 2 était de diviser le
+#   contexte par slot (65536 au lieu de 131072). Retour à 1, 131072 pour la
+#   requête. La garde mémoire décharge les autres modèles pour charger
 #   celui-ci (117,9 Go demandés), c'est normal.
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
@@ -1216,7 +1231,7 @@ reasoning-budget-soft-ratio    = 0.6
 reasoning-budget-soft2-ratio   = 0.85
 reasoning-budget-grace-tokens  = 192
 jinja            = true
-parallel         = 2"
+parallel         = 1"
 
 groupe "; --- Laguna S 2.1 : arch 'laguna', servie par le fork strix-llama.cpp ; sur le paquet Arch de secours, b10087 minimum (vérifié jusqu'à b10548) ---"
 

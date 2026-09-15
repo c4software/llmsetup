@@ -1,6 +1,7 @@
 # Lancé par ./setup-llm.sh --bench-agentic <modèle> [passes] [N] (MODEL,
-# PASSES et SERVER_URL posés par la commande ; FROID et PASSE_NUM seulement
-# en mode parallèle, N > 1, où chaque conteneur ne joue qu'une passe).
+# PASSES et SERVER_URL posés par la commande ; FROID, PASSE_NUM et INSTANCE
+# seulement en mode parallèle, N > 1, où chaque conteneur ne joue qu'une
+# passe et porte le numéro de son instance dans l'en-tête).
 # Réseau HÔTE : 127.0.0.1:8009 est le llama-server
 # du service systemd user. Rien n'est installé sur l'hôte. Aucun port publié
 # et aucun volume : N conteneurs simultanés ne se marchent pas dessus, chacun
@@ -14,4 +15,5 @@ services:
       PASSES: "${PASSES:-1}"
       FROID: "${FROID:-1}"
       PASSE_NUM: "${PASSE_NUM:-}"
+      INSTANCE: "${INSTANCE:-}"
       SERVER_URL: "${SERVER_URL:-http://127.0.0.1:8009}"

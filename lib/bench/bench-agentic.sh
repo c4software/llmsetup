@@ -46,8 +46,13 @@
 # le prix d'une. Le décode et le prefill agrégés de la salve sont lus sur
 # /metrics?model= côté hôte, avant et après (les deltas des N conteneurs se
 # recouvrent dans le temps : leurs t/s ne s'additionnent pas, le compteur du
-# serveur, lui, est juste). N n'est pas plafonné, seulement comparé au
-# `parallel` RÉEL lu sur /v1/models → status.args (jamais le ini, que le
+# serveur, lui, est juste). Même raison côté tableau de la salve : chaque
+# conteneur lit le compteur GLOBAL du serveur, donc ses colonnes prompt,
+# cache, généré, prefill et décode compteraient aussi le trafic des autres
+# instances (creation : 76 k tokens de prompt à 3 boucles contre 21 k en
+# solo, constaté le 15/09/2026 sur bigchuck) — elles sortent en « n/c »,
+# seuls PASS et temps mur restent par scénario. N n'est pas plafonné,
+# seulement comparé au `parallel` RÉEL lu sur /v1/models → status.args (jamais le ini, que le
 # routeur ne relit qu'au démarrage) : au-delà, warn, et la file d'attente se
 # voit dans le facteur. N = 1 (défaut) est le chemin historique, inchangé.
 # =============================================================================
@@ -69,8 +74,17 @@ _bench_agentic_nettoie() {
 # Médianes par scénario, sur stdin : les lignes TSV du conteneur déjà
 # débarrassées du marqueur (passe scénario verdict mur prompt cache gen
 # prefill décode). Sert au bilan solo comme au bilan parallèle.
+#
+# 1er argument non vide = lignes d'une salve à N > 1 : les colonnes venant
+# de /metrics (prompt, part du cache, généré, prefill, décode) sont lues par
+# CHAQUE conteneur sur le compteur global du serveur, donc chacun compte
+# aussi le trafic des N-1 autres (creation : 76 k tokens de prompt à 3
+# boucles contre 21 k en solo, artefact de recouvrement). Elles sortent en
+# « n/c » : seuls PASS et temps mur sont propres par scénario, les t/s de la
+# salve se lisent sur la ligne de bilan agrégée (compteurs pris côté hôte
+# avant et après la salve).
 _bench_agentic_medianes() {
-  awk -F'\t' '
+  awk -F'\t' -v recouvert="${1:-}" '
     function med(a, n,   i, j, t) { for (i = 2; i <= n; i++) { t = a[i]; j = i - 1; while (j > 0 && a[j] > t) { a[j+1] = a[j]; j-- } a[j+1] = t }
       return n % 2 ? a[(n+1)/2] : (a[n/2] + a[n/2+1]) / 2 }
     $1 == 0 { printf "  froid (prompt système)   : %s  %5.1f s, prompt %d tok (%d du cache), prefill %.0f t/s\n", $3, $4, $5+$6, $6, $8; next }
@@ -80,6 +94,9 @@ _bench_agentic_medianes() {
       gen[s, n[s]] = $7; pp[s, n[s]] = $8; tg[s, n[s]] = $9 }
     END { for (i = 1; i <= k; i++) { s = ordre[i]
         for (j = 1; j <= n[s]; j++) { A[j] = mur[s, j]; B[j] = pt[s, j]; C[j] = part[s, j]; D[j] = gen[s, j]; E[j] = pp[s, j]; F[j] = tg[s, j] }
+        if (recouvert != "") {
+          printf "  %-24s : %d/%d  %5.1f s, prompt n/c, cache n/c, généré n/c, prefill n/c, décode n/c\n",
+            s, ok[s]+0, n[s], med(A, n[s]); continue }
         printf "  %-24s : %d/%d  %5.1f s, prompt %d tok (%.0f %% du cache), généré %d tok, prefill %.0f t/s, décode %.1f t/s\n",
           s, ok[s]+0, n[s], med(A, n[s]), med(B, n[s]), med(C, n[s]), med(D, n[s]), med(E, n[s]), med(F, n[s]) } }'
 }
@@ -102,11 +119,14 @@ _bench_agentic_metrics() {
 _bench_agentic_nom() { echo "bench-agentic-$$-p$1-i$2"; }
 
 # Un conteneur pi jetable : _bench_agentic_run <modèle> <url> <sortie>
-#   <nom> <passe> <froid 0|1> <passes internes>
+#   <nom> <passe> <froid 0|1> <passes internes> [instance]
 # -T : la sortie part dans un fichier, pas de TTY en tâche de fond.
+# INSTANCE (8e argument, mode parallèle seulement) sert à l'en-tête du
+# conteneur : à N > 1 chacun joue PASSES=1 avec le numéro de la passe réelle,
+# « passe 2/1 » n'avait pas de sens.
 _bench_agentic_run() {
-  local preset="$1" url="$2" sortie="$3" nom="$4" passe="$5" froid="$6" passes="$7"
-  MODEL="$preset" PASSES="$passes" PASSE_NUM="$passe" FROID="$froid" SERVER_URL="$url" \
+  local preset="$1" url="$2" sortie="$3" nom="$4" passe="$5" froid="$6" passes="$7" inst="${8:-}"
+  MODEL="$preset" PASSES="$passes" PASSE_NUM="$passe" FROID="$froid" INSTANCE="$inst" SERVER_URL="$url" \
     docker compose -f "$SCRIPT_DIR/bench-agentic/docker-compose.yml" \
       run --rm -T --name "$nom" pi >"$sortie" 2>&1 || true
   return 0
@@ -121,7 +141,21 @@ _bench_agentic_med() {
 # build (comme avant) et colonne N en QUEUE de ligne — les lignes d'avant le
 # 15/09/2026, à 13 colonnes, restent lisibles telles quelles.
 # _bench_agentic_journal <fichier> <modèle> <device> <build> <N>
+#
+# N > 1 : les cinq colonnes /metrics du conteneur (prompt_tok, cache_tok,
+# gen_tok, prefill_tps, decode_tps) comptent le trafic des N instances
+# simultanées, pas celui du scénario — elles sont écrites « n/c » plutôt que
+# fausses. Format inchangé à 14 colonnes, passe/scénario/verdict/mur_s
+# restent justes ; les lignes de la référence solo passent ici avec N = 1 et
+# gardent leurs chiffres.
 _bench_agentic_journal() {
+  if (( ${5:-1} > 1 )); then
+    grep $'^TSV\t' "$1" \
+      | awk -F'\t' -v OFS='\t' '{ for (i = 6; i <= 10; i++) $i = "n/c"; print }' \
+      | sed "s/^TSV\t/$(date '+%F %T')\t$2\t$3\t$4\t/; s/\$/\t$5/" \
+      >> "$BENCH_AGENTIC_LOG" 2>/dev/null || true
+    return 0
+  fi
   grep $'^TSV\t' "$1" \
     | sed "s/^TSV\t/$(date '+%F %T')\t$2\t$3\t$4\t/; s/\$/\t$5/" \
     >> "$BENCH_AGENTIC_LOG" 2>/dev/null || true
@@ -167,7 +201,12 @@ cmd_bench_agentic() {
   info "──── bilan ($passes passe(s), médianes) ────"
   grep $'^TSV\t' "$sortie" | cut -f2- | _bench_agentic_medianes
 
-  # date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N
+  # Format du journal, 14 colonnes :
+  #   date modèle device build passe scénario verdict mur_s prompt_tok
+  #   cache_tok gen_tok prefill_tps decode_tps N
+  # Les cinq colonnes prompt_tok..decode_tps valent « n/c » sur les lignes
+  # d'une salve à N > 1 (compteurs /metrics recouverts entre instances) ;
+  # elles sont justes ici (N = 1) et sur les lignes solo du mode parallèle.
   _bench_agentic_journal "$sortie" "$preset" "${dev:-$DEFAULT_DEVICE}" "$build" 1
   rm -f "$sortie"
   return 0
@@ -238,7 +277,7 @@ _bench_agentic_parallele() {
     t0="$(date +%s.%N)"
     for (( i=1; i<=n; i++ )); do
       _BENCH_AGENTIC_NOMS+=("$(_bench_agentic_nom "$p" "$i")")
-      _bench_agentic_run "$preset" "$url" "$tmp/par-$p-$i.out" "${_BENCH_AGENTIC_NOMS[-1]}" "$p" 0 1 &
+      _bench_agentic_run "$preset" "$url" "$tmp/par-$p-$i.out" "${_BENCH_AGENTIC_NOMS[-1]}" "$p" 0 1 "$i" &
       pids+=($!)
     done
     wait "${pids[@]}" 2>/dev/null || true
@@ -278,7 +317,11 @@ _bench_agentic_parallele() {
   _bench_agentic_medianes <"$tous_solo"
   echo ""
   info "──── bilan à $n boucles simultanées ($passes passe(s) × $n instances, médianes) ────"
-  _bench_agentic_medianes <"$tous_par"
+  _bench_agentic_medianes recouvert <"$tous_par"
+  echo "  n/c : prompt, cache, généré, prefill et décode sont lus sur les compteurs"
+  echo "        globaux du serveur par chacune des $n instances — chaque scénario y"
+  echo "        compterait aussi le trafic des autres. PASS et temps mur sont propres"
+  echo "        par scénario ; les t/s de la salve sont la ligne de bilan ci-dessous."
 
   local med_solo med_par med_fact med_dec
   med_solo="$(_bench_agentic_med "${solos[@]}")"

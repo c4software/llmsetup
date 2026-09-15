@@ -58,7 +58,10 @@ Commandes :
                            joue la suite seule puis à N boucles pi SIMULTANÉES
                            (le cas orchestrateur + sous-agents), et donne le
                            facteur de débit de tâches (N x solo / parallèle) et
-                           le décode agrégé. Journal logs/bench-agentic.log
+                           le décode agrégé ; dans le tableau de la salve, seuls
+                           PASS et temps mur sont par scénario (colonnes
+                           /metrics en n/c, recouvertes entre instances).
+                           Journal logs/bench-agentic.log
   --bench-sanity [modèle|all]
                            Le modèle répond-il juste (question à réponse connue) ?
                            Complète le garde-fou anti-charabia ; --bench-devices
