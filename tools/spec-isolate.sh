@@ -46,6 +46,11 @@
 #   PROMPTS=spec-test.txt,spec-refactor.txt   résolus dans prompts/
 #   MAX_TOKENS=1200 max_tokens de chaque requête
 #   OUT=logs/spec-isolate/<tag>/              log serveur, générations, TSV
+#   LLAMA_BIN_DIR=  dossier de binaires mis en tête du PATH, devant ~/.local/bin :
+#                   pour mesurer un build du fork non installé (patch en cours,
+#                   build/ à part) sans toucher au moteur servi. Vide = moteur
+#                   du service. La ligne « llama-cpp: » de l'en-tête dit lequel
+#                   a répondu.
 #
 # Sorties : OUT/serveur.log (le llama-server jetable), OUT/mesures.tsv (une
 # ligne par mesure) et OUT/gen-*.txt (texte généré, à relire quand un chiffre
@@ -75,7 +80,8 @@ LOG="$OUT/serveur.log"
 # $HOME/.local/bin en tête, comme le service et lib/common.sh : c'est là que
 # vivent les liens du fork strix-llama.cpp. Sans ça on mesurerait le paquet
 # Arch en croyant mesurer le moteur servi (défaut réel du 12/09/2026).
-export PATH="$HOME/.local/bin:$PATH"
+# LLAMA_BIN_DIR (optionnel) passe encore devant : un build à part du fork.
+export PATH="${LLAMA_BIN_DIR:+$LLAMA_BIN_DIR:}$HOME/.local/bin:$PATH"
 # ROCm/HIP sur iGPU : allocations en mémoire unifiée, comme lib/service.sh.
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
@@ -126,7 +132,7 @@ trap _fin EXIT INT TERM
 
 echo "# spec-isolate — $(date '+%F %T')  tag=$TAG"
 echo "# host=$(hostname)  port=$PORT  np=$NP  passes=$PASSES  max_tokens=$MAX_TOKENS"
-echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)"
+echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)  ($(command -v llama-server))"
 echo "# args     : ${SRV_ARGS[*]}"
 echo ""
 echo "→ arrêt du service llama-server (un seul GPU)…"
