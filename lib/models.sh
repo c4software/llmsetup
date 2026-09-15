@@ -223,21 +223,95 @@ llama_model() {
 download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
   QWEN35_9B_PATH="Qwen3.5-9B-UD-Q6_K_XL.gguf"
 
+# GGUF MTP du même modèle (repo unsloth séparé) : MÊME NOM DE FICHIER que
+# celui ci-dessus (Qwen3.5-9B-UD-Q6_K_XL.gguf, 8 987 439 456 octets contre
+# 8 756 929 760), d'où un DOSSIER SÉPARÉ qwen3.5-9b-mtp/ par la convention
+# <clé> / <clé>-mtp du dépôt : les deux fichiers ne peuvent pas cohabiter.
+# ⚠ Incident du 15/09/2026 : un `hf download` de ce repo lancé dans
+#   ~/models/qwen3.5-9b/ a ÉCRASÉ le GGUF courant (même nom) ; il a été
+#   retéléchargé à l'identique. Ne jamais télécharger ce fichier ailleurs que
+#   dans son dossier.
+# Métadonnées (15/09/2026) : qwen35.nextn_predict_layers = 1, block_count 33
+# (32 + la couche MTP), tenseurs blk.32.nextn.* : tête MTP EMBARQUÉE, donc
+# spec-type = draft-mtp sans sidecar ni spec-draft-model.
+# bench-devices.conf est indexé par dossier de GGUF : qwen3.5-9b-mtp n'y a pas
+# de ligne, la section hérite donc du défaut [*] Vulkan0 : non mesuré par
+# --bench-devices, à faire si le sujet revient (le fork est Vulkan seul).
+download_hf qwen3.5-9b-mtp "unsloth/Qwen3.5-9B-MTP-GGUF" \
+  QWEN35_9B_MTP_PATH="Qwen3.5-9B-UD-Q6_K_XL.gguf"
+
 # Qwen3.5-9B : dense 9B — tâches auxiliaires courtes (résumés, titres, routage)
+# Depuis le 15/09/2026 cette section sert le GGUF MTP en mono-slot spéculé ;
+#   le réglage multi-slot qui était ici (GGUF courant, parallel 4, sans
+#   spéculation) est conservé tel quel dans qwen3.5-9b-parallel ci-dessous.
+#   Décision : quand un drafter apporte un gain, il devient le réglage servi
+#   par défaut et le multi-slot passe en variante.
 # chat-template-kwargs : thinking COUPÉ. Note : depuis les mises à jour de
 #   template unsloth, les Qwen3.5 Small (0.8B/2B/4B/9B) sont nothink PAR DÉFAUT —
 #   le kwargs est devenu redondant mais reste en ceinture-bretelles (un futur
 #   re-download de template ne doit pas réactiver le thinking en douce).
 # n-predict 1024 : borne dure, aucune tâche auxiliaire n'a besoin de plus —
 #   plus jamais de génération qui court jusqu'au plafond de contexte
-# Pas de variante MTP : jusqu'au 15/09/2026 la raison écrite ici était « MTP
-#   imposerait parallel=1 » ; c'est faux (cf. en-tête, vérifié dans le fork le
-#   15/09/2026). La raison qui tient : les 4 slots de tâches auxiliaires
-#   concurrentes font tout l'intérêt du 9b, et un drafter partagerait avec eux
-#   le batch de vérification (parallel x (n-max + 1) colonnes) pour un gain qui
-#   s'effondre à 4 voies ; non mesuré ici — la campagne multi-slot du
-#   15/09/2026 (cf. en-tête) n'a porté que sur les trois modèles spéculatifs,
-#   à reprendre si le sujet revient.
+# ctx-size 32768 inchangé, mais à parallel 1 le slot unique dispose de TOUT le
+#   ctx-size (le pool n'est plus divisé par 4) : 32768 redevient le contexte
+#   d'UNE requête, contre 8192 par slot dans la variante parallel.
+# Spéculation MTP, test isolé du 15/09/2026 (fork strix-0007bc6, Vulkan0,
+#   hors service, np 1, 2 passes, 1200 tokens, spec-test.txt et
+#   spec-refactor.txt) : GGUF courant sans spéculation 25,3 t/s ; GGUF MTP
+#   n-max 2 = 34,2 (acceptance 0,92 à 0,99), n-max 4 = 45,7 (0,83 à 0,97),
+#   n-max 6 = 40,8 ; ngram-map-k 7 min-hits 2 + draft-mtp n-max 4 = 52,1
+#   (42,4 sur spec-test.txt, 61,8 sur spec-refactor.txt). RETENU : la liste
+#   n-gram + MTP à n-max 4, soit x2,1 sur le réglage sans spéculation.
+#   n-max 4 : batch de vérification 5, sous les 8 colonnes de ggml-vulkan
+#   (cf. en-tête) ; n-max 6 (batch 7) retombe, c'est le découpage 4+2+1 du fork.
+#   Le n-gram est gardé parce que le 9b sert aussi des reformulations et des
+#   résumés où le prompt se ré-émet mot pour mot.
+# parallel 1, et le multi-slot MTP est INUTILISABLE ici (même journée, même
+#   fork) : np 4 n-max 1 = 18,2 t/s agrégés contre 80,8 sans spéculation,
+#   np 2 n-max 1 = 24,0. L'effondrement tient même à n-max 1, donc à des
+#   batches de 4 et 8 colonnes qui restent sous le seuil de ggml-vulkan : ce
+#   n'est PAS le découpage mat-vec, c'est un cas nouveau du chemin MTP
+#   multi-séquences du fork (speculative.cpp, vectorisé par séquence mais
+#   éprouvé par aucun test amont, cf. en-tête) : à verser à l'issue #50.
+#   D'où deux sections plutôt qu'un compromis.
+# cache-reuse 0 : contrainte des sections spéculatives, posée explicitement
+#   (la section parallel hérite du 4096 global, de toute façon ignoré ici).
+# Préchargement : preload.conf est indexé par NOM DE SECTION, donc la ligne
+#   `qwen3.5-9b` existante précharge désormais CETTE version (GGUF MTP). Les
+#   deux sections ensemble déclenchent l'avertissement « <clé> ET <clé>-mtp »
+#   de _preload_sanity (lib/preload.sh) : c'est voulu, ce sont bien les mêmes
+#   poids chargés deux fois (2 x ~8,8 Go).
+llama_model qwen3.5-9b "
+model                = $QWEN35_9B_MTP_PATH
+ctx-size             = 32768
+cache-ram            = 2048
+temp                 = 0.7
+top-k                = 20
+top-p                = 0.8
+min-p                = 0.0
+chat-template-kwargs = {\"enable_thinking\":false}
+n-predict            = 1024
+parallel             = 1
+cache-reuse          = 0
+spec-type            = ngram-map-k,draft-mtp
+spec-draft-n-max     = 4
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
+swa-full             = true
+ctx-checkpoints      = 128"
+
+groupe "; --- Variante multi-slot du 9b (4 slots, sans spéculation, GGUF sans tête MTP) ---"
+
+# Qwen3.5-9B, VARIANTE MULTI-SLOT : réglage servi jusqu'au 15/09/2026, gardé
+#   tel quel pour les tâches auxiliaires CONCURRENTES : 4 slots, pas de
+#   drafter, GGUF courant du repo unsloth sans MTP (dossier qwen3.5-9b/).
+#   Bascule manuelle : /model qwen3.5-9b-parallel
+# Pourquoi elle survit à l'arrivée du MTP : les 4 slots de tâches auxiliaires
+#   concurrentes font tout l'intérêt du 9b, et le chemin MTP multi-slot du fork
+#   est inutilisable (18,2 t/s agrégés à np 4 contre 80,8 ici, cf. la section
+#   principale). C'est la mesure du 15/09/2026 qui remplace l'ancienne raison
+#   écrite ici, « MTP imposerait parallel=1 » : celle-là était fausse (cf.
+#   en-tête, vérifié dans le fork le 15/09/2026), le résultat, lui, tient.
 # Mesuré 21/08/2026 (Vulkan0, b10433) : prefill 837 t/s, décode 25,7 t/s ;
 #   --bench-parallel : 4 requêtes = 78,6 t/s agrégés (x3,06), 20 t/s par
 #   requête — le parallel 4 est justifié ; --bench-load : 1,9 s de chargement
@@ -246,7 +320,10 @@ download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
 #   (93 → 33) : tâches auxiliaires, pas de raisonnement.
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   971 t/s, décode 25,7 t/s : prefill +16 %, décode identique au dixième.
-llama_model qwen3.5-9b "
+# ctx-size : pool partagé, donc 8192 par slot à parallel 4.
+# Toutes les autres clés sont celles de la section principale (sampling,
+#   n-predict, swa-full, ctx-checkpoints) : à ne changer qu'en même temps.
+llama_model qwen3.5-9b-parallel "
 model                = $QWEN35_9B_PATH
 ctx-size             = 32768
 cache-ram            = 2048
@@ -438,19 +515,89 @@ groupe "; --- LFM2.5 2.6B (Liquid AI — agentic edge, tool calling) ---"
 download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-GGUF" \
   LFM25_26B_PATH="LFM2.5-2.6B-Q8_0.gguf"
 
+# Drafter DSpark officiel Liquid AI (Q8_0, 356 491 776 octets), déclaré dans le
+# MÊME dossier que la cible : même façon de faire que le sidecar DSpark de
+# deepseek-v4-flash ou le DFlash 2 de qwen3.8-27b. Le GGUF devient nécessaire
+# au démarrage de la section principale : ne pas le retirer du dossier.
+# Métadonnées lues le 15/09/2026 : general.architecture = dflash, dorsale Qwen3
+# de 5 blocs, block_size 9, target_layers [3,10,18,22,28], tête de Markov rang
+# 256 et tête de confiance (conf_proj) ; embeddings et tête LM empruntés à la
+# cible, donc même device qu'elle, jamais de spec-draft-device.
+# Le TODO « Qwen3-style backbones » du loader du fork porte sur la dorsale DU
+# DRAFTER (Qwen3 ici), pas sur la cible : le couple charge sans contournement.
+# n-max : le README du repo annonce 10, le fork clampe à block_size = 9.
+download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-DSpark-GGUF" \
+  LFM25_DSPARK_PATH="LFM2.5-2.6B-DSpark-Q8_0.gguf"
+
 # LFM2.5-2.6B — agentic edge Liquid AI : tool calling, instruction following,
 #   multi-step. Compétitif avec des modèles 4x plus gros sur le tool use
 #   (BFCLv4, ToolSandbox) — coding : rester sur les gros, c'est sa faiblesse.
+# Depuis le 15/09/2026 cette section sert la version SPÉCULÉE (drafter DSpark
+#   officiel, parallel 1) ; le réglage multi-slot qui était ici (4 slots, sans
+#   drafter) est conservé tel quel dans lfm2.5-2.6b-parallel ci-dessous.
+#   Décision : quand un drafter apporte un gain, il devient le réglage servi
+#   par défaut et le multi-slot passe en variante.
 # Sampling : reco llama.cpp officielle du model card GGUF (temp 0.1, top-k 50,
 #   repeat-penalty 1.1). Le blog transformers donne temp 0.2 / rep 1.05 —
 #   on suit la reco llama.cpp, plus déterministe, cohérente pour du tool calling.
-# ctx 131072 : fenêtre native 128K (mid-training LFM2.5).
+# ctx 131072 : fenêtre native 128K (mid-training LFM2.5) ; à parallel 1 le slot
+#   unique en dispose en entier (contre 32768 par slot dans la variante).
 # cache-type-k/v f16 : arch hybride conv récurrente + GQA (lfm2) — KV minuscule
 #   sur 2.6B, le q8_0/q4_0 global n'apporte rien ; f16 explicite par prudence
 #   (chemin quantifié non validé sur cette arch).
-# cache-reuse 0 : état récurrent (conv) — même logique que GDN, non supporté.
+# cache-reuse 0 : état récurrent (conv) : même logique que GDN, non supporté ;
+#   c'est aussi la contrainte des sections spéculatives.
 # Pas de swa-full ni ctx-checkpoints : pas une arch hybride SWA Qwen.
 # jinja : template chat requis pour le tool calling.
+# Spéculation DSpark, test isolé du 15/09/2026 (fork strix-0007bc6, Vulkan0,
+#   hors service, np 1, 2 passes, 1200 tokens, spec-test.txt et
+#   spec-refactor.txt) : sans spéculation 69,6 t/s ; draft-dspark n-max 3 =
+#   122,3 (acceptance 0,39 à 0,83 selon le prompt), n-max 5 = 110,2, n-max 9 =
+#   124,6 (acceptance 0,19 à 0,69). RETENU n-max 3 : même débit que 9 au bruit
+#   près, acceptance bien plus haute, et batch de vérification de 4 colonnes,
+#   loin sous les 8 de ggml-vulkan (cf. en-tête). Soit x1,76 sur le réglage
+#   sans spéculation. Pas de n-gram ici : mesure non faite, le modèle sert du
+#   tool calling court plutôt que du refactor.
+# Mémoire : ~9 Go résidents chargé (poids 2,7 + drafter 0,36 + KV du ctx
+#   131072 d'un seul slot), à garder en tête avec le LRU de --models-max.
+# parallel 1 : DSpark multi-slot n'a PAS été mesuré sur ce modèle. Ce qui est
+#   mesuré ailleurs au 15/09/2026 : le MTP multi-slot du 9b s'effondre (18,2
+#   t/s agrégés à np 4 contre 80,8 sans spéculation, cf. son bloc) et aucun
+#   modèle spéculatif du parc ne gagne au multi-slot sauf deepseek-v4-flash à
+#   np 2, où le batch de vérification tombe pile sur les 8 colonnes du seuil.
+#   Ici np 2 donnerait 8 colonnes (2 x (3 + 1)) : le cas mérite une mesure,
+#   il n'en a pas encore.
+# Préchargement : preload.conf est indexé par NOM DE SECTION, donc la ligne
+#   `lfm2.5-2.6b` existante précharge désormais CETTE version (drafter DSpark
+#   compris, ~9 Go au lieu de ~2,7). _preload_sanity n'avertit PAS si les deux
+#   sections sont préchargées ensemble (lignes `model =` différentes, pas de
+#   suffixe -mtp) : c'est au lecteur de voir que ce sont les mêmes poids.
+# Mesuré 21/08/2026 (Vulkan0, b10433) et 13/09/2026 (fork) sans spéculation :
+#   chiffres dans la variante ci-dessous, qui porte ce réglage.
+llama_model lfm2.5-2.6b "
+model            = $LFM25_26B_PATH
+ctx-size         = 131072
+cache-ram        = 2048
+temp             = 0.1
+top-k            = 50
+min-p            = 0.0
+repeat-penalty   = 1.1
+cache-type-k     = f16
+cache-type-v     = f16
+cache-reuse      = 0
+spec-type        = draft-dspark
+spec-draft-model = $LFM25_DSPARK_PATH
+spec-draft-n-max = 3
+jinja            = true
+parallel         = 1"
+
+groupe "; --- Variante multi-slot du LFM2.5 (4 slots, sans drafter) ---"
+
+# LFM2.5-2.6B, VARIANTE MULTI-SLOT : réglage servi jusqu'au 15/09/2026, gardé
+#   tel quel pour les usages concurrents (plusieurs boucles d'outils légères
+#   en même temps) : 4 slots, pas de drafter, même GGUF cible que la section
+#   principale, le DSpark n'étant simplement pas chargé.
+#   Bascule manuelle : /model lfm2.5-2.6b-parallel
 # Mesuré 21/08/2026 (Vulkan0, b10433) : prefill 2279 t/s, décode 67,7 t/s ;
 #   --bench-parallel : 4 requêtes = 205 t/s agrégés (x3,06) ; --bench-load :
 #   0,5 s (2,7 Go), TTFT 27 ms ; --bench-cache : 62 % / 63 % comme les GDN
@@ -458,7 +605,10 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-GGUF" \
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   3048 t/s, décode 70,8 t/s : prefill +34 % contre le 21/08, mais bench.log
 #   du 02/09 (b10621) donnait déjà 2743 : l'essentiel vient du build.
-llama_model lfm2.5-2.6b "
+# ctx-size : pool partagé, donc 32768 par slot à parallel 4.
+# Toutes les autres clés sont celles de la section principale (sampling, KV
+#   f16, cache-reuse 0, jinja) : à ne changer qu'en même temps.
+llama_model lfm2.5-2.6b-parallel "
 model            = $LFM25_26B_PATH
 ctx-size         = 131072
 cache-ram        = 2048
@@ -1366,4 +1516,7 @@ parallel         = 1"
 
 # Préchargement par défaut (sans preload.conf) : le léger agentic edge seul,
 # le reste en LRU — les always-on se choisissent via --preload.
+# Depuis le 15/09/2026 la section lfm2.5-2.6b porte le drafter DSpark : le
+# préchargé par défaut pèse donc ~9 Go chargé (poids + drafter + KV) au lieu
+# de ~2,7 Go de poids. La variante sans drafter est lfm2.5-2.6b-parallel.
 DEFAULT_PRELOAD=(lfm2.5-2.6b)
