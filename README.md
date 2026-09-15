@@ -215,27 +215,24 @@ Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 
 ## Parc au 15/09/2026
 
-Une ligne par section servie du `models.ini` (la section thinking du 27B,
-doublon sur le même GGUF et deux fois plus lente, a été retirée le 13/09/2026,
-cf. `docs/HISTORIQUE.md`) ; depuis le 15/09/2026 ornith-1.5-35b-a3b en a deux,
-sur le même GGUF : la section de base sert la concurrence (parallel 4, sans
-spéculation), la variante `-mtp` le mono-utilisateur (parallel 1, spéculation).
-Même jour, même logique pour lfm2.5-2.6b et qwen3.5-9b, dans l'autre sens :
-le drafter y apporte assez (x1,76 et x2,1 en test isolé) pour que la section
-principale passe en spéculation à un slot, le réglage multi-slot d'avant
-restant servi sous le nom `-parallel`. Le 9b spéculé tourne sur un AUTRE GGUF
-(repo MTP d'unsloth, dossier `qwen3.5-9b-mtp/`), le LFM2.5 sur le même GGUF
-plus un drafter DSpark. Les deux sections spéculées ont été mesurées le
-15/09/2026 tel que servi : le drafter rend +59 % de décode au LFM2.5 et +29 %
-au 9b contre la variante `-parallel` re-mesurée le même jour, en échange de
-20 % et 5,8 % de prefill, le drafter décodant aussi le prompt. Les colonnes
-`-parallel` gardent les chiffres du 13/09/2026, série de référence de ce
-réglage.
-Réglages exacts dans `lib/models.sh` ; toutes les mesures sont celles du fork strix-0007bc6
-(Vulkan0, `--bench` 3 passes, les 12, 13 et 15/09/2026). Acceptance vide = pas de
-spéculation. La dernière colonne situe le décode contre la dernière mesure du
-paquet Arch (série `bNNNNN`, 21/08 au 05/09/2026) : deux séries distinctes, un
-ordre de grandeur, pas une comparaison à la décimale.
+Une ligne par section servie du `models.ini`. Campagne du 15/09/2026 : tout
+modèle qui dispose d'un drafter le sert à un slot (DSpark sur DeepSeek et
+LFM2.5, DFlash z-lab sur Coder-Next, tête MTP embarquée sur Ornith et sur le 9b
+via le GGUF MTP d'unsloth, dossier `qwen3.5-9b-mtp/`), et les trois modèles qui
+avaient 4 slots gardent ce réglage dans une seconde section sur le même GGUF :
+`ornith-1.5-35b-a3b` reste la section de base (concurrence réelle observée) avec
+une variante `-mtp` ; `lfm2.5-2.6b` et `qwen3.5-9b` passent au drafter, l'ancien
+réglage restant servi sous `-parallel`. Le drafter rend +59 % de décode au
+LFM2.5 et +29 % au 9b contre leur variante re-mesurée le même jour, contre 20 %
+et 5,8 % de prefill (le drafter décode aussi le prompt) ; sur les prompts de
+code des tests isolés les gains sont bien plus forts (x1,8 et x2,1). La section
+thinking du 27B a été retirée le 13/09/2026 (cf. `docs/HISTORIQUE.md`).
+Réglages exacts dans `lib/models.sh` ; toutes les mesures sont celles du fork
+strix-0007bc6 (Vulkan0, `--bench` 3 passes, les 12, 13 et 15/09/2026, prompt
+générique à long contexte). Acceptance vide = pas de spéculation. La dernière
+colonne situe le décode contre la dernière mesure du paquet Arch (série
+`bNNNNN`, 21/08 au 05/09/2026) : deux séries distinctes, un ordre de grandeur,
+pas une comparaison à la décimale.
 
 | Modèle (section) | Quant et taille | Device | Réglage spéculatif | Prefill t/s | Décode t/s | Acceptance | Écart décode contre paquet |
 |---|---|---|---|---|---|---|---|
@@ -328,9 +325,9 @@ parallel         = 4"
   téléchargements si le fichier manque ou si la source a bougé. Unique cas : le
   sidecar MTP de Qwen3.8-Flash-Next renommé pour le fork ;
 - `llama_model <section> "<corps ini>"` déclare la section ; deux sections
-  peuvent partager le même `*_PATH` (cas des deux sections Qwen3.8-27B jusqu'au
-  13/09/2026), et les garde-fous de
-  préchargement en dérivent ;
+  peuvent partager le même `*_PATH` (Ornith et lfm2.5 depuis le 15/09/2026 :
+  section à drafter et variante multi-slot ; les deux sections Qwen3.8-27B
+  jusqu'au 13/09/2026), et les garde-fous de préchargement en dérivent ;
 - `groupe "; --- titre ---"` avant le premier `llama_model` d'une famille.
 
 La suite (device, spéculation, mesures, récap partageable) est la procédure en
@@ -362,18 +359,33 @@ Non, il est régénéré à chaque `--setup`, `--preload` ou `--spec-*`.
 Éditer les fichiers `.conf` ou `lib/models.sh`.
 
 **Pourquoi `parallel = 1` sur les modèles spéculatifs ?**
-Par choix, pas par interdit. Cette FAQ a répondu jusqu'au 15/09/2026
+Par choix mesuré, pas par interdit. Cette FAQ a répondu jusqu'au 15/09/2026
 « contrainte llama.cpp : `-np` supérieur à 1 et `--mmproj` ne sont pas
 supportés avec MTP » ; cette phrase vient d'une doc unsloth de juin/juillet
 2026 et n'existe pas dans le moteur servi (fork strix-llama.cpp, commit
 `0007bc6`, vérifié le 15/09/2026) : le serveur y drafte tous les slots en un
 appel, `draft-dflash` et `draft-dspark` sont explicitement multi-séquences,
-`draft-mtp` est vectorisé par séquence mais n'a jamais été éprouvé à `-np` > 1
-(non éprouvé, pas interdit). Ce qui décide vraiment, modèle par modèle :
-`ctx-size` est un pool partagé (chaque slot reçoit `ctx-size / parallel`), la
-mémoire de KV, le batch de vérification qui vaut jusqu'à
-`parallel x (n-max + 1)` et franchit vite le seuil de 8 colonnes de
-ggml-vulkan, et le rendement réel de la spéculation, qui s'effondre quand les
-voies se multiplient. Une campagne de mesure multi-slot est en cours : les
-valeurs actuelles sont inchangées en attendant. Seul interdit qui demeure : le
-`--mmproj` reste incompatible avec un drafter.
+`draft-mtp` est vectorisé par séquence. Seul interdit qui demeure : `--mmproj`
+avec un drafter.
+
+Ce que la mesure du 15/09/2026 a établi (`--bench-parallel`,
+`tools/spec-isolate.sh NP=N`, `--bench-agentic <m> 2 N`) :
+
+- des slots vides ne coûtent rien : une requête seule tourne à la même vitesse
+  à `parallel` 1, 2 ou 4 ; seul le contexte par slot baisse (`ctx-size` est un
+  pool partagé) ;
+- sous charge, l'agrégé suit le batch de vérification `parallel x (n-max + 1)`
+  contre le seuil de 8 colonnes de ggml-vulkan : à 8 ou moins, gain (DeepSeek
+  DSpark np 2 x1,22 en salves ; Ornith sans spéculation np 4 x1,93) ; au-delà,
+  tout retombe sous x1 (27B DFlash np 2 x0,89, Coder-Next np 2 et 4 x0,86 et
+  x0,92) ;
+- le MTP multi-slot s'effondre même sous le seuil (qwen3.5-9b MTP n-max 1 à
+  np 2 : 24 t/s agrégés contre 80,8 sans spéculation à np 4) ;
+- en boucle agentic réelle, DeepSeek à 2 boucles ne rend que x1,16 de tâches
+  pour une latence doublée : remis à 1. Ornith sans spéculation tient 3 boucles
+  (40/40, cache 88 à 94 %, x2,33) : parallel 4 gardé.
+
+D'où le parc actuel : parallel 1 partout où il y a un drafter, parallel 4 sans
+spéculation là où la concurrence est réelle (Ornith) ou possible (variantes
+`-parallel` de lfm2.5 et du 9b). Détail par modèle dans `lib/models.sh` et
+`docs/HISTORIQUE.md`, paragraphe « Multi-slot et drafters ».
