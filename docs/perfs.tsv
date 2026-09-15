@@ -4,10 +4,8 @@
 # Decimales avec un point ici, virgule a l'affichage (py/perf_graphs.py).
 # Regenerer docs/graphs/ apres toute modification : python3 py/perf_graphs.py
 modele	prefill_paquet	prefill_fork	decode_paquet	decode_fork	acceptance_paquet	acceptance_fork	reglage	source
-lfm2.5-2.6b		2875		108.8		0.50	draft-dspark 3, drafter DSpark officiel Liquid AI Q8_0, parallel 1 (KV f16)	jamais mesure au paquet (reglage du 15/09/2026) ; strix-0007bc6 15/09/2026
-lfm2.5-2.6b-parallel	2279	3048	67.7	70.8			aucun, parallel 4 (KV f16), meme GGUF cible que la ligne ci-dessus, sans drafter	b10433 21/08/2026 contre strix-0007bc6 13/09/2026 (re-mesure du 15/09 sous ce nom : 3602 / 68.2)
-qwen3.5-9b		745		33.0		0.58	ngram-map-k 7 + draft-mtp 4, min-hits 2, tete MTP embarquee, parallel 1 (GGUF MTP, dossier qwen3.5-9b-mtp/)	jamais mesure au paquet (reglage du 15/09/2026) ; strix-0007bc6 15/09/2026
-qwen3.5-9b-parallel	837	971	25.7	25.7			aucun, parallel 4 (GGUF sans tete MTP)	b10433 21/08/2026 contre strix-0007bc6 13/09/2026 (re-mesure du 15/09 sous ce nom : 791 / 25.5)
+lfm2.5-2.6b	2279	2875	67.7	108.8		0.50	draft-dspark 3, drafter DSpark officiel Liquid AI Q8_0, parallel 1 (KV f16) ; paquet sans drafter, parallel 4	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
+qwen3.5-9b	837	745	25.7	33.0		0.58	ngram-map-k 7 + draft-mtp 4, min-hits 2, tete MTP embarquee, parallel 1 (GGUF MTP, dossier qwen3.5-9b-mtp/) ; paquet sans drafter, parallel 4, GGUF sans tete MTP	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
 ornith-1.5-35b-a3b	974	1129	70.7	73.3			aucun, parallel 4 (cache-type-v q8_0)	b10566 28/08/2026 contre strix-0007bc6 13/09/2026
 ornith-1.5-35b-a3b-mtp		1073		76.2		0.55	ngram-map-k 7 + draft-mtp 4, parallel 1 (meme GGUF que la ligne ci-dessus)	jamais mesure au paquet ; strix-0007bc6 15/09/2026
 qwen3.8-27b-dflash-nothink	261	359	29.5	32.6	0.65	0.595	ngram-map-k 47 + draft-dflash 7 (MTP n-max 6 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 13/09/2026

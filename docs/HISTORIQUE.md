@@ -30,10 +30,8 @@ le cas n-gram) ne se comparent pas entre elles.
 
 | Modèle | GGUF | Device | Réglage retenu | Prefill t/s | Gen t/s | État |
 |---|---|---|---|---|---|---|
-| lfm2.5-2.6b | Q8_0 (2,7 Go) + drafter DSpark officiel Q8_0 (0,36 Go) | Vulkan0 (mesuré) | **draft-dspark 3**, parallel 1 (retenu le 15/09/2026) | **2875** (jamais mesuré au paquet sur ce réglage) | **108,8** (acc. 0,50 ; 68,2 pour la variante sans drafter le même jour, +59 % ; 122,3 en test isolé, x1,76) | fork strix-0007bc6, 15/09/2026 ; chargement 0,4 s, TTFT 27 ms (drafter compris) ; le prefill perd 20 % contre la variante, le drafter décodant aussi le prompt |
-| lfm2.5-2.6b-parallel | Q8_0 (2,7 Go), même GGUF cible | Vulkan0 (mesuré) | parallel 4, sans drafter | **3048** (2279 au paquet b10433 ; 3602 re-mesuré le 15/09) | **70,8** (67,7 au paquet ; 68,2 le 15/09 ; 205 agrégés à 4 requêtes, x3,06) | fork strix-0007bc6, 13/09/2026 ; cache tour suivant 62 % ; chargement 0,5 s, TTFT 27 ms ; réglage servi jusqu'au 15/09/2026, gardé en variante pour les usages concurrents |
-| qwen3.5-9b | UD-Q6_K_XL (8,4 Go, GGUF MTP unsloth, dossier `qwen3.5-9b-mtp/`) | Vulkan0 (hérité : bench-devices.conf est indexé par dossier de GGUF) | **ngram-map-k 7 + draft-mtp 4**, min-hits 2, parallel 1 (retenu le 15/09/2026, tête MTP embarquée blk.32.nextn) | **745** (jamais mesuré au paquet sur ce réglage) | **33,0** (acc. 0,58 ; 25,5 pour la variante sans spéculation le même jour, +29 % ; 52,1 en test isolé, x2,1) | fork strix-0007bc6, 15/09/2026 ; cache 62 % au tour suivant, 0 % après édition, 64 % à l'identique, inchangé par le MTP ; multi-slot MTP inutilisable (np 4 n-max 1 = 18,2 t/s agrégés contre 80,8) |
-| qwen3.5-9b-parallel | UD-Q6_K_XL (8,2 Go, GGUF sans tête MTP) | Vulkan0 (mesuré) | parallel 4, sans spéculation | **971** (837 au paquet b10433 ; 791 re-mesuré le 15/09) | **25,7** (25,7 au paquet ; 25,5 le 15/09 ; 78,6 agrégés à 4, x3,06) | fork strix-0007bc6, 13/09/2026 ; cache 62 % ; chargement 1,9 s ; réglage servi jusqu'au 15/09/2026, gardé en variante pour les tâches auxiliaires concurrentes |
+| lfm2.5-2.6b | Q8_0 (2,7 Go) + drafter DSpark officiel Q8_0 (0,36 Go) | Vulkan0 (mesuré) | **draft-dspark 3**, parallel 1 (retenu le 15/09/2026) | **2875** (2279 au paquet b10433 le 21/08, réglage sans drafter à 4 slots ; 3048 sur le fork le 13/09 et 3602 le 15/09 avec ce même réglage) | **108,8** (acc. 0,50 ; 67,7 au paquet et 70,8 sur le fork le 13/09 sans drafter, 68,2 re-mesuré le 15/09, soit +59 % ; 122,3 en test isolé, x1,76) | fork strix-0007bc6, 15/09/2026 ; chargement 0,4 s, TTFT 27 ms (drafter compris) ; le prefill perd 20 % contre la variante, le drafter décodant aussi le prompt ; le réglage sans drafter à 4 slots (205 t/s agrégés à 4 requêtes, x3,06 ; chargement 0,5 s, TTFT 27 ms ; cache 62 / 63 %) a été gardé en variante `-parallel` la journée du 15/09/2026 puis retiré, cf. « Variantes -parallel retirées » |
+| qwen3.5-9b | UD-Q6_K_XL (8,4 Go, GGUF MTP unsloth, dossier `qwen3.5-9b-mtp/`) | Vulkan0 (hérité : bench-devices.conf est indexé par dossier de GGUF) | **ngram-map-k 7 + draft-mtp 4**, min-hits 2, parallel 1 (retenu le 15/09/2026, tête MTP embarquée blk.32.nextn) | **745** (837 au paquet b10433 le 21/08, réglage sans spéculation à 4 slots sur le GGUF sans MTP ; 971 sur le fork le 13/09 et 791 le 15/09 avec ce même réglage) | **33,0** (acc. 0,58 ; 25,7 au paquet comme sur le fork le 13/09 sans spéculation, 25,5 re-mesuré le 15/09, soit +29 % ; 52,1 en test isolé, x2,1) | fork strix-0007bc6, 15/09/2026 ; cache 62 % au tour suivant, 0 % après édition, 64 % à l'identique, inchangé par le MTP ; multi-slot MTP inutilisable (np 4 n-max 1 = 18,2 t/s agrégés contre 80,8) ; le réglage sans spéculation à 4 slots (78,6 t/s agrégés à 4 requêtes, x3,06 ; chargement 1,9 s, TTFT 65 ms) a été gardé en variante `-parallel` la journée du 15/09/2026 puis retiré, cf. « Variantes -parallel retirées » |
 | ornith-1.5-35b-a3b | Q4_K_M (22 Go) | Vulkan0 (mesuré : ROCm0 931 / 57,6) | parallel 4, sans spéculation | **1129** (974 au paquet b10566) | **73,3** (70,7 au paquet ; 136,8 agrégés à 4, x1,93) | fork strix-0007bc6, 13/09/2026 ; cache 62 % ; remplace les trois Qwen3.6-35B-A3B le 28/08/2026 |
 | ornith-1.5-35b-a3b-mtp | idem (même GGUF) | Vulkan0 (hérité : bench-devices.conf est indexé par dossier de GGUF) | **ngram-map-k 7 + draft-mtp 4**, parallel 1 (tête MTP embarquée blk.40.nextn, découverte le 15/09/2026) | **1073** (jamais mesuré au paquet) | **76,2** (acc. 0,55 ; 73,3 pour la section de base sans spéculation) ; **113,2** (refactor, acc. 0,83) et **90,3** (générique, acc. 0,65) en test isolé | fork strix-0007bc6, 15/09/2026 ; section créée pour l'usage mono-utilisateur (+24 % en solo, 88,7 contre 71,6 t/s) ; la section de base reste le défaut agentic, elle bat la variante MTP en concurrence réelle (138 t/s agrégés à 4 requêtes contre 102) |
 | qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | **draft-dflash 7** (DFlash 2 z-lab, retenu le 13/09/2026 sur le fork ; spec-prefill essayé et retiré, cache de prompt à 0 %) | **349** (215 au paquet b10433 ; 289 → 183 à 32k en llama-bench) | **21,7** (acc. 0,35 ; 12,1 sans spéculation au paquet, +79 %) | fork strix-0007bc6, 13/09/2026 ; reasoning-budget 4096 (fork) ; spec-prefill lossy et incompatible avec le cache de prompt, perdant en agentic |
@@ -68,7 +66,11 @@ Retraits de l'inventaire de fichiers (`KNOWN_FILES`, déplacés de
 qwen3.8-27b : qwen3.6-27b et qwen3.6-27b-mtp ; retirés le 15/08/2026 car
 jamais utilisés : qwen3.5-2b, qwen3.5-9b-mtp, gemma-31b, gemma-12b ; retirés
 le 28/08/2026, remplacés par ornith-1.5-35b-a3b : qwen3.6-35b-a3b et
-qwen3.6-35b-a3b-mtp. `./setup-llm.sh --cleanup` les purge.
+qwen3.6-35b-a3b-mtp ; retiré le 15/09/2026 avec la variante
+qwen3.5-9b-parallel (cf. « Variantes -parallel retirées ») : le GGUF SANS tête
+MTP du 9b, `~/models/qwen3.5-9b/Qwen3.5-9B-UD-Q6_K_XL.gguf` (8,2 Go), homonyme
+mais distinct de celui du dossier `qwen3.5-9b-mtp/` que sert la section
+`qwen3.5-9b`. `./setup-llm.sh --cleanup` les purge.
 
 Laguna S 2.1 (déplacé de `lib/models.sh` le 13/09/2026) : quants ré-uploadées
 fin juillet 2026 par unsloth (« Fix rope/context metadata to 256K YaRN
@@ -98,10 +100,8 @@ Colonne « fork » : campagne `--bench` 3 passes, Vulkan0, `strix-0007bc6`, les
 
 | Modèle | Paquet (prefill / gen) | Fork strix-0007bc6 (prefill / gen) | Écart prefill | Écart gen | Note |
 |---|---|---|---|---|---|
-| lfm2.5-2.6b | jamais mesuré (réglage à drafter retenu le 15/09/2026) | 2875 / 108,8 / acc. 0,50 (15/09, draft-dspark 3, parallel 1) | n/c | n/c | contre la variante sans drafter re-mesurée le même jour (3602 / 68,2) : décode +59 %, prefill -20 %, le drafter DSpark décodant aussi le prompt. Le comparateur de `--bench` annonce « prefill 3651 -> 2875 RÉGRESSION » : il compare par nom de section sans savoir que le réglage a changé, et la variante retrouve 3602 le même jour. Test isolé du 15/09 (2 passes, spec-test / spec-refactor) : sans spéculation 69,6 t/s ; draft-dspark n-max 3 = **122,3** (acc. 0,39 à 0,83), n-max 5 = 110,2, n-max 9 = 124,6 (acc. 0,19 à 0,69) ; n-max 3 retenu pour son acceptance et son batch de vérification de 4 colonnes. `--bench-load` du 15/09, drafter compris : 0,4 s, TTFT 27 ms |
-| lfm2.5-2.6b-parallel | 2279 / 67,7 (b10433, 21/08) | 3048 / 70,8 (13/09 ; 3602 / 68,2 re-mesuré le 15/09 sous ce nom) | +33,7 % | +4,6 % | bench.log du 02/09 (b10621) donnait déjà 2743 / 69,4 : l'essentiel de l'écart de prefill vient du build, pas du fork (+11 % sur cette base). Section renommée le 15/09/2026, réglage inchangé |
-| qwen3.5-9b | jamais mesuré (GGUF MTP et réglage spéculé retenus le 15/09/2026) | 745 / 33,0 / acc. 0,58 (15/09, ngram-map-k 7 + draft-mtp 4, parallel 1) | n/c | n/c | contre la variante sans spéculation re-mesurée le même jour (791 / 25,5) : décode +29 %, prefill -5,8 %. Le comparateur annonce « prefill 993 -> 745 RÉGRESSION » alors que le GGUF ET le réglage ont changé, et la variante ne rend elle-même que 791 le 15/09 contre 993 le 13/09 : l'essentiel est de la dispersion entre journées. Test isolé du 15/09 (2 passes) : sans spéculation 25,3 t/s ; MTP seul n-max 2 = 34,2, n-max 4 = 45,7, n-max 6 = 40,8 ; ngram-map-k 7 min-hits 2 + draft-mtp 4 = **52,1** (42,4 générique, 61,8 refactor), soit x2,1 en test isolé contre x1,29 au `--bench`, dont le prompt est générique. `--bench-cache` du 15/09 : 62 / 0 / 64 %, soit exactement les valeurs du 21/08 sans spéculation |
-| qwen3.5-9b-parallel | 837 / 25,7 (b10433, 21/08) | 971 / 25,7 (13/09 ; 791 / 25,5 re-mesuré le 15/09 sous ce nom) | +16,0 % | 0 % | décode identique au dixième ; bench.log 02/09 (b10621) 25,59, prefill inexploitable (67, contaminé par le cache). Section renommée le 15/09/2026, réglage et GGUF inchangés ; le prefill de 791 le 15/09 contre 993 le 13/09, à réglage strictement identique, donne la mesure de la dispersion de plateforme sur ce modèle |
+| lfm2.5-2.6b | 2279 / 67,7 (b10433, 21/08, réglage sans drafter à 4 slots) | 2875 / 108,8 / acc. 0,50 (15/09, draft-dspark 3, parallel 1) | +26,2 % | +60,7 % | réglages différents des deux côtés : le paquet tournait sans drafter à 4 slots, le fork sert le DSpark à un slot depuis le 15/09/2026. Sur le même fork, ce réglage sans drafter donnait 3048 / 70,8 le 13/09 et 3602 / 68,2 re-mesuré le 15/09 sous la variante `-parallel` (retirée le soir même) ; contre elle : décode +59 %, prefill -20 %, le drafter DSpark décodant aussi le prompt. Le comparateur de `--bench` annonce « prefill 3651 -> 2875 RÉGRESSION » : il compare par nom de section sans savoir que le réglage a changé, et la variante retrouve 3602 le même jour. Test isolé du 15/09 (2 passes, spec-test / spec-refactor) : sans spéculation 69,6 t/s ; draft-dspark n-max 3 = **122,3** (acc. 0,39 à 0,83), n-max 5 = 110,2, n-max 9 = 124,6 (acc. 0,19 à 0,69) ; n-max 3 retenu pour son acceptance et son batch de vérification de 4 colonnes. `--bench-load` du 15/09, drafter compris : 0,4 s, TTFT 27 ms |
+| qwen3.5-9b | 837 / 25,7 (b10433, 21/08, GGUF sans MTP, sans spéculation, 4 slots) | 745 / 33,0 / acc. 0,58 (15/09, ngram-map-k 7 + draft-mtp 4, parallel 1) | -11,0 % | +28,4 % | GGUF ET réglage différents des deux côtés : le paquet tournait sur le GGUF sans tête MTP, sans spéculation, à 4 slots. Sur le même fork, ce réglage donnait 971 / 25,7 le 13/09 et 791 / 25,5 re-mesuré le 15/09 sous la variante `-parallel` (retirée le soir même) ; contre elle : décode +29 %, prefill -5,8 %. Le comparateur annonce « prefill 993 -> 745 RÉGRESSION » alors que le GGUF ET le réglage ont changé, et la variante ne rend elle-même que 791 le 15/09 contre 993 le 13/09 : l'essentiel est de la dispersion entre journées. Test isolé du 15/09 (2 passes) : sans spéculation 25,3 t/s ; MTP seul n-max 2 = 34,2, n-max 4 = 45,7, n-max 6 = 40,8 ; ngram-map-k 7 min-hits 2 + draft-mtp 4 = **52,1** (42,4 générique, 61,8 refactor), soit x2,1 en test isolé contre x1,29 au `--bench`, dont le prompt est générique. `--bench-cache` du 15/09 : 62 / 0 / 64 %, soit exactement les valeurs du 21/08 sans spéculation |
 | ornith-1.5-35b-a3b | 974 / 70,7 (b10566, 28/08) | 1129 / 73,3 (13/09) | +15,9 % | +3,7 % | sans spéculation des deux côtés |
 | ornith-1.5-35b-a3b-mtp | jamais mesuré (section créée le 15/09/2026) | 1073 / 76,2 / acc. 0,55 (15/09, ngram 7 + draft-mtp 4) | n/c | n/c | variante mono-utilisateur du même GGUF : +24 % en solo contre la section de base (88,7 contre 71,6 t/s), mais perdante en concurrence (np 2 agrégé 75,7 soit x0,83, np 4 agrégé 102,1 soit x1,12, contre 138 t/s à np 4 sans spéculation) — d'où deux sections plutôt qu'un réglage unique |
 | qwen3.8-27b (thinking) | 215 / 12,1 (b10433, 21/08) | 349 / 21,7 / acc. 0,35 (13/09, draft-dflash 7, reasoning_effort medium) | +62,3 % | +79,3 % | réglage différent des deux côtés : le paquet tournait sans spéculation, le fork avec le drafter DFlash 2. Le comparateur du dépôt affiche « prefill 759 → 349 régression » : les 759 t/s du 12/09 à 23:15 portaient `spec-prefill-p` 0,30, option retirée depuis (cache de prompt à 0 %) ; 349 est la première mesure du réglage réellement servi, ce n'est pas une régression. Référence sans spéculation sur le paquet : bench.log 02/09 (b10621) 239 / 12,13 ; `--spec-test` du 13/09 : 24,5 t/s contre 12,3 sans |
@@ -193,12 +193,80 @@ Décisions par modèle à l'issue de la campagne : ornith-1.5-35b-a3b reste à
 parallel 4 sans spéculation (meilleur du parc en concurrence) et reçoit une
 section `-mtp` séparée à parallel 1 pour le mono-utilisateur ; lfm2.5-2.6b et
 qwen3.5-9b font l'inverse, la section principale passe au drafter à parallel 1
-et l'ancien réglage multi-slot devient la variante `-parallel` ;
+et l'ancien réglage multi-slot est d'abord gardé en variante `-parallel`, puis
+retiré le soir même (paragraphe suivant) ;
 qwen3-coder-next et deepseek-v4-flash restent à parallel 1. Règle générale qui
 s'en dégage, écrite en tête de `lib/models.sh` : un modèle spéculatif ne gagne
 au multi-slot que si `parallel x (n-max + 1)` reste inférieur ou égal à
 8 colonnes, et le MTP n'y gagne de toute façon pas. Seul interdit technique
 qui demeure : le mmproj reste incompatible avec un drafter.
+
+## Variantes -parallel retirées (15/09/2026)
+
+Les sections `lfm2.5-2.6b-parallel` et `qwen3.5-9b-parallel`, créées le
+15/09/2026 pour garder l'ancien réglage à 4 slots quand les sections
+principales sont passées au drafter, ont été retirées le soir du même jour.
+Raison, décidée par l'utilisateur : **pas de parallel si perte de perf**.
+Aucune concurrence n'a jamais été observée sur ces deux modèles au journal du
+service ; leurs sections à drafter (parallel 1) gagnent en solo (+59 % de
+décode sur le LFM2.5, +29 % sur le 9b), et un multi-slot qui ne sert personne
+ne fait que retrancher du contexte par slot. Le contraste est
+`ornith-1.5-35b-a3b`, seul multi-slot du parc conservé : 2 à 3 slots occupés
+au journal du service, x1,93 en salves de 4 requêtes et x2,33 à 3 boucles
+agentic, pour aucune perte en solo. Sa variante `-mtp` (parallel 4 côté base,
+parallel 1 côté MTP) reste elle aussi en place.
+
+Ce que portaient ces deux variantes, gardé ici puisque les sections n'existent
+plus :
+
+- **lfm2.5-2.6b-parallel** : 4 slots, pas de drafter, même GGUF cible que la
+  section principale (le DSpark n'étant simplement pas chargé), `ctx-size`
+  131072 en pool partagé, donc 32768 par slot. Mesuré le 21/08/2026 (Vulkan0,
+  b10433) : prefill 2279 t/s, décode 67,7 t/s ; `--bench-parallel` 4 requêtes
+  = 205 t/s agrégés (x3,06) ; `--bench-load` 0,5 s (2,7 Go), TTFT 27 ms ;
+  `--bench-cache` 62 % / 63 %, comme les GDN (autre tokenizer, même plafond :
+  c'est l'état récurrent, conv ici). Le 13/09/2026 sur le fork
+  (strix-0007bc6, `--bench` 3 passes) : 3048 / 70,8, soit +34 % de prefill
+  contre le 21/08, mais `bench.log` du 02/09 (b10621) donnait déjà 2743 :
+  l'essentiel vient du build. Re-mesuré le 15/09/2026 sous le nom `-parallel`
+  (même fork) : 3602 / 68,2, l'ancien réglage retrouvé à 1,3 % près, ce qui a
+  servi de témoin au prefill perdu par la section principale spéculée.
+- **qwen3.5-9b-parallel** : 4 slots, pas de drafter, GGUF du repo unsloth SANS
+  tête MTP (dossier `qwen3.5-9b/`, devenu orphelin par ce retrait, cf.
+  « Retraits de l'inventaire de fichiers »), `ctx-size` 32768 en pool partagé,
+  donc 8192 par slot ; toutes les autres clés étaient celles de la section
+  principale (sampling, `n-predict`, `swa-full`, `ctx-checkpoints`). Mesuré le
+  21/08/2026 (Vulkan0, b10433) : prefill 837 t/s, décode 25,7 t/s ;
+  `--bench-parallel` 4 requêtes = 78,6 t/s agrégés (x3,06), 20 t/s par
+  requête ; `--bench-load` 1,9 s (8,2 Go), TTFT à chaud 65 ms ;
+  `--bench-cache` 62 % au tour suivant, 63 % à l'identique. Justesse OK
+  (recopie) ; un calcul mental simple, lui, est raté (93 → 33) : tâches
+  auxiliaires, pas de raisonnement. Le 13/09/2026 sur le fork : 971 / 25,7,
+  prefill +16 %, décode identique au dixième. Re-mesuré le 15/09/2026 sous le
+  nom `-parallel` : 791 / 25,5, décode identique au 13/09 mais prefill 20 %
+  plus bas (993 dans `bench.log` ce jour-là) sans changement de réglage ni de
+  GGUF : dispersion de plateforme, à garder en tête avant de lire un écart de
+  prefill entre deux journées comme un effet de réglage.
+
+La justification écrite alors pour les garder tenait en deux points, tous deux
+caducs : « les 4 slots de tâches auxiliaires CONCURRENTES font tout l'intérêt
+du 9b » (elles n'ont jamais eu lieu) et « le chemin MTP multi-slot du fork est
+inutilisable » (18,2 t/s agrégés à np 4 contre 80,8 sans spéculation, cf.
+point 3 ci-dessus). Ce second point reste vrai, mais il justifie le
+parallel 1 de la section à drafter, pas l'existence d'une seconde section. De
+même côté LFM2.5 : DSpark à np 2 respecte le seuil des 8 colonnes (2 x (3 + 1))
+et ne rend pourtant que ~x1,1 agrégé pour un débit par requête divisé par deux
+(mesure `tools/spec-isolate.sh NP=2` du 15/09/2026, 400 tokens, 2 salves :
+solo 105 à 124 t/s, deux requêtes simultanées 120 à 136 t/s agrégés).
+
+Conséquences pratiques du retrait : `docs/perfs.tsv` garde les colonnes paquet
+de ces deux modèles sur les lignes `lfm2.5-2.6b` et `qwen3.5-9b` (2279 / 67,7
+et 837 / 25,7) avec la mention « paquet sans drafter » dans la colonne réglage,
+comme le fait la ligne deepseek, pour que les graphes gardent la comparaison
+paquet contre fork sur ces deux modèles ; `preload.conf` et les autres `.conf`
+locaux de bigchuck, indexés par nom de section, peuvent contenir des lignes
+`*-parallel` devenues sans effet (à nettoyer à la main si elles gênent) ; et le
+GGUF sans MTP du 9b devient orphelin, purgeable par `./setup-llm.sh --cleanup`.
 
 ## Spéculation
 
