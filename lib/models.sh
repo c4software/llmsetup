@@ -740,6 +740,20 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   3 (défaut llama.cpp) sur B200, acceptance qui chute au-delà. Pas de
 #   spec-draft-device (embeddings et tête de sortie empruntés à la cible), pas
 #   de spec-draft-p-min (sans tête de confiance le fork refuse p-min > 0).
+#   RETENU le 15/09/2026 : ngram-map-k 7 + draft-dspark n-max 3, sur --spec-ab
+#   (fork strix-0007bc6, Vulkan0, spec-refactor.txt, 4 passes, médiane hors
+#   1re passe) : ngram seul 31,2 t/s (acc. 0,91) ; draft-dspark seul n-max 3
+#   35,6 (0,94) ; ngram + dspark n-max 3 = 38,7 (0,87, +24 %) ; n-max 2 = 35,0
+#   (0,89) ; n-max 5 = 22,7 (0,48, -27 % : l'acceptance s'effondre au-delà de
+#   3, comme mesuré par unsloth sur B200). Les deux drafts se complètent : les
+#   n-grams recopient les blocs du prompt, DSpark porte le reste.
+#   Coût : 10,9 Go de plus en mémoire (115 Go de poids, 111 Go utilisés à ctx
+#   32K en isolé), à garder en tête avec le piège --models-max du routeur.
+#   --bench du 15/09/2026 tel que servi (fork strix-0007bc6, 3 passes) :
+#   prefill 199 t/s, décode 28,9 t/s, acceptance 0,68, contre 205 / 19,9 /
+#   0,65 en n-gram seul le 13/09 : décode +45 %, prefill inchangé (-3 %, le
+#   drafter décode aussi le prompt). La garde mémoire a dû décharger lfm2.5
+#   (préchargé) pour faire la place : ~118 Go demandés pour 117,6 disponibles.
 # Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433) — prefill 120 t/s,
 #   décode 11,2 t/s. ⚠ ROCm0 INUTILISABLE sur cette arch avec ce build : le
 #   serveur répond à ~500 t/s un charabia répétitif (« Nous dev dev dev… »),
@@ -776,9 +790,10 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   clé inconnue ferait échouer le routeur entier ; --start refuse donc de
 #   démarrer sur le paquet tant qu'elles sont là, y revenir impose de les
 #   retirer à la main puis --preload.
-# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
-#   205 t/s, décode 19,9 t/s, acceptance 0,65 : prefill +86 % et décode +62 %
-#   contre le paquet (110 / 12,3, b10433), le plus gros gain de décode du parc.
+# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes, n-gram
+#   seul, avant DSpark) : prefill 205 t/s, décode 19,9 t/s, acceptance 0,65 :
+#   prefill +86 % et décode +62 % contre le paquet (110 / 12,3, b10433), le
+#   plus gros gain de décode du parc.
 #   Le reasoning-budget ci-dessus n'a pas été atteint sur le test fait
 #   (1678 tokens de pensée).
 llama_model deepseek-v4-flash "

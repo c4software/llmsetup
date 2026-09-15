@@ -232,7 +232,7 @@ ordre de grandeur, pas une comparaison à la décimale.
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 47, min-hits 2, parallel 1 | 763 | 48,7 | 0,27 | +11 % |
 | gpt-oss | UD-Q4_K_XL, 59 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 | 599 | 52,9 | 0,57 | +2 % |
 | laguna-s-2.1 | UD-Q4_K_XL, 73 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 (DFlash refusé par le fork) | 346 | 29,6 | 0,80 | -2 % |
-| deepseek-v4-flash | UD-IQ3_XXS, 104 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 | 205 | 19,9 | 0,65 | +62 % |
+| deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 | 199 | 28,9 | 0,68 | +135 % (paquet en n-gram seul, 19,9 sur le fork en n-gram seul) |
 
 ![Prefill paquet contre fork](docs/graphs/prefill.svg)
 
@@ -245,7 +245,7 @@ Ces trois figures sont générées par `python3 py/perf_graphs.py` depuis
 à jour, dès que la table ci-dessus change.
 
 Ce que le fork apporte : le prefill sur tout le parc (+16 à +110 %), le décode
-partout où la spéculation change de régime (DeepSeek V4 +62 %, Flash-Next dont
+partout où la spéculation change de régime (DeepSeek V4 +135 % avec le drafter DSpark, Flash-Next dont
 le MTP n'existe pas sur le paquet +93 %, le 27B via DFlash 2), et
 `ngram-on-disk` (Flash-Next chargé en 72 Go au lieu d'environ 100, à perfs
 égales). Écartés après mesure : le speculative prefill (lossy, cache de prompt à

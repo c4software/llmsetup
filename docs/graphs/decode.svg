@@ -61,6 +61,6 @@
 <text x="246.0" y="600.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">deepseek-v4-flash</text>
 <rect x="258.0" y="582.0" width="87.3" height="16.0" fill="#9aa0a6"/>
 <text x="353.3" y="595.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">12,3</text>
-<rect x="258.0" y="603.0" width="141.3" height="16.0" fill="#2f6fdd"/>
-<text x="407.3" y="616.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">19,9</text>
+<rect x="258.0" y="603.0" width="205.2" height="16.0" fill="#2f6fdd"/>
+<text x="471.2" y="616.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">28,9</text>
 </svg>
