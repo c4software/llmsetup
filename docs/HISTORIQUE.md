@@ -84,8 +84,11 @@ le 28/08/2026, remplacés par ornith-1.5-35b-a3b : qwen3.6-35b-a3b et
 qwen3.6-35b-a3b-mtp ; retiré le 15/09/2026 avec la variante
 qwen3.5-9b-parallel (cf. « Variantes -parallel retirées ») : le GGUF SANS tête
 MTP du 9b, `~/models/qwen3.5-9b/Qwen3.5-9B-UD-Q6_K_XL.gguf` (8,2 Go), homonyme
-mais distinct de celui du dossier `qwen3.5-9b-mtp/` que sert la section
-`qwen3.5-9b`. `./setup-llm.sh --cleanup` les purge.
+mais distinct de celui du dossier `qwen3.5-9b-mtp/` ; puis, le soir du
+15/09/2026, avec la section `qwen3.5-9b` elle-même, remplacée par
+`ornith-1.5-9b-mtp-nothink` (cf. « qwen3.5-9b remplacé par Ornith-1.5-9B ») :
+ce second GGUF, `~/models/qwen3.5-9b-mtp/Qwen3.5-9B-UD-Q6_K_XL.gguf` (8,4 Go).
+`./setup-llm.sh --cleanup` les purge.
 
 Laguna S 2.1 (déplacé de `lib/models.sh` le 13/09/2026) : quants ré-uploadées
 fin juillet 2026 par unsloth (« Fix rope/context metadata to 256K YaRN
@@ -731,6 +734,164 @@ spec-draft-model     = ~/models/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q8_0.gguf
 spec-draft-n-max     = 7
 jinja                = true
 parallel             = 1
+swa-full             = true
+ctx-checkpoints      = 128
+```
+
+## qwen3.5-9b remplacé par Ornith-1.5-9B (15/09/2026)
+
+Section `qwen3.5-9b` (Qwen3.5-9B UD-Q6_K_XL du repo MTP unsloth, dossier
+`qwen3.5-9b-mtp/`, `ngram-map-k 7 + draft-mtp 4`, 745 t/s de prefill et 33,0 de
+décode au `--bench` du 15/09/2026) retirée du parc le 15/09/2026 et remplacée,
+au même créneau, par `ornith-1.5-9b-mtp-nothink` : Ornith-1.5-9B Q8_0 (9,79 Go)
+avec tête MTP tierce (`protoLabsAI/Ornith-1.5-9B-MTP-GGUF`, GGUF fusionné trunk
+officiel ornith-ai + tête nextn distillée par protoLabsAI, `blk.32.nextn.*`),
+même architecture llama.cpp `qwen35` (GDN).
+
+Raison : à VRAM comparable, les benchmarks de l'éditeur donnent Ornith-1.5-9B
+très au-dessus de Qwen3.5-9B sur tout ce que ce créneau sert, Terminal-Bench 2.1
+(harnais Claude Code) 47,0 contre 18,9, SWE-bench Verified 70,6 contre 53,2,
+NL2Repo 32,4 contre 16,2, GPQA 86,4 contre 81,7. Le débit est du même ordre
+(test isolé du 15/09/2026, mêmes prompts, quants différentes : 44,7 / 52,9 t/s
+contre 42,4 / 61,8), le remplacement se joue donc sur la qualité. Il n'y a ni
+régression ni défaut de mesure derrière ce retrait : les chiffres du 9b Qwen
+restent bons, les tables de ce document gardent ses lignes, mesurées à l'époque,
+comme `logs/`.
+
+Le GGUF `~/models/qwen3.5-9b-mtp/Qwen3.5-9B-UD-Q6_K_XL.gguf` (8,4 Go) n'est plus
+déclaré : il devient orphelin de `KNOWN_FILES`, rien n'a été supprimé sur la
+machine, `./setup-llm.sh --cleanup` le purgera (le GGUF SANS tête MTP du même
+modèle, `~/models/qwen3.5-9b/`, était déjà orphelin depuis le retrait de la
+variante `-parallel` le matin même). Pour ravoir la section : remettre la
+déclaration de téléchargement, le commentaire et le corps ci-dessous dans
+`lib/models.sh`.
+
+Le commentaire du bloc retiré, tel quel (connaissance à conserver : incident du
+GGUF homonyme écrasé, effondrement du MTP multi-slot, part du cache inchangée
+par la spéculation), puis le corps de la section tel qu'il était émis dans
+`models.ini`.
+
+```
+GGUF MTP (repo unsloth séparé), seul GGUF du 9b déclaré depuis le 15/09/2026 :
+le GGUF sans tête MTP (repo unsloth/Qwen3.5-9B-GGUF, dossier qwen3.5-9b/) n'est
+plus déclaré depuis le retrait de la variante qwen3.5-9b-parallel, il est donc
+orphelin (cf. le commentaire de KNOWN_FILES en tête de fichier).
+Les deux portent le MÊME NOM DE FICHIER (Qwen3.5-9B-UD-Q6_K_XL.gguf,
+8 987 439 456 octets contre 8 756 929 760), d'où un DOSSIER SÉPARÉ
+qwen3.5-9b-mtp/ par la convention <clé> / <clé>-mtp du dépôt : les deux
+fichiers ne peuvent pas cohabiter.
+⚠ Incident du 15/09/2026 : un `hf download` de ce repo lancé dans
+  ~/models/qwen3.5-9b/ a ÉCRASÉ le GGUF courant (même nom) ; il a été
+  retéléchargé à l'identique. Ne jamais télécharger ce fichier ailleurs que
+  dans son dossier.
+Métadonnées (15/09/2026) : qwen35.nextn_predict_layers = 1, block_count 33
+(32 + la couche MTP), tenseurs blk.32.nextn.* : tête MTP EMBARQUÉE, donc
+spec-type = draft-mtp sans sidecar ni spec-draft-model.
+bench-devices.conf est indexé par dossier de GGUF : qwen3.5-9b-mtp n'y a pas
+de ligne, la section hérite donc du défaut [*] Vulkan0 : non mesuré par
+--bench-devices, à faire si le sujet revient (le fork est Vulkan seul).
+download_hf qwen3.5-9b-mtp "unsloth/Qwen3.5-9B-MTP-GGUF" \
+  QWEN35_9B_MTP_PATH="Qwen3.5-9B-UD-Q6_K_XL.gguf"
+
+Qwen3.5-9B : dense 9B — tâches auxiliaires courtes (résumés, titres, routage)
+Depuis le 15/09/2026 cette section sert le GGUF MTP en mono-slot spéculé. Le
+  réglage multi-slot qui était ici (GGUF sans MTP, parallel 4, sans
+  spéculation) a d'abord été gardé en variante qwen3.5-9b-parallel le même
+  jour, puis RETIRÉ le soir même : aucune concurrence n'a jamais été observée
+  sur ce modèle au journal du service, et le drafter gagne en solo. Décision
+  utilisateur : pas de parallel si perte de perf (mesures et détail de la
+  variante dans docs/HISTORIQUE.md, « Variantes -parallel retirées »).
+chat-template-kwargs : thinking COUPÉ. Note : depuis les mises à jour de
+  template unsloth, les Qwen3.5 Small (0.8B/2B/4B/9B) sont nothink PAR DÉFAUT —
+  le kwargs est devenu redondant mais reste en ceinture-bretelles (un futur
+  re-download de template ne doit pas réactiver le thinking en douce).
+n-predict 1024 : borne dure, aucune tâche auxiliaire n'a besoin de plus —
+  plus jamais de génération qui court jusqu'au plafond de contexte
+ctx-size 32768 inchangé, mais à parallel 1 le slot unique dispose de TOUT le
+  ctx-size (le pool n'est plus divisé par 4) : 32768 redevient le contexte
+  d'UNE requête, contre 8192 par slot du temps du réglage à 4 slots.
+Spéculation MTP, test isolé du 15/09/2026 (fork strix-0007bc6, Vulkan0,
+  hors service, np 1, 2 passes, 1200 tokens, spec-test.txt et
+  spec-refactor.txt) : GGUF courant sans spéculation 25,3 t/s ; GGUF MTP
+  n-max 2 = 34,2 (acceptance 0,92 à 0,99), n-max 4 = 45,7 (0,83 à 0,97),
+  n-max 6 = 40,8 ; ngram-map-k 7 min-hits 2 + draft-mtp n-max 4 = 52,1
+  (42,4 sur spec-test.txt, 61,8 sur spec-refactor.txt). RETENU : la liste
+  n-gram + MTP à n-max 4, soit x2,1 sur le réglage sans spéculation.
+  n-max 4 : batch de vérification 5, sous les 8 colonnes de ggml-vulkan
+  (cf. en-tête) ; n-max 6 (batch 7) retombe, c'est le découpage 4+2+1 du fork.
+  Le n-gram est gardé parce que le 9b sert aussi des reformulations et des
+  résumés où le prompt se ré-émet mot pour mot.
+parallel 1, et le multi-slot MTP est INUTILISABLE ici (même journée, même
+  fork) : np 4 n-max 1 = 18,2 t/s agrégés contre 80,8 sans spéculation,
+  np 2 n-max 1 = 24,0. L'effondrement tient même à n-max 1, donc à des
+  batches de 4 et 8 colonnes qui restent sous le seuil de ggml-vulkan : ce
+  n'est PAS le découpage mat-vec, c'est un cas nouveau du chemin MTP
+  multi-séquences du fork (speculative.cpp, vectorisé par séquence mais
+  éprouvé par aucun test amont, cf. en-tête) : à verser à l'issue #50.
+  C'est la justification du parallel 1 ici : sur ce modèle le multi-slot ne
+  se paie qu'en abandonnant le drafter, et le drafter vaut plus.
+cache-reuse 0 : contrainte des sections spéculatives, posée explicitement.
+Mesuré le 15/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
+  passes, GGUF MTP) : prefill 745 t/s, décode 32,96 t/s, acceptance 0,58.
+  Contre le réglage sans spéculation re-mesuré le même jour sous la variante
+  -parallel depuis retirée (791 / 25,5) : décode +29 %, prefill -5,8 % (le drafter
+  MTP décode aussi le prompt). Le x2,1 du test isolé devient x1,29 ici : le
+  test isolé tournait sur spec-test.txt et spec-refactor.txt, où le prompt se
+  ré-émet mot pour mot et où les n-grams paient ; le prompt de --bench est
+  générique. Le comparateur de --bench annonce « RÉGRESSION » sur le prefill
+  (993 le 13/09 -> 745) : il compare par nom de section, alors que le GGUF ET
+  le réglage ont changé ; la variante ne rend elle-même que 791 le 15/09
+  contre 993 le 13/09, donc l'essentiel de cet écart est de la dispersion
+  entre journées, pas la spéculation.
+--bench-cache du 15/09/2026 : 62 % au tour suivant, 0 % après édition en
+  amont, 64 % sur requête identique : exactement les valeurs du 21/08 sans
+  spéculation. Le GGUF MTP et cache-reuse 0 ne changent rien à la part du
+  cache : elle est bornée par l'état récurrent (restauration au dernier
+  checkpoint), pas par la spéculation.
+Préchargement : preload.conf est indexé par NOM DE SECTION, donc la ligne
+  `qwen3.5-9b` existante précharge désormais CETTE version (GGUF MTP). Tant
+  que la variante -parallel a existé (journée du 15/09/2026), les deux
+  ensemble déclenchaient l'avertissement « <clé> ET <clé>-mtp » de
+  _preload_sanity (lib/preload.sh, dérivé du DOSSIER de GGUF : qwen3.5-9b et
+  qwen3.5-9b-mtp) et c'était voulu, 2 x ~8,8 Go des mêmes poids. Avec une
+  seule section le cas ne se présente plus.
+llama_model qwen3.5-9b "
+model                = $QWEN35_9B_MTP_PATH
+ctx-size             = 32768
+cache-ram            = 2048
+temp                 = 0.7
+top-k                = 20
+top-p                = 0.8
+min-p                = 0.0
+chat-template-kwargs = {\"enable_thinking\":false}
+n-predict            = 1024
+parallel             = 1
+cache-reuse          = 0
+spec-type            = ngram-map-k,draft-mtp
+spec-draft-n-max     = 4
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
+swa-full             = true
+ctx-checkpoints      = 128"
+```
+
+```ini
+[qwen3.5-9b]
+model                = ~/models/qwen3.5-9b-mtp/Qwen3.5-9B-UD-Q6_K_XL.gguf
+ctx-size             = 32768
+cache-ram            = 2048
+temp                 = 0.7
+top-k                = 20
+top-p                = 0.8
+min-p                = 0.0
+chat-template-kwargs = {"enable_thinking":false}
+n-predict            = 1024
+parallel             = 1
+cache-reuse          = 0
+spec-type            = ngram-map-k,draft-mtp
+spec-draft-n-max     = 4
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
 swa-full             = true
 ctx-checkpoints      = 128
 ```

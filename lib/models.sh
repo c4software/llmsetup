@@ -47,9 +47,9 @@ DEFAULT_DEVICE="Vulkan0"
 #     en secours sur le paquet Arch : aucune ligne device dans ce fichier au
 #     13/09/2026)
 #   - cache-reuse = 0 : explicite sur toutes les sections à état récurrent (GDN)
-#     ou à attention hybride/MLA ; seuls qwen3.5-9b (hérite du 4096 global, de
-#     toute façon ignoré) et gpt-oss (MoE mais sans état récurrent, attention +
-#     SWA : le cache-reuse sert) ne l'ont pas. Le cache-reuse
+#     ou à attention hybride/MLA ; seul gpt-oss (MoE mais sans état récurrent,
+#     attention + SWA : le cache-reuse sert) hérite encore du 4096 global. Le
+#     cache-reuse
 #     est de toute
 #     façon ignoré sur les architectures à état récurrent (GDN), llama-server
 #     log "cache reuse is not supported by this context". La vraie restauration
@@ -70,8 +70,8 @@ DEFAULT_DEVICE="Vulkan0"
 #   - cache-type-v = q8_0 en surcharge locale pour les modèles à usage
 #     agentic/tool calling (le KV V q4_0 dégrade le tool calling, cf. doc
 #     llama.cpp function-calling)
-#   - swa-full + ctx-checkpoints : posé sur qwen3.5-9b, ornith-1.5-35b-a3b-parallel
-#     et
+#   - swa-full + ctx-checkpoints : posé sur ornith-1.5-9b-mtp-nothink,
+#     ornith-1.5-35b-a3b-parallel et
 #     qwen3.8-27b-dflash-nothink. Jusqu'au 15/09/2026 ce bloc affirmait que
 #     swa-full « n'est effectif que sur le 9b » ; le journal du 13/09/2026 dit
 #     le contraire : llama-server écrit « swa_full is not supported by this
@@ -128,6 +128,8 @@ DEFAULT_DEVICE="Vulkan0"
 #       qwen3.5-9b          le MTP multi-slot s'effondre (np 4 n-max 1 = 18,2
 #                           t/s agrégés contre 80,8 sans spéculation) : garder
 #                           les 4 slots imposait d'abandonner le drafter
+#                           (section remplacée le soir même par
+#                           ornith-1.5-9b-mtp-nothink, cf. docs/HISTORIQUE.md)
 #       lfm2.5-2.6b         DSpark np 2 (batch 8, pile le seuil) = ~x1,1 pour un
 #                           débit par requête divisé par deux
 #     Ces deux derniers ont eu une variante `-parallel` (4 slots, sans drafter)
@@ -168,6 +170,13 @@ _GROUPE_EN_ATTENTE=""
 #  distinct. Le fichier devient donc ORPHELIN
 #  → ./setup-llm.sh --cleanup le purgera (non lancé). lfm2.5-2.6b-parallel, elle,
 #  partageait le GGUF de la section principale : rien d'orphelin de ce côté)
+# (retiré le 15/09/2026 avec la section qwen3.5-9b, remplacée par
+#  ornith-1.5-9b-mtp-nothink : le GGUF MTP unsloth du 9b Qwen,
+#  ~/models/qwen3.5-9b-mtp/Qwen3.5-9B-UD-Q6_K_XL.gguf (8,4 Go), plus déclaré par
+#  aucun download_hf. Le dossier devient ORPHELIN
+#  → ./setup-llm.sh --cleanup le purgera (non lancé). Commentaire métier,
+#  mesures et corps ini : docs/HISTORIQUE.md, « qwen3.5-9b remplacé par
+#  Ornith-1.5-9B (15/09/2026) »)
 # (retiré le 15/09/2026 avec la section laguna-s-2.1, jugée non utile dans
 #  l'usage réel : les 3 shards UD-Q4_K_XL (73,4 Go) et le drafter DFlash
 #  poolside BF16 (2,2 Go) de ~/models/laguna-s-2.1/, plus déclarés par aucun
@@ -250,107 +259,118 @@ llama_model() {
 
 # =============================================================================
 # Groupe de tête du ini — candidats naturels au préchargement (preload.conf) :
-#   9b = tâches auxiliaires, ornith-1.5-35b-a3b-parallel = default agentic
+#   ornith-1.5-9b-mtp-nothink = tâches auxiliaires et édition de code courte,
+#   ornith-1.5-35b-a3b-parallel = default agentic
 #   (opencode & co)
 # =============================================================================
 
-# GGUF MTP (repo unsloth séparé), seul GGUF du 9b déclaré depuis le 15/09/2026 :
-# le GGUF sans tête MTP (repo unsloth/Qwen3.5-9B-GGUF, dossier qwen3.5-9b/) n'est
-# plus déclaré depuis le retrait de la variante qwen3.5-9b-parallel, il est donc
-# orphelin (cf. le commentaire de KNOWN_FILES en tête de fichier).
-# Les deux portent le MÊME NOM DE FICHIER (Qwen3.5-9B-UD-Q6_K_XL.gguf,
-# 8 987 439 456 octets contre 8 756 929 760), d'où un DOSSIER SÉPARÉ
-# qwen3.5-9b-mtp/ par la convention <clé> / <clé>-mtp du dépôt : les deux
-# fichiers ne peuvent pas cohabiter.
-# ⚠ Incident du 15/09/2026 : un `hf download` de ce repo lancé dans
-#   ~/models/qwen3.5-9b/ a ÉCRASÉ le GGUF courant (même nom) ; il a été
-#   retéléchargé à l'identique. Ne jamais télécharger ce fichier ailleurs que
-#   dans son dossier.
-# Métadonnées (15/09/2026) : qwen35.nextn_predict_layers = 1, block_count 33
-# (32 + la couche MTP), tenseurs blk.32.nextn.* : tête MTP EMBARQUÉE, donc
-# spec-type = draft-mtp sans sidecar ni spec-draft-model.
-# bench-devices.conf est indexé par dossier de GGUF : qwen3.5-9b-mtp n'y a pas
-# de ligne, la section hérite donc du défaut [*] Vulkan0 : non mesuré par
-# --bench-devices, à faire si le sujet revient (le fork est Vulkan seul).
-download_hf qwen3.5-9b-mtp "unsloth/Qwen3.5-9B-MTP-GGUF" \
-  QWEN35_9B_MTP_PATH="Qwen3.5-9B-UD-Q6_K_XL.gguf"
+# GGUF fusionné (trunk officiel ornith-ai + tête MTP distillée par protoLabsAI),
+# repo tiers protoLabsAI/Ornith-1.5-9B-MTP-GGUF, un seul fichier Q8_0 de 9,79 Go.
+# Le repo OFFICIEL ornith-ai n'a PAS de tête MTP (les poids nextn ne sont pas
+# publiés), il n'y a pas de repo unsloth pour Ornith 1.5 et pas de drafter
+# DFlash / DSpark pour ce 9B : ce GGUF tiers est la seule façon de spéculer ici,
+# d'où le repo hors unsloth/ornith-ai, seul cas du parc avec le DFlash 2 z-lab
+# du 27B.
+# Métadonnées (15/09/2026, 442 tenseurs) : arch llama.cpp qwen35 (GDN, même
+# famille que le Qwen3.5-9B remplacé), tenseurs blk.32.nextn.* : tête MTP
+# EMBARQUÉE dans le fichier principal, donc spec-type = draft-mtp sans sidecar
+# ni spec-draft-model. Contexte natif 262144.
+# bench-devices.conf est indexé par dossier de GGUF : ornith-1.5-9b n'y a pas de
+# ligne, la section hérite du défaut [*] Vulkan0. Étape --bench-devices NON
+# LANCÉE et ce n'est pas un oubli : le fork strix-llama.cpp ne construit que
+# Vulkan (cf. en-tête BACKENDS) et tout le parc y est, comme les autres sections
+# du 15/09/2026. À reprendre le jour d'un retour au paquet Arch.
+download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
+  ORNITH15_9B_MTP_PATH="Ornith-1.5-9B-MTP-Q8_0.gguf"
 
-# Qwen3.5-9B : dense 9B — tâches auxiliaires courtes (résumés, titres, routage)
-# Depuis le 15/09/2026 cette section sert le GGUF MTP en mono-slot spéculé. Le
-#   réglage multi-slot qui était ici (GGUF sans MTP, parallel 4, sans
-#   spéculation) a d'abord été gardé en variante qwen3.5-9b-parallel le même
-#   jour, puis RETIRÉ le soir même : aucune concurrence n'a jamais été observée
-#   sur ce modèle au journal du service, et le drafter gagne en solo. Décision
-#   utilisateur : pas de parallel si perte de perf (mesures et détail de la
-#   variante dans docs/HISTORIQUE.md, « Variantes -parallel retirées »).
-# chat-template-kwargs : thinking COUPÉ. Note : depuis les mises à jour de
-#   template unsloth, les Qwen3.5 Small (0.8B/2B/4B/9B) sont nothink PAR DÉFAUT —
-#   le kwargs est devenu redondant mais reste en ceinture-bretelles (un futur
-#   re-download de template ne doit pas réactiver le thinking en douce).
-# n-predict 1024 : borne dure, aucune tâche auxiliaire n'a besoin de plus —
-#   plus jamais de génération qui court jusqu'au plafond de contexte
-# ctx-size 32768 inchangé, mais à parallel 1 le slot unique dispose de TOUT le
-#   ctx-size (le pool n'est plus divisé par 4) : 32768 redevient le contexte
-#   d'UNE requête, contre 8192 par slot du temps du réglage à 4 slots.
-# Spéculation MTP, test isolé du 15/09/2026 (fork strix-0007bc6, Vulkan0,
-#   hors service, np 1, 2 passes, 1200 tokens, spec-test.txt et
-#   spec-refactor.txt) : GGUF courant sans spéculation 25,3 t/s ; GGUF MTP
-#   n-max 2 = 34,2 (acceptance 0,92 à 0,99), n-max 4 = 45,7 (0,83 à 0,97),
-#   n-max 6 = 40,8 ; ngram-map-k 7 min-hits 2 + draft-mtp n-max 4 = 52,1
-#   (42,4 sur spec-test.txt, 61,8 sur spec-refactor.txt). RETENU : la liste
-#   n-gram + MTP à n-max 4, soit x2,1 sur le réglage sans spéculation.
-#   n-max 4 : batch de vérification 5, sous les 8 colonnes de ggml-vulkan
-#   (cf. en-tête) ; n-max 6 (batch 7) retombe, c'est le découpage 4+2+1 du fork.
-#   Le n-gram est gardé parce que le 9b sert aussi des reformulations et des
-#   résumés où le prompt se ré-émet mot pour mot.
-# parallel 1, et le multi-slot MTP est INUTILISABLE ici (même journée, même
-#   fork) : np 4 n-max 1 = 18,2 t/s agrégés contre 80,8 sans spéculation,
-#   np 2 n-max 1 = 24,0. L'effondrement tient même à n-max 1, donc à des
-#   batches de 4 et 8 colonnes qui restent sous le seuil de ggml-vulkan : ce
-#   n'est PAS le découpage mat-vec, c'est un cas nouveau du chemin MTP
-#   multi-séquences du fork (speculative.cpp, vectorisé par séquence mais
-#   éprouvé par aucun test amont, cf. en-tête) : à verser à l'issue #50.
-#   C'est la justification du parallel 1 ici : sur ce modèle le multi-slot ne
-#   se paie qu'en abandonnant le drafter, et le drafter vaut plus.
-# cache-reuse 0 : contrainte des sections spéculatives, posée explicitement.
-# Mesuré le 15/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
-#   passes, GGUF MTP) : prefill 745 t/s, décode 32,96 t/s, acceptance 0,58.
-#   Contre le réglage sans spéculation re-mesuré le même jour sous la variante
-#   -parallel depuis retirée (791 / 25,5) : décode +29 %, prefill -5,8 % (le drafter
-#   MTP décode aussi le prompt). Le x2,1 du test isolé devient x1,29 ici : le
-#   test isolé tournait sur spec-test.txt et spec-refactor.txt, où le prompt se
-#   ré-émet mot pour mot et où les n-grams paient ; le prompt de --bench est
-#   générique. Le comparateur de --bench annonce « RÉGRESSION » sur le prefill
-#   (993 le 13/09 -> 745) : il compare par nom de section, alors que le GGUF ET
-#   le réglage ont changé ; la variante ne rend elle-même que 791 le 15/09
-#   contre 993 le 13/09, donc l'essentiel de cet écart est de la dispersion
-#   entre journées, pas la spéculation.
-# --bench-cache du 15/09/2026 : 62 % au tour suivant, 0 % après édition en
-#   amont, 64 % sur requête identique : exactement les valeurs du 21/08 sans
-#   spéculation. Le GGUF MTP et cache-reuse 0 ne changent rien à la part du
-#   cache : elle est bornée par l'état récurrent (restauration au dernier
-#   checkpoint), pas par la spéculation.
-# Préchargement : preload.conf est indexé par NOM DE SECTION, donc la ligne
-#   `qwen3.5-9b` existante précharge désormais CETTE version (GGUF MTP). Tant
-#   que la variante -parallel a existé (journée du 15/09/2026), les deux
-#   ensemble déclenchaient l'avertissement « <clé> ET <clé>-mtp » de
-#   _preload_sanity (lib/preload.sh, dérivé du DOSSIER de GGUF : qwen3.5-9b et
-#   qwen3.5-9b-mtp) et c'était voulu, 2 x ~8,8 Go des mêmes poids. Avec une
-#   seule section le cas ne se présente plus.
-llama_model qwen3.5-9b "
-model                = $QWEN35_9B_MTP_PATH
-ctx-size             = 32768
-cache-ram            = 2048
-temp                 = 0.7
+# Ornith-1.5-9B nothink + tête MTP tierce : petit modèle du parc, tâches
+#   auxiliaires (résumés, titres, routage) ET édition de code courte.
+# REMPLACE la section qwen3.5-9b le 15/09/2026 (même créneau, même arch qwen35,
+#   même dossier de rôle). Pourquoi : à quantité de VRAM comparable (9,79 Go en
+#   Q8_0 contre 8,4 Go en UD-Q6_K_XL) le modèle est meilleur sur tout ce qu'on
+#   lui demande, chiffres de l'éditeur contre Qwen3.5-9B : Terminal-Bench 2.1
+#   (harnais Claude Code) 47,0 contre 18,9, SWE-bench Verified 70,6 contre 53,2,
+#   NL2Repo 32,4 contre 16,2, GPQA 86,4 contre 81,7. Le débit, lui, est du même
+#   ordre (test isolé du même jour, mêmes prompts : 44,7 / 52,9 t/s contre
+#   42,4 / 61,8 pour le 9b Qwen, quants différentes) : le remplacement se joue
+#   sur la qualité, pas sur la vitesse. Commentaire métier,
+#   mesures et corps ini de la section retirée : docs/HISTORIQUE.md,
+#   « qwen3.5-9b remplacé par Ornith-1.5-9B (15/09/2026) ». Le GGUF du 9b Qwen
+#   (~/models/qwen3.5-9b-mtp/, 8,4 Go) devient ORPHELIN, --cleanup le purgera.
+# Fiche (model card HF ornith-ai + protoLabsAI, pas de guide unsloth) : post-train
+#   d'ornith-ai (ex deepreinforce-ai) sur Qwen3.5-9B, publié le 18/08/2026,
+#   licence MIT ; le GGUF MTP tiers date du 20/08/2026. Modèle multimodal : le
+#   mmproj n'est pas téléchargé, texte seul, et de toute façon le mmproj est le
+#   seul interdit dur avec un drafter (cf. en-tête).
+# Quant Q8_0 : la seule publiée dans le repo MTP, et elle tient largement
+#   (9,79 Go) ; aucune grille de quants à arbitrer ici.
+# ctx-size 131072 : la valeur du reste du parc (27B, coder-next, gpt-oss,
+#   DeepSeek), sous le natif 262144, à parallel 1 le slot unique en dispose en
+#   entier. Le qwen3.5-9b remplacé était à 32768 avec n-predict 1024 parce qu'il
+#   ne servait QUE des tâches auxiliaires courtes ; ce modèle-ci fait aussi de
+#   l'édition de code (Terminal-Bench, SWE-bench), la borne dure de génération
+#   est donc retirée et le contexte aligné sur le parc.
+# jinja + cache-type-v q8_0 : conventions du parc pour un modèle à tool calling
+#   (template chat requis, le V q4_0 global dégrade le tool calling, cf. en-tête).
+# ⚠ SAMPLING IMPOSÉ par la fiche éditeur, la famille BOUCLE sinon : temp 1.0,
+#   top-k 20, top-p 0.95, min-p 0 et surtout presence-penalty 1.5 (le [*] global
+#   est à 0.0, d'où la surcharge locale). Ce sont les valeurs utilisées par les
+#   tests isolés ci-dessous : les changer invalide ces chiffres.
+# ⚠ PIÈGE THINKING, nothink OBLIGATOIRE : thinking ON, les 1200 tokens du test
+#   partent en raisonnement sans jamais atteindre </think> (aucune réponse
+#   rendue) et l'acceptance tombe à 0,42 contre 0,69 en nothink (test isolé
+#   ornith9b-mtp3-think du 15/09/2026). D'où chat-template-kwargs
+#   {"enable_thinking":false}, et le suffixe -nothink du nom de section.
+# Test ISOLÉ du 15/09/2026 (tools/spec-isolate.sh, fork strix-0007bc6, Vulkan0,
+#   hors service, Q8_0, ctx 32768, np 1, 2 passes, 1200 tokens ; t/s de décode
+#   passe 2, spec-test.txt / spec-refactor.txt) :
+#     sans spéculation              23,6 / 23,3
+#     draft-mtp n-max 2             28,4 / 30,2   (acceptance 0,80 / 0,91)
+#     draft-mtp n-max 3             45,3 / 51,3   (acceptance 0,69 / 0,85)
+#     draft-mtp n-max 4             29,9 / 33,3   (acceptance 0,58 / 0,76)
+#     ngram-map-k 7 min-hits 2
+#       + draft-mtp 3               44,7 / 52,9   (acceptance 0,69 / 0,85)
+#   Sanité « ok » sur chaque passe, sorties relues.
+# n-max 3, et la courbe n'est PAS monotone : 2 et 4 retombent à ~30 t/s quand 3
+#   donne 45 à 51, soit x1,9 à x2,2 sur la référence. Signature du découpage
+#   mat-vec du fork (issue #50, cf. en-tête) : le batch de vérification vaut
+#   n-max + 1, et seul 4 colonnes passe en un bloc ; 3 (n-max 2) et 5 (n-max 4)
+#   se découpent en 2+1 et 4+1. Ce n'est donc pas le seuil des 8 colonnes de
+#   ggml-vulkan qui commande ici mais le découpage, comme sur le 27B. Si les
+#   issues #50 / #51 sont corrigées en amont, re-mesurer 2, 3 et 4.
+# parallel 1 : np x (n-max + 1) = 4 colonnes à un slot, le seul batch rapide de
+#   ce modèle ; à np 2 on demande 8 colonnes, donc deux découpages 4+4 par
+#   forward, et le multi-slot MTP s'était déjà effondré sur le 9b Qwen à des
+#   batches pourtant sous le seuil (cf. en-tête). Aucune concurrence n'a jamais
+#   été observée sur ce créneau au journal du service. Non mesuré à NP>1,
+#   conformément à la règle : sans mesure, parallel 1.
+# cache-reuse 0 : contrainte des sections spéculatives, posée explicitement
+#   (ignorée de toute façon sur GDN, cf. en-tête) ; swa-full + ctx-checkpoints
+#   comme le 9b remplacé, même arch qwen35 : le serveur écrit « swa_full is not
+#   supported by this model » et seul ctx-checkpoints travaille (en-tête).
+# --fit : la fiche protoLabsAI conseille « --fit off -ngl 99 » parce que la tête
+#   MTP fait monter l'estimation mémoire et que le fit peut renvoyer des couches
+#   au CPU. RIEN À POSER ICI : --fit n'ajuste que les arguments NON POSÉS et le
+#   parc fixe n-gpu-layers = 99 dans les flags globaux [*] (lib/ini.sh), comme
+#   pour toutes les autres sections MTP, qui ne posent pas non plus de fit.
+#   Vérifié au chargement (aucune couche CPU dans le journal du service).
+
+llama_model ornith-1.5-9b-mtp-nothink "
+model                = $ORNITH15_9B_MTP_PATH
+ctx-size             = 131072
+cache-ram            = 4096
+temp                 = 1.0
 top-k                = 20
-top-p                = 0.8
+top-p                = 0.95
 min-p                = 0.0
+presence-penalty     = 1.5
 chat-template-kwargs = {\"enable_thinking\":false}
-n-predict            = 1024
+cache-type-v         = q8_0
+jinja                = true
 parallel             = 1
 cache-reuse          = 0
 spec-type            = ngram-map-k,draft-mtp
-spec-draft-n-max     = 4
+spec-draft-n-max     = 3
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
 swa-full             = true
