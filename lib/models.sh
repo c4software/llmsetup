@@ -696,6 +696,16 @@ parallel         = 1"
 #   (21/08/2026, b10433), 12,3 avec n-gram : normal, pas un bug de config.
 download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
   DSV4_FLASH_PATH="UD-IQ3_XXS/DeepSeek-V4-Flash-0731-UD-IQ3_XXS-00001-of-00004.gguf"
+# Drafter DSpark officiel (extrait du checkpoint 0731 par unsloth, dossier
+# dspark/ du même repo ; le Q8_0 est à la racine, le BF16 bit-exact de 11,3 Go
+# dans dspark/, mesurés identiques par unsloth). general.architecture = dflash
+# avec dorsale DSV4 (3 étages pleins, fenêtre 128, tête de Markov rang 256),
+# block_size 5 : embeddings et tête de sortie empruntés à la cible, donc même
+# device qu'elle, jamais de spec-draft-device. Vérifié le 15/09/2026 : le GGUF
+# principal n'a AUCUN tenseur nextn (pas de tête MTP embarquée, le 0731 ne
+# publie qu'un drafter DSpark), draft-mtp est donc impossible sur ce modèle.
+download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
+  DSV4_FLASH_DSPARK_PATH="dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf"
 
 # DeepSeek-V4-Flash-0731 — MoE 284B (13B actifs), agentic/coding, 1M ctx natif
 # Sampling officiel DeepSeek pour le 0731 : temp 1.0, top-p 0.95 en agentic
@@ -717,9 +727,19 @@ download_hf_shards deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   « DeepseekV4 MTP + DSpark », sidecar drafter via #26458 ; le port #25683
 #   a été fermé sans merge). Le fork strix-llama.cpp comme le paquet Arch de
 #   secours exposent draft-dspark et draft-mtp (déjà le cas en b10433).
-#   Toujours pas activé : drafter GGUF à identifier et tête MTP du checkpoint à
-#   vérifier.
-#   Gain modeste attendu sur APU.
+#   Vérifié le 15/09/2026 : pas de tête MTP dans le GGUF (aucun tenseur nextn
+#   dans les quatre shards, unsloth le confirme : « --mtp will not work with
+#   these files »), le drafter est le sidecar DSpark déclaré plus haut
+#   ($DSV4_FLASH_DSPARK_PATH, 10,9 Go), loader DSV4 de src/models/dflash.cpp
+#   du fork (dsv4_hc_mult > 0, « DFlash with DSpark markov head »).
+#   Test isolé du 15/09/2026 (fork strix-0007bc6, Vulkan0, ctx 32K, draft-dspark
+#   seul n-max 3, 1200 tokens, hors service) : spec-test.txt 27,7 et 25,8 t/s
+#   (acc. 0,59 / 0,52), spec-refactor.txt 28,0 et 32,9 t/s (acc. 0,63 / 0,81),
+#   sortie saine (raisonnement puis code), mémoire 111 Go utilisés sur 124.
+#   n-max : borné à block_size 5 par le checkpoint ; unsloth mesure l'optimum à
+#   3 (défaut llama.cpp) sur B200, acceptance qui chute au-delà. Pas de
+#   spec-draft-device (embeddings et tête de sortie empruntés à la cible), pas
+#   de spec-draft-p-min (sans tête de confiance le fork refuse p-min > 0).
 # Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433) — prefill 120 t/s,
 #   décode 11,2 t/s. ⚠ ROCm0 INUTILISABLE sur cette arch avec ce build : le
 #   serveur répond à ~500 t/s un charabia répétitif (« Nous dev dev dev… »),
@@ -772,7 +792,9 @@ min-p            = 0.0
 cache-type-k     = f16
 cache-type-v     = f16
 cache-reuse      = 0
-spec-type        = ngram-map-k
+spec-type        = ngram-map-k,draft-dspark
+spec-draft-model = $DSV4_FLASH_DSPARK_PATH
+spec-draft-n-max = 3
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
 reasoning-budget-enable        = true
