@@ -47,7 +47,7 @@
 <text x="513.2" y="196.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="end">-11,0 %</text>
 <rect x="542.0" y="204.0" width="53.8" height="16.0" fill="#9aa0a6"/>
 <text x="603.8" y="217.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+28,4 %</text>
-<text x="246.0" y="258.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b</text>
+<text x="246.0" y="258.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b-parallel</text>
 <rect x="542.0" y="240.0" width="30.1" height="16.0" fill="#2f6fdd"/>
 <text x="580.1" y="253.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+15,9 %</text>
 <rect x="542.0" y="261.0" width="7.0" height="16.0" fill="#9aa0a6"/>

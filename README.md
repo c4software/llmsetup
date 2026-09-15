@@ -219,9 +219,11 @@ Une ligne par section servie du `models.ini`. Campagne du 15/09/2026 : tout
 modèle qui dispose d'un drafter le sert à un slot (DSpark sur DeepSeek et
 LFM2.5, DFlash z-lab sur Coder-Next, tête MTP embarquée sur Ornith et sur le 9b
 via le GGUF MTP d'unsloth, dossier `qwen3.5-9b-mtp/`). Des trois modèles qui
-avaient 4 slots, seul `ornith-1.5-35b-a3b` garde ce réglage : il reste la
-section de base (concurrence réelle observée, 2 à 3 slots au journal du service)
-avec une variante `-mtp` mono-utilisateur. `lfm2.5-2.6b` et `qwen3.5-9b` passent
+avaient 4 slots, seul Ornith garde ce réglage : sa section de concurrence,
+renommée `ornith-1.5-35b-a3b-parallel` le 15/09/2026 pour que le nom dise ce
+qu'elle sert (concurrence réelle observée, 2 à 3 slots au journal du service),
+reste le défaut agentic, avec `ornith-1.5-35b-a3b-mtp` en variante solo. Le
+dossier de GGUF, lui, reste `ornith-1.5-35b-a3b/`. `lfm2.5-2.6b` et `qwen3.5-9b` passent
 au drafter à un slot ; leurs variantes `-parallel`, créées le même jour, ont été
 retirées le soir du 15/09/2026 : aucune concurrence n'a jamais été observée sur
 ces deux modèles, et pas de parallel si perte de perf. Le drafter rend +59 % de
@@ -240,7 +242,7 @@ pas une comparaison à la décimale.
 |---|---|---|---|---|---|---|---|
 | lfm2.5-2.6b | Q8_0, 2,7 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 (KV f16) | 2875 | 108,8 | 0,50 | +61 % (paquet sans drafter, 67,7 t/s à 4 slots) |
 | qwen3.5-9b | UD-Q6_K_XL, 8,4 Go (GGUF MTP unsloth, dossier `qwen3.5-9b-mtp/`) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 745 | 33,0 | 0,58 | +28 % (paquet sans drafter, 25,7 t/s à 4 slots) |
-| ornith-1.5-35b-a3b | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
+| ornith-1.5-35b-a3b-parallel | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
 | ornith-1.5-35b-a3b-mtp | Q4_K_M, 22 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 1073 | 76,2 | 0,55 | non mesuré au paquet |
 | qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |
 | qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
@@ -390,8 +392,9 @@ Ce que la mesure du 15/09/2026 a établi (`--bench-parallel`,
   (40/40, cache 88 à 94 %, x2,33) : parallel 4 gardé.
 
 D'où le parc actuel : parallel 1 partout où il y a un drafter, parallel 4 sans
-spéculation au seul endroit où la concurrence est réelle (Ornith, 2 à 3 slots au
-journal du service). Les variantes `-parallel` de lfm2.5 et du 9b, créées le
+spéculation au seul endroit où la concurrence est réelle
+(`ornith-1.5-35b-a3b-parallel`, 2 à 3 slots au journal du service). Les
+variantes `-parallel` de lfm2.5 et du 9b, créées le
 15/09/2026 pour garder l'ancien réglage à 4 slots, ont été retirées le soir
 même : aucune concurrence n'a jamais été observée sur ces deux modèles, et pas
 de parallel si perte de perf. Détail par modèle dans `lib/models.sh` et

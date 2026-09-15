@@ -70,7 +70,8 @@ DEFAULT_DEVICE="Vulkan0"
 #   - cache-type-v = q8_0 en surcharge locale pour les modèles à usage
 #     agentic/tool calling (le KV V q4_0 dégrade le tool calling, cf. doc
 #     llama.cpp function-calling)
-#   - swa-full + ctx-checkpoints : posé sur qwen3.5-9b, ornith-1.5-35b-a3b et
+#   - swa-full + ctx-checkpoints : posé sur qwen3.5-9b, ornith-1.5-35b-a3b-parallel
+#     et
 #     qwen3.8-27b-dflash-nothink. Jusqu'au 15/09/2026 ce bloc affirmait que
 #     swa-full « n'est effectif que sur le 9b » ; le journal du 13/09/2026 dit
 #     le contraire : llama-server écrit « swa_full is not supported by this
@@ -114,10 +115,13 @@ DEFAULT_DEVICE="Vulkan0"
 #                           2 boucles = x1,16 de tâches seulement, décode par
 #                           boucle divisé par deux, ctx par slot divisé par
 #                           deux, aucune concurrence réelle sur ce modèle
-#       ornith-1.5-35b-a3b  np 4 sans spéculation x1,93, 138 t/s agrégés, le
-#                           meilleur du parc en concurrence -> INCHANGÉ ; la
-#                           variante MTP mono-utilisateur est une SECTION à
-#                           part (ornith-1.5-35b-a3b-mtp, parallel 1, +24 % en
+#       ornith-1.5-35b-a3b-parallel
+#                           np 4 sans spéculation x1,93, 138 t/s agrégés, le
+#                           meilleur du parc en concurrence -> RÉGLAGE INCHANGÉ,
+#                           seul le NOM de la section a pris le suffixe
+#                           -parallel le 15/09/2026 ; la variante MTP
+#                           mono-utilisateur est une SECTION à part
+#                           (ornith-1.5-35b-a3b-mtp, parallel 1, +24 % en
 #                           solo, x0,83 à np 2 et x1,12 à np 4)
 #       qwen3-coder-next    solo 73,0 t/s, np 2 = x0,86, np 4 = x0,92 : aucun
 #                           np ne bat le solo (batch 16 et 32) -> RESTE À 1
@@ -130,7 +134,8 @@ DEFAULT_DEVICE="Vulkan0"
 #     le 15/09/2026, RETIRÉE le soir même : aucune concurrence n'avait jamais
 #     été observée sur eux au journal du service, et leur section à drafter
 #     gagne en solo. Décision utilisateur : pas de parallel si perte de perf.
-#     Le seul multi-slot du parc est donc ornith-1.5-35b-a3b, où la concurrence
+#     Le seul multi-slot du parc est donc ornith-1.5-35b-a3b-parallel, où la
+#     concurrence
 #     est réelle (2 à 3 slots au journal) et ne coûte rien.
 #     Règle générale qui s'en dégage : un modèle spéculatif ne gagne au
 #     multi-slot que si parallel x (n-max + 1) reste <= 8 colonnes.
@@ -239,7 +244,8 @@ llama_model() {
 
 # =============================================================================
 # Groupe de tête du ini — candidats naturels au préchargement (preload.conf) :
-#   9b = tâches auxiliaires, ornith-1.5-35b-a3b = default agentic (opencode & co)
+#   9b = tâches auxiliaires, ornith-1.5-35b-a3b-parallel = default agentic
+#   (opencode & co)
 # =============================================================================
 
 # GGUF MTP (repo unsloth séparé), seul GGUF du 9b déclaré depuis le 15/09/2026 :
@@ -347,7 +353,17 @@ ctx-checkpoints      = 128"
 download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
   ORNITH15_35B_A3B_PATH="Ornith-1.5-35B-Q4_K_M.gguf"
 
-# Ornith-1.5-35B-A3B nothink — DEFAULT AGENTIC, chargé à la demande
+# Ornith-1.5-35B-A3B nothink, parallel 4 : DEFAULT AGENTIC, chargé à la demande
+# NOM DE SECTION : `-parallel` depuis le 15/09/2026 (la section s'appelait
+#   `ornith-1.5-35b-a3b` tout court jusque-là, cf. docs/HISTORIQUE.md et les
+#   mesures antérieures). Le suffixe dit ce que la section SERT, comme `-mtp`
+#   et `-dflash-nothink` ailleurs dans ce fichier : ici la variante parallel 4
+#   SANS spéculation, réservée à la concurrence (x1,93 en salves, x2,33 à trois
+#   boucles agentic simultanées, mesurés le 15/09/2026) ; la variante solo est
+#   `ornith-1.5-35b-a3b-mtp`, déclarée juste en dessous. Aucun autre nom ne
+#   bouge : le DOSSIER de GGUF reste ~/models/ornith-1.5-35b-a3b/ (donc la
+#   ligne de bench-devices.conf, indexée par dossier, est intacte) et la
+#   variable reste $ORNITH15_35B_A3B_PATH.
 #   (le bandeau disait « always-on » jusqu'au 15/09/2026 : sur bigchuck
 #   preload.conf ne contient que lfm2.5-2.6b, ce modèle monte à la demande en
 #   8,3 s ; preload.conf est un choix utilisateur local, non versionné)
@@ -386,7 +402,8 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   138 t/s agrégés à 4 requêtes contre 102 avec MTP au même np 4 ; la
 #   spéculation ne gagne qu'en mono-utilisateur (88,7 contre 71,6 t/s en solo,
 #   +24 %). D'où DEUX sections sur le même GGUF : celle-ci pour l'agentic
-#   concurrent, ornith-1.5-35b-a3b-mtp (déclarée juste en dessous) pour
+#   concurrent (section ornith-1.5-35b-a3b-parallel), ornith-1.5-35b-a3b-mtp
+#   (déclarée juste en dessous) pour
 #   l'usage mono-utilisateur.
 # Quant Q4_K_M (21,7 Go) : choix du 28/08/2026, c'est la quant de la commande
 #   de référence de la fiche ; pas de quant unsloth UD sur ce repo
@@ -421,7 +438,7 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   1129 t/s, décode 73,3 t/s : prefill +16 %, décode +4 % (sans spéculation
 #   des deux côtés).
-llama_model ornith-1.5-35b-a3b "
+llama_model ornith-1.5-35b-a3b-parallel "
 model                = $ORNITH15_35B_A3B_PATH
 ctx-size             = 1048576
 cache-ram            = 12288
@@ -438,7 +455,7 @@ cache-reuse          = 0
 swa-full             = true
 ctx-checkpoints      = 128"
 
-groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot) ---"
+groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot) ; la section de concurrence est ornith-1.5-35b-a3b-parallel ci-dessus ---"
 
 # Ornith-1.5-35B-A3B nothink, VARIANTE MTP — même GGUF que la section
 #   ci-dessus (Ornith-1.5-35B-Q4_K_M.gguf, tête MTP embarquée blk.40.nextn,
@@ -449,7 +466,7 @@ groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot)
 #   sont préchargées ensemble (~22 Go chargés deux fois). Précédent du parc :
 #   qwen3.8-27b / qwen3.8-27b-dflash-nothink sur un GGUF unique.
 #   bench-devices.conf est indexé par dossier de GGUF : cette section hérite
-#   du Vulkan0 mesuré pour ornith-1.5-35b-a3b, rien à y ajouter.
+#   du Vulkan0 mesuré pour ornith-1.5-35b-a3b-parallel, rien à y ajouter.
 #   Bascule manuelle : /model ornith-1.5-35b-a3b-mtp
 # POURQUOI DEUX SECTIONS, et laquelle sert quoi (mesures du 15/09/2026, fork
 #   strix-0007bc6, Vulkan0) :
