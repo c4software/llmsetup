@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="730" viewBox="0 0 900 730" role="img" aria-label="Écart du fork, en % du paquet">
-<rect x="0" y="0" width="900" height="730" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="844" viewBox="0 0 900 844" role="img" aria-label="Écart du fork, en % du paquet">
+<rect x="0" y="0" width="900" height="844" fill="#ffffff"/>
 <text x="24.0" y="34.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" fill="#3c4043" text-anchor="start" font-weight="600">Écart du fork, en % du paquet</text>
 <text x="24.0" y="56.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#5f6368" text-anchor="start">positif = le fork gagne ; réglages parfois différents des deux côtés,</text>
 <text x="24.0" y="72.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#5f6368" text-anchor="start">deux séries non comparables à la décimale</text>
@@ -9,80 +9,86 @@
 <text x="114.0" y="98.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="start">décode</text>
 <rect x="163.0" y="89.0" width="11" height="11" fill="#c0392b"/>
 <text x="180.0" y="98.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="start">négatif</text>
-<line x1="258.0" y1="110.0" x2="258.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="258.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-150 %</text>
-<line x1="305.3" y1="110.0" x2="305.3" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="305.3" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-125 %</text>
-<line x1="352.7" y1="110.0" x2="352.7" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="352.7" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-100 %</text>
-<line x1="400.0" y1="110.0" x2="400.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="400.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-75 %</text>
-<line x1="447.3" y1="110.0" x2="447.3" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="447.3" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-50 %</text>
-<line x1="494.7" y1="110.0" x2="494.7" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="494.7" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-25 %</text>
-<line x1="542.0" y1="110.0" x2="542.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="542.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">0 %</text>
-<line x1="589.3" y1="110.0" x2="589.3" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="589.3" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">25 %</text>
-<line x1="636.7" y1="110.0" x2="636.7" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="636.7" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">50 %</text>
-<line x1="684.0" y1="110.0" x2="684.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="684.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">75 %</text>
-<line x1="731.3" y1="110.0" x2="731.3" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="731.3" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">100 %</text>
-<line x1="778.7" y1="110.0" x2="778.7" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="778.7" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">125 %</text>
-<line x1="826.0" y1="110.0" x2="826.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="826.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">150 %</text>
-<line x1="258.0" y1="686.0" x2="826.0" y2="686.0" stroke="#bdc1c6" stroke-width="1.0"/>
-<line x1="542.0" y1="110.0" x2="542.0" y2="686.0" stroke="#bdc1c6" stroke-width="1.5"/>
+<line x1="258.0" y1="110.0" x2="258.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="258.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-150 %</text>
+<line x1="305.3" y1="110.0" x2="305.3" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="305.3" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-125 %</text>
+<line x1="352.7" y1="110.0" x2="352.7" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="352.7" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-100 %</text>
+<line x1="400.0" y1="110.0" x2="400.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="400.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-75 %</text>
+<line x1="447.3" y1="110.0" x2="447.3" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="447.3" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-50 %</text>
+<line x1="494.7" y1="110.0" x2="494.7" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="494.7" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">-25 %</text>
+<line x1="542.0" y1="110.0" x2="542.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="542.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">0 %</text>
+<line x1="589.3" y1="110.0" x2="589.3" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="589.3" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">25 %</text>
+<line x1="636.7" y1="110.0" x2="636.7" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="636.7" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">50 %</text>
+<line x1="684.0" y1="110.0" x2="684.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="684.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">75 %</text>
+<line x1="731.3" y1="110.0" x2="731.3" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="731.3" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">100 %</text>
+<line x1="778.7" y1="110.0" x2="778.7" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="778.7" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">125 %</text>
+<line x1="826.0" y1="110.0" x2="826.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="826.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">150 %</text>
+<line x1="258.0" y1="800.0" x2="826.0" y2="800.0" stroke="#bdc1c6" stroke-width="1.0"/>
+<line x1="542.0" y1="110.0" x2="542.0" y2="800.0" stroke="#bdc1c6" stroke-width="1.5"/>
 <text x="246.0" y="144.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">lfm2.5-2.6b</text>
-<rect x="542.0" y="126.0" width="63.9" height="16.0" fill="#2f6fdd"/>
-<text x="613.9" y="139.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+33,7 %</text>
-<rect x="542.0" y="147.0" width="8.7" height="16.0" fill="#9aa0a6"/>
-<text x="558.7" y="160.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+4,6 %</text>
-<text x="246.0" y="201.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.5-9b</text>
-<rect x="542.0" y="183.0" width="30.3" height="16.0" fill="#2f6fdd"/>
-<text x="580.3" y="196.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+16,0 %</text>
-<rect x="542.0" y="204.0" width="0.0" height="16.0" fill="#9aa0a6"/>
-<text x="550.0" y="217.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+0 %</text>
-<text x="246.0" y="258.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b</text>
-<rect x="542.0" y="240.0" width="30.1" height="16.0" fill="#2f6fdd"/>
-<text x="580.1" y="253.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+15,9 %</text>
-<rect x="542.0" y="261.0" width="7.0" height="16.0" fill="#9aa0a6"/>
-<text x="557.0" y="274.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+3,7 %</text>
-<text x="246.0" y="315.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b-mtp</text>
-<text x="550.0" y="310.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
-<text x="550.0" y="331.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
-<text x="246.0" y="372.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-27b-dflash-nothink</text>
-<rect x="542.0" y="354.0" width="71.1" height="16.0" fill="#2f6fdd"/>
-<text x="621.1" y="367.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+37,5 %</text>
-<rect x="542.0" y="375.0" width="19.9" height="16.0" fill="#9aa0a6"/>
-<text x="569.9" y="388.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+10,5 %</text>
-<text x="246.0" y="429.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-flash-next-mtp-nothink</text>
-<rect x="542.0" y="411.0" width="178.8" height="16.0" fill="#2f6fdd"/>
-<text x="728.8" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+94,4 %</text>
-<rect x="542.0" y="432.0" width="176.2" height="16.0" fill="#9aa0a6"/>
-<text x="726.2" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+93,1 %</text>
-<text x="246.0" y="486.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3-coder-next</text>
-<rect x="542.0" y="468.0" width="104.8" height="16.0" fill="#2f6fdd"/>
-<text x="654.8" y="481.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+55,3 %</text>
-<rect x="542.0" y="489.0" width="36.8" height="16.0" fill="#9aa0a6"/>
-<text x="586.8" y="502.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+19,5 %</text>
-<text x="246.0" y="543.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">gpt-oss</text>
-<rect x="542.0" y="525.0" width="151.2" height="16.0" fill="#2f6fdd"/>
-<text x="701.2" y="538.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+79,9 %</text>
-<rect x="542.0" y="546.0" width="3.6" height="16.0" fill="#9aa0a6"/>
-<text x="553.6" y="559.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+1,9 %</text>
-<text x="246.0" y="600.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">laguna-s-2.1</text>
-<rect x="542.0" y="582.0" width="67.6" height="16.0" fill="#2f6fdd"/>
-<text x="617.6" y="595.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+35,7 %</text>
-<rect x="537.6" y="603.0" width="4.4" height="16.0" fill="#c0392b"/>
-<text x="529.6" y="616.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="end">-2,3 %</text>
-<text x="246.0" y="657.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">deepseek-v4-flash</text>
-<rect x="542.0" y="639.0" width="148.0" height="16.0" fill="#2f6fdd"/>
-<text x="698.0" y="652.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+78,2 %</text>
-<rect x="542.0" y="660.0" width="254.0" height="16.0" fill="#9aa0a6"/>
-<text x="804.0" y="673.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+134,1 %</text>
+<text x="550.0" y="139.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<text x="550.0" y="160.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<text x="246.0" y="201.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">lfm2.5-2.6b-parallel</text>
+<rect x="542.0" y="183.0" width="63.9" height="16.0" fill="#2f6fdd"/>
+<text x="613.9" y="196.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+33,7 %</text>
+<rect x="542.0" y="204.0" width="8.7" height="16.0" fill="#9aa0a6"/>
+<text x="558.7" y="217.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+4,6 %</text>
+<text x="246.0" y="258.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.5-9b</text>
+<text x="550.0" y="253.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<text x="550.0" y="274.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<text x="246.0" y="315.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.5-9b-parallel</text>
+<rect x="542.0" y="297.0" width="30.3" height="16.0" fill="#2f6fdd"/>
+<text x="580.3" y="310.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+16,0 %</text>
+<rect x="542.0" y="318.0" width="0.0" height="16.0" fill="#9aa0a6"/>
+<text x="550.0" y="331.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+0 %</text>
+<text x="246.0" y="372.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b</text>
+<rect x="542.0" y="354.0" width="30.1" height="16.0" fill="#2f6fdd"/>
+<text x="580.1" y="367.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+15,9 %</text>
+<rect x="542.0" y="375.0" width="7.0" height="16.0" fill="#9aa0a6"/>
+<text x="557.0" y="388.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+3,7 %</text>
+<text x="246.0" y="429.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b-mtp</text>
+<text x="550.0" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<text x="550.0" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<text x="246.0" y="486.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-27b-dflash-nothink</text>
+<rect x="542.0" y="468.0" width="71.1" height="16.0" fill="#2f6fdd"/>
+<text x="621.1" y="481.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+37,5 %</text>
+<rect x="542.0" y="489.0" width="19.9" height="16.0" fill="#9aa0a6"/>
+<text x="569.9" y="502.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+10,5 %</text>
+<text x="246.0" y="543.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-flash-next-mtp-nothink</text>
+<rect x="542.0" y="525.0" width="178.8" height="16.0" fill="#2f6fdd"/>
+<text x="728.8" y="538.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+94,4 %</text>
+<rect x="542.0" y="546.0" width="176.2" height="16.0" fill="#9aa0a6"/>
+<text x="726.2" y="559.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+93,1 %</text>
+<text x="246.0" y="600.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3-coder-next</text>
+<rect x="542.0" y="582.0" width="104.8" height="16.0" fill="#2f6fdd"/>
+<text x="654.8" y="595.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+55,3 %</text>
+<rect x="542.0" y="603.0" width="36.8" height="16.0" fill="#9aa0a6"/>
+<text x="586.8" y="616.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+19,5 %</text>
+<text x="246.0" y="657.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">gpt-oss</text>
+<rect x="542.0" y="639.0" width="151.2" height="16.0" fill="#2f6fdd"/>
+<text x="701.2" y="652.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+79,9 %</text>
+<rect x="542.0" y="660.0" width="3.6" height="16.0" fill="#9aa0a6"/>
+<text x="553.6" y="673.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+1,9 %</text>
+<text x="246.0" y="714.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">laguna-s-2.1</text>
+<rect x="542.0" y="696.0" width="67.6" height="16.0" fill="#2f6fdd"/>
+<text x="617.6" y="709.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+35,7 %</text>
+<rect x="537.6" y="717.0" width="4.4" height="16.0" fill="#c0392b"/>
+<text x="529.6" y="730.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="end">-2,3 %</text>
+<text x="246.0" y="771.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">deepseek-v4-flash</text>
+<rect x="542.0" y="753.0" width="148.0" height="16.0" fill="#2f6fdd"/>
+<text x="698.0" y="766.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+78,2 %</text>
+<rect x="542.0" y="774.0" width="254.0" height="16.0" fill="#9aa0a6"/>
+<text x="804.0" y="787.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+134,1 %</text>
 </svg>

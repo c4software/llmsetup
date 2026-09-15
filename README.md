@@ -225,8 +225,12 @@ le drafter y apporte assez (x1,76 et x2,1 en test isolé) pour que la section
 principale passe en spéculation à un slot, le réglage multi-slot d'avant
 restant servi sous le nom `-parallel`. Le 9b spéculé tourne sur un AUTRE GGUF
 (repo MTP d'unsloth, dossier `qwen3.5-9b-mtp/`), le LFM2.5 sur le même GGUF
-plus un drafter DSpark. Les quatre lignes concernées sont « à mesurer » : le
-`--bench` tel que servi n'a pas encore été joué sur ces réglages.
+plus un drafter DSpark. Les deux sections spéculées ont été mesurées le
+15/09/2026 tel que servi : le drafter rend +59 % de décode au LFM2.5 et +29 %
+au 9b contre la variante `-parallel` re-mesurée le même jour, en échange de
+20 % et 5,8 % de prefill, le drafter décodant aussi le prompt. Les colonnes
+`-parallel` gardent les chiffres du 13/09/2026, série de référence de ce
+réglage.
 Réglages exacts dans `lib/models.sh` ; toutes les mesures sont celles du fork strix-0007bc6
 (Vulkan0, `--bench` 3 passes, les 12, 13 et 15/09/2026). Acceptance vide = pas de
 spéculation. La dernière colonne situe le décode contre la dernière mesure du
@@ -235,9 +239,9 @@ ordre de grandeur, pas une comparaison à la décimale.
 
 | Modèle (section) | Quant et taille | Device | Réglage spéculatif | Prefill t/s | Décode t/s | Acceptance | Écart décode contre paquet |
 |---|---|---|---|---|---|---|---|
-| lfm2.5-2.6b | Q8_0, 2,7 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 (KV f16) | à mesurer | à mesurer | à mesurer | à mesurer |
+| lfm2.5-2.6b | Q8_0, 2,7 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 (KV f16) | 2875 | 108,8 | 0,50 | jamais mesuré au paquet (réglage du 15/09/2026) |
 | lfm2.5-2.6b-parallel | Q8_0, 2,7 Go (même GGUF) | Vulkan0 | aucun, parallel 4 (KV f16) | 3048 | 70,8 | — | +4,6 % |
-| qwen3.5-9b | UD-Q6_K_XL, 8,4 Go (GGUF MTP unsloth, dossier `qwen3.5-9b-mtp/`) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | à mesurer | à mesurer | à mesurer | à mesurer |
+| qwen3.5-9b | UD-Q6_K_XL, 8,4 Go (GGUF MTP unsloth, dossier `qwen3.5-9b-mtp/`) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 745 | 33,0 | 0,58 | jamais mesuré au paquet (réglage du 15/09/2026) |
 | qwen3.5-9b-parallel | UD-Q6_K_XL, 8,2 Go (GGUF sans MTP) | Vulkan0 | aucun, parallel 4 | 971 | 25,7 | — | 0 % |
 | ornith-1.5-35b-a3b | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
 | ornith-1.5-35b-a3b-mtp | Q4_K_M, 22 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 1073 | 76,2 | 0,55 | non mesuré au paquet |

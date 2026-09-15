@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="730" viewBox="0 0 900 730" role="img" aria-label="Prefill : paquet Arch contre fork">
-<rect x="0" y="0" width="900" height="730" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="844" viewBox="0 0 900 844" role="img" aria-label="Prefill : paquet Arch contre fork">
+<rect x="0" y="0" width="900" height="844" fill="#ffffff"/>
 <text x="24.0" y="34.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" fill="#3c4043" text-anchor="start" font-weight="600">Prefill : paquet Arch contre fork</text>
 <text x="24.0" y="56.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#5f6368" text-anchor="start">tokens/s du prompt, passe 1 à froid.</text>
 <text x="24.0" y="72.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#5f6368" text-anchor="start">colonne paquet : dernier run bNNNNN du modèle ; colonne fork : strix-0007bc6, Vulkan0, --bench 3 passes, 12 et 13/09/2026</text>
@@ -7,64 +7,72 @@
 <text x="41.0" y="98.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="start">paquet Arch</text>
 <rect x="125.0" y="89.0" width="11" height="11" fill="#2f6fdd"/>
 <text x="142.0" y="98.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="start">fork strix-llama.cpp</text>
-<line x1="258.0" y1="110.0" x2="258.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="258.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">0</text>
-<line x1="400.0" y1="110.0" x2="400.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="400.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">1000</text>
-<line x1="542.0" y1="110.0" x2="542.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="542.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">2000</text>
-<line x1="684.0" y1="110.0" x2="684.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="684.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">3000</text>
-<line x1="826.0" y1="110.0" x2="826.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="826.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">4000</text>
-<line x1="258.0" y1="686.0" x2="826.0" y2="686.0" stroke="#bdc1c6" stroke-width="1.0"/>
+<line x1="258.0" y1="110.0" x2="258.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="258.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">0</text>
+<line x1="400.0" y1="110.0" x2="400.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="400.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">1000</text>
+<line x1="542.0" y1="110.0" x2="542.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="542.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">2000</text>
+<line x1="684.0" y1="110.0" x2="684.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="684.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">3000</text>
+<line x1="826.0" y1="110.0" x2="826.0" y2="800.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="826.0" y="818.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">4000</text>
+<line x1="258.0" y1="800.0" x2="826.0" y2="800.0" stroke="#bdc1c6" stroke-width="1.0"/>
 <text x="246.0" y="144.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">lfm2.5-2.6b</text>
-<rect x="258.0" y="126.0" width="323.6" height="16.0" fill="#9aa0a6"/>
-<text x="589.6" y="139.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">2279</text>
-<rect x="258.0" y="147.0" width="432.8" height="16.0" fill="#2f6fdd"/>
-<text x="698.8" y="160.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">3048</text>
-<text x="246.0" y="201.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.5-9b</text>
-<rect x="258.0" y="183.0" width="118.9" height="16.0" fill="#9aa0a6"/>
-<text x="384.9" y="196.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">837</text>
-<rect x="258.0" y="204.0" width="137.9" height="16.0" fill="#2f6fdd"/>
-<text x="403.9" y="217.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">971</text>
-<text x="246.0" y="258.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b</text>
-<rect x="258.0" y="240.0" width="138.3" height="16.0" fill="#9aa0a6"/>
-<text x="404.3" y="253.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">974</text>
-<rect x="258.0" y="261.0" width="160.3" height="16.0" fill="#2f6fdd"/>
-<text x="426.3" y="274.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">1129</text>
-<text x="246.0" y="315.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b-mtp</text>
-<text x="266.0" y="310.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
-<rect x="258.0" y="318.0" width="152.4" height="16.0" fill="#2f6fdd"/>
-<text x="418.4" y="331.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">1073</text>
-<text x="246.0" y="372.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-27b-dflash-nothink</text>
-<rect x="258.0" y="354.0" width="37.1" height="16.0" fill="#9aa0a6"/>
-<text x="303.1" y="367.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">261</text>
-<rect x="258.0" y="375.0" width="51.0" height="16.0" fill="#2f6fdd"/>
-<text x="317.0" y="388.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">359</text>
-<text x="246.0" y="429.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-flash-next-mtp-nothink</text>
-<rect x="258.0" y="411.0" width="28.0" height="16.0" fill="#9aa0a6"/>
-<text x="294.0" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">197</text>
-<rect x="258.0" y="432.0" width="54.4" height="16.0" fill="#2f6fdd"/>
-<text x="320.4" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">383</text>
-<text x="246.0" y="486.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3-coder-next</text>
-<rect x="258.0" y="468.0" width="66.5" height="16.0" fill="#9aa0a6"/>
-<text x="332.5" y="481.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">468</text>
-<rect x="258.0" y="489.0" width="103.2" height="16.0" fill="#2f6fdd"/>
-<text x="369.2" y="502.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">727</text>
-<text x="246.0" y="543.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">gpt-oss</text>
-<rect x="258.0" y="525.0" width="47.3" height="16.0" fill="#9aa0a6"/>
-<text x="313.3" y="538.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">333</text>
-<rect x="258.0" y="546.0" width="85.1" height="16.0" fill="#2f6fdd"/>
-<text x="351.1" y="559.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">599</text>
-<text x="246.0" y="600.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">laguna-s-2.1</text>
-<rect x="258.0" y="582.0" width="36.2" height="16.0" fill="#9aa0a6"/>
-<text x="302.2" y="595.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">255</text>
-<rect x="258.0" y="603.0" width="49.1" height="16.0" fill="#2f6fdd"/>
-<text x="315.1" y="616.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">346</text>
-<text x="246.0" y="657.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">deepseek-v4-flash</text>
-<rect x="258.0" y="639.0" width="15.6" height="16.0" fill="#9aa0a6"/>
-<text x="281.6" y="652.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">110</text>
-<rect x="258.0" y="660.0" width="27.8" height="16.0" fill="#2f6fdd"/>
-<text x="293.8" y="673.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">196</text>
+<text x="266.0" y="139.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<rect x="258.0" y="147.0" width="408.2" height="16.0" fill="#2f6fdd"/>
+<text x="674.2" y="160.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">2875</text>
+<text x="246.0" y="201.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">lfm2.5-2.6b-parallel</text>
+<rect x="258.0" y="183.0" width="323.6" height="16.0" fill="#9aa0a6"/>
+<text x="589.6" y="196.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">2279</text>
+<rect x="258.0" y="204.0" width="432.8" height="16.0" fill="#2f6fdd"/>
+<text x="698.8" y="217.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">3048</text>
+<text x="246.0" y="258.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.5-9b</text>
+<text x="266.0" y="253.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<rect x="258.0" y="261.0" width="105.8" height="16.0" fill="#2f6fdd"/>
+<text x="371.8" y="274.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">745</text>
+<text x="246.0" y="315.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.5-9b-parallel</text>
+<rect x="258.0" y="297.0" width="118.9" height="16.0" fill="#9aa0a6"/>
+<text x="384.9" y="310.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">837</text>
+<rect x="258.0" y="318.0" width="137.9" height="16.0" fill="#2f6fdd"/>
+<text x="403.9" y="331.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">971</text>
+<text x="246.0" y="372.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b</text>
+<rect x="258.0" y="354.0" width="138.3" height="16.0" fill="#9aa0a6"/>
+<text x="404.3" y="367.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">974</text>
+<rect x="258.0" y="375.0" width="160.3" height="16.0" fill="#2f6fdd"/>
+<text x="426.3" y="388.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">1129</text>
+<text x="246.0" y="429.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b-mtp</text>
+<text x="266.0" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<rect x="258.0" y="432.0" width="152.4" height="16.0" fill="#2f6fdd"/>
+<text x="418.4" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">1073</text>
+<text x="246.0" y="486.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-27b-dflash-nothink</text>
+<rect x="258.0" y="468.0" width="37.1" height="16.0" fill="#9aa0a6"/>
+<text x="303.1" y="481.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">261</text>
+<rect x="258.0" y="489.0" width="51.0" height="16.0" fill="#2f6fdd"/>
+<text x="317.0" y="502.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">359</text>
+<text x="246.0" y="543.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-flash-next-mtp-nothink</text>
+<rect x="258.0" y="525.0" width="28.0" height="16.0" fill="#9aa0a6"/>
+<text x="294.0" y="538.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">197</text>
+<rect x="258.0" y="546.0" width="54.4" height="16.0" fill="#2f6fdd"/>
+<text x="320.4" y="559.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">383</text>
+<text x="246.0" y="600.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3-coder-next</text>
+<rect x="258.0" y="582.0" width="66.5" height="16.0" fill="#9aa0a6"/>
+<text x="332.5" y="595.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">468</text>
+<rect x="258.0" y="603.0" width="103.2" height="16.0" fill="#2f6fdd"/>
+<text x="369.2" y="616.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">727</text>
+<text x="246.0" y="657.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">gpt-oss</text>
+<rect x="258.0" y="639.0" width="47.3" height="16.0" fill="#9aa0a6"/>
+<text x="313.3" y="652.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">333</text>
+<rect x="258.0" y="660.0" width="85.1" height="16.0" fill="#2f6fdd"/>
+<text x="351.1" y="673.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">599</text>
+<text x="246.0" y="714.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">laguna-s-2.1</text>
+<rect x="258.0" y="696.0" width="36.2" height="16.0" fill="#9aa0a6"/>
+<text x="302.2" y="709.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">255</text>
+<rect x="258.0" y="717.0" width="49.1" height="16.0" fill="#2f6fdd"/>
+<text x="315.1" y="730.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">346</text>
+<text x="246.0" y="771.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">deepseek-v4-flash</text>
+<rect x="258.0" y="753.0" width="15.6" height="16.0" fill="#9aa0a6"/>
+<text x="281.6" y="766.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">110</text>
+<rect x="258.0" y="774.0" width="27.8" height="16.0" fill="#2f6fdd"/>
+<text x="293.8" y="787.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">196</text>
 </svg>

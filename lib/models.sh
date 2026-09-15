@@ -280,6 +280,23 @@ download_hf qwen3.5-9b-mtp "unsloth/Qwen3.5-9B-MTP-GGUF" \
 #   D'où deux sections plutôt qu'un compromis.
 # cache-reuse 0 : contrainte des sections spéculatives, posée explicitement
 #   (la section parallel hérite du 4096 global, de toute façon ignoré ici).
+# Mesuré le 15/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
+#   passes, GGUF MTP) : prefill 745 t/s, décode 32,96 t/s, acceptance 0,58.
+#   Contre le réglage sans spéculation re-mesuré le même jour sous
+#   qwen3.5-9b-parallel (791 / 25,5) : décode +29 %, prefill -5,8 % (le drafter
+#   MTP décode aussi le prompt). Le x2,1 du test isolé devient x1,29 ici : le
+#   test isolé tournait sur spec-test.txt et spec-refactor.txt, où le prompt se
+#   ré-émet mot pour mot et où les n-grams paient ; le prompt de --bench est
+#   générique. Le comparateur de --bench annonce « RÉGRESSION » sur le prefill
+#   (993 le 13/09 -> 745) : il compare par nom de section, alors que le GGUF ET
+#   le réglage ont changé ; la variante ne rend elle-même que 791 le 15/09
+#   contre 993 le 13/09, donc l'essentiel de cet écart est de la dispersion
+#   entre journées, pas la spéculation.
+# --bench-cache du 15/09/2026 : 62 % au tour suivant, 0 % après édition en
+#   amont, 64 % sur requête identique : exactement les valeurs du 21/08 sans
+#   spéculation. Le GGUF MTP et cache-reuse 0 ne changent rien à la part du
+#   cache : elle est bornée par l'état récurrent (restauration au dernier
+#   checkpoint), pas par la spéculation.
 # Préchargement : preload.conf est indexé par NOM DE SECTION, donc la ligne
 #   `qwen3.5-9b` existante précharge désormais CETTE version (GGUF MTP). Les
 #   deux sections ensemble déclenchent l'avertissement « <clé> ET <clé>-mtp »
@@ -324,6 +341,11 @@ groupe "; --- Variante multi-slot du 9b (4 slots, sans spéculation, GGUF sans t
 #   (93 → 33) : tâches auxiliaires, pas de raisonnement.
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   971 t/s, décode 25,7 t/s : prefill +16 %, décode identique au dixième.
+# Re-mesuré le 15/09/2026 sous ce nom (même fork, --bench 3 passes) : prefill
+#   791 t/s, décode 25,5 t/s : décode identique au 13/09 (25,7), prefill 20 %
+#   plus bas (993 dans bench.log ce jour-là) sans changement de réglage ni de
+#   GGUF : dispersion de plateforme, à garder en tête avant de lire un écart de
+#   prefill entre deux journées comme un effet de réglage.
 # ctx-size : pool partagé, donc 8192 par slot à parallel 4.
 # Toutes les autres clés sont celles de la section principale (sampling,
 #   n-predict, swa-full, ctx-checkpoints) : à ne changer qu'en même temps.
@@ -576,6 +598,19 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-DSpark-GGUF" \
 #   compris, ~9 Go au lieu de ~2,7). _preload_sanity n'avertit PAS si les deux
 #   sections sont préchargées ensemble (lignes `model =` différentes, pas de
 #   suffixe -mtp) : c'est au lecteur de voir que ce sont les mêmes poids.
+# Mesuré le 15/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
+#   passes) : prefill 2875 t/s, décode 108,8 t/s, acceptance 0,50. Contre le
+#   réglage sans drafter re-mesuré le même jour sous lfm2.5-2.6b-parallel
+#   (3602 / 68,2) : décode +59 %, prefill -20 %, le drafter DSpark décodant
+#   aussi le prompt (même effet que sur deepseek-v4-flash et qwen3-coder-next).
+#   Le comparateur de --bench annonce « RÉGRESSION » sur le prefill (3651 le
+#   13/09 -> 2875) : il compare par nom de section et ignore que le réglage a
+#   changé ; la variante retrouve 3602 le même jour, donc l'écart vient du
+#   drafter, pas de la plateforme. Le x1,76 du test isolé devient x1,59 ici :
+#   le prompt de --bench est générique, celui du test isolé plus favorable.
+# --bench-load du 15/09/2026 (section préchargée, drafter compris) : 0,4 s de
+#   chargement + 1er token, TTFT à chaud 27 ms : le drafter de 0,36 Go ne coûte
+#   rien de visible (0,5 s / 27 ms au 21/08 sans lui).
 # Mesuré 21/08/2026 (Vulkan0, b10433) et 13/09/2026 (fork) sans spéculation :
 #   chiffres dans la variante ci-dessous, qui porte ce réglage.
 llama_model lfm2.5-2.6b "
@@ -609,6 +644,9 @@ groupe "; --- Variante multi-slot du LFM2.5 (4 slots, sans drafter) ---"
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   3048 t/s, décode 70,8 t/s : prefill +34 % contre le 21/08, mais bench.log
 #   du 02/09 (b10621) donnait déjà 2743 : l'essentiel vient du build.
+# Re-mesuré le 15/09/2026 sous ce nom (même fork, --bench 3 passes) : prefill
+#   3602 t/s, décode 68,2 t/s : l'ancien réglage retrouvé à 1,3 % près, ce qui
+#   sert de témoin au prefill perdu par la section principale spéculée.
 # ctx-size : pool partagé, donc 32768 par slot à parallel 4.
 # Toutes les autres clés sont celles de la section principale (sampling, KV
 #   f16, cache-reuse 0, jinja) : à ne changer qu'en même temps.
