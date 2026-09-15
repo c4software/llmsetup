@@ -218,18 +218,22 @@ Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 Une ligne par section servie du `models.ini`. Campagne du 15/09/2026 : tout
 modèle qui dispose d'un drafter le sert à un slot (DSpark sur DeepSeek et
 LFM2.5, DFlash z-lab sur Coder-Next, tête MTP embarquée sur Ornith et sur le 9b
-via le GGUF MTP d'unsloth, dossier `qwen3.5-9b-mtp/`). Des trois modèles qui
-avaient 4 slots, seul Ornith garde ce réglage : sa section de concurrence,
+via la tête MTP tierce du GGUF fusionné protoLabsAI). Des trois modèles qui
+avaient 4 slots, seul Ornith 35B garde ce réglage : sa section de concurrence,
 renommée `ornith-1.5-35b-a3b-parallel` le 15/09/2026 pour que le nom dise ce
 qu'elle sert (concurrence réelle observée, 2 à 3 slots au journal du service),
 reste le défaut agentic, avec `ornith-1.5-35b-a3b-mtp` en variante solo. Le
-dossier de GGUF, lui, reste `ornith-1.5-35b-a3b/`. `lfm2.5-2.6b` et `qwen3.5-9b` passent
+dossier de GGUF, lui, reste `ornith-1.5-35b-a3b/`. `lfm2.5-2.6b` et le 9b passent
 au drafter à un slot ; leurs variantes `-parallel`, créées le même jour, ont été
 retirées le soir du 15/09/2026 : aucune concurrence n'a jamais été observée sur
 ces deux modèles, et pas de parallel si perte de perf. Le drafter rend +59 % de
 décode au LFM2.5 et +29 % au 9b contre l'ancien réglage re-mesuré le même jour, contre 20 %
 et 5,8 % de prefill (le drafter décode aussi le prompt) ; sur les prompts de
-code des tests isolés les gains sont bien plus forts (x1,8 et x2,1). La section
+code des tests isolés les gains sont bien plus forts (x1,8 et x2,1). Le créneau
+du 9b a changé de modèle le soir du 15/09/2026 : `qwen3.5-9b` est remplacée par
+`ornith-1.5-9b-mtp-nothink` (Ornith-1.5-9B Q8_0 avec tête MTP tierce, +11 % de
+prefill et +20 % de décode contre elle, et très au-dessus sur les benchmarks
+agentic de l'éditeur), cf. `docs/HISTORIQUE.md`. La section
 thinking du 27B a été retirée le 13/09/2026 (cf. `docs/HISTORIQUE.md`).
 Réglages exacts dans `lib/models.sh` ; toutes les mesures sont celles du fork
 strix-0007bc6 (Vulkan0, `--bench` 3 passes, les 12, 13 et 15/09/2026, prompt
@@ -241,7 +245,7 @@ pas une comparaison à la décimale.
 | Modèle (section) | Quant et taille | Device | Réglage spéculatif | Prefill t/s | Décode t/s | Acceptance | Écart décode contre paquet |
 |---|---|---|---|---|---|---|---|
 | lfm2.5-2.6b | Q8_0, 2,7 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 (KV f16) | 2875 | 108,8 | 0,50 | +61 % (paquet sans drafter, 67,7 t/s à 4 slots) |
-| qwen3.5-9b | UD-Q6_K_XL, 8,4 Go (GGUF MTP unsloth, dossier `qwen3.5-9b-mtp/`) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 745 | 33,0 | 0,58 | +28 % (paquet sans drafter, 25,7 t/s à 4 slots) |
+| ornith-1.5-9b-mtp-nothink | Q8_0, 9,79 Go (GGUF fusionné tiers protoLabsAI, tête MTP nextn distillée) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 3, parallel 1 | 828 | 39,5 | 0,56 | jamais mesuré au paquet (+20 % de décode contre `qwen3.5-9b`, remplacée le même jour) |
 | ornith-1.5-35b-a3b-parallel | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
 | ornith-1.5-35b-a3b-mtp | Q4_K_M, 22 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 1073 | 76,2 | 0,55 | non mesuré au paquet |
 | qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |

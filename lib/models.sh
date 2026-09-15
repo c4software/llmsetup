@@ -354,6 +354,23 @@ download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
 #   parc fixe n-gpu-layers = 99 dans les flags globaux [*] (lib/ini.sh), comme
 #   pour toutes les autres sections MTP, qui ne posent pas non plus de fit.
 #   Vérifié au chargement (aucune couche CPU dans le journal du service).
+# n-gram CONFIRMÉ SUR LE SERVICE, --spec-ab du 15/09/2026 (fork strix-0007bc6,
+#   Vulkan0, 4 passes, spec-refactor.txt) : base (ngram-map-k 7 min-hits 2 +
+#   draft-mtp 3) 52,89 t/s, acceptance 0,847 ; draft-mtp SEUL 50,62 t/s,
+#   acceptance 0,840, soit -4,3 %. Le n-gram est donc gardé : il paie sur le
+#   cas d'usage visé (édition de code, le oldString se ré-émet mot pour mot),
+#   et il ne coûte rien ailleurs (test isolé : 44,7 contre 45,3 t/s sur le
+#   prompt générique, dans le bruit).
+# Mesuré le 15/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
+#   passes, première mesure journalisée de cette section) : prefill 827,9 t/s,
+#   décode 39,5 t/s, acceptance 0,56. Contre la section qwen3.5-9b remplacée,
+#   mesurée le même jour sur le même fork (745 / 32,96 / 0,58) : prefill +11 %,
+#   décode +20 %, pour un GGUF plus gros et une quant plus haute. L'écart avec
+#   les 52,9 t/s du --spec-ab est normal : bench-task est un prompt générique où
+#   les hits n-gram sont rares (acceptance 0,56 contre 0,85 sur spec-refactor).
+# --bench-cache, --bench-load et --bench-agentic : non lancés sur cette section
+#   au 15/09/2026 (le 9b remplacé donnait 62 / 0 / 64 % de cache sur la même
+#   arch qwen35 et le même état récurrent GDN, rien n'indique un écart).
 
 llama_model ornith-1.5-9b-mtp-nothink "
 model                = $ORNITH15_9B_MTP_PATH
