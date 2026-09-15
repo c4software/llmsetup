@@ -12,5 +12,4 @@ qwen3.8-27b-dflash-nothink	261	359	29.5	32.6	0.65	0.595	ngram-map-k 47 + draft-d
 qwen3.8-flash-next-mtp-nothink	197	383	25.9	50.0	0.75	0.87	ngram-map-k 7 + draft-mtp 4 et ngram-on-disk (n-gram seul sur le paquet)	b10809 05/09/2026 contre strix-0007bc6 12/09/2026
 qwen3-coder-next	468	727	43.7	52.2	0.29	0.515	draft-dflash 7, drafter DFlash z-lab Q8_0 (ngram-map-k 47 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
 gpt-oss	333	599	51.9	52.9		0.57	ngram-map-k 7, min-hits 2	b10548 21/08/2026 contre strix-0007bc6 13/09/2026
-laguna-s-2.1	255	346	30.3	29.6	0.835	0.80	ngram-map-k 7, min-hits 2 (DFlash refuse)	b10548 21/08/2026 contre strix-0007bc6 13/09/2026
 deepseek-v4-flash	110	196	12.3	28.8		0.69	ngram-map-k 7 + draft-dspark 3 (drafter DSpark unsloth Q8_0 ; n-gram seul sur le paquet), reasoning-budget 6144	b10433 21/08/2026 contre strix-0007bc6 15/09/2026

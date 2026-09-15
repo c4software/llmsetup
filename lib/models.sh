@@ -168,6 +168,12 @@ _GROUPE_EN_ATTENTE=""
 #  distinct. Le fichier devient donc ORPHELIN
 #  → ./setup-llm.sh --cleanup le purgera (non lancé). lfm2.5-2.6b-parallel, elle,
 #  partageait le GGUF de la section principale : rien d'orphelin de ce côté)
+# (retiré le 15/09/2026 avec la section laguna-s-2.1, jugée non utile dans
+#  l'usage réel : les 3 shards UD-Q4_K_XL (73,4 Go) et le drafter DFlash
+#  poolside BF16 (2,2 Go) de ~/models/laguna-s-2.1/, plus déclarés par aucun
+#  download_hf. Le dossier entier devient ORPHELIN
+#  → ./setup-llm.sh --cleanup le purgera (non lancé). Commentaire métier et
+#  mesures : docs/HISTORIQUE.md, « Laguna-S-2.1 retiré (15/09/2026) »)
 # (retraits antérieurs : docs/HISTORIQUE.md)
 KNOWN_FILES=()
 
@@ -1296,110 +1302,6 @@ reasoning-budget               = 6144
 reasoning-budget-soft-ratio    = 0.6
 reasoning-budget-soft2-ratio   = 0.85
 reasoning-budget-grace-tokens  = 192
-jinja            = true
-parallel         = 1"
-
-groupe "; --- Laguna S 2.1 : arch 'laguna', servie par le fork strix-llama.cpp ; sur le paquet Arch de secours, b10087 minimum (vérifié jusqu'à b10548) ---"
-
-# Laguna S 2.1 (poolside) — MoE 118B (8B actifs), agentic coding, shards UD-Q4_K_XL
-# 73.4 Go / 3 shards.
-# (ré-upload de fin juillet 2026 absorbé, cf. docs/HISTORIQUE.md)
-# Alternative plus légère si la RAM est juste : UD-IQ4_XS (57.6 Go) — changer
-#   l'entrée en conséquence, le glob suit. (UD-Q4_K_S a été RETIRÉ du repo
-#   unsloth ; il ne reste en shards que UD-IQ4_XS, UD-Q3_K_XL, UD-Q4_K_XL et
-#   UD-Q5_K_XL.)
-download_hf_shards laguna-s-2.1 "unsloth/Laguna-S-2.1-GGUF" \
-  LAGUNA_S_PATH="UD-Q4_K_XL/Laguna-S-2.1-UD-Q4_K_XL-00001-of-00003.gguf"
-# Drafter DFlash officiel (poolside, 1B, 6 couches, block_size 16, embeddings
-# partagés avec la cible) : GGUF BF16 de 2,2 Go dans le repo poolside, pas
-# dans celui d'unsloth. Même dossier que le modèle, autre repo.
-download_hf laguna-s-2.1 "poolside/Laguna-S-2.1-GGUF" \
-  LAGUNA_DFLASH_PATH="laguna-s-2.1-DFlash-BF16.gguf"
-
-# Laguna S 2.1 — MoE 118B-A8B (poolside), agentic coding / long-horizon
-# 48 couches en ratio 1:3 global/SWA (fenêtre 512) + softplus gating :
-#   pas de swa-full, l'ISWA laguna n'est pas l'implémentation Qwen.
-# ctx 262144 : les GGUF sont packagés pour 256K (metadata rope/YaRN fixée par
-#   unsloth fin juillet 2026 sur la config poolside). Le checkpoint est natif 1M
-#   mais il faut alors surcharger le rope au chargement :
-#     --ctx-size 1048576 --rope-scaling yarn --rope-scale 128 --yarn-orig-ctx 8192
-#   (dégradation qualité annoncée par poolside → on reste à 256K).
-# cache-reuse 0 : MoE + attention mixte, non testé avec le cache-reuse global.
-# cache-type-v q8_0 : précision V critique pour les diffs de code.
-# thinking activé par défaut (recommandé en agentic coding, avec preserved
-#   thinking côté client) — pour un modèle nothink, ajouter :
-#     chat-template-kwargs = {"enable_thinking":false}
-# Spéculation DFlash (drafter $LAGUNA_DFLASH_PATH, déclaré ci-dessus) :
-#   draft-dflash est en mainline (PR #22105, mergée le 28/06/2026), MAIS LE
-#   MAINLINE REFUSE CE DRAFTER. Mesuré 21/08/2026 (llama-cpp b10548, --spec-ab
-#   spec-type=draft-dflash;spec-draft-model=…;spec-draft-n-max=15 et 7) :
-#   « llama_model_load: error loading model: done_getting_tensors: wrong
-#   number of tensors; expected 76, got 69 », le serveur sort, le modèle ne
-#   charge pas. La model card poolside avait raison : le mainline « ships the
-#   generic DFlash framework » mais pas le contrat spécifique Laguna (7
-#   tenseurs d'écart), fork poolside/llama.cpp branche laguna requis, hors
-#   périmètre ici : ni le paquet Arch de secours ni le fork strix-llama.cpp ne
-#   portent ce contrat. Flags à réutiliser le jour où le mainline
-#   suit : --spec-type draft-dflash -md <drafter> --spec-draft-n-max 7 (bloc
-#   entraîné 16).
-#   Retours communauté sur le fork poolside : jusqu'à +30 tok/s.
-#   12/09/2026 : le fork strix-llama.cpp revendique DFlash (draft-dflash dans
-#   son --spec-type, loader src/models/dflash.cpp, DFlash2/DSpark compris),
-#   d'où le draft-dflash remis ci-dessous le 12/09, puis retiré le jour même
-#   (cf. VÉRIFIÉ ci-dessous) — MAIS LA LECTURE DU CODE DIT QUE ÇA
-#   VA ENCORE ÉCHOUER, et de la même façon : le contrôle de comptage est
-#   toujours là (« wrong number of tensors; expected %d, got %d »,
-#   src/llama-model-loader.cpp) et le loader DFlash du fork ne crée AUCUN
-#   blk.N.attn_gate — aucune trace d'attn_gate ni de laguna dans dflash.cpp.
-#   Or le drafter en porte un par couche : ses tenseurs (lus dans l'en-tête du
-#   GGUF) font 12 par couche sur 6 couches = 72, plus 4 hors blocs = 76, quand
-#   le loader générique n'en crée que 11 x 6 + 3 = 69. C'est exactement l'écart
-#   de 7 déjà mesuré.
-#   VÉRIFIÉ le 12/09/2026 sur strix-0007bc6, et la lecture du code avait raison :
-#   refus identique au paquet Arch (« common_speculative_init_result: failed to
-#   load draft model »), le modèle ne charge plus du tout via le routeur. Retour
-#   au NGRAM SEUL le jour même : draft-dflash, spec-draft-model et
-#   spec-draft-n-max retirés du corps ci-dessous. Le drafter reste déclaré et
-#   sur disque (2,2 Go) pour le jour où un moteur crée les attn_gate : il
-#   faudra le fork poolside/llama.cpp branche `laguna`, ou un DFlash mainline
-#   qui connaisse le contrat Laguna.
-# Candidat ROCm sur le papier (gros prefill agentic) : invalidé par la mesure
-#   ci-dessous.
-# Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10548, sans
-#   spéculation, 3 passes) : 247 pp / 28,6 tg contre ROCm0 320 / 23,6 (tour
-#   simulé 113 s contre 134), les deux justes — le schéma des denses.
-# Courbe t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 33 ms, 8 = 95
-#   (x2,9), 16 = 282, 32 = 384, 48 = 540 ms (x16,5). Référence sans
-#   spéculation sur spec-refactor : 28,7 t/s.
-# Spéculation n-gram : ngram-map-k size_m 7, RETENU par --spec-ngram-tune
-#   21/08/2026 (b10548, Vulkan0, spec-refactor.txt, 4 passes) : sans
-#   spéculation 28,7 t/s ; size_m 7 = 53,0 t/s (+85 %, le plus gros gain
-#   n-gram mesuré ici) ; size_m 47 = 39,9 t/s (+39 %). Courbe raide (x2,9 au
-#   batch 8, x16,5 au batch 48) et pourtant le petit draft double presque le
-#   débit : MoE à 8B actifs, le forward de batch 8 coûte peu en absolu (95 ms)
-#   et le décode de base est lent (33 ms/token), les hits rapportent gros. Pas
-#   d'état récurrent (SWA + global), donc pas de surcoût fixe par pas.
-# --bench (bench-task, peu de répétitions) avec n-gram 7 : 30,3 t/s contre 28,6
-#   sans (+6 %) — pas de revers hors refactor, contrairement à Qwen3-Coder-Next.
-#   --bench-cache : 99 % au tour suivant, 100 % à l'identique (pas d'état
-#   récurrent). --bench-load : 90,5 s depuis le disque (13/09/2026, fork ; 67 s
-#   au paquet le 21/08), TTFT à chaud 138 ms (173 ms au paquet).
-# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
-#   346 t/s, décode 29,6 t/s, acceptance 0,80 : prefill +36 %, décode -2 %
-#   contre le paquet (255 / 30,3 / 0,835, b10548), soit le bruit de mesure.
-llama_model laguna-s-2.1 "
-model            = $LAGUNA_S_PATH
-ctx-size         = 262144
-cache-ram        = 8192
-temp             = 0.7
-top-p            = 0.95
-top-k            = 0
-min-p            = 0.0
-cache-type-v     = q8_0
-cache-reuse      = 0
-spec-type        = ngram-map-k
-spec-ngram-map-k-size-m   = 7
-spec-ngram-map-k-min-hits = 2
 jinja            = true
 parallel         = 1"
 

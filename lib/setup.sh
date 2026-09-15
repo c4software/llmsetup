@@ -178,8 +178,9 @@ _setup_propose_fork() {
 # une lecture disque complète du GGUF, sans réseau.
 #
 # Updates amont connus (juillet/août 2026) à rattraper si téléchargés avant :
-#   --update laguna-s-2.1   (fix rope/context 256K YaRN + fixes poolside)
 #   --update qwen3.8-27b    (repo day-zero mi-août, template/quants mouvants)
+#   (l'entrée laguna-s-2.1, fix rope/context 256K YaRN + fixes poolside, est
+#    tombée avec le retrait du modèle le 15/09/2026 : docs/HISTORIQUE.md)
 # =============================================================================
 
 cmd_update() {
