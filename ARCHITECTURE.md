@@ -127,6 +127,19 @@ common → models → ini → preload → setup → fork → bench → bench-dev
   jetable `bench-agentic/`, appel froid puis N passes de cinq scénarios de
   tool calls en direct sur le serveur ; delta de `/metrics?model=` par
   scénario, médianes en awk, journal `logs/bench-agentic.log`).
+  3e argument `N` > 1 (`_bench_agentic_parallele`) : le cas orchestrateur +
+  sous-agents, N boucles pi simultanées sur le même modèle. Chaque passe joue
+  la suite seule (référence solo de la même exécution) puis la même suite dans
+  N conteneurs lancés ensemble (`&` + `wait`, un `/work` jetable par conteneur,
+  réseau hôte sans port publié, noms `bench-agentic-<pid>-p<passe>-i<inst>`
+  tués par un trap INT/TERM ; image construite une fois avant la salve).
+  Bilan : facteur de débit de tâches `(N x temps solo) / temps parallèle`,
+  et décode / prefill / part du cache agrégés lus sur `/metrics?model=` côté
+  hôte avant et après la salve (les deltas des N conteneurs se recouvrent,
+  leurs t/s ne s'additionnent pas). Le `parallel` réel vient de `/v1/models`
+  → `status.args` (`py/spec_server_nmax.py --parallel`, comme
+  `bench-parallel`) : N n'est pas plafonné, un dépassement est un `warn`.
+  `N = 1` est le chemin historique, inchangé.
 - `spec.sh` : `cmd_spec_test` (3e argument = prompt, journalisé),
   `cmd_spec_tune`, `cmd_spec_ngram_tune` (courbe `llama-bench` service
   arrêté, raffinement en boucle bornée sur les `STEP_LO/HI` de
@@ -348,7 +361,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench.log` | `_bench_one` | `date modèle gguf device build prefill décode acceptance passes prefill_cache` ; lu par `bench_compare.py` |
 | `bench-parallel.log` | `cmd_bench_parallel` | `date modèle device build parallel_srv n agrégé décode_par_requête passes` |
 | `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
-| `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps` (une ligne par scénario et par passe, passe 0 = appel froid) |
+| `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N` (une ligne par scénario et par passe, passe 0 = appel froid ; `N` = boucles simultanées de la salve, 1 pour la référence solo — colonne ajoutée en queue le 15/09/2026, les lignes antérieures à 13 colonnes restent lisibles) |
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |

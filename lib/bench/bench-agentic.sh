@@ -8,7 +8,8 @@
 # =============================================================================
 # bench-agentic — une vraie boucle de tool calls sur le modèle, mesurée.
 #
-# Usage : ./setup-llm.sh --bench-agentic [modèle] [passes]   (passes = 1 par défaut)
+# Usage : ./setup-llm.sh --bench-agentic [modèle] [passes] [N]
+#         (passes = 1 par défaut, N = 1 boucle par défaut)
 #
 # Les autres benchs mesurent du débit sur une requête isolée ; celui-ci fait
 # ce qu'un client agentic fait : pi (pi.dev) joue cinq scénarios (réponse
@@ -32,36 +33,44 @@
 # même scénario, même jour), une passe seule ne dit rien, 3 est un bon
 # défaut de qualification. Journal :
 # logs/bench-agentic.log (TSV, une ligne par scénario et par passe, build).
+#
+# 3e argument, N > 1 — le cas réel : un orchestrateur et ses sous-agents
+# tapent le même modèle EN MÊME TEMPS (2 à 3 slots simultanés observés sur
+# Ornith). En série, un modèle à `parallel = 3` a l'air aussi bon qu'à
+# `parallel = 1` : c'est faux dès qu'il sert trois boucles. À N > 1, chaque
+# passe joue donc la suite DEUX fois : une fois seule (référence solo de la
+# même exécution, même build, même cache) puis une fois à N conteneurs pi
+# simultanés, chacun dans son /work jetable. On en tire le facteur de débit
+# de tâches, (N × temps solo) / temps parallèle : x1 = le serveur sérialise
+# (les boucles se mettent en file), xN = le batch absorbe les N boucles pour
+# le prix d'une. Le décode et le prefill agrégés de la salve sont lus sur
+# /metrics?model= côté hôte, avant et après (les deltas des N conteneurs se
+# recouvrent dans le temps : leurs t/s ne s'additionnent pas, le compteur du
+# serveur, lui, est juste). N n'est pas plafonné, seulement comparé au
+# `parallel` RÉEL lu sur /v1/models → status.args (jamais le ini, que le
+# routeur ne relit qu'au démarrage) : au-delà, warn, et la file d'attente se
+# voit dans le facteur. N = 1 (défaut) est le chemin historique, inchangé.
 # =============================================================================
 BENCH_AGENTIC_LOG="$LOG_DIR/bench-agentic.log"
 
-cmd_bench_agentic() {
-  local preset="${1:-}" passes="${2:-1}"
-  command -v docker >/dev/null || error "docker introuvable (bench-agentic joue pi dans un conteneur)"
-  [[ "$passes" =~ ^[1-9][0-9]*$ ]] || error "passes doit être un entier >= 1 (reçu : '$passes')"
-  curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
-  if [[ -z "$preset" ]]; then
-    _bench_select_one
-    [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné — bench-agentic annulé."; return; }
-    preset="$BENCH_DEV_CHOICE"
-  fi
-  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset' (voir --help)"
+# Conteneurs de la salve en cours, pour le trap Ctrl-C (docker compose run
+# détaché de son shell survivrait au SIGINT : on les tue nommément).
+_BENCH_AGENTIC_NOMS=()
 
-  # Le conteneur est en réseau hôte : localhost du conteneur = la machine.
-  local url="${SPEC_TEST_URL/localhost/127.0.0.1}"
-  info "bench-agentic '$preset' — appel froid puis $passes passe(s) de 5 scénarios pi (tool calls) en direct sur $url"
-  local sortie; sortie="$(mktemp)"
-  MODEL="$preset" PASSES="$passes" SERVER_URL="$url" \
-    docker compose -f "$SCRIPT_DIR/bench-agentic/docker-compose.yml" run --rm --build pi 2>&1 \
-    | tee "$sortie" | grep -v $'^TSV\t' || true
+_bench_agentic_nettoie() {
+  local c
+  for c in ${_BENCH_AGENTIC_NOMS[@]+"${_BENCH_AGENTIC_NOMS[@]}"}; do
+    docker rm -f "$c" >/dev/null 2>&1 || true
+  done
+  _BENCH_AGENTIC_NOMS=()
+  return 0
+}
 
-  # Bilan : froid à part, puis médianes par scénario sur les passes
-  # (verdict = nombre de PASS / passes). Colonnes TSV du conteneur :
-  # passe scénario verdict mur prompt cache gen prefill décode.
-  echo ""
-  info "──── bilan ($passes passe(s), médianes) ────"
-  grep $'^TSV\t' "$sortie" | cut -f2- | awk -F'\t' '
+# Médianes par scénario, sur stdin : les lignes TSV du conteneur déjà
+# débarrassées du marqueur (passe scénario verdict mur prompt cache gen
+# prefill décode). Sert au bilan solo comme au bilan parallèle.
+_bench_agentic_medianes() {
+  awk -F'\t' '
     function med(a, n,   i, j, t) { for (i = 2; i <= n; i++) { t = a[i]; j = i - 1; while (j > 0 && a[j] > t) { a[j+1] = a[j]; j-- } a[j+1] = t }
       return n % 2 ? a[(n+1)/2] : (a[n/2] + a[n/2+1]) / 2 }
     $1 == 0 { printf "  froid (prompt système)   : %s  %5.1f s, prompt %d tok (%d du cache), prefill %.0f t/s\n", $3, $4, $5+$6, $6, $8; next }
@@ -73,14 +82,215 @@ cmd_bench_agentic() {
         for (j = 1; j <= n[s]; j++) { A[j] = mur[s, j]; B[j] = pt[s, j]; C[j] = part[s, j]; D[j] = gen[s, j]; E[j] = pp[s, j]; F[j] = tg[s, j] }
         printf "  %-24s : %d/%d  %5.1f s, prompt %d tok (%.0f %% du cache), généré %d tok, prefill %.0f t/s, décode %.1f t/s\n",
           s, ok[s]+0, n[s], med(A, n[s]), med(B, n[s]), med(C, n[s]), med(D, n[s]), med(E, n[s]), med(F, n[s]) } }'
+}
 
+# Compteurs cumulés de llama-server pour un modèle : "pt pc gt ps gs"
+# (mêmes compteurs que snap() dans bench-agentic/scenarios.sh, mais lus
+# depuis l'hôte, autour de la salve entière).
+_bench_agentic_metrics() {
+  curl -s "$SPEC_TEST_URL/metrics?model=$1" 2>/dev/null | awk '
+    /^llamacpp:prompt_tokens_total /{pt=$2} /^llamacpp:prompt_tokens_cached_total /{pc=$2}
+    /^llamacpp:tokens_predicted_total /{gt=$2} /^llamacpp:prompt_seconds_total /{ps=$2}
+    /^llamacpp:tokens_predicted_seconds_total /{gs=$2}
+    END{printf "%s %s %s %s %s", pt+0, pc+0, gt+0, ps+0, gs+0}'
+}
+
+# Nom du conteneur d'une instance : explicite (PID du shell, passe, instance)
+# pour que le trap Ctrl-C puisse le tuer. Enregistré par l'appelant AVANT le
+# lancement : `_bench_agentic_run &` s'exécute dans un sous-shell, un
+# `+=` fait là-dedans ne remonterait pas.
+_bench_agentic_nom() { echo "bench-agentic-$$-p$1-i$2"; }
+
+# Un conteneur pi jetable : _bench_agentic_run <modèle> <url> <sortie>
+#   <nom> <passe> <froid 0|1> <passes internes>
+# -T : la sortie part dans un fichier, pas de TTY en tâche de fond.
+_bench_agentic_run() {
+  local preset="$1" url="$2" sortie="$3" nom="$4" passe="$5" froid="$6" passes="$7"
+  MODEL="$preset" PASSES="$passes" PASSE_NUM="$passe" FROID="$froid" SERVER_URL="$url" \
+    docker compose -f "$SCRIPT_DIR/bench-agentic/docker-compose.yml" \
+      run --rm -T --name "$nom" pi >"$sortie" 2>&1 || true
+  return 0
+}
+
+# Médiane d'une liste de nombres passés en arguments (convention awk du dépôt).
+_bench_agentic_med() {
+  printf '%s\n' "$@" | sort -n | awk '{a[NR]=$1} END{print (NR%2)?a[(NR+1)/2]:(a[NR/2]+a[NR/2+1])/2}'
+}
+
+# Ajoute au journal les lignes TSV d'un fichier : préfixe date/modèle/device/
+# build (comme avant) et colonne N en QUEUE de ligne — les lignes d'avant le
+# 15/09/2026, à 13 colonnes, restent lisibles telles quelles.
+# _bench_agentic_journal <fichier> <modèle> <device> <build> <N>
+_bench_agentic_journal() {
+  grep $'^TSV\t' "$1" \
+    | sed "s/^TSV\t/$(date '+%F %T')\t$2\t$3\t$4\t/; s/\$/\t$5/" \
+    >> "$BENCH_AGENTIC_LOG" 2>/dev/null || true
+  return 0
+}
+
+cmd_bench_agentic() {
+  local preset="${1:-}" passes="${2:-1}" n="${3:-1}"
+  command -v docker >/dev/null || error "docker introuvable (bench-agentic joue pi dans un conteneur)"
+  [[ "$passes" =~ ^[1-9][0-9]*$ ]] || error "passes doit être un entier >= 1 (reçu : '$passes')"
+  [[ "$n" =~ ^[1-9][0-9]*$ ]] || error "N doit être un entier >= 1 (reçu : '$n')"
+  curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
+  if [[ -z "$preset" ]]; then
+    _bench_select_one
+    [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné — bench-agentic annulé."; return; }
+    preset="$BENCH_DEV_CHOICE"
+  fi
+  [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset' (voir --help)"
+
+  # Le conteneur est en réseau hôte : localhost du conteneur = la machine.
+  local url="${SPEC_TEST_URL/localhost/127.0.0.1}"
   local dev
   dev="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
     | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --device 2>/dev/null || true)"
-  # date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps
   local build; build="$(_llama_build)"
-  grep $'^TSV\t' "$sortie" | sed "s/^TSV\t/$(date '+%F %T')\t$preset\t${dev:-$DEFAULT_DEVICE}\t$build\t/" \
-    >> "$BENCH_AGENTIC_LOG" 2>/dev/null || true
+
+  if (( n > 1 )); then
+    _bench_agentic_parallele "$preset" "$passes" "$n" "$url" "${dev:-$DEFAULT_DEVICE}" "$build"
+    return 0
+  fi
+
+  info "bench-agentic '$preset' — appel froid puis $passes passe(s) de 5 scénarios pi (tool calls) en direct sur $url"
+  local sortie; sortie="$(mktemp)"
+  MODEL="$preset" PASSES="$passes" SERVER_URL="$url" \
+    docker compose -f "$SCRIPT_DIR/bench-agentic/docker-compose.yml" run --rm --build pi 2>&1 \
+    | tee "$sortie" | grep -v $'^TSV\t' || true
+
+  # Bilan : froid à part, puis médianes par scénario sur les passes
+  # (verdict = nombre de PASS / passes). Colonnes TSV du conteneur :
+  # passe scénario verdict mur prompt cache gen prefill décode.
+  echo ""
+  info "──── bilan ($passes passe(s), médianes) ────"
+  grep $'^TSV\t' "$sortie" | cut -f2- | _bench_agentic_medianes
+
+  # date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N
+  _bench_agentic_journal "$sortie" "$preset" "${dev:-$DEFAULT_DEVICE}" "$build" 1
   rm -f "$sortie"
+  return 0
+}
+
+# Mode parallèle (N > 1) : par passe, la suite jouée seule puis la même suite
+# jouée par N conteneurs pi simultanés. Voir l'en-tête du fichier pour le
+# pourquoi. _bench_agentic_parallele <modèle> <passes> <N> <url> <device> <build>
+_bench_agentic_parallele() {
+  local preset="$1" passes="$2" n="$3" url="$4" dev="$5" build="$6"
+
+  # parallel RÉEL du serveur (status.args), sinon celui du script : au-delà,
+  # les boucles supplémentaires font la queue, le facteur ne montera plus.
+  local par_srv par_cfg par
+  par_srv="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
+    | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --parallel 2>/dev/null || true)"
+  par_cfg="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^parallel[[:space:]]*=[[:space:]]*//p' | tr -d ' ')"
+  par="${par_srv:-${par_cfg:-1}}"
+
+  info "bench-agentic '$preset' — parallel serveur = $par$( [[ -n "$par_srv" ]] || echo " (script)" ), appel froid puis $passes passe(s) : suite solo puis $n boucles pi simultanées sur $url"
+  if (( n > par )); then
+    warn "N ($n) > parallel ($par) : les boucles au-delà font la queue côté serveur, le facteur de débit de tâches ne montera pas."
+  fi
+
+  # Image construite une fois : N `run --build` simultanés se battraient
+  # pour le même build.
+  info "Construction de l'image pi (une fois pour les $n instances)…"
+  docker compose -f "$SCRIPT_DIR/bench-agentic/docker-compose.yml" build pi >/dev/null \
+    || error "docker compose build a échoué (bench-agentic/)"
+
+  # Ctrl-C : tuer les conteneurs de la salve en cours avant de sortir.
+  trap '_bench_agentic_nettoie; error "bench-agentic interrompu"' INT TERM
+
+  local tmp; tmp="$(mktemp -d)"
+  local tous_solo="$tmp/solo.tsv" tous_par="$tmp/par.tsv"
+  : >"$tous_solo"; : >"$tous_par"
+
+  # Appel froid, une fois, seul (PASSES=0 : le conteneur ne joue que le
+  # scénario 0). Il amorce aussi le prompt système dans le cache du serveur,
+  # comme en usage réel.
+  _BENCH_AGENTIC_NOMS=("$(_bench_agentic_nom 0 0)")
+  _bench_agentic_run "$preset" "$url" "$tmp/froid.out" "${_BENCH_AGENTIC_NOMS[0]}" 0 1 0
+  grep -v $'^TSV\t' "$tmp/froid.out" || true
+  grep $'^TSV\t' "$tmp/froid.out" | cut -f2- >>"$tous_solo" || true
+  _bench_agentic_journal "$tmp/froid.out" "$preset" "$dev" "$build" 1
+
+  local -a solos=() paras=() facteurs=() decs=()
+  local p i f t0 t1 mur m0 m1 ok
+  for (( p=1; p<=passes; p++ )); do
+    echo ""
+    info "──── passe $p/$passes : suite solo (référence) ────"
+    _BENCH_AGENTIC_NOMS=("$(_bench_agentic_nom "$p" 0)")
+    t0="$(date +%s.%N)"
+    _bench_agentic_run "$preset" "$url" "$tmp/solo-$p.out" "${_BENCH_AGENTIC_NOMS[0]}" "$p" 0 1
+    t1="$(date +%s.%N)"
+    mur="$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.1f", b-a}')"
+    solos+=("$mur")
+    grep -v $'^TSV\t' "$tmp/solo-$p.out" || true
+    grep $'^TSV\t' "$tmp/solo-$p.out" | cut -f2- >>"$tous_solo" || true
+    _bench_agentic_journal "$tmp/solo-$p.out" "$preset" "$dev" "$build" 1
+    info "  suite solo : $mur s de temps mur"
+
+    echo ""
+    info "──── passe $p/$passes : $n boucles simultanées ────"
+    _BENCH_AGENTIC_NOMS=()
+    local -a pids=()
+    m0="$(_bench_agentic_metrics "$preset")"
+    t0="$(date +%s.%N)"
+    for (( i=1; i<=n; i++ )); do
+      _BENCH_AGENTIC_NOMS+=("$(_bench_agentic_nom "$p" "$i")")
+      _bench_agentic_run "$preset" "$url" "$tmp/par-$p-$i.out" "${_BENCH_AGENTIC_NOMS[-1]}" "$p" 0 1 &
+      pids+=($!)
+    done
+    wait "${pids[@]}" 2>/dev/null || true
+    t1="$(date +%s.%N)"
+    m1="$(_bench_agentic_metrics "$preset")"
+    mur="$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.1f", b-a}')"
+    paras+=("$mur")
+
+    # PASS par instance : chaque conteneur a joué les mêmes 5 scénarios.
+    for (( i=1; i<=n; i++ )); do
+      f="$tmp/par-$p-$i.out"
+      ok="$(awk -F'\t' '$1 == "TSV" && $4 == "PASS"' "$f" | wc -l)"
+      info "  instance $i : $ok/5 PASS"
+      grep $'^TSV\t' "$f" | cut -f2- >>"$tous_par" || true
+      _bench_agentic_journal "$f" "$preset" "$dev" "$build" "$n"
+    done
+
+    # Agrégats de la salve, compteurs du serveur pris avant/après : les
+    # deltas des N conteneurs se recouvrent, seule cette lecture est juste.
+    # Décode agrégé = tokens générés / temps mur (le débit de la machine) ;
+    # décode par boucle = le rapport tokens/secondes du serveur, ce que voit
+    # une boucle. Prefill idem.
+    local dec_agg dec_boucle pp_agg part_agg gen_agg
+    read -r dec_agg dec_boucle pp_agg part_agg gen_agg <<<"$(echo "$m0 $m1 $mur" | awk '{
+      pt=$6-$1; pc=$7-$2; gt=$8-$3; ps=$9-$4; gs=$10-$5; mur=$11
+      part=(pt+pc)>0 ? 100*pc/(pt+pc) : 0
+      printf "%.1f %.1f %.0f %.0f %.0f", (mur>0?gt/mur:0), (gs>0?gt/gs:0), (ps>0?pt/ps:0), part, gt }')"
+    decs+=("$dec_agg")
+    info "  $n boucles : $mur s de temps mur, décode agrégé $dec_agg t/s (par boucle $dec_boucle t/s), prefill $pp_agg t/s, $part_agg % du prompt servi du cache, $gen_agg tokens générés"
+    facteurs+=("$(awk -v n="$n" -v s="${solos[-1]}" -v q="$mur" 'BEGIN{printf "%.2f", (q>0 ? n*s/q : 0)}')")
+  done
+
+  trap - INT TERM
+
+  echo ""
+  info "──── bilan solo, appel froid compris ($passes passe(s), médianes) ────"
+  _bench_agentic_medianes <"$tous_solo"
+  echo ""
+  info "──── bilan à $n boucles simultanées ($passes passe(s) × $n instances, médianes) ────"
+  _bench_agentic_medianes <"$tous_par"
+
+  local med_solo med_par med_fact med_dec
+  med_solo="$(_bench_agentic_med "${solos[@]}")"
+  med_par="$(_bench_agentic_med "${paras[@]}")"
+  med_fact="$(_bench_agentic_med "${facteurs[@]}")"
+  med_dec="$(_bench_agentic_med "${decs[@]}")"
+  echo ""
+  info "  → $n boucles : temps mur $med_par s contre $med_solo s en solo, soit x$med_fact de débit de tâches, décode agrégé $med_dec t/s"
+  if awk -v r="$med_fact" 'BEGIN{exit !(r < 1.2)}'; then
+    warn "  Pas de gain : le serveur sérialise les boucles (parallel $par) ou le modèle est borné compute."
+  fi
+
+  rm -rf "$tmp"
   return 0
 }

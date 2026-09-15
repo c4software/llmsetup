@@ -7,6 +7,15 @@
 # tokens générés, prefill et décode t/s). Tout se passe dans /work du
 # conteneur. Les lignes "TSV<tab>..." sont reprises par cmd_bench_agentic
 # (lib/bench/bench-agentic.sh) pour le journal logs/bench-agentic.log.
+#
+# Trois variables d'orchestration, toutes optionnelles et sans effet en usage
+# historique (--bench-agentic <modele> <passes>, un seul conteneur en serie) :
+#   FROID=0     saute le scenario 0 (l'appelant l'a deja mesure dans un autre
+#               conteneur) ; defaut 1.
+#   PASSE_NUM=p force le numero de passe des lignes TSV ; defaut : le compteur
+#               local. Sert au mode parallele, ou chaque conteneur ne joue
+#               qu'une passe (PASSES=1) mais porte le numero de la passe reelle.
+#   PASSES=0    ne joue aucune passe (conteneur d'appel froid seul).
 set -u
 cd /work
 fails=0
@@ -50,21 +59,25 @@ run() { pi -p --no-session --provider local --model "$MODEL" "$@" 2>&1 | tail -n
 
 version=$(pi --version 2>/dev/null | head -1)
 PASSES="${PASSES:-1}"
+FROID="${FROID:-1}"
+PASSE_NUM="${PASSE_NUM:-}"
 echo "════ pi $version → $SERVER_URL | modèle $MODEL | $PASSES passe(s) ════"
 rm -rf /work/* 2>/dev/null
 
+if [ "$FROID" = 1 ]; then
 echo "0. Froid : première question de la conversation (prompt système de pi)"
 PASSE=0; export PASSE
 t0=$(date +%s.%N); s0=$(snap)
 out=$(run "Réponds en un seul mot : quelle est la capitale de la France ?")
 case "$out" in *Paris*) pass "$out"; v=PASS ;; *) fail "$out"; v=FAIL ;; esac
 mesure froid $v "$t0" $s0
+fi
 
 p=1
 while [ "$p" -le "$PASSES" ]; do
-PASSE=$p; export PASSE
+PASSE="${PASSE_NUM:-$p}"; export PASSE
 echo
-echo "──── passe $p/$PASSES ────"
+echo "──── passe $PASSE/$PASSES ────"
 rm -rf /work/* 2>/dev/null
 echo "1. Réponse simple (sans outil)"
 t0=$(date +%s.%N); s0=$(snap)
@@ -121,5 +134,5 @@ p=$((p + 1))
 done
 
 echo
-echo "Résumé : $MODEL : $((5 * PASSES + 1 - fails))/$((5 * PASSES + 1)) (froid compris)"
+echo "Résumé : $MODEL : $((5 * PASSES + FROID - fails))/$((5 * PASSES + FROID))$([ "$FROID" = 1 ] && echo " (froid compris)")"
 [ "$fails" -eq 0 ] || exit 1

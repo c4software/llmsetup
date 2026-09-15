@@ -427,6 +427,15 @@ sur le scénario 5, même jour, même build). Lire :
   est nettement en dessous, le prefill mange le temps (historique repayé),
   pas la génération.
 
+Sur un modèle à `parallel > 1` destiné à un orchestrateur et ses sous-agents,
+ajouter un 3e argument : `./setup-llm.sh --bench-agentic <modèle> 2 <N>` joue
+chaque passe d'abord seule puis à `N` boucles pi simultanées (2 à 3, le nombre
+de slots réellement vus), la série seule ne disant rien de ce cas. Le facteur
+de débit de tâches se lit ainsi : `(N x temps solo) / temps parallèle`, donc
+x1 = le serveur sérialise (les boucles font la queue, `parallel` trop bas) et
+xN = le batch sert les N boucles pour le prix d'une ; entre les deux, c'est le
+gain réel à attendre d'un sous-agent de plus.
+
 Critère de passage : 5/5 sur au moins une passe, une ligne dans le tableau
 de l'étape 6 (« Boucle agentic réelle » dans `docs/HISTORIQUE.md`) avec pi, build,
 date, et le résumé dans le commentaire du bloc (verdict, part du cache).

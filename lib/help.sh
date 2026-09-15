@@ -48,13 +48,17 @@ Commandes :
                            contexte froid, tour suivant, édition au milieu,
                            requête identique — part servie du cache et prefill
                            à chaque fois. Journal logs/bench-cache.log
-  --bench-agentic [modèle] [passes]
+  --bench-agentic [modèle] [passes] [N]
                            Une vraie boucle de tool calls : pi (conteneur
                            jetable, bench-agentic/) joue un appel froid (prompt
                            système) puis N passes de 5 scénarios en direct sur
                            llama-server ; par scénario PASS/passes et médianes
                            (temps mur, prompt et part du cache, générés, prefill
-                           et décode t/s réels). Journal logs/bench-agentic.log
+                           et décode t/s réels). 3e argument N > 1 : chaque passe
+                           joue la suite seule puis à N boucles pi SIMULTANÉES
+                           (le cas orchestrateur + sous-agents), et donne le
+                           facteur de débit de tâches (N x solo / parallèle) et
+                           le décode agrégé. Journal logs/bench-agentic.log
   --bench-sanity [modèle|all]
                            Le modèle répond-il juste (question à réponse connue) ?
                            Complète le garde-fou anti-charabia ; --bench-devices
@@ -186,6 +190,7 @@ Workflow typique :
   ./setup-llm.sh --bench-parallel <m> # ce que vaut parallel = N
   ./setup-llm.sh --bench-cache <m>    # part du prompt repayée à chaque tour (agentic)
   ./setup-llm.sh --bench-agentic <m> 3  # vraie boucle de tool calls (pi), PASS/FAIL et t/s réels
+  ./setup-llm.sh --bench-agentic <m> 2 3  # les mêmes, à 3 boucles simultanées : débit de tâches
   ./setup-llm.sh --bench-load <m>     # coût d'une bascule LRU
   ./setup-llm.sh --bench all          # après chaque mise à jour de llama-cpp : régressions
 
