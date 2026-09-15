@@ -83,9 +83,15 @@ command -v python3      >/dev/null || { echo "python3 introuvable" >&2; exit 1; 
 # --- Garde-fou : une seule mesure à la fois sur la machine (un seul GPU) -----
 # Une mesure du dépôt qui tourne en parallèle fausserait les deux : celle-ci
 # par contention, l'autre en perdant son service sous les pieds.
-if pgrep -f 'setup-llm\.sh --(bench|spec)' >/dev/null 2>&1; then
+# Motif ANCRÉ sur le début de la ligne de commande (interpréteur optionnel,
+# puis le chemin du script) : un « pgrep -f "setup-llm.sh --bench …" » laissé
+# dans un shell d'attente contient la chaîne et ferait un refus à tort
+# (constaté sur bigchuck le 15/09/2026, deux boucles zsh oubliées). Le service
+# lui-même (« bash …/setup-llm.sh --start ») ne matche pas non plus.
+MESURE_RE='^([^ ]*sh )?[^ ]*setup-llm\.sh --(bench|spec)'
+if pgrep -f "$MESURE_RE" >/dev/null 2>&1; then
   echo "REFUS : une mesure du dépôt tourne déjà (setup-llm.sh --bench* / --spec*)." >&2
-  pgrep -af 'setup-llm\.sh --(bench|spec)' >&2 || true
+  pgrep -af "$MESURE_RE" >&2 || true
   echo "Attendre sa fin (un seul GPU), puis relancer." >&2
   exit 1
 fi
