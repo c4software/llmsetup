@@ -180,6 +180,7 @@ près — voir `tests/py-golden.sh`.
 | `spec_server_nmax.py <modèle> [flag]` | JSON de `/v1/models` sur stdin | valeur réelle du flag (défaut `--spec-draft-n-max` ; aussi `--spec-type`, `--spec-ngram-map-k-size-m`), vide si absent | `cmd_spec_test` |
 | `batch_curve.py <modèle> <device> <depth> [tsv] [rec]` | jsonl de `llama-bench -o jsonl` sur stdin (plusieurs balayages concaténés, le plus récent fait foi) | tableau batch/size_m/coût/seuil/gain, marches, baisses au-delà du bruit, tailles dominées, verdict ; `SIZEM_SAFE=`/`SIZEM_LARGE=`/`STEP_LO=`/`STEP_HI=` si `rec` ; append TSV si fichier donné | `cmd_spec_ngram_tune`, `tools/bench-spec-batch.sh` |
 | `depth_curve.py <modèle> <device> <pp> <gen> [tsv] [rec]` | jsonl de `llama-bench -d` sur stdin | tableau prefill/décode/tour simulé par profondeur, dégradation de 0 à la profondeur max, `TOUR_<depth>=` si `rec` ; append TSV | `tools/bench-depth.sh` |
+| `spec_isolate_bench.py --port --tag --out --prompts --passes --max-tokens --np [--seed] [--temp]` | le serveur jetable de `tools/spec-isolate.sh` sur `--port` | tableau par passe (prefill, décode, acceptance, sanité, aperçu), salve simultanée si `--np > 1`, médianes hors 1re passe ; append `<out>/mesures.tsv` et `<out>/gen-*.txt` | `tools/spec-isolate.sh` |
 | `check_answer.py <json> <attendu>` | réponse `/v1/chat/completions` | ligne lisible ; code 0 si la valeur attendue est dans la réponse (ou le raisonnement), 1 sinon | `_bench_sanity_one` (bench.sh, aussi appelé par `cmd_bench_devices`) |
 | `cache_stats.py <json> <étiquette>` | réponse `/v1/chat/completions` | ligne lisible + `PN=` (tokens du prompt) `CN=` (servis du cache) `PMS=` (prefill ms) | `cmd_bench_cache` |
 | `parallel_agg.py <temps_mur_s> <réponse.json>...` | réponses d'une salve de requêtes simultanées | ligne lisible + `AGG=` (tokens / temps mur) `MED=` (décode médian par requête) `TOK=` `ERR=` | `_bench_parallel_salve` (bench.sh) |
@@ -368,6 +369,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
+| `spec-isolate/<tag>/mesures.tsv` | `tools/spec-isolate.sh` | `date tag prompt np mesure pp gen n draft_n accepted acceptance sain` (à côté de `serveur.log` et des `gen-*.txt` du même dossier) |
 
 `device` est l'état réel du serveur (`/v1/models`, flag `--device`) partout
 où le serveur est en cause, le device demandé pour les outils `llama-bench`.
@@ -381,6 +383,20 @@ pour une mesure propre, l'état est journalisé). Journal lisible
 explorer ; pour régler, `--spec-ngram-tune`. Les autres fichiers de `tools/`
 (sync opencode, extension pi, renommage du sidecar MTP pour le fork) sont
 décrits dans le README.
+
+`spec-isolate.sh <tag> -- <args llama-server...>` : monte un `llama-server`
+JETABLE (port 8099 par défaut, jamais 8009) avec les arguments bruts passés
+après `--`, mesure la spéculation par `py/spec_isolate_bench.py`, le tue et
+relance le service. Sert AVANT la déclaration d'un modèle dans `lib/models.sh`
+(étape 2 de la skill ajout-modele) : le drafter se charge-t-il, quelle
+acceptance, quel `spec-draft-n-max`. Rien n'est écrit dans le ini ni dans les
+`.conf`. Le service est arrêté par l'outil et relancé par son trap (EXIT, INT,
+TERM) ; l'outil REFUSE de démarrer si une mesure du dépôt tourne déjà
+(`setup-llm.sh --bench*` / `--spec*`, conteneur `bench-agentic-*`) : un seul
+GPU. Variables : `PORT`, `NP` (ajoute `-np` et une salve simultanée),
+`PASSES`, `PROMPTS`, `MAX_TOKENS`, `OUT`. Sorties dans
+`logs/spec-isolate/<tag>/`. Le verdict se confirme ensuite sur le service par
+`--spec-ab` / `--spec-test`.
 
 `bench-depth.sh` : même principe avec `llama-bench -d` (profondeur de KV
 avant la mesure) : prefill et décode à 0 / 16k / 32k (64k sur demande), KV

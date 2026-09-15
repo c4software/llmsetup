@@ -20,7 +20,10 @@
 # est décalé d'un cran (pop du mode) pour ne pas toucher aux indices.
 import json, sys
 
-mode = sys.argv.pop(1) if len(sys.argv) > 1 else ""
+# __name__ : py/spec_isolate_bench.py IMPORTE degenere()/periodique() pour ne pas
+# dupliquer les seuils de charabia. À l'import, on ne consomme pas argv et on ne
+# dispatche pas (voir le dernier elif) ; en ligne de commande, rien ne change.
+mode = sys.argv.pop(1) if __name__ == "__main__" and len(sys.argv) > 1 else ""
 
 # Sortie dégénérée : un backend peut produire des tokens à toute vitesse sans
 # rien dire ("Nous dev dev dev dev…" à 500 t/s sur DeepSeek V4 / ROCm0, b10433,
@@ -150,6 +153,6 @@ elif mode == "--spec":
         print("DEGEN=1")
     print(f"GEN={tg:.2f}")
     if dn: print(f"ACC={da/dn:.3f}"); print(f"DN={dn} DA={da} PN={n}")
-else:
+elif __name__ == "__main__":
     print(f"timings.py : mode inconnu '{mode}' (--bench|--spec)", file=sys.stderr)
     sys.exit(2)

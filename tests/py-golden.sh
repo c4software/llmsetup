@@ -160,5 +160,91 @@ sys.exit(0 if a == b else 1)
   fi
 done
 
+# --- spec_isolate_bench.py : mesure de bout en bout sur un serveur bouchon ---
+# Pas de référence golden ici (la sortie porte une date et des t/s), mais un
+# test FONCTIONNEL : un petit serveur HTTP stdlib rend une réponse
+# /v1/chat/completions canonique, et on vérifie les trois choses que l'outil
+# doit garantir — acceptance calculée depuis draft_n/draft_n_accepted, TSV
+# écrit avec son en-tête, et sanité héritée de timings.degenere() (une réponse
+# de charabia doit ressortir "non").
+BOUCHON="$TMP/bouchon.py"
+cat > "$BOUCHON" <<'PYEOF'
+import json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# draft_n 300 / accepted 120 => acceptance 0.400, valeur attendue par le test.
+TIMINGS = {"prompt_per_second": 2500.0, "predicted_per_second": 120.5,
+           "predicted_n": 200, "prompt_n": 700, "cache_n": 0,
+           "draft_n": 300, "draft_n_accepted": 120}
+SAIN = ("def inverse(tete):\n    prec = None\n    while tete:\n"
+        "        suiv = tete.suivant\n        tete.suivant = prec\n"
+        "        prec, tete = tete, suiv\n    return prec\n") * 8
+CHARABIA = "dev " * 400
+
+class H(BaseHTTPRequestHandler):
+    def do_POST(self):
+        corps = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        # le prompt "degen" du test demande explicitement la sortie dégénérée
+        texte = CHARABIA if "DEGEN" in corps["messages"][0]["content"] else SAIN
+        rep = json.dumps({"timings": TIMINGS,
+                          "choices": [{"message": {"content": texte}}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(rep)))
+        self.end_headers()
+        self.wfile.write(rep)
+    def log_message(self, *a):
+        pass
+
+srv = HTTPServer(("127.0.0.1", 0), H)
+print(srv.server_port, flush=True)
+srv.serve_forever()
+PYEOF
+
+mkdir -p "$TMP/prompts" "$TMP/isolate"
+echo "Ecris une fonction Python qui inverse une liste chainee." > "$TMP/prompts/bouchon-sain.txt"
+echo "DEGEN : reponse volontairement repetitive." > "$TMP/prompts/bouchon-degen.txt"
+
+python3 "$BOUCHON" > "$TMP/port.txt" &
+BPID=$!
+for _ in $(seq 1 50); do [[ -s "$TMP/port.txt" ]] && break; sleep 0.1; done
+BPORT="$(head -1 "$TMP/port.txt" || true)"
+if [[ -z "$BPORT" ]]; then
+  echo "[FAIL] spec_isolate_bench : serveur bouchon non démarré"; rc=1
+else
+  python3 "$PY/spec_isolate_bench.py" --port "$BPORT" --tag bouchon \
+    --out "$TMP/isolate" --prompts bouchon-sain.txt,bouchon-degen.txt \
+    --passes 2 --max-tokens 64 --np 1 --prompts-dir "$TMP/prompts" \
+    > "$TMP/isolate.out" 2>&1 || { echo "[FAIL] spec_isolate_bench : sortie non nulle"; cat "$TMP/isolate.out"; rc=1; }
+
+  _ckgrep() {  # $1 = libellé, $2 = motif grep -E, $3 = fichier
+    if grep -qE "$2" "$3"; then echo "[OK]   $1"; else
+      echo "[FAIL] $1 : motif '$2' absent de $3"; sed -n '1,40p' "$3"; rc=1; fi
+  }
+  # acceptance = 120/300 = 0,400, sur l'affichage comme dans le TSV
+  _ckgrep "spec_isolate_bench : acceptance 0.400 affichée" 'acceptance=0\.400 \(120/300\)' "$TMP/isolate.out"
+  _ckgrep "spec_isolate_bench : médiane hors 1re passe"    'médianes hors 1re passe'       "$TMP/isolate.out"
+  _ckgrep "spec_isolate_bench : charabia signalé"          'SORTIE DÉGÉNÉRÉE'              "$TMP/isolate.out"
+  T="$TMP/isolate/mesures.tsv"
+  if [[ -s "$T" ]]; then
+    # $'…' : les motifs portent de VRAIS tabulateurs, grep -E ne connaît pas \t
+    _ckgrep "spec_isolate_bench : en-tête TSV" $'^date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain$' "$T"
+    _ckgrep "spec_isolate_bench : TSV passe saine"  $'bouchon-sain[.]txt\t1\tpasse1\t2500\t120[.]50\t200\t300\t120\t0[.]400\toui'  "$T"
+    _ckgrep "spec_isolate_bench : TSV passe dégénérée" $'bouchon-degen[.]txt\t1\tpasse2\t.*\t0[.]400\tnon' "$T"
+    n="$(grep -c . "$T")"
+    if [[ "$n" -eq 5 ]]; then echo "[OK]   spec_isolate_bench : 4 mesures + en-tête"
+    else echo "[FAIL] spec_isolate_bench : $n lignes de TSV, 5 attendues"; cat "$T"; rc=1; fi
+  else
+    echo "[FAIL] spec_isolate_bench : mesures.tsv absent ou vide"; rc=1
+  fi
+  # générations sauvegardées, une par prompt et par passe
+  if [[ -s "$TMP/isolate/gen-bouchon-sain-p2.txt" ]]; then
+    echo "[OK]   spec_isolate_bench : génération sauvegardée"
+  else
+    echo "[FAIL] spec_isolate_bench : gen-bouchon-sain-p2.txt absent"; rc=1
+  fi
+fi
+kill "$BPID" 2>/dev/null || true
+
 [[ "$rc" -eq 0 ]] && echo "── py-golden : tout est identique aux références. ──"
 exit "$rc"

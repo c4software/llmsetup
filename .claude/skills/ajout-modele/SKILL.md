@@ -162,6 +162,50 @@ le batch évite ce cas : 4 (batch 5) ou 7 (batch 8 = 4+4), pas 6 (batch 7).
 `GGML_VK_MMV_NO_SPLIT=1` annule la pénalité mais désactive le découpage pour
 tout le parc : non retenu.
 
+### Test isolé AVANT déclaration
+
+Déclarer un modèle coûte un bloc, un ini régénéré, un restart et un
+préchargement : quand le drafter est neuf (premier DSpark, premier DFlash, un
+sidecar jamais servi ici) ou que le `spec-draft-n-max` reste à choisir, le
+répondre d'abord hors service, sur un `llama-server` jetable qui ne touche ni
+au ini ni aux `.conf` :
+
+```bash
+PASSES=2 MAX_TOKENS=1200 tools/spec-isolate.sh <tag> -- \
+  -m ~/models/<dossier>/<gguf> -md ~/models/<dossier>/<drafter.gguf> \
+  --spec-type draft-dspark --spec-draft-n-max 3 -c 32768 \
+  --temp 0.1 --top-k 50 --min-p 0 --repeat-penalty 1.1 -ctk f16 -ctv f16
+```
+
+Tout ce qui suit `--` va tel quel à `llama-server` (le script ajoute seulement
+`--device Vulkan0 -ngl 99 -fa on --jinja` devant, surchargeables) : mettre le
+sampling réel du modèle, pas un sampling de confort, sinon les chiffres ne
+valent rien pour le bloc. L'outil arrête le service et le relance par son trap,
+et refuse de démarrer si un `--bench*`, un `--spec*` ou un conteneur
+`bench-agentic-*` tourne (un seul GPU). Lecture : l'**acceptance** doit exister
+(« n/a » = le drafter n'est pas chargé, relire `logs/spec-isolate/<tag>/serveur.log`)
+et rester haute ; la **sanité** doit dire « ok » sur chaque passe (un « SORTIE
+DÉGÉNÉRÉE » invalide la mesure, si beaux que soient les t/s : c'est le
+charabia à 550 t/s de l'étape 3) ; le **décode** se lit sur la médiane hors 1re passe, et
+se compare à un run `--spec-type none` des mêmes arguments. Enchaîner plusieurs
+`<tag>` (un par n-max) coûte un redémarrage chacun et tranche la question. Puis
+seulement : écrire le réglage retenu dans `lib/models.sh` avec ses chiffres
+datés, et le CONFIRMER tel qu'il est servi par
+`./setup-llm.sh --spec-ab <modèle> <n> - <variante>` (ou `--spec-test`) ; le
+test isolé est un dégrossissage, le service reste l'arbitre.
+
+Pour un modèle qu'on envisage à `parallel > 1`, refaire le même test avec
+`NP=2` : le script ajoute `-np 2` et mesure en plus une salve de 2 requêtes
+simultanées (agrégé = tokens sur temps mur, par requête = médiane). La règle
+d'arbitrage est celle du découpage mat-vec ci-dessus, appliquée au batch
+multi-slot : `np x (n-max + 1) <= 8` colonnes sur ggml-vulkan ; à np 2 et
+n-max 3 on tombe pile sur 8, à np 2 et n-max 7 sur 16 et la spéculation coûte
+plus qu'elle ne rapporte. Ne pas conclure sur la théorie seule : le MTP
+multi-slot s'effondre en pratique (qwen3.5-9b, 15/09/2026 : 18,2 t/s agrégés à
+np 4 contre 80,8 sans spéculation), et le seul gain mesuré du parc est
+deepseek-v4-flash à np 2. Sans mesure `NP>1`, déclarer `parallel = 1` et le
+dire dans le commentaire.
+
 Critère de passage : après restart, `curl localhost:8009/v1/models` montre
 le `--spec-type` attendu dans `status.args`, et un premier
 `./setup-llm.sh --spec-test <modèle> 2` affiche une acceptance (pas
