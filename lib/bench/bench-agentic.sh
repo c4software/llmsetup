@@ -50,7 +50,7 @@
 # conteneur lit le compteur GLOBAL du serveur, donc ses colonnes prompt,
 # cache, généré, prefill et décode compteraient aussi le trafic des autres
 # instances (creation : 76 k tokens de prompt à 3 boucles contre 21 k en
-# solo, constaté le 15/09/2026 sur bigchuck) — elles sortent en « n/c »,
+# solo, constaté le 15/09/2026 sur bigchuck) : elles sortent en « n/c »,
 # seuls PASS et temps mur restent par scénario. N n'est pas plafonné,
 # seulement comparé au `parallel` RÉEL lu sur /v1/models → status.args (jamais le ini, que le
 # routeur ne relit qu'au démarrage) : au-delà, warn, et la file d'attente se
@@ -144,7 +144,7 @@ _bench_agentic_med() {
 #
 # N > 1 : les cinq colonnes /metrics du conteneur (prompt_tok, cache_tok,
 # gen_tok, prefill_tps, decode_tps) comptent le trafic des N instances
-# simultanées, pas celui du scénario — elles sont écrites « n/c » plutôt que
+# simultanées, pas celui du scénario : elles sont écrites « n/c » plutôt que
 # fausses. Format inchangé à 14 colonnes, passe/scénario/verdict/mur_s
 # restent justes ; les lignes de la référence solo passent ici avec N = 1 et
 # gardent leurs chiffres.
@@ -319,7 +319,7 @@ _bench_agentic_parallele() {
   info "──── bilan à $n boucles simultanées ($passes passe(s) × $n instances, médianes) ────"
   _bench_agentic_medianes recouvert <"$tous_par"
   echo "  n/c : prompt, cache, généré, prefill et décode sont lus sur les compteurs"
-  echo "        globaux du serveur par chacune des $n instances — chaque scénario y"
+  echo "        globaux du serveur par chacune des $n instances : chaque scénario y"
   echo "        compterait aussi le trafic des autres. PASS et temps mur sont propres"
   echo "        par scénario ; les t/s de la salve sont la ligne de bilan ci-dessous."
 
