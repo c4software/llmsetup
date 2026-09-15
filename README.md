@@ -245,7 +245,7 @@ pas une comparaison à la décimale.
 | qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |
 | qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | Vulkan0 | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 727 | 52,2 | 0,515 | +19 % (paquet en n-gram seul) |
-| gpt-oss | UD-Q4_K_XL, 59 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 | 599 | 52,9 | 0,57 | +2 % |
+| gpt-oss | UD-Q4_K_XL, 59 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 ; DFlash z-lab converti, refusé par le fork : biais d'attention, [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61) | 599 | 52,9 | 0,57 | +2 % |
 | laguna-s-2.1 | UD-Q4_K_XL, 73 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 (DFlash refusé par le fork) | 346 | 29,6 | 0,80 | -2 % |
 | deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 (parallel 2 essayé et retiré le 15/09 : x1,16 de tâches au bench agentic à 2 boucles, latence doublée) | 196 | 28,8 | 0,69 | +134 % (paquet en n-gram seul, 19,9 sur le fork en n-gram seul) |
 
@@ -265,8 +265,11 @@ le MTP n'existe pas sur le paquet +93 %, le 27B via DFlash 2), et
 `ngram-on-disk` (Flash-Next chargé en 72 Go au lieu d'environ 100, à perfs
 égales). Écartés après mesure : le speculative prefill (lossy, cache de prompt à
 0 %), le draft adaptatif (2 % sous le draft fixe), le DFlash de Laguna S 2.1
-(drafter refusé). Contrepartie, le découpage des mat-vec batchés (-7,4 % au
-batch de 7), contournée par modèle et signalée en amont :
+(drafter refusé) et celui de gpt-oss (drafter z-lab converti sans erreur mais
+refusé au chargement, ses biais d'attention n'étant pas lus par le loader
+DFlash : [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61)).
+Contrepartie, le découpage des mat-vec batchés (-7,4 % au batch de 7),
+contournée par modèle et signalée en amont :
 [issue #50](https://github.com/halo-box/strix-llama.cpp/issues/50).
 
 ## Fichiers de configuration

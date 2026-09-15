@@ -38,7 +38,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | qwen3.8-27b-dflash-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + **draft-dflash 7** (drafter DFlash 2 z-lab, 2,0 Go ; remplace la tête MTP le 13/09/2026 : le batch de vérification 8 se découpe en 4+4 et échappe au pire cas du découpage mat-vec) | **359** (261 au paquet b10433) | **32,6** (acc. 0,595 ; 29,5 acc. 0,65 au paquet, +11 % ; 26,6 acc. 0,59 en MTP n-max 6 sur le fork, +23 %) ; **64,5** (refactor, acc. 0,67) et **35,9** (générique, acc. 0,70) en `--spec-ab` | fork strix-0007bc6, 13/09/2026 ; DFlash 2 bat la tête MTP sur les deux prompts (+12 % en refactor, +18 % en générique) et annule le retrait de décode du fork ; réglage non mesuré sur le paquet Arch ; chargement 4,4 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) + drafter DSpark unsloth Q8_0 (10,9 Go) | Vulkan0 (mesuré) | ngram-map-k 7 + **draft-dspark 3**, **parallel 1** (parallel 2 retenu le matin du 15/09/2026 puis annulé le soir même, cf. « Multi-slot et drafters » ; pas de tête MTP dans le GGUF, le 0731 ne publie qu'un drafter DSpark) | **196** (199 à parallel 1 le matin du 15/09 ; 205 en n-gram seul le 13/09 ; 110 au paquet b10433) | **28,8** (acc. 0,69, mesure du run à parallel 2 gardée comme référence chiffrée ; 28,9 acc. 0,68 à parallel 1, le réglage servi depuis le soir du 15/09, l'écart est dans le bruit ; 19,9 acc. 0,65 en n-gram seul sur le fork ; 12,3 au paquet) ; **39,0** agrégés à 2 requêtes (x1,16, 19,9 par requête, `--bench-parallel`) ; **38,7** (refactor, acc. 0,87) en `--spec-ab` contre 31,2 en n-gram seul, 35,6 en DSpark seul, 35,0 à n-max 2, 22,7 à n-max 5 | fork strix-0007bc6, 15/09/2026, plus gros gain de décode du parc (+135 % contre le paquet, +45 % contre le n-gram seul) ; ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) ; reasoning-budget 6144 (fork) ; 115 Go de poids, la garde mémoire décharge lfm2.5 pour le charger |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) + drafter DFlash z-lab Q8_0 (0,51 Go, conversion transmutator) | Vulkan0 (mesuré, ROCm0 exclu) | **draft-dflash 7** seul (retenu le 15/09/2026 ; remplace ngram-map-k 47, dont le compromis +47 % refactor / -5 % générique disparaît) | **727** (763 en ngram-map-k 47 le 13/09 ; 468 au paquet b10433) | **52,2** (bench, acc. 0,515 ; 48,7 acc. 0,27 en n-gram seul sur le fork ; 43,7 au paquet) ; **100,0** (refactor, acc. 0,92) et **70,5** (générique, acc. 0,70) en test isolé | fork strix-0007bc6, 15/09/2026 ; les n-grams par-dessus le drafter font retomber l'acceptance (0,92 → 0,82 en refactor) sans rien apporter : retirés ; ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
-| gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | **599** (333 au paquet b10548) | **52,9** (bench, acc. 0,57 ; 51,9 au paquet) ; 59,8 (refactor, paquet) | fork strix-0007bc6, 13/09/2026 ; cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque |
+| gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | **599** (333 au paquet b10548) | **52,9** (bench, acc. 0,57 ; 51,9 au paquet) ; 59,8 (refactor, paquet) | fork strix-0007bc6, 13/09/2026 ; cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque ; drafter DFlash z-lab converti le 15/09/2026 mais refusé par le fork (biais d'attention, issue #61), le n-gram reste seul |
 | laguna-s-2.1 | UD-Q4_K_XL (73 Go, MoE) | Vulkan0 (mesuré : ROCm0 320 / 23,6) | **ngram-map-k 7** seul (draft-dflash refusé par le mainline `wrong number of tensors; expected 76, got 69` **et** par le fork le 12/09/2026 : `failed to load draft model`) | **346** (255 au paquet b10548) | **29,6** (bench, acc. 0,80 ; 30,3 acc. 0,835 au paquet) ; 53,0 (refactor, +85 %, paquet) | fork strix-0007bc6, 13/09/2026 ; cache 99 % ; chargement 90,5 s depuis le disque (67 s au paquet) |
 | qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS (94 Go, MoE, GDN) | Vulkan0 (mesuré, ROCm0 exclu) | **ngram-map-k 7** + **draft-mtp 4** (confirmé, k2/4/6/8 = 43,0 / **50,7** / 49,5 / 32,7) sur le fork (sidecar autonome Q8_0 renommé par `tools/mtp-rename-hc-head.py` ; le mainline ne sait toujours pas le charger, PR #28243) | **383** (414 en n-gram seul sur le fork ; 197 au paquet b10809) | **50,0** (bench mixte, acc. 0,87 ; 30,9 en n-gram seul sur le fork, 25,9 au paquet) ; **54,0** (refactor, +115 %) | fork strix-0007bc6, 12/09/2026 (le MTP n'existe pas sur le paquet) ; ROCm0 répond « LAMPAMPAMP… » ; cache 62 % ; chargement 60,8 s depuis le disque (14,1 s fichier chaud) |
 
@@ -575,6 +575,43 @@ corrigé ; à re-tester à chaque `--update-fork` (le changelog s'affiche sans
 rien faire tant que l'épinglage est en place). Signalé en amont le 13/09/2026 :
 [issue #51](https://github.com/halo-box/strix-llama.cpp/issues/51) (table des
 quatre bras, commits candidats, bisect proposé).
+
+### Drafter DFlash de gpt-oss : converti, refusé par le fork (15/09/2026)
+
+Le drafter officiel de gpt-oss-120b, `z-lab/gpt-oss-120b-DFlash` (safetensors,
+1,57 Go), se convertit sans avertissement avec le `convert_hf_to_gguf.py` du
+fork (classe `DFlashModel`, `conversion/qwen.py` l. 641), à condition de lui
+passer les métadonnées HF de la cible avec `--target-model-dir` (tokenizer et
+config d'`openai/gpt-oss-120b`, sans poids, 27 Mo) : GGUF Q8_0 de
+847 145 664 octets, 123 tenseurs, `dflash.block_size 10`,
+`dflash.target_layers [2, 10, 18, 26, 34]`, `fc.weight [14400, 2880]`, sans
+`token_embd` ni `output` (empruntés à la cible). La commande exacte est dans le
+bloc `gpt-oss` de `lib/models.sh`.
+
+`llama-server` le refuse : `done_getting_tensors: wrong number of tensors;
+expected 123, got 91`, puis `failed to load draft model`. 123 - 91 = 32 = les
+8 couches x 4 biais d'attention du drafter (`attn_q.bias`, `attn_k.bias`,
+`attn_v.bias`, `attn_output.bias`), que sa config annonce par
+`attention_bias = true` et qui sont tous non nuls (absmax 4,16 sur
+`attn_output`) : les jeter à la conversion donnerait un autre modèle. La
+dorsale Qwen3 de `src/models/dflash.cpp` (l. ~211-232 au commit 0007bc6) ne
+crée aucun tenseur de biais et le graphe n'en applique aucun (projections
+`build_lora_mm` nues l. ~708-710, `build_attn(..., layer.wo, NULL, ...)`
+l. ~727-728, même forme côté encodeur l. ~625-629). Le même loader accepte les
+DFlash sans biais déjà servis ici, DFlash 2 du 27B, DFlash de Coder-Next,
+DSpark de Liquid et de DeepSeek V4 Flash : c'est un manque, pas un refus.
+
+Décision : ne pas patcher le moteur. Signalé en amont le 15/09/2026,
+[issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61)
+(reproduction, les 32 tenseurs, correctif proposé en trois points, 15 à
+20 lignes : création des quatre biais en `TENSOR_NOT_REQUIRED`, `ggml_add` des
+biais Q/K/V avant les `reshape_3d`, `layer.bo` à la place du `NULL` dans les
+deux `build_attn`). Si elle est corrigée : reconvertir et essayer `draft-dflash`
+à `spec-draft-n-max 9` (= `block_size - 1`) contre le n-gram servi aujourd'hui,
+re-mesuré le même jour par `tools/spec-isolate.sh` à 51,0 t/s (spec-test,
+acceptance 0,49) et 51,3 t/s (spec-refactor, acceptance 0,71). Pour situer
+l'enjeu, z-lab annonce en amont une acceptance de 3,7 à 5,4 tokens à block 10
+et 1,3x à 1,9x de bout en bout sous SGLang et vLLM sur H200.
 
 ## Qwen3.8-27B thinking : section retirée le 13/09/2026
 

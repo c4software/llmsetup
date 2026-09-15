@@ -1041,6 +1041,63 @@ download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   599 t/s, décode 52,9 t/s, acceptance 0,57 : prefill +80 %, décode neutre
 #   (+2 %) contre le paquet (333 / 51,9, b10548).
+# Drafter DFlash z-lab : converti, refusé par le fork (15/09/2026).
+#   z-lab/gpt-oss-120b-DFlash (safetensors, 1,57 Go) est le drafter officiel de
+#   gpt-oss-120b : architectures ["DFlashDraftModel"], model_type qwen3,
+#   8 couches, hidden 2880, 64 têtes Q / 8 KV, head_dim 64, block_size 10,
+#   target_layer_ids [1, 9, 17, 25, 33], DFlash 1 (ni conv ni selector) et
+#   surtout attention_bias = true. Il se convertit sans avertissement avec le
+#   convert_hf_to_gguf.py DU FORK (classe DFlashModel, conversion/qwen.py
+#   l. 641), à condition de lui passer les métadonnées HF de la cible
+#   (openai/gpt-oss-120b, tokenizer et config sans poids, 27 Mo) :
+#     cd ~/llm/strix-llama.cpp && ~/llm/venv-convert/bin/python \
+#       convert_hf_to_gguf.py ~/models/gpt-oss/dflash-src \
+#       --target-model-dir ~/models/gpt-oss/target-meta \
+#       --outfile ~/models/gpt-oss/gpt-oss-120b-dflash-Q8_0.gguf --outtype q8_0
+#   (venv ~/llm/venv-convert : torch 2.14.0+cpu, transformers 5.17.0.)
+#   GGUF obtenu : 847 145 664 octets, 123 tenseurs, dflash.block_size 10,
+#   dflash.target_layers [2, 10, 18, 26, 34], fc.weight [14400, 2880], sans
+#   token_embd ni output (empruntés à la cible, donc même device qu'elle).
+#   Chargement REFUSÉ par llama-server (fork strix-0007bc6, build 10893) :
+#   "done_getting_tensors: wrong number of tensors; expected 123, got 91" puis
+#   "failed to load draft model". 123 - 91 = 32 = 8 couches x 4 biais
+#   d'attention (blk.N.attn_q.bias [4096], attn_k.bias [512], attn_v.bias
+#   [512], attn_output.bias [2880]), tous non nuls (absmax 4,16 sur
+#   attn_output, 1,46 sur k, 1,22 sur q) : les jeter à la conversion
+#   dénaturerait le drafter, ce n'est pas un contournement.
+#   Cause : src/models/dflash.cpp, dorsale Qwen3 (l. ~211-232 au commit
+#   0007bc6) ne crée AUCUN tenseur de biais, et le graphe n'en applique aucun
+#   (projections build_lora_mm nues l. ~708-710, build_attn(..., layer.wo,
+#   NULL, ...) l. ~727-728, même forme côté encodeur l. ~625-629). Le même
+#   loader accepte les DFlash sans biais déjà servis ici (DFlash 2 du
+#   qwen3.8-27b, DFlash de Qwen3-Coder-Next, DSpark de Liquid et de DeepSeek
+#   V4 Flash) : c'est un manque, pas un refus délibéré.
+#   Décision : ne pas patcher le moteur. Signalé en amont le 15/09/2026,
+#   [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61)
+#   (reproduction, 32 tenseurs, trois points de correctif estimés à 15-20
+#   lignes). Si elle est corrigée : re-télécharger le drafter, reconvertir,
+#   essayer spec-type draft-dflash à spec-draft-n-max 9 (= block_size - 1) et
+#   le comparer au n-gram servi aujourd'hui. Référence à battre, re-mesurée le
+#   même jour par tools/spec-isolate.sh : 51,0 t/s (spec-test, acceptance
+#   0,49) et 51,3 t/s (spec-refactor, acceptance 0,71). Chiffres amont z-lab
+#   pour situer l'enjeu : acceptance 3,7 à 5,4 tokens à block 10, 1,3x à 1,9x
+#   sous SGLang/vLLM sur H200.
+#   Fichiers laissés sur bigchuck, aucun déclaré par un download_hf :
+#     ~/models/gpt-oss/gpt-oss-120b-dflash-Q8_0.gguf (847 Mo)
+#     ~/models/gpt-oss/dflash-src/    (source HF du drafter, 1,5 Go)
+#     ~/models/gpt-oss/target-meta/   (métadonnées HF de la cible, 27 Mo)
+#     ~/llm/venv-convert/             (venv de conversion, 1,2 Go)
+#   Ce que --cleanup en fera (lecture de cmd_cleanup, lib/setup.sh) : le GGUF
+#   SERA PURGÉ. Il est à mindepth 2 sous ~/models, sa clé (gpt-oss) est encore
+#   connue, mais gpt-oss est déclaré en shards : cmd_cleanup ne protège alors
+#   que le DOSSIER DE QUANT (~/models/gpt-oss/UD-Q4_K_XL), pas la racine du
+#   dossier de modèle, donc tout .gguf non déclaré posé à côté tombe. Les deux
+#   sous-dossiers, eux, SURVIVENT : le balayage des dossiers est en
+#   maxdepth 1 (il ne voit que ~/models/gpt-oss) et celui des fichiers ne
+#   regarde que les *.gguf ; le find -type d -empty final ne prend que les
+#   dossiers vides. ~/llm/venv-convert est hors de ~/models : jamais touché.
+#   Donc : reconvertir après un --cleanup coûte la seule conversion, pas les
+#   téléchargements.
 llama_model gpt-oss "
 model            = $GPTOSS_PATH
 ctx-size         = 131072
