@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="673" viewBox="0 0 900 673" role="img" aria-label="Décode : paquet Arch contre fork">
-<rect x="0" y="0" width="900" height="673" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="730" viewBox="0 0 900 730" role="img" aria-label="Décode : paquet Arch contre fork">
+<rect x="0" y="0" width="900" height="730" fill="#ffffff"/>
 <text x="24.0" y="34.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" fill="#3c4043" text-anchor="start" font-weight="600">Décode : paquet Arch contre fork</text>
 <text x="24.0" y="56.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#5f6368" text-anchor="start">tokens/s générés, médiane hors 1re passe.</text>
 <text x="24.0" y="72.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#5f6368" text-anchor="start">colonne paquet : dernier run bNNNNN du modèle ; colonne fork : strix-0007bc6, Vulkan0, --bench 3 passes, 12 et 13/09/2026</text>
@@ -7,17 +7,17 @@
 <text x="41.0" y="98.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="start">paquet Arch</text>
 <rect x="125.0" y="89.0" width="11" height="11" fill="#2f6fdd"/>
 <text x="142.0" y="98.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="start">fork strix-llama.cpp</text>
-<line x1="258.0" y1="110.0" x2="258.0" y2="629.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="258.0" y="647.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">0</text>
-<line x1="400.0" y1="110.0" x2="400.0" y2="629.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="400.0" y="647.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">20</text>
-<line x1="542.0" y1="110.0" x2="542.0" y2="629.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="542.0" y="647.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">40</text>
-<line x1="684.0" y1="110.0" x2="684.0" y2="629.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="684.0" y="647.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">60</text>
-<line x1="826.0" y1="110.0" x2="826.0" y2="629.0" stroke="#e4e6e9" stroke-width="1.0"/>
-<text x="826.0" y="647.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">80</text>
-<line x1="258.0" y1="629.0" x2="826.0" y2="629.0" stroke="#bdc1c6" stroke-width="1.0"/>
+<line x1="258.0" y1="110.0" x2="258.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="258.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">0</text>
+<line x1="400.0" y1="110.0" x2="400.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="400.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">20</text>
+<line x1="542.0" y1="110.0" x2="542.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="542.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">40</text>
+<line x1="684.0" y1="110.0" x2="684.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="684.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">60</text>
+<line x1="826.0" y1="110.0" x2="826.0" y2="686.0" stroke="#e4e6e9" stroke-width="1.0"/>
+<text x="826.0" y="704.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="middle">80</text>
+<line x1="258.0" y1="686.0" x2="826.0" y2="686.0" stroke="#bdc1c6" stroke-width="1.0"/>
 <text x="246.0" y="144.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">lfm2.5-2.6b</text>
 <rect x="258.0" y="126.0" width="480.7" height="16.0" fill="#9aa0a6"/>
 <text x="746.7" y="139.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">67,7</text>
@@ -33,34 +33,38 @@
 <text x="768.0" y="253.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">70,7</text>
 <rect x="258.0" y="261.0" width="520.4" height="16.0" fill="#2f6fdd"/>
 <text x="786.4" y="274.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">73,3</text>
-<text x="246.0" y="315.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-27b-dflash-nothink</text>
-<rect x="258.0" y="297.0" width="209.4" height="16.0" fill="#9aa0a6"/>
-<text x="475.4" y="310.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">29,5</text>
-<rect x="258.0" y="318.0" width="231.5" height="16.0" fill="#2f6fdd"/>
-<text x="497.5" y="331.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">32,6</text>
-<text x="246.0" y="372.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-flash-next-mtp-nothink</text>
-<rect x="258.0" y="354.0" width="183.9" height="16.0" fill="#9aa0a6"/>
-<text x="449.9" y="367.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">25,9</text>
-<rect x="258.0" y="375.0" width="355.0" height="16.0" fill="#2f6fdd"/>
-<text x="621.0" y="388.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">50,0</text>
-<text x="246.0" y="429.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3-coder-next</text>
-<rect x="258.0" y="411.0" width="310.3" height="16.0" fill="#9aa0a6"/>
-<text x="576.3" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">43,7</text>
-<rect x="258.0" y="432.0" width="345.8" height="16.0" fill="#2f6fdd"/>
-<text x="611.8" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">48,7</text>
-<text x="246.0" y="486.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">gpt-oss</text>
-<rect x="258.0" y="468.0" width="368.5" height="16.0" fill="#9aa0a6"/>
-<text x="634.5" y="481.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">51,9</text>
-<rect x="258.0" y="489.0" width="375.6" height="16.0" fill="#2f6fdd"/>
-<text x="641.6" y="502.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">52,9</text>
-<text x="246.0" y="543.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">laguna-s-2.1</text>
-<rect x="258.0" y="525.0" width="215.1" height="16.0" fill="#9aa0a6"/>
-<text x="481.1" y="538.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">30,3</text>
-<rect x="258.0" y="546.0" width="210.2" height="16.0" fill="#2f6fdd"/>
-<text x="476.2" y="559.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">29,6</text>
-<text x="246.0" y="600.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">deepseek-v4-flash</text>
-<rect x="258.0" y="582.0" width="87.3" height="16.0" fill="#9aa0a6"/>
-<text x="353.3" y="595.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">12,3</text>
-<rect x="258.0" y="603.0" width="205.2" height="16.0" fill="#2f6fdd"/>
-<text x="471.2" y="616.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">28,9</text>
+<text x="246.0" y="315.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">ornith-1.5-35b-a3b-mtp</text>
+<text x="266.0" y="310.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
+<rect x="258.0" y="318.0" width="541.0" height="16.0" fill="#2f6fdd"/>
+<text x="807.0" y="331.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">76,2</text>
+<text x="246.0" y="372.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-27b-dflash-nothink</text>
+<rect x="258.0" y="354.0" width="209.4" height="16.0" fill="#9aa0a6"/>
+<text x="475.4" y="367.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">29,5</text>
+<rect x="258.0" y="375.0" width="231.5" height="16.0" fill="#2f6fdd"/>
+<text x="497.5" y="388.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">32,6</text>
+<text x="246.0" y="429.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-flash-next-mtp-nothink</text>
+<rect x="258.0" y="411.0" width="183.9" height="16.0" fill="#9aa0a6"/>
+<text x="449.9" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">25,9</text>
+<rect x="258.0" y="432.0" width="355.0" height="16.0" fill="#2f6fdd"/>
+<text x="621.0" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">50,0</text>
+<text x="246.0" y="486.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3-coder-next</text>
+<rect x="258.0" y="468.0" width="310.3" height="16.0" fill="#9aa0a6"/>
+<text x="576.3" y="481.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">43,7</text>
+<rect x="258.0" y="489.0" width="370.6" height="16.0" fill="#2f6fdd"/>
+<text x="636.6" y="502.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">52,2</text>
+<text x="246.0" y="543.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">gpt-oss</text>
+<rect x="258.0" y="525.0" width="368.5" height="16.0" fill="#9aa0a6"/>
+<text x="634.5" y="538.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">51,9</text>
+<rect x="258.0" y="546.0" width="375.6" height="16.0" fill="#2f6fdd"/>
+<text x="641.6" y="559.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">52,9</text>
+<text x="246.0" y="600.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">laguna-s-2.1</text>
+<rect x="258.0" y="582.0" width="215.1" height="16.0" fill="#9aa0a6"/>
+<text x="481.1" y="595.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">30,3</text>
+<rect x="258.0" y="603.0" width="210.2" height="16.0" fill="#2f6fdd"/>
+<text x="476.2" y="616.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">29,6</text>
+<text x="246.0" y="657.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">deepseek-v4-flash</text>
+<rect x="258.0" y="639.0" width="87.3" height="16.0" fill="#9aa0a6"/>
+<text x="353.3" y="652.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">12,3</text>
+<rect x="258.0" y="660.0" width="204.5" height="16.0" fill="#2f6fdd"/>
+<text x="470.5" y="673.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">28,8</text>
 </svg>

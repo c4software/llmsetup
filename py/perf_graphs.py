@@ -162,7 +162,11 @@ def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
     hauteur = HAUT_TITRE + h_groupe * len(rows) + HAUT_AXE
     x0 = MARGE_G
     x_max = LARGEUR - MARGE_D
-    vmax = max(max(r[cle_paquet], r[cle_fork]) for r in rows)
+    # Une colonne vide = mesure absente (section jamais benchée sur cette
+    # série, ex. une variante servie seulement sous le fork) : elle ne compte
+    # pas dans l'échelle et sa barre n'est pas tracée, un « n/c » la remplace.
+    vmax = max(v for r in rows for v in (r[cle_paquet], r[cle_fork])
+               if v is not None)
     ticks, haut = graduations(vmax)
     ech = (x_max - x0) / haut
 
@@ -180,6 +184,10 @@ def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
         for j, (cle, couleur) in enumerate(
                 ((cle_paquet, GRIS), (cle_fork, BLEU))):
             y = yg + j * (H_BARRE + ECART_BARRES)
+            if r[cle] is None:
+                out.append(texte(x0 + 8, y + H_BARRE - 3, "n/c", taille=11,
+                                 couleur=TEXTE_FAIBLE))
+                continue
             x1 = x0 + r[cle] * ech
             out.append(barre(x0, x1, y, y + H_BARRE, couleur))
             out.append(texte(x1 + 8, y + H_BARRE - 3,
@@ -191,7 +199,10 @@ def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
 # --- graphe des écarts -------------------------------------------------------
 
 def ecart(paquet, fork):
-    return (fork - paquet) / paquet * 100.0 if paquet else 0.0
+    """None si l'une des deux séries manque : l'écart n'a pas de sens."""
+    if not paquet or fork is None:
+        return None
+    return (fork - paquet) / paquet * 100.0
 
 
 def graphe_ecarts(rows, titre, sous_titre, chemin):
@@ -202,7 +213,7 @@ def graphe_ecarts(rows, titre, sous_titre, chemin):
     x_max = LARGEUR - MARGE_D
     vals = [(ecart(r["prefill_paquet"], r["prefill_fork"]),
              ecart(r["decode_paquet"], r["decode_fork"])) for r in rows]
-    amax = max(max(abs(a), abs(b)) for a, b in vals)
+    amax = max(abs(v) for a, b in vals for v in (a, b) if v is not None)
     ticks, haut = graduations(amax)
     # Zéro au centre : l'échelle est symétrique, les crans se miroitent.
     ticks = [-t for t in reversed(ticks[1:])] + ticks
@@ -223,9 +234,13 @@ def graphe_ecarts(rows, titre, sous_titre, chemin):
         out.append(texte(x0 - 12, yg + H_BARRE + 2, r["modele"], taille=12,
                          ancre="end"))
         for j, (v, couleur) in enumerate(((e_pp, BLEU), (e_gen, GRIS))):
+            y = yg + j * (H_BARRE + ECART_BARRES)
+            if v is None:
+                out.append(texte(x_zero + 8, y + H_BARRE - 3, "n/c",
+                                 taille=11, couleur=TEXTE_FAIBLE))
+                continue
             if v < 0:
                 couleur = ROUGE
-            y = yg + j * (H_BARRE + ECART_BARRES)
             x1 = x_zero + v * ech
             out.append(barre(x_zero, x1, y, y + H_BARRE, couleur))
             signe = "+" if v >= 0 else "-"
