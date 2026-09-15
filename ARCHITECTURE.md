@@ -377,7 +377,11 @@ en q8_0 comme le service, tour simulé par profondeur et par device. Journal
   déterministe, toute variation vient d'un choix explicite (modèle ou conf).
 - Sorties des `py/*.py` au caractère près — `tests/py-golden.sh`
   (fixtures capturées sur le code inline d'origine).
-- `parallel = 1` sur tous les modèles MTP (contrainte llama.cpp np/mmproj).
+- `parallel` est un choix par modèle (contexte par slot, mémoire, rendement
+  mesuré de la spéculation), pas une contrainte de `spec-type` : le « np > 1
+  non supporté avec MTP » affirmé ici jusqu'au 15/09/2026 venait d'une doc
+  unsloth, absente du fork servi (vérifié le 15/09/2026) ; seul `--mmproj`
+  reste incompatible avec un drafter.
 - `--cleanup` piloté uniquement par `KNOWN_FILES`.
 - Restart requis après toute régénération du ini (routeur = lecture au boot).
 - Mesures spec : l'état réel vient de `/v1/models`, jamais du script/ini.

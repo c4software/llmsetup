@@ -341,6 +341,19 @@ exposés. Réinstaller `ggml-hip`, ou forcer Vulkan0 dans la conf puis `--preloa
 Non, il est régénéré à chaque `--setup`, `--preload` ou `--spec-*`.
 Éditer les fichiers `.conf` ou `lib/models.sh`.
 
-**Pourquoi `parallel = 1` sur les modèles MTP ?**
-Contrainte llama.cpp : `-np` supérieur à 1 et `--mmproj` ne sont pas supportés
-avec MTP. Un modèle non-MTP séparé sur le même GGUF rend le parallélisme.
+**Pourquoi `parallel = 1` sur les modèles spéculatifs ?**
+Par choix, pas par interdit. Cette FAQ a répondu jusqu'au 15/09/2026
+« contrainte llama.cpp : `-np` supérieur à 1 et `--mmproj` ne sont pas
+supportés avec MTP » ; cette phrase vient d'une doc unsloth de juin/juillet
+2026 et n'existe pas dans le moteur servi (fork strix-llama.cpp, commit
+`0007bc6`, vérifié le 15/09/2026) : le serveur y drafte tous les slots en un
+appel, `draft-dflash` et `draft-dspark` sont explicitement multi-séquences,
+`draft-mtp` est vectorisé par séquence mais n'a jamais été éprouvé à `-np` > 1
+(non éprouvé, pas interdit). Ce qui décide vraiment, modèle par modèle :
+`ctx-size` est un pool partagé (chaque slot reçoit `ctx-size / parallel`), la
+mémoire de KV, le batch de vérification qui vaut jusqu'à
+`parallel x (n-max + 1)` et franchit vite le seuil de 8 colonnes de
+ggml-vulkan, et le rendement réel de la spéculation, qui s'effondre quand les
+voies se multiplient. Une campagne de mesure multi-slot est en cours : les
+valeurs actuelles sont inchangées en attendant. Seul interdit qui demeure : le
+`--mmproj` reste incompatible avec un drafter.

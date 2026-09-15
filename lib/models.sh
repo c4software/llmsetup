@@ -71,15 +71,48 @@ DEFAULT_DEVICE="Vulkan0"
 #     agentic/tool calling (le KV V q4_0 dégrade le tool calling, cf. doc
 #     llama.cpp function-calling)
 #   - swa-full + ctx-checkpoints : posé sur qwen3.5-9b, ornith-1.5-35b-a3b et
-#     qwen3.8-27b-dflash-nothink. swa-full n'est effectif que sur le 9b :
-#     llama-server le désactive au chargement sur les 35B A3B (pas de SWA) et
-#     le refuse sur l'arch du 3.8-27B (« swa_full is not supported by this
-#     model ») ; seul ctx-checkpoints y travaille.
-#   - parallel = 1 OBLIGATOIRE sur tous les modèles MTP : "-np > 1 and --mmproj
-#     are not yet supported with MTP" (doc unsloth, confirmée sur les README
-#     Qwen MTP et Gemma QAT, juin/juillet 2026). Les anciens parallel 2/3 sur
-#     les modèles MTP étaient au mieux ignorés, au pire cassaient la spéculation
-#     (constaté avant le 15/08/2026, plus aucune section ne les porte).
+#     qwen3.8-27b-dflash-nothink. Jusqu'au 15/09/2026 ce bloc affirmait que
+#     swa-full « n'est effectif que sur le 9b » ; le journal du 13/09/2026 dit
+#     le contraire : llama-server écrit « swa_full is not supported by this
+#     model, it will be disabled » AUSSI sur le 9b (puis « cache_reuse is not
+#     supported by this context »), comme sur les 35B A3B (pas de SWA) et sur
+#     l'arch du 3.8-27B. Donc swa-full n'est effectif sur AUCUNE des trois
+#     sections : seul ctx-checkpoints y travaille. Les lignes sont gardées
+#     telles quelles (coût nul, le serveur les désactive lui-même) et
+#     redeviendront utiles si une arch à vraie SWA entre au parc.
+#   - parallel : ce n'est PAS une contrainte de spec-type. Jusqu'au 15/09/2026
+#     le dépôt affirmait « parallel = 1 OBLIGATOIRE sur tous les modèles MTP »
+#     en citant "-np > 1 and --mmproj are not yet supported with MTP" ; cette
+#     phrase est une doc unsloth de juin/juillet 2026, elle n'existe NULLE PART
+#     dans le fork strix-llama.cpp servi (lecture du code et de l'historique au
+#     commit 0007bc6, vérifié le 15/09/2026). Ce que fait réellement le fork :
+#     le serveur crée UN seul objet spéculatif dimensionné à n_parallel
+#     séquences (tools/server/server-context.cpp:1459) et drafte tous les slots
+#     en un appel ; draft-dflash et draft-dspark sont explicitement
+#     multi-séquences (common/speculative.cpp:1276-1331, commit dfb1328eb du
+#     28/08/2026 « keep DFlash draft blocks the same width across sequences ») ;
+#     draft-mtp est vectorisé par séquence (speculative.cpp:1482-1700) sans
+#     assert sur n_seq, mais aucun commit ni test ne l'éprouve : « non éprouvé »,
+#     pas « interdit » ; ngram-map-k a une table par séquence.
+#     Les vraies contraintes, qui se jugent MODÈLE PAR MODÈLE :
+#       (1) ctx-size est un pool partagé : chaque slot reçoit ctx-size /
+#           parallel, donc à contexte agentic large le deuxième slot coûte du
+#           contexte utile ou de la RAM de KV ;
+#       (2) le batch de vérification vaut jusqu'à parallel x (n-max + 1) et
+#           franchit vite le seuil de 8 colonnes de ggml-vulkan
+#           (mul_mat_vec_max_cols = 8, courbe mesurée dans le bloc
+#           qwen3.8-27b) : au-delà, chaque forward change de régime ;
+#       (3) rendement mesuré : unsloth donne sur DSpark un gain de spéculation
+#           qui tombe de 1,84x à 1,10x à 4 voies.
+#     Donc : parallel 1 reste le réglage servi partout où il l'est, mais comme
+#     CHOIX justifié par le contexte par slot, la mémoire ou le rendement, pas
+#     comme interdit technique. Une campagne de mesure multi-slot est en cours
+#     sur bigchuck : ne pas toucher aux valeurs parallel avant ses résultats.
+#     Seul interdit qui demeure : le mmproj reste incompatible avec un drafter
+#     (vision => pas de spéculation). Les anciens parallel 2/3 sur modèles MTP
+#     (constatés avant le 15/08/2026, plus aucune section ne les porte) n'ont
+#     pas été re-mesurés depuis : leur mauvais comportement d'alors n'est pas
+#     une preuve, il attend la campagne.
 # =============================================================================
 
 declare -A MODEL_INI GROUPE_AVANT
@@ -186,8 +219,13 @@ download_hf qwen3.5-9b "unsloth/Qwen3.5-9B-GGUF" \
 #   re-download de template ne doit pas réactiver le thinking en douce).
 # n-predict 1024 : borne dure, aucune tâche auxiliaire n'a besoin de plus —
 #   plus jamais de génération qui court jusqu'au plafond de contexte
-# Pas de variante MTP : MTP imposerait parallel=1, incompatible avec les
-#   4 slots de tâches auxiliaires concurrentes qui font tout l'intérêt du 9b.
+# Pas de variante MTP : jusqu'au 15/09/2026 la raison écrite ici était « MTP
+#   imposerait parallel=1 » ; c'est faux (cf. en-tête, vérifié dans le fork le
+#   15/09/2026). La raison qui tient : les 4 slots de tâches auxiliaires
+#   concurrentes font tout l'intérêt du 9b, et un drafter partagerait avec eux
+#   le batch de vérification (parallel x (n-max + 1) colonnes) pour un gain qui
+#   s'effondre à 4 voies ; non mesuré ici, à reprendre avec la campagne
+#   multi-slot si le sujet revient.
 # Mesuré 21/08/2026 (Vulkan0, b10433) : prefill 837 t/s, décode 25,7 t/s ;
 #   --bench-parallel : 4 requêtes = 78,6 t/s agrégés (x3,06), 20 t/s par
 #   requête — le parallel 4 est justifié ; --bench-load : 1,9 s de chargement
@@ -213,15 +251,43 @@ ctx-checkpoints      = 128"
 download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
   ORNITH15_35B_A3B_PATH="Ornith-1.5-35B-Q4_K_M.gguf"
 
-# Ornith-1.5-35B-A3B nothink — DEFAULT AGENTIC, always-on
+# Ornith-1.5-35B-A3B nothink — DEFAULT AGENTIC, chargé à la demande
+#   (le bandeau disait « always-on » jusqu'au 15/09/2026 : sur bigchuck
+#   preload.conf ne contient que lfm2.5-2.6b, ce modèle monte à la demande en
+#   8,3 s ; preload.conf est un choix utilisateur local, non versionné)
 #   Remplace le 28/08/2026 les trois variantes Qwen3.6-35B-A3B (nothink,
 #   thinking, mtp-nothink) par une seule section, parallel 4.
 # Fiche (model card HF ornith-ai, 24/08/2026, pas de guide unsloth) : post-train
 #   d'Ornith AI sur Qwen3.6-35B-A3B, arch llama.cpp qwen35moe (même famille
 #   que le 35B-A3B remplacé : GDN + MoE, 3B actifs, support mainline acquis
-#   en b10566). Pas de tête MTP (pas de repo -MTP, pas de nextn), donc pas de
-#   spéculation ici — et parallel 4 serait de toute façon incompatible. Un
-#   mmproj BF16 (0,9 Go) existe : texte seul, non téléchargé.
+#   en b10566). Un mmproj BF16 (0,9 Go) existe : texte seul, non téléchargé.
+# ⚠ TÊTE MTP PRÉSENTE, contrairement à ce que ce bloc affirmait jusqu'au
+#   15/09/2026 (« pas de tête MTP : pas de repo -MTP, pas de nextn, donc pas de
+#   spéculation ici, et parallel 4 serait de toute façon incompatible » : les
+#   deux moitiés sont fausses). Vérifié le 15/09/2026 avec gguf-py sur
+#   bigchuck : l'en-tête du GGUF servi Ornith-1.5-35B-Q4_K_M.gguf porte
+#   qwen35moe.nextn_predict_layers = 1 et les tenseurs
+#   blk.40.nextn.{eh_proj,enorm,hnorm,shared_head_norm} : la tête est dans le
+#   fichier principal, sans repo -MTP séparé. Le fork strix-llama.cpp a le
+#   graphe MTP qwen35moe et l'autodétecte. Et parallel n'est pas une contrainte
+#   de spec-type (cf. en-tête).
+#   Test ISOLÉ du 15/09/2026 (fork strix-0007bc6, Vulkan0, 2 passes,
+#   1200 tokens ; t/s spec-test / spec-refactor) :
+#     sans spéculation              71,5 / n/a
+#     draft-mtp n-max 2             93,1 / 99,8
+#     draft-mtp n-max 4             92,4 / 100,9   (acceptance 0,68 / 0,81)
+#     draft-mtp n-max 6             75,2 /  88,3
+#     ngram-map-k 7 min-hits 2
+#       + draft-mtp 4               90,3 / 113,2   (acceptance 0,65 / 0,83)
+#   Sorties cohérentes avec la référence, aucune dérive du rollback GDN
+#   observée sur ces passes. Lecture : n-max 4 est l'optimum, 6 retombe sous la
+#   référence en spec-test (le batch dépasse les 8 colonnes de ggml-vulkan) ;
+#   l'ajout du n-gram ne paie que sur du refactor.
+#   ⚠ Le réglage SERVI n'est PAS changé : la section reste sans spec-type et à
+#   parallel 4. La décision (spéculation ici, et à quel parallel) attend la
+#   campagne de mesure multi-slot en cours sur bigchuck : ce modèle est le
+#   défaut agentic, ses 4 slots servent les subagents, et le test ci-dessus est
+#   mono-slot.
 # Quant Q4_K_M (21,7 Go) : choix du 28/08/2026, c'est la quant de la commande
 #   de référence de la fiche ; pas de quant unsloth UD sur ce repo
 #   (grille : Q4_K_M 21,7 / Q5_K_M 25,3 / Q6_K 29,2 / Q8_0 37,8 Go).
@@ -336,7 +402,9 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 #   toute mesure). Deuxième arch MoE à opérateurs fusionnés cassée sur ROCm0
 #   après DeepSeek V4 ; les denses et le 35B-A3B passent.
 # Spéculation n-gram : ngram-map-k size_m 47, RETENU sur mesure réelle, avec
-#   un compromis à connaître. Pas de tête MTP. Courbe t_forward(batch) Vulkan0
+#   un compromis à connaître. Pas de tête MTP dans le GGUF (ni nextn, ni repo
+#   -MTP), mais un drafter EXTERNE existe désormais, cf. « Drafter DFlash
+#   z-lab » en bas de bloc. Courbe t_forward(batch) Vulkan0
 #   (21/08, reps=5) : batch 1 = 21 ms, 8 = 46 (x2,16), 9 = marche, 16 = 106,
 #   32 = 146, 48 = 199 ms. --spec-ngram-tune 21/08/2026 (spec-refactor.txt,
 #   4 passes) : sans spéculation 46,8 t/s ; size_m 7 = 20,8 t/s (!) malgré une
@@ -360,6 +428,24 @@ download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
 #   763 t/s, décode 48,7 t/s, acceptance 0,27 : prefill +63 %, décode +11 %
 #   contre le paquet (468 / 43,7, b10433) à acceptance inchangée : le gain
 #   vient du moteur, pas de la spéculation.
+# Drafter DFlash z-lab : PISTE MESURÉE, PAS ENCORE SERVIE (15/09/2026).
+#   Le « pas de tête MTP » ci-dessus ne ferme plus la spéculation par drafter :
+#   un drafter DFlash z-lab pour cette arch existe en GGUF communautaire
+#   (repo transmutator, Q8_0, 0,51 Go, arch dflash, block_size 16,
+#   target_layers [4,12,24,36,44], dorsale Qwen3 de 8 blocs, 91 tenseurs).
+#   Mesures ISOLÉES du 15/09/2026 (fork strix-0007bc6, Vulkan0, 2 passes ;
+#   t/s spec-test / spec-refactor) :
+#     ngram-map-k 47 (le réglage servi)  45,2 /  48,7
+#     draft-dflash n-max 15               43,5 /  65,9
+#     draft-dflash n-max 7                70,5 / 100,0   (acceptance 0,70 / 0,92)
+#     ngram-map-k 47 + draft-dflash 7     67,9 / 104,6   (acceptance 0,65 / 0,82)
+#   Lecture : draft-dflash n-max 7 lave le défaut connu du réglage actuel (le
+#   -5,5 % en génération sans répétition) tout en doublant le refactor ; n-max
+#   15 retombe, batch de vérification au-delà des 8 colonnes de ggml-vulkan.
+#   RÉGLAGE À INTÉGRER, en attente de la mesure multi-slot : ni le corps ini
+#   ci-dessous ni un download_hf ne sont touchés pour l'instant (il faudra
+#   déclarer le GGUF du drafter, ajouter draft-dflash au spec-type et fixer
+#   spec-draft-n-max, puis re-jouer les étapes 4 à 7 de la procédure).
 llama_model qwen3-coder-next "
 model            = $QWEN3_CODER_NEXT_PATH
 ctx-size         = 131072
@@ -495,9 +581,17 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   quant/build/device.
 # cache-reuse 0 : ignoré sur l'arch hybride GDN (état récurrent), cf. l'en-tête
 #   du fichier (était justifié par le MTP jusqu'au 13/09/2026).
-# parallel 1 : un seul slot, régime agentic sérialisé ; la contrainte MTP
-#   (« -np > 1 and --mmproj are not yet supported with MTP », en-tête du
-#   fichier) redeviendrait bloquante si la tête MTP était reprise.
+# parallel 1 : un seul slot, régime agentic sérialisé. Jusqu'au 15/09/2026 ce
+#   bloc ajoutait que « la contrainte MTP (-np > 1 and --mmproj are not yet
+#   supported with MTP) redeviendrait bloquante si la tête MTP était reprise » :
+#   cette contrainte n'existe pas dans le fork (vérifié le 15/09/2026 sur
+#   strix-0007bc6, cf. en-tête), draft-dflash y est même explicitement
+#   multi-séquences. Ce qui justifie réellement le 1 ici : l'usage (agentic
+#   sérialisé, un agent à la fois), le contexte par slot (ctx-size est un pool
+#   partagé), et le batch de vérification à parallel x (n-max + 1) qui
+#   franchirait immédiatement les 8 colonnes de ggml-vulkan documentées plus
+#   bas (déjà 8 à parallel 1 avec n-max 7). Valeur inchangée, en attente de la
+#   campagne de mesure multi-slot en cours sur bigchuck.
 #
 # spec-type ngram-map-k,draft-dflash (draft-mtp jusqu'au 13/09/2026) : la liste
 #   est essayée dans l'ordre de
@@ -510,7 +604,11 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   oldString mot pour mot depuis le fichier lu, et ngram-map-k construit sa
 #   map à partir du PROMPT entier, pas seulement du texte généré.
 #   ngram-map-k plutôt que ngram-mod (le défaut de --spec-default d'upstream) :
-#   le pool partagé de ngram-mod n'apporte rien à parallel 1, et map-k
+#   le pool partagé de ngram-mod n'apporte rien tant que la section reste à
+#   parallel 1 (argument conditionnel au réglage, pas une propriété du
+#   modèle) : à re-évaluer, ngram-mod contre map-k, si la campagne multi-slot
+#   fait passer cette section à plusieurs slots, où le pool partagé prend au
+#   contraire du sens. Et map-k
 #   s'auto-limite par clé (n_draft_tokens = min(m, values[slot_max].n_accepted) dans
 #   common/ngram-map.cpp), donc le plein tarif d'un draft raté n'est payé
 #   qu'une fois par n-gram.
@@ -547,7 +645,11 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   occurrences du n-gram, pour éviter les faux départs qui paient le batch
 #   sans être acceptés.
 # cache-ram 12288 (était 4096) : session review omp du 25/08/2026, 4 agents
-#   en série sur le seul slot (parallel 1). L'état de l'orchestrateur à 60k de
+#   en série sur le seul slot (conséquence du réglage parallel 1 servi, pas
+#   d'une contrainte du moteur ; cf. en-tête, vérifié le 15/09/2026 : plusieurs
+#   slots sont possibles, le choix attend la campagne multi-slot ; le besoin de
+#   cache-ram ci-dessous ne disparaîtrait pas pour autant, il se déplacerait
+#   sur la RAM de KV). L'état de l'orchestrateur à 60k de
 #   contexte pèse 9 Go (« prompt state size 9022 MiB exceeds cache size limit
 #   4096 MiB, skipping ») : jamais sauvegardé, donc prefill complet de 58k
 #   tokens (~325 s à 180 t/s) à chaque retour d'agent, au-delà du timeout
@@ -988,9 +1090,15 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   on attendait un gros surcoût fixe par pas spéculatif ; mesuré le 05/09/2026
 #   (b10809, Vulkan0) : ce n'est PAS le cas ici, le petit draft gagne, cf. le
 #   commentaire de la section -mtp-nothink.
-# parallel 1 : contrainte MTP (np > 1 non supporté), de nouveau active avec le
-#   retour de draft-mtp. De toute façon imposé par la place : 93,7 Go de poids
-#   sur 124 Go, un deuxième slot de KV à 128k mangerait la marge.
+# parallel 1 : la raison écrite ici jusqu'au 15/09/2026, « contrainte MTP
+#   (np > 1 non supporté) », ne tient pas : cette phrase vient d'une doc
+#   unsloth, pas du fork (vérifié le 15/09/2026 dans strix-0007bc6, cf.
+#   en-tête). draft-mtp y est vectorisé par séquence et sans assert sur n_seq :
+#   NON ÉPROUVÉ à np > 1, pas interdit. La raison qui tient, elle, est la
+#   mémoire, et elle suffit : 93,7 Go de poids sur 124 Go, un deuxième slot de
+#   KV à 128k mangerait la marge ; et ctx-size étant un pool partagé, passer à
+#   2 slots couperait aussi en deux le contexte par requête. Valeur inchangée,
+#   en attente de la campagne multi-slot.
 # Device : Vulkan0 (--bench-devices 05/09/2026, b10809 : prefill 181 t/s,
 #   décode 24 t/s brut). ROCm0 EXCLU par la question de contrôle : réponse
 #   « LAMPAMPAMPAMP... » dégénérée, le même symptôme que DeepSeek V4 et

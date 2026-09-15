@@ -137,7 +137,11 @@ Deux questions indépendantes :
    convention de dossiers `<clé>` / `<clé>-mtp`, pas sur ce suffixe : il est
    là pour le lecteur, et il se renomme quand le drafter change (cf. Clôture).
 2. **Veut-on la spéculation sur ce modèle ?** Contraintes à respecter :
-   `parallel = 1` obligatoire, `cache-reuse = 0`, pas de mmproj. Sur une
+   `cache-reuse = 0`, pas de mmproj (seul interdit dur avec un drafter).
+   `parallel = 1` était donné ici comme obligatoire jusqu'au 15/09/2026 : c'est
+   un CHOIX à justifier par modèle (contexte par slot, mémoire, rendement
+   mesuré), pas un interdit du moteur (vérifié dans le fork le 15/09/2026, cf.
+   en-tête de `lib/models.sh`). Sur une
    architecture à état récurrent (GDN des Qwen3.5+, conv LFM2), le rollback
    partiel sur rejet de draft est en mainline (PR #22673) mais n'a pas été
    validé ici sur Vulkan en boucle de tool calls : garder une variante sans
