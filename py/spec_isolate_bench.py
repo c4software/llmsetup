@@ -20,7 +20,10 @@
 # Sorties :
 #   - un tableau texte lisible sur stdout (une ligne par mesure) ;
 #   - <out>/mesures.tsv en APPEND : date tag prompt np mesure pp gen n
-#     draft_n accepted acceptance sain ;
+#     draft_n accepted acceptance sain agrege ; agrege est vide sur les
+#     lignes de passe séquentielle, et sur les lignes de salve (np > 1) porte
+#     le débit agrégé de la salve (somme des predicted_n / temps mur), la
+#     colonne gen y restant la médiane par requête ;
 #   - <out>/gen-<prompt>-p<N>.txt : reasoning_content + content de chaque
 #     passe, à relire quand un chiffre semble trop beau.
 #
@@ -46,7 +49,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from timings import degenere  # noqa: E402  (même seuils que --bench / --spec-test)
 
-TSV_HDR = "date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain"
+TSV_HDR = "date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain\tagrege"
 
 
 def mot_dominant(texte):
@@ -101,9 +104,9 @@ def requete(url, prompt, seed, max_tokens, temp):
     }
 
 
-def ligne_tsv(fh, tag, prompt, np_, mesure, r):
+def ligne_tsv(fh, tag, prompt, np_, mesure, r, agrege=None):
     fh.write(
-        "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+        "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
         % (
             datetime.now().strftime("%F %T"),
             tag,
@@ -117,6 +120,7 @@ def ligne_tsv(fh, tag, prompt, np_, mesure, r):
             r.get("da") if r.get("da") is not None else "n/a",
             "n/a" if r.get("acc") is None else "%.3f" % r["acc"],
             "non" if r.get("degen") else "oui",
+            "" if agrege is None else "%.2f" % agrege,
         )
     )
     fh.flush()
@@ -241,6 +245,7 @@ def multi_slot(args, fh, chemin_prompts):
                 "acc": acc,
                 "degen": degen,
             },
+            agrege=agg,
         )
         print("    agrégé = somme des tokens générés / temps mur de la salve")
 

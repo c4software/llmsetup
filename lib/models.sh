@@ -591,8 +591,11 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-DSpark-GGUF" \
 #   t/s agrégés à np 4 contre 80,8 sans spéculation, cf. son bloc) et aucun
 #   modèle spéculatif du parc ne gagne au multi-slot sauf deepseek-v4-flash à
 #   np 2, où le batch de vérification tombe pile sur les 8 colonnes du seuil.
-#   Ici np 2 donnerait 8 colonnes (2 x (3 + 1)) : le cas mérite une mesure,
-#   il n'en a pas encore.
+#   Ici np 2 donne 8 colonnes (2 x (3 + 1)), mesuré le 15/09/2026 au soir
+#   par tools/spec-isolate.sh NP=2 (400 tokens, 2 salves) : solo 105 à 124
+#   t/s, deux requêtes simultanées 120 à 136 t/s agrégés, soit ~x1,1 pour un
+#   débit par requête divisé par deux (70 t/s). Comme DeepSeek à np 2 : le
+#   seuil est respecté mais le gain ne vaut pas la latence, parallel 1 gardé.
 # Préchargement : preload.conf est indexé par NOM DE SECTION, donc la ligne
 #   `lfm2.5-2.6b` existante précharge désormais CETTE version (drafter DSpark
 #   compris, ~9 Go au lieu de ~2,7). _preload_sanity n'avertit PAS si les deux

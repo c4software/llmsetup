@@ -36,8 +36,10 @@
 #
 # Variables d'env :
 #   PORT=8099       port du serveur jetable (jamais 8009, celui du service)
-#   NP=1            slots ; si > 1, -np $NP est ajouté ET le bench fait en plus
-#                   une salve de NP requêtes simultanées. Rappel : le batch de
+#   NP=1            slots : -np $NP est TOUJOURS passé (un test isolé se fait à
+#                   un slot, pas aux 4 par défaut de llama-server) ; si > 1, le
+#                   bench fait en plus une salve de NP requêtes simultanées.
+#                   Rappel : le batch de
 #                   vérification vaut np x (n-max + 1), à garder <= 8 colonnes
 #                   sur ggml-vulkan (cf. en-tête de lib/models.sh).
 #   PASSES=2        passes séquentielles par prompt (la 1re est le cache froid)
@@ -136,8 +138,7 @@ sleep 3
 # de commande sans toucher au script.
 # (pas de « [[ … ]] && … » en fin de portée : sous set -e un test faux tuerait
 #  le script — piège documenté dans AGENTS.md.)
-declare -a NPARG=()
-if [[ "$NP" -gt 1 ]]; then NPARG=(-np "$NP"); fi
+declare -a NPARG=(-np "$NP")
 llama-server --device Vulkan0 -ngl 99 -fa on --jinja \
              "${SRV_ARGS[@]}" "${NPARG[@]}" \
              --host 127.0.0.1 --port "$PORT" > "$LOG" 2>&1 &

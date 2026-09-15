@@ -228,9 +228,9 @@ else
   T="$TMP/isolate/mesures.tsv"
   if [[ -s "$T" ]]; then
     # $'…' : les motifs portent de VRAIS tabulateurs, grep -E ne connaît pas \t
-    _ckgrep "spec_isolate_bench : en-tête TSV" $'^date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain$' "$T"
-    _ckgrep "spec_isolate_bench : TSV passe saine"  $'bouchon-sain[.]txt\t1\tpasse1\t2500\t120[.]50\t200\t300\t120\t0[.]400\toui'  "$T"
-    _ckgrep "spec_isolate_bench : TSV passe dégénérée" $'bouchon-degen[.]txt\t1\tpasse2\t.*\t0[.]400\tnon' "$T"
+    _ckgrep "spec_isolate_bench : en-tête TSV" $'^date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain\tagrege$' "$T"
+    _ckgrep "spec_isolate_bench : TSV passe saine"  $'bouchon-sain[.]txt\t1\tpasse1\t2500\t120[.]50\t200\t300\t120\t0[.]400\toui\t$'  "$T"
+    _ckgrep "spec_isolate_bench : TSV passe dégénérée" $'bouchon-degen[.]txt\t1\tpasse2\t.*\t0[.]400\tnon\t$' "$T"
     n="$(grep -c . "$T")"
     if [[ "$n" -eq 5 ]]; then echo "[OK]   spec_isolate_bench : 4 mesures + en-tête"
     else echo "[FAIL] spec_isolate_bench : $n lignes de TSV, 5 attendues"; cat "$T"; rc=1; fi
