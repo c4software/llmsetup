@@ -1308,6 +1308,27 @@ architectures donnent 0 %.
 Chargement (`--bench-load`, 16/09/2026) : 3,5 s de chargement + premier token
 pour 15 Go, TTFT à chaud 88 ms.
 
+### Boucle agentic réelle des deux modèles (--bench-agentic du 16/09/2026)
+
+pi 0.84.3 en conteneur, appel froid puis 3 passes de 5 scénarios, bigchuck, fork strix-0007bc6, 16/09/2026 (autre série de moteur que la table du 28/08 ci-dessus, à ne pas comparer à la décimale) :
+
+| Modèle | Verdict | Scénario | Mur | Prompt (part du cache) | Généré | Prefill | Décode |
+|---|---|---|---|---|---|---|---|
+| muse-glimmer-30b-dflash | 16/16 | froid (prompt système de pi) | 11,2 s | 1 599 tok (0 %) | n/s | 259 t/s | n/s |
+| | 3/3 | réponse simple | 2,5 s | 1 599 tok (99 %) | 62 | 55 t/s | 33,0 t/s |
+| | 3/3 | write+bash+read | 10,9 s | 7 332 tok (99 %) | 344 | 74 t/s | 38,1 t/s |
+| | 3/3 | edit | 10,8 s | 7 274 tok (98 %) | 363 | 79 t/s | 40,8 t/s |
+| | 3/3 | création module + tests | 25,9 s | 10 674 tok (98 %) | 986 | 101 t/s | 39,8 t/s |
+| | 3/3 | bug sans toucher au test | 37,5 s | 12 498 tok (97 %) | 1 050 | 164 t/s | 33,8 t/s |
+| lfm2.5-8b-a1b-nothink | ÉCHEC (passe 1 seule) | froid | 3,0 s | 1 328 tok (0 %) | 24 | 3012 t/s | 47,8 t/s |
+| | 0/1 | réponse simple | 0,8 s | 1 328 tok (100 %) | 23 | 202 t/s | 46,3 t/s |
+| | 1/1 | write+bash+read | 1,9 s | 4 253 tok (85 %) | 105 | 1722 t/s | 89,2 t/s |
+| | 1/1 | edit | 4,0 s | 9 278 tok (90 %) | 300 | 1355 t/s | 103,3 t/s |
+| | 0/1 | création module + tests | 5,2 s | 3 094 tok (44 %) | 423 | 3080 t/s | 98,6 t/s |
+| | boucle sans fin | bug sans toucher au test | tué après 36 min | contexte à 47k | 18 700 requêtes de 20 à 50 tok | | |
+
+Lecture : Muse-Glimmer tient la boucle complète, le cache sert 97 à 99 % à chaque tour (attention pure) et le décode en boucle (34 à 41 t/s) rejoint le `--bench` (38,0) ; le raisonnement en `reasoning_strength` low ne fait échouer aucun scénario. LFM2.5-8B-A1B (thinking coupé) réussit les tool calls simples mais rate la réponse simple et la création de module (fichiers écrits, test jamais relancé jusqu'au vert), et part en boucle de tool calls sur la correction de bug : `--bench-agentic` n'a pas de limite de tours, le conteneur a été tué à la main. C'est le résultat, pas un défaut du serveur (le 2.6B, lui, reste le modèle de tool calling). La section est gardée avec ce verdict, à retirer si elle ne sert pas dans l'usage réel.
+
 ## Choix du device (--bench-devices) : méthode et exemples datés
 
 Méthode complète et exemple du 16/08/2026 (paquet Arch b10433).

@@ -786,6 +786,18 @@ download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
 # --bench-load du 16/09/2026 : 1,7 s chargement + 1er token (8,4 Go lus),
 #   TTFT à chaud 31 ms.
 # Mémoire : ~16 Go chargé (poids 9 + drafter 0,36 + KV du ctx 131072).
+# --bench-agentic du 16/09/2026 (pi 0.84.3, strix-0007bc6) : ÉCHEC. Passe 1 :
+#   simple 0/1 (23 tokens, réponse hors sujet), outils 1/1 (1,9 s, 89 t/s),
+#   edit 1/1 (4,0 s, 103 t/s), création 0/1 (les fichiers sont écrits mais le
+#   test n'est pas relancé jusqu'au vert), bug sans toucher au test : BOUCLE
+#   sans fin (36 min, 18 700 requêtes de 20 à 50 tokens, contexte à 47k,
+#   conteneur tué à la main ; le bench n'a pas de limite de tours). Verdict :
+#   le modèle tient les tool calls simples mais pas une boucle de correction,
+#   comme Liquid l'annonce (« moins adapté au code lourd »). Section GARDÉE
+#   pour l'instant avec ce verdict : à retirer si elle ne sert pas dans l'usage
+#   réel (même critère que laguna et gpt-oss), ou à re-mesurer avec le
+#   raisonnement rétabli (reasoning-budget N > 0) si on veut lui donner sa
+#   chance en agentic, au prix du débit.
 llama_model lfm2.5-8b-a1b-nothink "
 model            = $LFM25_8B_PATH
 ctx-size         = 131072
@@ -1310,6 +1322,14 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 # Mémoire : 21 Go résidents au test isolé à -c 32768 (free après mesures) ;
 #   compter ~24 Go à 131072 (poids 15,9 + drafter 3,0 + KV en q8_0 sur V, KV
 #   réduit par le GQA 2 têtes et la SWA).
+# --bench-agentic du 16/09/2026 (pi 0.84.3, strix-0007bc6, 3 passes) : 16/16,
+#   froid compris. Médianes : froid 11,2 s (1,6k tokens, 259 t/s) ; simple
+#   2,5 s ; outils 10,9 s (344 tokens, 38,1 t/s) ; edit 10,8 s (40,8 t/s) ;
+#   création 25,9 s (986 tokens, 39,8 t/s) ; bug sans toucher au test 37,5 s
+#   (1050 tokens, 33,8 t/s). Cache servi 97 à 99 % à chaque tour (attention
+#   pure, cf. --bench-cache), décode en boucle 34 à 41 t/s = celui du --bench
+#   (38,0). Le raisonnement en strength low reste court et ne fait échouer
+#   aucun scénario : réglage confirmé.
 llama_model muse-glimmer-30b-dflash "
 model                = $MUSE_30B_PATH
 ctx-size             = 131072
