@@ -717,34 +717,52 @@ download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-GGUF" \
 download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
   LFM25_8B_DSPARK_PATH="LFM2.5-8B-A1B-DSpark-Q8_0.gguf"
 
-# LFM2.5-8B-A1B — déclaré le 16/09/2026, AUCUNE MESURE ENCORE : les réglages
-#   ci-dessous sont des valeurs de départ, à remplacer par les chiffres des
-#   étapes 2 à 7 de .claude/skills/ajout-modele/SKILL.md.
+# LFM2.5-8B-A1B nothink — déclaré le 16/09/2026 ; test isolé fait (étape 2,
+#   ci-dessous), étapes 3 à 7 de .claude/skills/ajout-modele/SKILL.md à suivre.
 # Sampling : reco officielle de la model card 8B-A1B (temp 0.2, top-k 80,
 #   repeat-penalty 1.05), différente de celle du 2.6B (0.1 / 50 / 1.1) : la
 #   fiche du 8B ne donne ni top-p ni min-p, min-p 0 explicite.
-# Thinking : le template ChatML porte des balises <think> (modèle
-#   « reasoning-tuned » selon la fiche) sans kwarg documenté pour le couper ;
-#   à vérifier sur la première réponse du service (reasoning_content), et
-#   poser reasoning = off si le canal reste ouvert et coûte des tokens.
+# Thinking COUPÉ (suffixe -nothink) : modèle « reasoning-tuned », il ouvre
+#   <think> de lui-même et le template n'a aucun interrupteur (ni
+#   enable_thinking ni reasoning_effort ; seul preserve_thinking, qui ne
+#   concerne que la relecture de l'historique). Test isolé du 16/09/2026 : en
+#   1200 tokens il n'avait pas fini de raisonner, contenu VIDE sur les deux
+#   prompts. `reasoning-budget 0` seul est inerte sur le fork : le mécanisme
+#   n'y vit que derrière reasoning-budget-enable (common/sampling.cpp:313).
+#   Avec reasoning-budget-enable + budget 0 la balise se ferme d'office et la
+#   réponse part au premier token (contenu ligne 2 du gen). ⚠ Clé propre au
+#   fork (FORK_ONLY_KEYS, cf. deepseek-v4-flash) : le parc était déjà
+#   verrouillé sur le fork par deepseek-v4-flash et qwen3.8-flash-next.
+#   Sur le paquet Arch de secours, l'équivalent serait reasoning-budget 0 seul
+#   (mainline) : non mesuré.
 # ctx 131072 : fenêtre native 128K, un seul slot en dispose en entier.
 # cache-type-k/v f16 : arch hybride conv + GQA, KV minuscule, chemin quantifié
 #   non validé sur lfm2 (même prudence que le 2.6B).
 # cache-reuse 0 : état récurrent (conv) et contrainte des sections spéculatives.
 # Pas de swa-full ni ctx-checkpoints : pas une arch hybride SWA Qwen.
-# Spéculation : DSpark n-max 3 en valeur de départ (optimum mesuré du 2.6B le
-#   15/09/2026 : 3 = 9 au bruit près avec une acceptance bien plus haute, et
-#   batch de vérification de 4 colonnes). À trancher par tools/spec-isolate.sh
-#   (n-max 3 / 5 / 9, contre spec-type none) puis --spec-ab tel que servi.
+# Spéculation DSpark, test isolé du 16/09/2026 (fork strix-0007bc6, Vulkan0,
+#   hors service, np 1, 2 passes, 1200 tokens, médiane hors 1re passe,
+#   spec-test.txt / spec-refactor.txt, thinking coupé) :
+#     sans spéculation      102,2 / 102,9 t/s
+#     draft-dspark n-max 3  118,0 / 133,4  (acceptance 0,66 / 0,82)
+#     draft-dspark n-max 5  114,0 / 128,4  (0,60 / 0,72)
+#     draft-dspark n-max 9   82,0 / 117,3  (0,36 / 0,56)
+#   RETENU n-max 3 : x1,16 en générique, x1,30 en refactor, batch de
+#   vérification de 4 colonnes. Gain plus faible que sur le 2.6B (x1,76) :
+#   1,5B actifs sur 9 Go de poids, le décode est déjà limité par la lecture
+#   des experts routés, et le batch en lit davantage. Le même test AVEC
+#   raisonnement (avant le budget 0) donnait 100,9 / 109,6 en n-max 3 contre
+#   107,3 / 100,3 sans spéculation, acceptance 0,53 / 0,62 : le drafter
+#   devine bien mieux la réponse que la pensée.
 #   n-gram AJOUTÉ d'emblée (ngram-map-k size-m 7, min-hits 2, contrairement au
 #   2.6B) : le 8B vise aussi l'édition de code, où le prompt se ré-émet. Sur un
 #   MoE la pente sous la marche des 8 colonnes est raide (cf. bloc 27B), donc
-#   gain attendu faible : --spec-ngram-tune décide, et le bloc n-gram se
-#   retire si aucun size-m ne bat la référence.
+#   gain attendu faible : --spec-ngram-tune décide (étape 5), et le bloc
+#   n-gram se retire si aucun size-m ne bat la référence.
 # parallel 1 : np 2 x (3 + 1) = 8 colonnes, pile au seuil, mais le 2.6B y a
 #   mesuré ~x1,1 agrégé pour une latence doublée : pas mesuré ici, 1 gardé.
 # Mémoire : ~16 Go chargé (poids 9 + drafter 0,36 + KV du ctx 131072).
-llama_model lfm2.5-8b-a1b "
+llama_model lfm2.5-8b-a1b-nothink "
 model            = $LFM25_8B_PATH
 ctx-size         = 131072
 cache-ram        = 2048
@@ -760,6 +778,8 @@ spec-draft-model = $LFM25_8B_DSPARK_PATH
 spec-draft-n-max = 3
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
+reasoning-budget-enable = true
+reasoning-budget = 0
 jinja            = true
 parallel         = 1"
 
@@ -1187,9 +1207,8 @@ download_hf muse-glimmer-30b "unsloth/Muse-Glimmer-30B-GGUF" \
 download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
   MUSE_30B_DFLASH_PATH="Muse-Glimmer-30B-DFlash2-Q8_0.gguf"
 
-# Muse-Glimmer-30B DFlash — déclaré le 16/09/2026, AUCUNE MESURE ENCORE : les
-#   réglages ci-dessous sont des valeurs de départ, à remplacer par les
-#   chiffres des étapes 2 à 7 de .claude/skills/ajout-modele/SKILL.md.
+# Muse-Glimmer-30B DFlash — déclaré le 16/09/2026 ; test isolé fait (étape 2,
+#   ci-dessous), étapes 3 à 7 de .claude/skills/ajout-modele/SKILL.md à suivre.
 #   Concurrent direct de qwen3.8-27b-dflash-nothink (même classe dense, même
 #   spec-type) : c'est contre lui que se lit le résultat.
 # Pas de suffixe -nothink : le canal de réflexion de ce modèle NE SE FERME PAS
@@ -1200,6 +1219,11 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 #   (clé mainline, pas une clé du fork ; les -soft-ratio & co du fork restent
 #   possibles plus tard, cf. deepseek-v4-flash). À re-évaluer au bench-agentic
 #   (étape 7) : si low fait échouer des scénarios, remonter à medium.
+#   reasoning-budget-enable = true : sur le fork, reasoning-budget n'agit que
+#   derrière cette clé (common/sampling.cpp:313, vérifié le 16/09/2026 sur le
+#   LFM 8B) ; sans elle le 4096 est décoratif. Clé propre au fork (cf.
+#   deepseek-v4-flash), parc déjà verrouillé sur le fork. Au test isolé en
+#   strength low le raisonnement tient en 15 à 40 lignes, la réponse suit.
 # Sampling : reco officielle Meta et unsloth (temp 1.0, top-p 0.95, top-k 64),
 #   min-p 0 explicite.
 # Tokens de fin : <|end_of_text|> et <|eot|> sont les eos du GGUF ; <|eom|>
@@ -1217,18 +1241,29 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 #   sections Qwen (où le journal dit « swa_full is not supported ») elle
 #   devrait être effective ici : à lire dans le journal au premier démarrage,
 #   et --bench-cache tranche ce que vaut la restauration (étape 6).
-# Spéculation : ngram-map-k + draft-dflash, n-max 7 en valeur de départ. La
-#   carte z-lab dit 15, mais un batch de vérification de 16 colonnes quitte le
-#   noyau mat-vec de ggml-vulkan (marche x2 entre 8 et 9, cf. bloc 27B) et le
-#   fork découpe en 4/2/1 : 7 donne un batch de 8 = 4+4, le meilleur cas. À
-#   trancher par tools/spec-isolate.sh (n-max 7 contre 15 et 3, et spec-type
-#   none), puis --spec-ab tel que servi (--spec-tune refuse draft-dflash).
+# Spéculation DFlash 2, test isolé du 16/09/2026 (fork strix-0007bc6, Vulkan0,
+#   hors service, np 1, 2 passes, 1200 tokens, -c 32768, médiane hors 1re
+#   passe, spec-test.txt / spec-refactor.txt, strength low) :
+#     sans spéculation        14,0 / 13,9 t/s   (prefill froid 275 t/s)
+#     draft-dflash n-max 7    43,0 / 41,4  (acceptance 0,74 / 0,72, 6,0 à 6,2
+#                                           tokens acceptés par étape)
+#     draft-dflash n-max 15   20,9 / 17,5  (0,55 / 0,46)
+#     draft-dflash n-max 3    37,8 / 34,6  (0,85 / 0,80)
+#   RETENU n-max 7 : x3,1 sur le décode nu. La carte z-lab dit 15, mais un
+#   batch de vérification de 16 colonnes quitte le noyau mat-vec de
+#   ggml-vulkan (marche x2 entre 8 et 9, cf. bloc 27B) : mesuré, le 15 perd
+#   moitié du gain. 7 donne un batch de 8 = 4+4, pas de découpage 4/2/1 du
+#   fork. Le décode nu à 14 t/s est celui d'un dense de 16 Go sur la bande
+#   passante de bigchuck (le 27B UD-Q4_K_XL de 17 Go est du même ordre) : ce
+#   modèle ne vit que par son drafter. --spec-tune refuse draft-dflash : tout
+#   re-réglage passe par --spec-ab.
 #   size-m 7 / min-hits 2 de départ ; dense à pente plate sous la marche comme
 #   le 27B (où 47 l'emporte) : --spec-ngram-tune décide (étape 5).
 # parallel 1 : batch déjà à 8 colonnes avec n-max 7 (np 2 en ferait 16), et
 #   régime agentic sérialisé.
-# Mémoire : ~22 Go chargé (poids 15,9 + drafter 3,0 + KV du ctx 131072 en
-#   q8_0 sur V ; KV réduit par le GQA 2 têtes et la SWA).
+# Mémoire : 21 Go résidents au test isolé à -c 32768 (free après mesures) ;
+#   compter ~24 Go à 131072 (poids 15,9 + drafter 3,0 + KV en q8_0 sur V, KV
+#   réduit par le GQA 2 têtes et la SWA).
 llama_model muse-glimmer-30b-dflash "
 model                = $MUSE_30B_PATH
 ctx-size             = 131072
@@ -1238,6 +1273,7 @@ top-k                = 64
 top-p                = 0.95
 min-p                = 0.0
 chat-template-kwargs = {\"reasoning_strength\":\"low\"}
+reasoning-budget-enable = true
 reasoning-budget     = 4096
 cache-type-v         = q8_0
 cache-reuse          = 0
