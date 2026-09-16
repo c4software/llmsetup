@@ -439,16 +439,27 @@ _fork_confirm() {
 }
 
 # Configuration cmake + construction des quatre cibles.
-# Vulkan uniquement : c'est le backend de tous les modèles retenus
-# (bench-devices.conf) ; ROCm reste servi par le paquet Arch si besoin.
+# Vulkan toujours, plus ROCm (GGML_HIP, gfx1151) si /opt/rocm est présent :
+# --bench-devices doit pouvoir comparer Vulkan0 et ROCm0 sur le MÊME moteur,
+# les modèles MTP / DFlash n'existant que sur le fork.
 _fork_build() {
   if _fork_skip_build; then
     warn "FORK_SKIP_BUILD=1 — construction sautée (mode test uniquement)."
     return 0
   fi
-  info "Configuration cmake (Vulkan, Release, CURL)..."
-  cmake -B "$FORK_DIR/build" -S "$FORK_DIR" \
-    -DGGML_VULKAN=ON -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=ON \
+  local rocm="${ROCM_PATH:-/opt/rocm}"
+  local -a hip_opts=()
+  local -a hip_env=()
+  if [[ -x "$rocm/lib/llvm/bin/clang" ]]; then
+    hip_opts=(-DGGML_HIP=ON -DGPU_TARGETS="${FORK_GPU_TARGETS:-gfx1151}")
+    hip_env=(PATH="$rocm/bin:$PATH" HIPCXX="$rocm/lib/llvm/bin/clang" HIP_PATH="$rocm")
+    info "Configuration cmake (Vulkan + ROCm, Release, CURL)..."
+  else
+    warn "ROCm absent ($rocm) : construction Vulkan seule, pas de device ROCm0."
+    info "Configuration cmake (Vulkan, Release, CURL)..."
+  fi
+  env "${hip_env[@]}" cmake -B "$FORK_DIR/build" -S "$FORK_DIR" \
+    -DGGML_VULKAN=ON "${hip_opts[@]}" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=ON \
     || error "cmake -B en échec"
 
   # nproc vient de coreutils, mais un -j vide vaut « parallélisme illimité » :
@@ -462,7 +473,7 @@ _fork_build() {
   # laisser de lien neuf vers un binaire absent. Les liens déjà en place, eux,
   # pointent vers le build précédent que cmake vient peut-être d'écraser à
   # moitié — d'où le rappel de vérification.
-  cmake --build "$FORK_DIR/build" --config Release -j"$jobs" \
+  env "${hip_env[@]}" cmake --build "$FORK_DIR/build" --config Release -j"$jobs" \
     --target "${FORK_BINS[@]}" \
     || {
       warn "Les liens de $FORK_BIN_DIR pointent vers ce build à moitié refait :"
