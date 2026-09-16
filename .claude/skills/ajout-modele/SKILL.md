@@ -211,6 +211,29 @@ le `--spec-type` attendu dans `status.args`, et un premier
 `./setup-llm.sh --spec-test <modèle> 2` affiche une acceptance (pas
 « n/a ») : le drafter (tête MTP, sidecar ou GGUF externe) est bien chargé.
 
+## Enchaînement automatique des étapes 3 à 7
+
+Le modèle est déclaré et servi (fin de l'étape 2) : sur la machine du service,
+
+```bash
+tools/qualif-modele.sh <section>
+```
+
+joue dans l'ordre l'étape 3 (`--bench-devices`), l'étape 5 (`--spec-ab` sur
+`spec-refactor.txt` puis sur `spec-test.txt`), l'étape 6 (`--bench`,
+`--bench-cache`, `--bench-load`) et l'étape 7 (`--bench-agentic 3`), une à la
+fois (un seul GPU), lit le drafter et le `size-m` réellement servis dans
+`status.args` de `/v1/models`, et écrit `logs/qualif/<tag>/resume.md` : les
+sorties brutes par étape plus le tableau de l'étape 6 déjà rempli. Options :
+`--passes`, `--size-m`, `--devices`, `--sans-agentic`, `--sans-cache`,
+`--sans-load`, `--tag`. Une étape en échec n'arrête pas les suivantes.
+
+Ce qu'il ne fait pas : l'étape 4 (`--spec-tune`) reste manuelle, elle n'a de
+sens que pour `draft-mtp` et elle écrit dans `spec-nmax.conf` ; le test isolé
+(`tools/spec-isolate.sh`) se joue avant la déclaration ; et rien n'est écrit
+dans `lib/models.sh`, le README ou `docs/HISTORIQUE.md` : les chiffres du
+récapitulatif restent à reporter à la main.
+
 ## 3. Device : ROCm0 ou Vulkan0 (--bench-devices)
 
 Avant toute mesure de spéculation : les seuils de noyau ggml (marches de
@@ -327,6 +350,13 @@ pour localiser la marche de noyau ggml et sortir deux candidats (sûr sous
 la marche, large qui amortit le coût fixe), puis arbitrage des candidats
 sur mesure réelle avec `prompts/spec-refactor.txt` (le seul prompt où les
 n-grams ont des hits). Gagnant écrit dans `spec-ngram.conf`.
+
+Sur un modèle servi par un **drafter externe** (`ngram-map-k,draft-dflash`,
+`…,draft-dspark`), `tools/qualif-modele.sh` ne passe pas par cette commande
+mais par `--spec-ab` : l'arbitrage de `--spec-ngram-tune` se fait contre une
+référence « sans spéculation » (`spec-type none`) qui ne dit rien ici, la
+bonne référence étant le drafter seul, réellement servi ; et `--spec-ab`
+n'écrit dans aucune conf, ce qui laisse le choix au commentaire du bloc.
 
 Lire la courbe : sur Vulkan, denses comme MoE ont une marche x2 entre
 batch 8 et 9 (`mul_mat_vec_max_cols = 8`), mesurée le 21/08/2026 sur le 27B

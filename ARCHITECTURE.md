@@ -369,6 +369,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
+| `qualif/<tag>/` | `tools/qualif-modele.sh` | `01-devices.log` … `07-agentic.log` (sortie brute de chaque étape) et `resume.md` (en-tête, tableau de perfs, table des étapes) |
 | `spec-isolate/<tag>/mesures.tsv` | `tools/spec-isolate.sh` | `date tag prompt np mesure pp gen n draft_n accepted acceptance sain agrege` (`agrege` vide sur les passes séquentielles, débit agrégé de la salve sur les lignes np > 1 ; à côté de `serveur.log` et des `gen-*.txt` du même dossier) |
 
 `device` est l'état réel du serveur (`/v1/models`, flag `--device`) partout
@@ -397,6 +398,22 @@ GPU. Variables : `PORT`, `NP` (ajoute `-np` et une salve simultanée),
 `PASSES`, `PROMPTS`, `MAX_TOKENS`, `OUT`. Sorties dans
 `logs/spec-isolate/<tag>/`. Le verdict se confirme ensuite sur le service par
 `--spec-ab` / `--spec-test`.
+
+`qualif-modele.sh <section> [options]` : enchaîne, sur un modèle DÉJÀ déclaré
+dans `lib/models.sh` et servi par le routeur, les étapes 3, 5, 6 et 7 de la
+skill ajout-modele : `--bench-devices`, `--spec-ab` (sur `spec-refactor.txt`
+puis `spec-test.txt`), `--bench`, `--bench-cache`, `--bench-load` et
+`--bench-agentic`, toutes en séquence (un seul GPU) et toutes avec leur entrée
+sur `/dev/null`. Les variantes de `--spec-ab` sont dérivées du drafter et du
+`size-m` RÉELLEMENT servis, lus dans `status.args` de `/v1/models`. Mêmes
+refus de démarrage que `spec-isolate.sh` (mesure du dépôt en cours,
+`spec-isolate.sh`, conteneur `bench-agentic-*`). Sorties dans
+`logs/qualif/<tag>/` : un journal par étape et `resume.md`, le tableau de
+l'étape 6 rempli par parsing des bilans (codes ANSI filtrés, `n/c` quand un
+motif manque). Une étape en échec n'arrête pas les suivantes ; code de retour
+non nul si l'une a échoué. N'écrit ni `lib/models.sh` ni les `.conf` (sauf
+`bench-devices.conf`, écrit par `--bench-devices` lui-même) ; ne joue ni le
+test isolé ni `--spec-tune`.
 
 `bench-depth.sh` : même principe avec `llama-bench -d` (profondeur de KV
 avant la mesure) : prefill et décode à 0 / 16k / 32k (64k sur demande), KV
