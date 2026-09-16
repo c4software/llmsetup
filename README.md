@@ -213,7 +213,7 @@ noyau ggml, puis arbitrage réel des candidats sur `prompts/spec-refactor.txt`,
 écrit dans `spec-ngram.conf`). Formules, garde-fous et limites : ARCHITECTURE.md.
 Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 
-## Parc au 15/09/2026
+## Parc au 16/09/2026
 
 Une ligne par section servie du `models.ini`. Campagne du 15/09/2026 : tout
 modèle qui dispose d'un drafter le sert à un slot (DSpark sur DeepSeek et
@@ -234,7 +234,9 @@ du 9b a changé de modèle le soir du 15/09/2026 : `qwen3.5-9b` est remplacée p
 `ornith-1.5-9b-mtp-nothink` (Ornith-1.5-9B Q8_0 avec tête MTP tierce, +11 % de
 prefill et +20 % de décode contre elle, et très au-dessus sur les benchmarks
 agentic de l'éditeur), cf. `docs/HISTORIQUE.md`. La section
-thinking du 27B a été retirée le 13/09/2026 (cf. `docs/HISTORIQUE.md`).
+thinking du 27B a été retirée le 13/09/2026, `laguna-s-2.1` le 15/09 et
+`gpt-oss` le 16/09/2026, ces deux géants n'étant pas utiles dans l'usage réel
+(cf. `docs/HISTORIQUE.md`).
 Réglages exacts dans `lib/models.sh` ; toutes les mesures sont celles du fork
 strix-0007bc6 (Vulkan0, `--bench` 3 passes, les 12, 13 et 15/09/2026, prompt
 générique à long contexte). Acceptance vide = pas de spéculation. La dernière
@@ -251,7 +253,6 @@ pas une comparaison à la décimale.
 | qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |
 | qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | Vulkan0 | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 727 | 52,2 | 0,515 | +19 % (paquet en n-gram seul) |
-| gpt-oss | UD-Q4_K_XL, 59 Go | Vulkan0 | spec-type `ngram-map-k`, size-m 7, min-hits 2, parallel 1 ; DFlash z-lab converti, refusé par le fork 0007bc6 (biais d'attention, [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61)) ; patch mesuré le 15/09/2026 avec ngram 7 + DFlash 3 : 54,1 / 59,6 t/s contre 51,2 / 51,0 en isolé, [PR #62](https://github.com/halo-box/strix-llama.cpp/pull/62) en attente | 599 | 52,9 | 0,57 | +2 % |
 | deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 (parallel 2 essayé et retiré le 15/09 : x1,16 de tâches au bench agentic à 2 boucles, latence doublée) | 196 | 28,8 | 0,69 | +134 % (paquet en n-gram seul, 19,9 sur le fork en n-gram seul) |
 
 ![Prefill paquet contre fork](docs/graphs/prefill.svg)
@@ -271,14 +272,15 @@ le MTP n'existe pas sur le paquet +93 %, le 27B via DFlash 2), et
 égales). Écartés après mesure : le speculative prefill (lossy, cache de prompt à
 0 %), le draft adaptatif (2 % sous le draft fixe), le DFlash de Laguna S 2.1
 (drafter refusé ; le modèle lui-même a quitté le parc le 15/09/2026, non utile
-dans l'usage réel, cf. `docs/HISTORIQUE.md`) et, en attente, celui de gpt-oss
-(drafter z-lab converti sans erreur mais refusé au chargement, ses biais
-d'attention n'étant pas lus par le loader DFlash :
+dans l'usage réel, cf. `docs/HISTORIQUE.md`) et celui de gpt-oss (drafter
+z-lab converti sans erreur mais refusé au chargement, ses biais d'attention
+n'étant pas lus par le loader DFlash :
 [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61) ; le patch
 de 25 lignes, mesuré le 15/09/2026 sur un build à part, rend +6 % et +17 % en
-ngram 7 + DFlash 3 sans régression sur les drafters sans biais, et attend en
-[PR #62](https://github.com/halo-box/strix-llama.cpp/pull/62) ; la section
-passera au drafter quand le fork ré-épinglé le portera).
+ngram 7 + DFlash 3 sans régression sur les drafters sans biais, et reste en
+[PR #62](https://github.com/halo-box/strix-llama.cpp/pull/62) ; le modèle
+lui-même a quitté le parc le 16/09/2026, non utile dans l'usage réel, la PR
+vaut pour les autres drafters à biais).
 Contrepartie, le découpage des mat-vec batchés (-7,4 % au batch de 7),
 contournée par modèle et signalée en amont :
 [issue #50](https://github.com/halo-box/strix-llama.cpp/issues/50).

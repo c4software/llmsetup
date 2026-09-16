@@ -4,7 +4,7 @@ Archive des campagnes de mesure et des essais du dépôt, sortie du README le
 13/09/2026 pour n'y garder que l'état courant. Le contenu est celui des
 sections correspondantes du README, repris tel quel : chiffres, protocoles et
 récits datés. L'état courant du parc (réglages retenus et perfs sur le fork)
-reste dans `README.md`, section « Parc au 15/09/2026 ».
+reste dans `README.md`, section « Parc au 16/09/2026 ».
 
 Deux séries de mesures cohabitent ici et ne se comparent jamais entre elles :
 le paquet Arch (`bNNNNN`) et le fork strix-llama.cpp (`strix-<commit>`).
@@ -64,7 +64,8 @@ famille 27B ; `_preload_sanity` avertit si elles sont préchargées ensemble.
 Toujours le 15/09/2026, la section `laguna-s-2.1` est retirée, jugée non utile
 dans l'usage réel (cf. « Laguna-S-2.1 retiré (15/09/2026) ») ; les tables
 ci-dessous gardent sa ligne et ses mesures, son dossier de GGUF devient
-orphelin. Dans la foulée, la section de base d'Ornith est renommée
+orphelin ; le 16/09/2026, même sort pour `gpt-oss` (cf. « gpt-oss retiré
+(16/09/2026) »), les tables gardent aussi sa ligne. Dans la foulée, la section de base d'Ornith est renommée
 `ornith-1.5-35b-a3b-parallel` : le nom dit ce qu'elle sert, comme `-mtp` et `-dflash-nothink` ailleurs, puisque
 c'est la variante parallel 4 sans spéculation réservée à la concurrence. Seul
 le nom de SECTION change : le dossier de GGUF reste `ornith-1.5-35b-a3b/` (donc
@@ -634,6 +635,9 @@ acceptance 0,49) et 51,3 t/s (spec-refactor, acceptance 0,71). Pour situer
 l'enjeu, z-lab annonce en amont une acceptance de 3,7 à 5,4 tokens à block 10
 et 1,3x à 1,9x de bout en bout sous SGLang et vLLM sur H200.
 
+Suite : le modèle a quitté le parc le 16/09/2026 (cf. « gpt-oss retiré
+(16/09/2026) »), la PR #62 reste ouverte pour les autres drafters à biais.
+
 ## Qwen3.8-27B thinking : section retirée le 13/09/2026
 
 Le 27B avait deux sections sur le même GGUF : la thinking (`qwen3.8-27b`,
@@ -1028,6 +1032,139 @@ spec-type        = ngram-map-k
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
 jinja            = true
+parallel         = 1
+```
+
+## gpt-oss retiré (16/09/2026)
+
+Section `gpt-oss` (openai gpt-oss-120b, MoE 128 experts, shards UD-Q4_K_XL de
+59 Go) retirée du parc le 16/09/2026. Raison, décidée par l'utilisateur : le
+modèle ne sert pas dans l'usage réel. Ni régression ni mesure douteuse derrière
+ce retrait, ses chiffres du 13/09/2026 restaient bons (599 t/s de prefill, 52,9
+de décode, acceptance 0,57, cache 99 %) ; c'est, après Laguna la veille, le
+second géant qu'on ne charge jamais, pour 59 Go de disque et 91 s de
+chargement. Les tables de ce document gardent ses lignes, comme `logs/`.
+
+Le GGUF (2 shards) de `~/models/gpt-oss/UD-Q4_K_XL/` n'est plus déclaré : il
+devient orphelin de `KNOWN_FILES`, rien n'a été supprimé sur la machine,
+`./setup-llm.sh --cleanup` le purgera. Restent aussi dans `~/models/gpt-oss/`
+les sous-dossiers `dflash-src/` (source HF du drafter, 1,5 Go) et
+`target-meta/` (27 Mo), jamais déclarés, que `--cleanup` ne touche pas (il ne
+balaie que les `*.gguf` et les dossiers vides) : à retirer à la main. Le GGUF
+du drafter converti avait déjà été purgé par le `--cleanup` du 15/09 au soir.
+Le venv `~/llm/venv-convert` et le build `~/llm/strix-llama.cpp/build-bias/`
+sont hors de `~/models` et gardés pour la PR #62. Pour ravoir la section :
+remettre la déclaration de téléchargement, le commentaire et le corps ci-dessous
+dans `lib/models.sh`, sous la bannière `; --- Géants ---` (toujours là pour
+DeepSeek), avant DeepSeek. Depuis ce retrait, plus aucune section n'hérite du
+`cache-reuse = 4096` global : gpt-oss était la seule sans état récurrent où il
+servait.
+
+Le commentaire du bloc retiré, tel quel (connaissance à conserver : choix du
+device contre ROCm0, la courbe de batch la plus raide du parc et pourtant
++16 % au n-gram, conversion du drafter DFlash z-lab et refus par le fork,
+comportement de `--cleanup` sur un modèle en shards), puis le corps de la
+section tel qu'il était émis dans `models.ini`.
+
+```
+GPT-OSS 120B — shards UD-Q4_K_XL
+download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
+  GPTOSS_PATH="UD-Q4_K_XL/gpt-oss-120b-UD-Q4_K_XL-00001-of-00002.gguf"
+
+GPT-OSS 120B — shards UD-Q4_K_XL (59 Go), MoE 128 experts, attention
+  classique + couches à fenêtre glissante (SWA), pas d'état récurrent.
+Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433, 3 passes) :
+  413 pp / 49,9 tg contre ROCm0 219 / 31,5 (tour simulé 65 s contre 105) —
+  les deux passent le contrôle de justesse, ROCm0 est juste lent ici. La
+  courbe ROCm0 « bien meilleure » du 20/08 (reps=2) ne voulait rien dire.
+  --bench (bench-task) : 333 pp / 51,9 tg. --bench-load : 91 s (59 Go depuis
+  le disque), TTFT à chaud 86 ms. --bench-cache : tour suivant 99 %, requête
+  identique 100 % — comme DeepSeek : sans état récurrent, le cache de prompt
+  sert tout (la SWA n'y change rien). Un premier run donnait 63 % : requête
+  « froide » déjà en cache après le --bench, outil corrigé depuis.
+Courbe t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 17 ms, 8 = 57
+  (x3,4), 16 = 130, 32 = 168, 48 = 246 ms (x14,7) — la plus raide de toutes.
+Spéculation n-gram : ngram-map-k size_m 7, RETENU par --spec-ngram-tune
+  21/08/2026 (Vulkan0, spec-refactor.txt, 4 passes) : sans spéculation
+  51,7 t/s ; size_m 7 = 59,8 t/s (+16 %) ; size_m 47 = 52,7 t/s (+2 %). La
+  courbe la plus raide de toutes (x3,4 au batch 8) n'a pas empêché le petit
+  draft de gagner : pas d'état récurrent, donc pas de surcoût fixe par pas
+  (contraste avec Qwen3-Coder-Next), et les misses sont gratuits. Le grand
+  draft, lui, paie son batch x14,7 à chaque hit partiel.
+Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
+  599 t/s, décode 52,9 t/s, acceptance 0,57 : prefill +80 %, décode neutre
+  (+2 %) contre le paquet (333 / 51,9, b10548).
+Drafter DFlash z-lab : converti, refusé par le fork (15/09/2026).
+  z-lab/gpt-oss-120b-DFlash (safetensors, 1,57 Go) est le drafter officiel de
+  gpt-oss-120b : architectures ["DFlashDraftModel"], model_type qwen3,
+  8 couches, hidden 2880, 64 têtes Q / 8 KV, head_dim 64, block_size 10,
+  target_layer_ids [1, 9, 17, 25, 33], DFlash 1 (ni conv ni selector) et
+  surtout attention_bias = true. Il se convertit sans avertissement avec le
+  convert_hf_to_gguf.py DU FORK (classe DFlashModel, conversion/qwen.py
+  l. 641), à condition de lui passer les métadonnées HF de la cible
+  (openai/gpt-oss-120b, tokenizer et config sans poids, 27 Mo) :
+    cd ~/llm/strix-llama.cpp && ~/llm/venv-convert/bin/python \
+      convert_hf_to_gguf.py ~/models/gpt-oss/dflash-src \
+      --target-model-dir ~/models/gpt-oss/target-meta \
+      --outfile ~/models/gpt-oss/gpt-oss-120b-dflash-Q8_0.gguf --outtype q8_0
+  (venv ~/llm/venv-convert : torch 2.14.0+cpu, transformers 5.17.0.)
+  GGUF obtenu : 847 145 664 octets, 123 tenseurs, dflash.block_size 10,
+  dflash.target_layers [2, 10, 18, 26, 34], fc.weight [14400, 2880], sans
+  token_embd ni output (empruntés à la cible, donc même device qu'elle).
+  Chargement REFUSÉ par llama-server (fork strix-0007bc6, build 10893) :
+  "done_getting_tensors: wrong number of tensors; expected 123, got 91" puis
+  "failed to load draft model". 123 - 91 = 32 = 8 couches x 4 biais
+  d'attention (blk.N.attn_q.bias [4096], attn_k.bias [512], attn_v.bias
+  [512], attn_output.bias [2880]), tous non nuls (absmax 4,16 sur
+  attn_output, 1,46 sur k, 1,22 sur q) : les jeter à la conversion
+  dénaturerait le drafter, ce n'est pas un contournement.
+  Cause : src/models/dflash.cpp, dorsale Qwen3 (l. ~211-232 au commit
+  0007bc6) ne crée AUCUN tenseur de biais, et le graphe n'en applique aucun
+  (projections build_lora_mm nues l. ~708-710, build_attn(..., layer.wo,
+  NULL, ...) l. ~727-728, même forme côté encodeur l. ~625-629). Le même
+  loader accepte les DFlash sans biais déjà servis ici (DFlash 2 du
+  qwen3.8-27b, DFlash de Qwen3-Coder-Next, DSpark de Liquid et de DeepSeek
+  V4 Flash) : c'est un manque, pas un refus délibéré.
+  Décision : ne pas patcher le moteur. Signalé en amont le 15/09/2026,
+  [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61)
+  (reproduction, 32 tenseurs, trois points de correctif estimés à 15-20
+  lignes). Si elle est corrigée : re-télécharger le drafter, reconvertir,
+  essayer spec-type draft-dflash à spec-draft-n-max 9 (= block_size - 1) et
+  le comparer au n-gram servi aujourd'hui. Référence à battre, re-mesurée le
+  même jour par tools/spec-isolate.sh : 51,0 t/s (spec-test, acceptance
+  0,49) et 51,3 t/s (spec-refactor, acceptance 0,71). Chiffres amont z-lab
+  pour situer l'enjeu : acceptance 3,7 à 5,4 tokens à block 10, 1,3x à 1,9x
+  sous SGLang/vLLM sur H200.
+  Fichiers laissés sur bigchuck, aucun déclaré par un download_hf :
+    ~/models/gpt-oss/gpt-oss-120b-dflash-Q8_0.gguf (847 Mo)
+    ~/models/gpt-oss/dflash-src/    (source HF du drafter, 1,5 Go)
+    ~/models/gpt-oss/target-meta/   (métadonnées HF de la cible, 27 Mo)
+    ~/llm/venv-convert/             (venv de conversion, 1,2 Go)
+  Ce que --cleanup en fera (lecture de cmd_cleanup, lib/setup.sh) : le GGUF
+  SERA PURGÉ. Il est à mindepth 2 sous ~/models, sa clé (gpt-oss) est encore
+  connue, mais gpt-oss est déclaré en shards : cmd_cleanup ne protège alors
+  que le DOSSIER DE QUANT (~/models/gpt-oss/UD-Q4_K_XL), pas la racine du
+  dossier de modèle, donc tout .gguf non déclaré posé à côté tombe. Les deux
+  sous-dossiers, eux, SURVIVENT : le balayage des dossiers est en
+  maxdepth 1 (il ne voit que ~/models/gpt-oss) et celui des fichiers ne
+  regarde que les *.gguf ; le find -type d -empty final ne prend que les
+  dossiers vides. ~/llm/venv-convert est hors de ~/models : jamais touché.
+  Donc : reconvertir après un --cleanup coûte la seule conversion, pas les
+  téléchargements.
+```
+
+```ini
+[gpt-oss]
+model            = ~/models/gpt-oss/UD-Q4_K_XL/gpt-oss-120b-UD-Q4_K_XL-00001-of-00002.gguf
+ctx-size         = 131072
+cache-ram        = 8192
+temp             = 1.0
+top-k            = 0
+top-p            = 1.0
+min-p            = 0.0
+spec-type        = ngram-map-k
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
 parallel         = 1
 ```
 

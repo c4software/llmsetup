@@ -47,8 +47,9 @@ DEFAULT_DEVICE="Vulkan0"
 #     en secours sur le paquet Arch : aucune ligne device dans ce fichier au
 #     13/09/2026)
 #   - cache-reuse = 0 : explicite sur toutes les sections à état récurrent (GDN)
-#     ou à attention hybride/MLA ; seul gpt-oss (MoE mais sans état récurrent,
-#     attention + SWA : le cache-reuse sert) hérite encore du 4096 global. Le
+#     ou à attention hybride/MLA ; plus aucune section n'hérite du 4096 global
+#     depuis le retrait de gpt-oss le 16/09/2026 (MoE sans état récurrent,
+#     attention + SWA : le cache-reuse y servait). Le
 #     cache-reuse
 #     est de toute
 #     façon ignoré sur les architectures à état récurrent (GDN), llama-server
@@ -64,7 +65,8 @@ DEFAULT_DEVICE="Vulkan0"
 #     témoin DeepSeek (attention pure) : 99 % et 100 %. C'est le coût de ces
 #     architectures en boucle agentic, à mettre en face de leur débit. Et pour
 #     TOUS, DeepSeek compris : une édition en amont du prompt (2/3 de préfixe
-#     commun) = 0 % réutilisé (4 % sur gpt-oss, le seul au-dessus de zéro),
+#     commun) = 0 % réutilisé (4 % sur gpt-oss, le seul au-dessus de zéro,
+#     retiré depuis),
 #     le cache ne sert que les continuations — ne
 #     jamais réécrire l'historique (compaction, tronquage) si on tient au cache.
 #   - cache-type-v = q8_0 en surcharge locale pour les modèles à usage
@@ -183,6 +185,15 @@ _GROUPE_EN_ATTENTE=""
 #  download_hf. Le dossier entier devient ORPHELIN
 #  → ./setup-llm.sh --cleanup le purgera (non lancé). Commentaire métier et
 #  mesures : docs/HISTORIQUE.md, « Laguna-S-2.1 retiré (15/09/2026) »)
+# (retiré le 16/09/2026 avec la section gpt-oss, jugée non utile dans l'usage
+#  réel : les 2 shards UD-Q4_K_XL (59 Go) de ~/models/gpt-oss/UD-Q4_K_XL/, plus
+#  déclarés par aucun download_hf. Le dossier entier devient ORPHELIN, avec les
+#  sous-dossiers dflash-src/ et target-meta/ du drafter DFlash, jamais déclarés
+#  (le GGUF converti, lui, est déjà tombé au --cleanup du 15/09 au soir)
+#  → ./setup-llm.sh --cleanup purgera les shards (non lancé) ; les sous-dossiers
+#  non vides survivent au balayage, à retirer à la main.
+#  ~/llm/venv-convert (hors ~/models) n'est pas concerné. Commentaire métier,
+#  mesures et corps ini : docs/HISTORIQUE.md, « gpt-oss retiré (16/09/2026) »)
 # (retraits antérieurs : docs/HISTORIQUE.md)
 KNOWN_FILES=()
 
@@ -304,8 +315,7 @@ download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
 #   seul interdit dur avec un drafter (cf. en-tête).
 # Quant Q8_0 : la seule publiée dans le repo MTP, et elle tient largement
 #   (9,79 Go) ; aucune grille de quants à arbitrer ici.
-# ctx-size 131072 : la valeur du reste du parc (27B, coder-next, gpt-oss,
-#   DeepSeek), sous le natif 262144, à parallel 1 le slot unique en dispose en
+# ctx-size 131072 : la valeur du reste du parc (27B, coder-next, DeepSeek), sous le natif 262144, à parallel 1 le slot unique en dispose en
 #   entier. Le qwen3.5-9b remplacé était à 32768 avec n-predict 1024 parce qu'il
 #   ne servait QUE des tâches auxiliaires courtes ; ce modèle-ci fait aussi de
 #   l'édition de code (Terminal-Bench, SWE-bench), la borne dure de génération
@@ -1073,103 +1083,6 @@ ctx-checkpoints      = 128"
 # =============================================================================
 
 groupe "; --- Géants ---"
-
-# GPT-OSS 120B — shards UD-Q4_K_XL
-download_hf_shards gpt-oss "unsloth/gpt-oss-120b-GGUF" \
-  GPTOSS_PATH="UD-Q4_K_XL/gpt-oss-120b-UD-Q4_K_XL-00001-of-00002.gguf"
-
-# GPT-OSS 120B — shards UD-Q4_K_XL (59 Go), MoE 128 experts, attention
-#   classique + couches à fenêtre glissante (SWA), pas d'état récurrent.
-# Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433, 3 passes) :
-#   413 pp / 49,9 tg contre ROCm0 219 / 31,5 (tour simulé 65 s contre 105) —
-#   les deux passent le contrôle de justesse, ROCm0 est juste lent ici. La
-#   courbe ROCm0 « bien meilleure » du 20/08 (reps=2) ne voulait rien dire.
-#   --bench (bench-task) : 333 pp / 51,9 tg. --bench-load : 91 s (59 Go depuis
-#   le disque), TTFT à chaud 86 ms. --bench-cache : tour suivant 99 %, requête
-#   identique 100 % — comme DeepSeek : sans état récurrent, le cache de prompt
-#   sert tout (la SWA n'y change rien). Un premier run donnait 63 % : requête
-#   « froide » déjà en cache après le --bench, outil corrigé depuis.
-# Courbe t_forward(batch) Vulkan0 (21/08, reps=5) : batch 1 = 17 ms, 8 = 57
-#   (x3,4), 16 = 130, 32 = 168, 48 = 246 ms (x14,7) — la plus raide de toutes.
-# Spéculation n-gram : ngram-map-k size_m 7, RETENU par --spec-ngram-tune
-#   21/08/2026 (Vulkan0, spec-refactor.txt, 4 passes) : sans spéculation
-#   51,7 t/s ; size_m 7 = 59,8 t/s (+16 %) ; size_m 47 = 52,7 t/s (+2 %). La
-#   courbe la plus raide de toutes (x3,4 au batch 8) n'a pas empêché le petit
-#   draft de gagner : pas d'état récurrent, donc pas de surcoût fixe par pas
-#   (contraste avec Qwen3-Coder-Next), et les misses sont gratuits. Le grand
-#   draft, lui, paie son batch x14,7 à chaque hit partiel.
-# Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
-#   599 t/s, décode 52,9 t/s, acceptance 0,57 : prefill +80 %, décode neutre
-#   (+2 %) contre le paquet (333 / 51,9, b10548).
-# Drafter DFlash z-lab : converti, refusé par le fork (15/09/2026).
-#   z-lab/gpt-oss-120b-DFlash (safetensors, 1,57 Go) est le drafter officiel de
-#   gpt-oss-120b : architectures ["DFlashDraftModel"], model_type qwen3,
-#   8 couches, hidden 2880, 64 têtes Q / 8 KV, head_dim 64, block_size 10,
-#   target_layer_ids [1, 9, 17, 25, 33], DFlash 1 (ni conv ni selector) et
-#   surtout attention_bias = true. Il se convertit sans avertissement avec le
-#   convert_hf_to_gguf.py DU FORK (classe DFlashModel, conversion/qwen.py
-#   l. 641), à condition de lui passer les métadonnées HF de la cible
-#   (openai/gpt-oss-120b, tokenizer et config sans poids, 27 Mo) :
-#     cd ~/llm/strix-llama.cpp && ~/llm/venv-convert/bin/python \
-#       convert_hf_to_gguf.py ~/models/gpt-oss/dflash-src \
-#       --target-model-dir ~/models/gpt-oss/target-meta \
-#       --outfile ~/models/gpt-oss/gpt-oss-120b-dflash-Q8_0.gguf --outtype q8_0
-#   (venv ~/llm/venv-convert : torch 2.14.0+cpu, transformers 5.17.0.)
-#   GGUF obtenu : 847 145 664 octets, 123 tenseurs, dflash.block_size 10,
-#   dflash.target_layers [2, 10, 18, 26, 34], fc.weight [14400, 2880], sans
-#   token_embd ni output (empruntés à la cible, donc même device qu'elle).
-#   Chargement REFUSÉ par llama-server (fork strix-0007bc6, build 10893) :
-#   "done_getting_tensors: wrong number of tensors; expected 123, got 91" puis
-#   "failed to load draft model". 123 - 91 = 32 = 8 couches x 4 biais
-#   d'attention (blk.N.attn_q.bias [4096], attn_k.bias [512], attn_v.bias
-#   [512], attn_output.bias [2880]), tous non nuls (absmax 4,16 sur
-#   attn_output, 1,46 sur k, 1,22 sur q) : les jeter à la conversion
-#   dénaturerait le drafter, ce n'est pas un contournement.
-#   Cause : src/models/dflash.cpp, dorsale Qwen3 (l. ~211-232 au commit
-#   0007bc6) ne crée AUCUN tenseur de biais, et le graphe n'en applique aucun
-#   (projections build_lora_mm nues l. ~708-710, build_attn(..., layer.wo,
-#   NULL, ...) l. ~727-728, même forme côté encodeur l. ~625-629). Le même
-#   loader accepte les DFlash sans biais déjà servis ici (DFlash 2 du
-#   qwen3.8-27b, DFlash de Qwen3-Coder-Next, DSpark de Liquid et de DeepSeek
-#   V4 Flash) : c'est un manque, pas un refus délibéré.
-#   Décision : ne pas patcher le moteur. Signalé en amont le 15/09/2026,
-#   [issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61)
-#   (reproduction, 32 tenseurs, trois points de correctif estimés à 15-20
-#   lignes). Si elle est corrigée : re-télécharger le drafter, reconvertir,
-#   essayer spec-type draft-dflash à spec-draft-n-max 9 (= block_size - 1) et
-#   le comparer au n-gram servi aujourd'hui. Référence à battre, re-mesurée le
-#   même jour par tools/spec-isolate.sh : 51,0 t/s (spec-test, acceptance
-#   0,49) et 51,3 t/s (spec-refactor, acceptance 0,71). Chiffres amont z-lab
-#   pour situer l'enjeu : acceptance 3,7 à 5,4 tokens à block 10, 1,3x à 1,9x
-#   sous SGLang/vLLM sur H200.
-#   Fichiers laissés sur bigchuck, aucun déclaré par un download_hf :
-#     ~/models/gpt-oss/gpt-oss-120b-dflash-Q8_0.gguf (847 Mo)
-#     ~/models/gpt-oss/dflash-src/    (source HF du drafter, 1,5 Go)
-#     ~/models/gpt-oss/target-meta/   (métadonnées HF de la cible, 27 Mo)
-#     ~/llm/venv-convert/             (venv de conversion, 1,2 Go)
-#   Ce que --cleanup en fera (lecture de cmd_cleanup, lib/setup.sh) : le GGUF
-#   SERA PURGÉ. Il est à mindepth 2 sous ~/models, sa clé (gpt-oss) est encore
-#   connue, mais gpt-oss est déclaré en shards : cmd_cleanup ne protège alors
-#   que le DOSSIER DE QUANT (~/models/gpt-oss/UD-Q4_K_XL), pas la racine du
-#   dossier de modèle, donc tout .gguf non déclaré posé à côté tombe. Les deux
-#   sous-dossiers, eux, SURVIVENT : le balayage des dossiers est en
-#   maxdepth 1 (il ne voit que ~/models/gpt-oss) et celui des fichiers ne
-#   regarde que les *.gguf ; le find -type d -empty final ne prend que les
-#   dossiers vides. ~/llm/venv-convert est hors de ~/models : jamais touché.
-#   Donc : reconvertir après un --cleanup coûte la seule conversion, pas les
-#   téléchargements.
-llama_model gpt-oss "
-model            = $GPTOSS_PATH
-ctx-size         = 131072
-cache-ram        = 8192
-temp             = 1.0
-top-k            = 0
-top-p            = 1.0
-min-p            = 0.0
-spec-type        = ngram-map-k
-spec-ngram-map-k-size-m   = 7
-spec-ngram-map-k-min-hits = 2
-parallel         = 1"
 
 # DeepSeek-V4-Flash-0731 — MoE 284B (13B actifs), 1M ctx natif, shards UD-IQ3_XXS
 # UD-IQ3_XXS (104 Go, reco unsloth pour 128 Go de RAM) : le checkpoint est QAT
