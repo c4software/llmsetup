@@ -688,6 +688,81 @@ spec-draft-n-max = 3
 jinja            = true
 parallel         = 1"
 
+groupe "; --- LFM2.5 8B-A1B (Liquid AI — MoE 8,3B / 1,5B actifs, agentic edge) ---"
+
+# LFM2.5-8B-A1B (Liquid AI, sorti le 24/08/2026) — MoE hybride conv récurrente
+# + GQA (arch lfm2moe, 24 couches : 18 conv double-gate + 6 GQA), 8,3B total /
+# 1,5B actifs, ctx natif 128K, vocab 128 000. Grand frère du 2.6B ci-dessus :
+# Liquid annonce +11,5 points de MMLU-Pro et un net progrès en code, mais le
+# 2.6B reste devant sur le tool use pur (BFCLv4, IFEval) — les deux sections
+# cohabitent tant que la boucle agentic (étape 7) n'a pas tranché.
+# Q8_0 officiel LiquidAI (9 010 195 680 octets) : petit modèle, même logique
+# que le 2.6B, aucune raison de descendre ; pas de quant unsloth UD ni de
+# guide unsloth pour cette variante au 16/09/2026 (le guide LFM2.5 ne couvre
+# que les 1.2B). Support lfm2moe mainline depuis mai 2026, présent dans le
+# fork strix-0007bc6 (vérifié le 16/09/2026, src/llama-arch.cpp:128).
+download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-GGUF" \
+  LFM25_8B_PATH="LFM2.5-8B-A1B-Q8_0.gguf"
+
+# Drafter DSpark officiel Liquid AI (Q8_0, 356 491 104 octets ; F16 664 Mo
+# annoncé +2 % d'acceptance, à essayer par --spec-ab si le Q8_0 déçoit),
+# déclaré dans le MÊME dossier que la cible, comme pour le 2.6B. Sidecar pur
+# (5 couches d'attention, tête de Markov rang 256, tête de confiance, block
+# size 9) : embeddings et tête LM empruntés à la cible, donc même device
+# qu'elle, jamais de spec-draft-device. Le support DSpark pour LFM2 est une
+# PR distincte du DSpark générique (mainline #27383, commit 07822bdd, présent
+# dans le fork strix-0007bc6, vérifié le 16/09/2026). Le GGUF devient
+# nécessaire au démarrage de la section : ne pas le retirer du dossier.
+# n-max : le README du repo dit 10, le fork clampe à block_size = 9.
+download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
+  LFM25_8B_DSPARK_PATH="LFM2.5-8B-A1B-DSpark-Q8_0.gguf"
+
+# LFM2.5-8B-A1B — déclaré le 16/09/2026, AUCUNE MESURE ENCORE : les réglages
+#   ci-dessous sont des valeurs de départ, à remplacer par les chiffres des
+#   étapes 2 à 7 de .claude/skills/ajout-modele/SKILL.md.
+# Sampling : reco officielle de la model card 8B-A1B (temp 0.2, top-k 80,
+#   repeat-penalty 1.05), différente de celle du 2.6B (0.1 / 50 / 1.1) : la
+#   fiche du 8B ne donne ni top-p ni min-p, min-p 0 explicite.
+# Thinking : le template ChatML porte des balises <think> (modèle
+#   « reasoning-tuned » selon la fiche) sans kwarg documenté pour le couper ;
+#   à vérifier sur la première réponse du service (reasoning_content), et
+#   poser reasoning = off si le canal reste ouvert et coûte des tokens.
+# ctx 131072 : fenêtre native 128K, un seul slot en dispose en entier.
+# cache-type-k/v f16 : arch hybride conv + GQA, KV minuscule, chemin quantifié
+#   non validé sur lfm2 (même prudence que le 2.6B).
+# cache-reuse 0 : état récurrent (conv) et contrainte des sections spéculatives.
+# Pas de swa-full ni ctx-checkpoints : pas une arch hybride SWA Qwen.
+# Spéculation : DSpark n-max 3 en valeur de départ (optimum mesuré du 2.6B le
+#   15/09/2026 : 3 = 9 au bruit près avec une acceptance bien plus haute, et
+#   batch de vérification de 4 colonnes). À trancher par tools/spec-isolate.sh
+#   (n-max 3 / 5 / 9, contre spec-type none) puis --spec-ab tel que servi.
+#   n-gram AJOUTÉ d'emblée (ngram-map-k size-m 7, min-hits 2, contrairement au
+#   2.6B) : le 8B vise aussi l'édition de code, où le prompt se ré-émet. Sur un
+#   MoE la pente sous la marche des 8 colonnes est raide (cf. bloc 27B), donc
+#   gain attendu faible : --spec-ngram-tune décide, et le bloc n-gram se
+#   retire si aucun size-m ne bat la référence.
+# parallel 1 : np 2 x (3 + 1) = 8 colonnes, pile au seuil, mais le 2.6B y a
+#   mesuré ~x1,1 agrégé pour une latence doublée : pas mesuré ici, 1 gardé.
+# Mémoire : ~16 Go chargé (poids 9 + drafter 0,36 + KV du ctx 131072).
+llama_model lfm2.5-8b-a1b "
+model            = $LFM25_8B_PATH
+ctx-size         = 131072
+cache-ram        = 2048
+temp             = 0.2
+top-k            = 80
+min-p            = 0.0
+repeat-penalty   = 1.05
+cache-type-k     = f16
+cache-type-v     = f16
+cache-reuse      = 0
+spec-type        = ngram-map-k,draft-dspark
+spec-draft-model = $LFM25_8B_DSPARK_PATH
+spec-draft-n-max = 3
+spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-min-hits = 2
+jinja            = true
+parallel         = 1"
+
 download_hf qwen3-coder-next "unsloth/Qwen3-Coder-Next-GGUF" \
   QWEN3_CODER_NEXT_PATH="Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
 # Drafter DFlash (servi depuis le 15/09/2026) : conversion GGUF communautaire
@@ -1072,6 +1147,104 @@ spec-type            = ngram-map-k,draft-dflash
 spec-draft-model     = $QWEN38_27B_DFLASH_PATH
 spec-draft-n-max     = 7
 spec-ngram-map-k-size-m   = 47
+spec-ngram-map-k-min-hits = 2
+jinja                = true
+parallel             = 1
+swa-full             = true
+ctx-checkpoints      = 128"
+
+# =============================================================================
+# Muse-Glimmer-30B (Meta) : dense 30B agentic + drafter DFlash 2
+# =============================================================================
+
+groupe "; --- Muse-Glimmer-30B (Meta, dense 30B : GGUF cible + drafter DFlash 2 z-lab) ---"
+
+# Muse-Glimmer-30B (Meta, août 2026, Apache 2.0) — dense causal 30B, 52 couches,
+# hidden 6656, GQA 32 Q / 2 KV, motif d'attention [local, local, local, global]
+# avec fenêtre glissante de 2048 sur les couches locales (RoPE θ 500000 sur les
+# locales seulement), ctx natif 131072. Orienté agentic : SWE-bench Verified
+# 76,0, SWE-Bench Pro 51,2, MCP Atlas 75,5. Encodeur de perception (mmproj)
+# disponible mais NON déclaré : texte seul, incompatible avec un drafter.
+# general.architecture = muse-glimmer, mainline b10353 (PR #26841, 10/08/2026),
+# présent dans le fork strix-0007bc6 (vérifié le 16/09/2026,
+# src/llama-arch.cpp:75, plus le correctif #26879 des tool calls après EOM).
+# UD-Q4_K_XL unsloth (15 878 222 368 octets) : quant recommandée par le guide
+# unsloth (docs.unsloth.ai/models/muse-glimmer). Fichier unique, pas de shard.
+# Le repo officiel meta-models/Muse-Glimmer-30B-GGUF porte les mêmes quants
+# sous d'autres noms (KQuant-*), plus un DFlash 1 (block 16) : non retenu, le
+# DFlash 2 ci-dessous annonce la même longueur acceptée pour un drafter à
+# sélecteur de chemin, format déjà servi sur le 27B.
+download_hf muse-glimmer-30b "unsloth/Muse-Glimmer-30B-GGUF" \
+  MUSE_30B_PATH="Muse-Glimmer-30B-UD-Q4_K_XL.gguf"
+
+# Drafter DFlash 2 (z-lab, miroir d'incoai, Q8_0, 2 959 518 912 octets) :
+# diffusion par blocs avec sélecteur de chemin, acceptance annoncée 5,4 à 5,6
+# tokens par étape (GSM8K, cible Q4_K_M ; Q8_0 5,58, BF16 5,45). Même dossier
+# que le modèle, autre repo. spec-type draft-dflash (pas de « dflash2 » : le
+# moteur détecte le format au chargement, PR #27342 présente dans le fork,
+# commit b10f9ca5). Le GGUF devient nécessaire au démarrage de la section : ne
+# pas le retirer de ~/models/muse-glimmer-30b/.
+download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
+  MUSE_30B_DFLASH_PATH="Muse-Glimmer-30B-DFlash2-Q8_0.gguf"
+
+# Muse-Glimmer-30B DFlash — déclaré le 16/09/2026, AUCUNE MESURE ENCORE : les
+#   réglages ci-dessous sont des valeurs de départ, à remplacer par les
+#   chiffres des étapes 2 à 7 de .claude/skills/ajout-modele/SKILL.md.
+#   Concurrent direct de qwen3.8-27b-dflash-nothink (même classe dense, même
+#   spec-type) : c'est contre lui que se lit le résultat.
+# Pas de suffixe -nothink : le canal de réflexion de ce modèle NE SE FERME PAS
+#   (reasoning off, enable_thinking false, reasoning_effort none : sans effet,
+#   documenté par la fiche Meta). Seul le niveau se règle, par le kwarg
+#   reasoning_strength (low / medium / high / xhigh, défaut high) : low ici,
+#   régime agentic où la latence prime, plafonné par reasoning-budget 4096
+#   (clé mainline, pas une clé du fork ; les -soft-ratio & co du fork restent
+#   possibles plus tard, cf. deepseek-v4-flash). À re-évaluer au bench-agentic
+#   (étape 7) : si low fait échouer des scénarios, remonter à medium.
+# Sampling : reco officielle Meta et unsloth (temp 1.0, top-p 0.95, top-k 64),
+#   min-p 0 explicite.
+# Tokens de fin : <|end_of_text|> et <|eot|> sont les eos du GGUF ; <|eom|>
+#   n'est PAS une fin de tour (fin de message, tool calls parallèles) : ne
+#   jamais l'ajouter en stop, le template jinja gère.
+# ctx 131072 : natif, un seul slot en dispose en entier.
+# cache-ram 12288 : même besoin que le 27B (orchestrateur de 60k gardé en RAM
+#   pendant qu'un agent occupe le slot, cf. son bloc).
+# cache-type-v q8_0 : convention agentic du parc (cf. en-tête) ; attention pure
+#   sans état récurrent, donc rien ne s'y oppose.
+# cache-reuse 0 : contrainte des sections spéculatives (ici la seule raison :
+#   pas d'état récurrent, la valeur serait sinon utilisable).
+# swa-full + ctx-checkpoints : arch à SWA réelle (fenêtre 2048 sur 3 couches
+#   sur 4), c'est LE cas pour lequel la paire est prévue ; contrairement aux
+#   sections Qwen (où le journal dit « swa_full is not supported ») elle
+#   devrait être effective ici : à lire dans le journal au premier démarrage,
+#   et --bench-cache tranche ce que vaut la restauration (étape 6).
+# Spéculation : ngram-map-k + draft-dflash, n-max 7 en valeur de départ. La
+#   carte z-lab dit 15, mais un batch de vérification de 16 colonnes quitte le
+#   noyau mat-vec de ggml-vulkan (marche x2 entre 8 et 9, cf. bloc 27B) et le
+#   fork découpe en 4/2/1 : 7 donne un batch de 8 = 4+4, le meilleur cas. À
+#   trancher par tools/spec-isolate.sh (n-max 7 contre 15 et 3, et spec-type
+#   none), puis --spec-ab tel que servi (--spec-tune refuse draft-dflash).
+#   size-m 7 / min-hits 2 de départ ; dense à pente plate sous la marche comme
+#   le 27B (où 47 l'emporte) : --spec-ngram-tune décide (étape 5).
+# parallel 1 : batch déjà à 8 colonnes avec n-max 7 (np 2 en ferait 16), et
+#   régime agentic sérialisé.
+# Mémoire : ~22 Go chargé (poids 15,9 + drafter 3,0 + KV du ctx 131072 en
+#   q8_0 sur V ; KV réduit par le GQA 2 têtes et la SWA).
+llama_model muse-glimmer-30b-dflash "
+model                = $MUSE_30B_PATH
+ctx-size             = 131072
+cache-ram            = 12288
+temp                 = 1.0
+top-k                = 64
+top-p                = 0.95
+min-p                = 0.0
+chat-template-kwargs = {\"reasoning_strength\":\"low\"}
+reasoning-budget     = 4096
+cache-type-v         = q8_0
+cache-reuse          = 0
+spec-type            = ngram-map-k,draft-dflash
+spec-draft-model     = $MUSE_30B_DFLASH_PATH
+spec-draft-n-max     = 7
+spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
 jinja                = true
 parallel             = 1
