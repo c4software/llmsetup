@@ -422,14 +422,18 @@ strix-0007bc6, 13/09/2026**, parc complet du plus petit au plus gros, modèle
 précédent déchargé avant chaque gros ; entre parenthèses la valeur de la
 campagne du paquet Arch (b10433, 21 au 28/08/2026) quand elle existe. La
 requête froide est à 0 % partout, par construction (horodatage en tête du
-contexte).
+contexte). Les deux sections ajoutées le 16/09/2026,
+`lfm2.5-8b-a1b-nothink` et `muse-glimmer-30b-dflash`, ont été mesurées ce
+jour-là sur le même fork et sont insérées à leur place.
 
 | Modèle | Architecture | Tour suivant | Édition au 1er tiers | Requête identique | Prefill froid → identique |
 |---|---|---|---|---|---|
 | lfm2.5-2.6b | conv récurrente (autre tokenizer) | 63 % (62) | 0 % (0) | 64 % (63) | 373 → 151 ms |
+| lfm2.5-8b-a1b-nothink | conv récurrente, MoE | 63 % | 0 % | 64 % | 440 → 176 ms |
 | qwen3.5-9b | hybride SWA/GDN | 62 % (62) | 0 % (0) | 64 % (63) | 1 419 → 549 ms |
 | qwen3.8-27b | dense, GDN + gated attention | 62 % | 0 % | 64 % | 3 814 → 1 463 ms |
 | qwen3.8-27b-dflash-nothink | idem (même GGUF) | 62 % | 0 % | 64 % | 3 838 → 1 472 ms |
+| **muse-glimmer-30b-dflash** | **attention + SWA 2048, dense** | **99 %** | **34 %** | **100 %** | 5 096 → 82 ms |
 | ornith-1.5-35b-a3b | GDN, MoE | 62 % (62) | 0 % (0) | 64 % (64) | 1 182 → 447 ms |
 | qwen3-coder-next | GDN, MoE | 65 % (64) | 0 % (0) | 67 % (66) | 1 941 → 697 ms |
 | qwen3.8-flash-next-mtp-nothink | GDN, MoE | 62 % (62) | 0 % (0) | 64 % (64) | 3 652 → 1 293 ms |
@@ -456,7 +460,8 @@ requête identique ; sans état récurrent (attention pure, SWA comprise) tout
 est servi. Le second vaut
 pour tous : une édition en amont du prompt, même avec 2/3 de préfixe commun
 (au-dessus du seuil `slot-prompt-similarity 0.5`), donne **0 %** partout,
-attention pure comprise. Le cache de prompt du serveur ne sert que les
+attention pure comprise, sauf `muse-glimmer-30b-dflash`, ajouté le 16/09/2026,
+seule ligne du parc à rendre 34 % sur l'édition. Le cache de prompt du serveur ne sert que les
 **continuations** (le prompt en cache doit être un préfixe exact du nouveau) ;
 toute modification en amont repaie tout le contexte. En boucle agentic, cela
 signifie : ne jamais réécrire l'historique (compaction, tronquage de
@@ -472,15 +477,18 @@ l'état du cache de pages du noyau : fichier chaud (benché à l'instant) ou
 relu depuis le disque. Série **fork strix-0007bc6, 13/09/2026**, parc complet
 à la suite d'une campagne `--bench-cache` ; entre parenthèses la valeur de la
 campagne du paquet Arch (b10433 à b10566, 21 au 28/08/2026) quand elle
-existe. L'état du cache de pages est déduit de la variation de `buff/cache`
+existe. Les deux sections ajoutées le 16/09/2026 ont été mesurées ce
+jour-là, même fork, et sont insérées à leur place. L'état du cache de pages est déduit de la variation de `buff/cache`
 pendant le chargement.
 
 | Modèle | Taille | Chargement + 1er token | TTFT à chaud | État du cache de pages |
 |---|---|---|---|---|
 | lfm2.5-2.6b | 2,7 Go | 0,9 s (0,5) | 26 ms (27) | chaud |
+| lfm2.5-8b-a1b-nothink | 9,0 Go (+ drafter 0,36) | 1,7 s | 31 ms | non relevé (série du 16/09/2026) |
 | qwen3.5-9b | 8,2 Go | 5,0 s (1,9) | 63 ms (65) | disque (+8 Go de cache de pages) |
 | qwen3.8-27b | 17 Go | 3,6 s (4,4) | 129 ms (165) | chaud (~4,7 Go/s) |
 | qwen3.8-27b-dflash-nothink | 17 Go (même GGUF) | 3,5 s | 131 ms | chaud |
+| muse-glimmer-30b-dflash | 15,9 Go (+ drafter 3,0) | 3,5 s | 88 ms | non relevé (série du 16/09/2026) |
 | ornith-1.5-35b-a3b | 21 Go | 8,3 s | 42 ms | disque (+20 Go de cache de pages) |
 | qwen3-coder-next | 47 Go | 55,4 s (72) | 54 ms (406) | disque |
 | gpt-oss | 59 Go | 91,3 s (91) | 85 ms (86) | disque |
@@ -1167,6 +1175,138 @@ spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
 parallel         = 1
 ```
+
+## Muse-Glimmer-30B et LFM2.5-8B-A1B ajoutés (16/09/2026)
+
+Deux sections ajoutées le 16/09/2026, toutes deux servies avec un drafter
+externe à un seul slot : `lfm2.5-8b-a1b-nothink` (LFM2.5-8B-A1B de Liquid AI,
+grand frère du 2.6B, drafter DSpark officiel) et `muse-glimmer-30b-dflash`
+(Muse-Glimmer-30B de Meta, drafter DFlash 2 z-lab, concurrent direct de
+`qwen3.8-27b-dflash-nothink`). Même moteur pour tout ce qui suit : fork
+strix-0007bc6, bigchuck (Ryzen AI Max+ 395, 124 Go), Vulkan0, 16/09/2026.
+Aucune des deux n'a jamais été mesurée sur le paquet Arch : la colonne « paquet »
+du README et de `docs/perfs.tsv` reste vide pour elles.
+
+Deux points de méthode communs. `--bench-devices` n'a pas pu tourner : le fork
+ne construit que Vulkan et la commande refuse de trancher avec un seul device.
+Les deux sections héritent donc du défaut `[*] Vulkan0`, sans ligne dans
+`bench-devices.conf` : ce n'est pas un choix mesuré, seulement le seul device
+disponible. `--spec-ngram-tune` a été écarté de la même façon sur les deux :
+sur un modèle sans tête MTP il prend « sans spéculation » pour référence, ce qui
+n'a pas de sens quand le draft vient d'un drafter externe déjà servi ; la taille
+n-gram a été réglée par `--spec-ab` sur le modèle tel qu'il est servi.
+
+### lfm2.5-8b-a1b-nothink : LFM2.5-8B-A1B-Q8_0.gguf (9,0 Go) + drafter DSpark officiel Q8_0 (0,36 Go), bigchuck, fork strix-0007bc6, Vulkan0, 16/09/2026
+
+MoE `lfm2moe` 8,3B total / 1,5B actifs, ctx 131072, KV f16. Le modèle est
+« reasoning-tuned » et son template n'a aucun interrupteur de thinking : en
+1200 tokens il n'avait pas fini de raisonner, contenu vide sur les deux prompts.
+Le suffixe `-nothink` vient de `reasoning-budget-enable` + `reasoning-budget 0`
+(clés du fork), qui ferment la balise d'office.
+
+| Configuration | Device | Prompt t/s | Gen t/s | Acceptance | Source |
+|---|---|---|---|---|---|
+| sans spéculation | Vulkan0 | n/c | 102,2 | — | test isolé, 2 passes, 1200 tokens (spec-test.txt) |
+| sans spéculation | Vulkan0 | n/c | 102,9 | — | test isolé, 2 passes, 1200 tokens (spec-refactor.txt) |
+| draft-dspark, n-max 3 | Vulkan0 | n/c | 118,0 | 0,66 | test isolé, 2 passes (spec-test.txt) |
+| draft-dspark, n-max 3 | Vulkan0 | n/c | 133,4 | 0,82 | test isolé, 2 passes (spec-refactor.txt) |
+| draft-dspark, n-max 5 | Vulkan0 | n/c | 114,0 | 0,60 | test isolé, 2 passes (spec-test.txt) |
+| draft-dspark, n-max 5 | Vulkan0 | n/c | 128,4 | 0,72 | test isolé, 2 passes (spec-refactor.txt) |
+| draft-dspark, n-max 9 | Vulkan0 | n/c | 82,0 | 0,36 | test isolé, 2 passes (spec-test.txt) |
+| draft-dspark, n-max 9 | Vulkan0 | n/c | 117,3 | 0,56 | test isolé, 2 passes (spec-refactor.txt) |
+| sans spéculation, thinking ON | Vulkan0 | n/c | 107,3 | — | test isolé, 2 passes, contenu vide en 1200 tokens (spec-test.txt) |
+| draft-dspark 3, thinking ON | Vulkan0 | n/c | 100,9 | 0,53 | test isolé, 2 passes, contenu vide en 1200 tokens (spec-test.txt) |
+| draft-dspark 3, thinking ON | Vulkan0 | n/c | 109,6 | 0,62 | test isolé, 2 passes, contenu vide en 1200 tokens (spec-refactor.txt) |
+| sans spéculation | Vulkan0 | n/c | 106,0 | — | --spec-ab, 4 passes (spec-refactor.txt) |
+| draft-dspark seul, n-max 3 | Vulkan0 | n/c | 126,6 | 0,78 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 7 + draft-dspark 3 | Vulkan0 | n/c | 146,2 | 0,78 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 15 + draft-dspark 3 | Vulkan0 | n/c | 144,2 | 0,70 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 47 + draft-dspark 3 | Vulkan0 | n/c | 169,6 | 0,61 | --spec-ab, 4 passes (spec-refactor.txt) |
+| draft-dspark seul, n-max 3 | Vulkan0 | n/c | 120,3 | 0,71 | --spec-ab, 4 passes (spec-test.txt) |
+| ngram 7 + draft-dspark 3 | Vulkan0 | n/c | 118,3 | 0,68 | --spec-ab, 4 passes (spec-test.txt) |
+| ngram 47 + draft-dspark 3 | Vulkan0 | 3079 | 108,1 | 0,55 | --bench, 3 passes (bench-task) |
+
+Retenu : `ngram-map-k` size-m 47 min-hits 2 + `draft-dspark` n-max 3 sur
+Vulkan0, `reasoning-budget-enable` + `reasoning-budget 0`, parallel 1
+(`spec-draft-n-max`, `spec-ngram-map-k-size-m` et le reste dans `lib/models.sh` ;
+rien dans `spec-nmax.conf` ni `spec-ngram.conf`, aucun tune n'a tourné, et rien
+dans `bench-devices.conf`). Jamais mesuré au paquet Arch.
+
+Lectures. Le DSpark rend x1,16 en générique et x1,30 en refactor, bien moins que
+sur le 2.6B (x1,76) : 1,5B actifs sur 9 Go de poids, le décode est déjà borné
+par la lecture des experts routés et le batch de vérification en lit davantage.
+Le n-gram, absent du 2.6B, est ajouté ici parce que le 8B vise aussi l'édition
+de code : à 47 colonnes il rend +34 % contre le drafter seul et +60 % contre
+rien sur le refactor, pour un coût nul en générique (les hits y sont rares, un
+miss ne coûte qu'une sonde de hash). Même régime large que le 27B dense, malgré
+la pente MoE : 1,5B actifs font un forward court même à 48 colonnes. Enfin, le
+drafter devine bien mieux la réponse que la pensée (acceptance 0,53 / 0,62 avec
+le raisonnement contre 0,66 / 0,82 sans), ce qui conforte le budget 0.
+
+Cache de prompt (`--bench-cache`, 16/09/2026) : requête froide 440 ms, tour
+suivant 63 % servi du cache (220 ms), édition au premier tiers 0 %, requête
+identique 64 % (176 ms). Le modèle se range avec les architectures à état
+récurrent (la conv double-gate), comme le 2.6B : restauration au dernier
+checkpoint, pas au token près.
+
+Chargement (`--bench-load`, 16/09/2026) : 1,7 s de chargement + premier token
+pour 8,4 Go lus, TTFT à chaud 31 ms.
+
+### muse-glimmer-30b-dflash : Muse-Glimmer-30B-UD-Q4_K_XL.gguf (15,9 Go) + drafter DFlash 2 z-lab Q8_0 (3,0 Go), bigchuck, fork strix-0007bc6, Vulkan0, 16/09/2026
+
+Dense 30B `muse-glimmer`, SWA de 2048 sur 3 couches sur 4, ctx 131072,
+cache-type-v q8_0, `swa-full` + `ctx-checkpoints 128`. Pas de suffixe `-nothink` :
+le canal de réflexion de ce modèle ne se ferme pas, seul son niveau se règle
+(`chat-template-kwargs` `reasoning_strength` low), plafonné par
+`reasoning-budget-enable` + `reasoning-budget 4096`. Le test isolé a tourné à
+-c 32768.
+
+| Configuration | Device | Prompt t/s | Gen t/s | Acceptance | Source |
+|---|---|---|---|---|---|
+| sans spéculation | Vulkan0 | 275 (froid) | 14,0 | — | test isolé, 2 passes, 1200 tokens (spec-test.txt) |
+| sans spéculation | Vulkan0 | n/c | 13,9 | — | test isolé, 2 passes, 1200 tokens (spec-refactor.txt) |
+| draft-dflash, n-max 7 | Vulkan0 | n/c | 43,0 | 0,74 | test isolé, 2 passes, 6,0 tokens acceptés par étape (spec-test.txt) |
+| draft-dflash, n-max 7 | Vulkan0 | n/c | 41,4 | 0,72 | test isolé, 2 passes, 6,2 tokens acceptés par étape (spec-refactor.txt) |
+| draft-dflash, n-max 15 | Vulkan0 | n/c | 20,9 | 0,55 | test isolé, 2 passes (spec-test.txt) |
+| draft-dflash, n-max 15 | Vulkan0 | n/c | 17,5 | 0,46 | test isolé, 2 passes (spec-refactor.txt) |
+| draft-dflash, n-max 3 | Vulkan0 | n/c | 37,8 | 0,85 | test isolé, 2 passes (spec-test.txt) |
+| draft-dflash, n-max 3 | Vulkan0 | n/c | 34,6 | 0,80 | test isolé, 2 passes (spec-refactor.txt) |
+| draft-dflash seul, n-max 7 | Vulkan0 | n/c | 37,2 | 0,63 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 7 + draft-dflash 7 | Vulkan0 | n/c | 41,8 | 0,62 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 15 + draft-dflash 7 | Vulkan0 | n/c | 29,2 | 0,52 | --spec-ab, 4 passes (spec-refactor.txt) |
+| ngram 47 + draft-dflash 7 | Vulkan0 | n/c | 37,1 | 0,53 | --spec-ab, 4 passes (spec-refactor.txt) |
+| draft-dflash seul, n-max 7 | Vulkan0 | n/c | 42,0 | 0,73 | --spec-ab, 4 passes (spec-test.txt) |
+| ngram 7 + draft-dflash 7 | Vulkan0 | n/c | 43,5 | 0,73 | --spec-ab, 4 passes (spec-test.txt) |
+| ngram 7 + draft-dflash 7 | Vulkan0 | 266 | 38,0 | 0,635 | --bench, 3 passes (bench-task) |
+
+Retenu : `ngram-map-k` size-m 7 min-hits 2 + `draft-dflash` n-max 7 sur Vulkan0,
+`reasoning_strength` low + `reasoning-budget 4096`, parallel 1 (tout dans
+`lib/models.sh` ; rien dans `spec-nmax.conf`, `spec-ngram.conf` ni
+`bench-devices.conf`, aucun tune n'a tourné et `--spec-tune` refuse de toute
+façon `draft-dflash`). Jamais mesuré au paquet Arch. Contre le concurrent direct
+`qwen3.8-27b-dflash-nothink`, mesuré le même mois sur le même fork
+(359 / 32,6 / 0,595) : +17 % de décode, -26 % de prefill.
+
+Lectures. Le décode nu à 14 t/s est celui d'un dense de 16 Go sur la bande
+passante de bigchuck : ce modèle ne vit que par son drafter, qui rend x3,1. La
+carte z-lab annonce 15, mais un batch de vérification de 16 colonnes quitte le
+noyau mat-vec de ggml-vulkan (marche x2 entre 8 et 9, cf. l'issue #50) et le 15
+mesuré perd la moitié du gain ; n-max 7 donne un batch de 8 = 4+4, hors du
+découpage 4/2/1 du fork. Côté n-gram, le régime large PERD ici, contrairement au
+27B où 47 gagne : le DFlash 2 accepte déjà 6 tokens par étape, et un draft
+n-gram de 47 colonnes accepté à moitié lui vole des pas plus rentables ; 15 est
+le pire des deux mondes (batch 16 hors du noyau mat-vec, exactement comme
+n-max 15). Retenu 7 : +12,5 % sur le refactor, +3,5 % en générique.
+
+Cache de prompt (`--bench-cache`, 16/09/2026) : requête froide 5 096 ms, tour
+suivant 99 % (321 ms), édition au premier tiers 34 % (3 668 ms), requête
+identique 100 % (82 ms). Attention pure, cache complet : le modèle se range avec
+DeepSeek et les MoE à SWA, pas avec les architectures à état récurrent. Le 34 %
+sur l'édition est une première dans ce document, où toutes les autres
+architectures donnent 0 %.
+
+Chargement (`--bench-load`, 16/09/2026) : 3,5 s de chargement + premier token
+pour 15 Go, TTFT à chaud 88 ms.
 
 ## Choix du device (--bench-devices) : méthode et exemples datés
 

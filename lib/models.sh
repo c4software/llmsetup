@@ -717,8 +717,9 @@ download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-GGUF" \
 download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
   LFM25_8B_DSPARK_PATH="LFM2.5-8B-A1B-DSpark-Q8_0.gguf"
 
-# LFM2.5-8B-A1B nothink — déclaré le 16/09/2026 ; test isolé fait (étape 2,
-#   ci-dessous), étapes 3 à 7 de .claude/skills/ajout-modele/SKILL.md à suivre.
+# LFM2.5-8B-A1B nothink — ajouté le 16/09/2026, étapes 1 à 6 de la skill
+#   ajout-modele faites le jour même (chiffres ci-dessous), étape 7
+#   (--bench-agentic) en bas de bloc.
 # Sampling : reco officielle de la model card 8B-A1B (temp 0.2, top-k 80,
 #   repeat-penalty 1.05), différente de celle du 2.6B (0.1 / 50 / 1.1) : la
 #   fiche du 8B ne donne ni top-p ni min-p, min-p 0 explicite.
@@ -770,6 +771,20 @@ download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
 #   1,5B actifs font un forward court même à 48 colonnes.
 # parallel 1 : np 2 x (3 + 1) = 8 colonnes, pile au seuil, mais le 2.6B y a
 #   mesuré ~x1,1 agrégé pour une latence doublée : pas mesuré ici, 1 gardé.
+# Device : Vulkan0 hérité du défaut. --bench-devices n'a pas tourné (le fork
+#   n'expose que Vulkan0 et la commande refuse avec un seul device) : pas de
+#   ligne dans bench-devices.conf, la sanité de la sortie a été lue au test
+#   isolé (sanité ok sur toutes les passes).
+# Mesuré le 16/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
+#   passes, bench-task) : prefill 3079 t/s, décode 108,1 t/s, acceptance 0,55.
+#   Même débit que le 2.6B (2875 / 108,8) pour un modèle trois fois plus gros
+#   et bien meilleur en code selon Liquid : c'est l'argument de cette section.
+#   Jamais mesuré au paquet Arch.
+# --bench-cache du 16/09/2026 : suite 63 % servi du cache (220 ms), identique
+#   64 %, édition 0 % : arch à état récurrent (conv), restauration au dernier
+#   checkpoint comme le 2.6B et les GDN.
+# --bench-load du 16/09/2026 : 1,7 s chargement + 1er token (8,4 Go lus),
+#   TTFT à chaud 31 ms.
 # Mémoire : ~16 Go chargé (poids 9 + drafter 0,36 + KV du ctx 131072).
 llama_model lfm2.5-8b-a1b-nothink "
 model            = $LFM25_8B_PATH
@@ -1216,8 +1231,9 @@ download_hf muse-glimmer-30b "unsloth/Muse-Glimmer-30B-GGUF" \
 download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
   MUSE_30B_DFLASH_PATH="Muse-Glimmer-30B-DFlash2-Q8_0.gguf"
 
-# Muse-Glimmer-30B DFlash — déclaré le 16/09/2026 ; test isolé fait (étape 2,
-#   ci-dessous), étapes 3 à 7 de .claude/skills/ajout-modele/SKILL.md à suivre.
+# Muse-Glimmer-30B DFlash — ajouté le 16/09/2026, étapes 1 à 6 de la skill
+#   ajout-modele faites le jour même (chiffres ci-dessous), étape 7
+#   (--bench-agentic) en bas de bloc.
 #   Concurrent direct de qwen3.8-27b-dflash-nothink (même classe dense, même
 #   spec-type) : c'est contre lui que se lit le résultat.
 # Pas de suffixe -nothink : le canal de réflexion de ce modèle NE SE FERME PAS
@@ -1246,10 +1262,13 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 # cache-reuse 0 : contrainte des sections spéculatives (ici la seule raison :
 #   pas d'état récurrent, la valeur serait sinon utilisable).
 # swa-full + ctx-checkpoints : arch à SWA réelle (fenêtre 2048 sur 3 couches
-#   sur 4), c'est LE cas pour lequel la paire est prévue ; contrairement aux
-#   sections Qwen (où le journal dit « swa_full is not supported ») elle
-#   devrait être effective ici : à lire dans le journal au premier démarrage,
-#   et --bench-cache tranche ce que vaut la restauration (étape 6).
+#   sur 4), c'est LE cas pour lequel la paire est prévue, et contrairement aux
+#   sections Qwen le journal ne dit PAS « swa_full is not supported » (vérifié
+#   le 16/09/2026) : elle est effective. --bench-cache du 16/09/2026 : suite
+#   99 % servi du cache (321 ms), identique 100 % (82 ms), édition au 1er
+#   tiers 34 % (le préfixe avant l'édition est réutilisé) : la restauration
+#   au token près d'une attention pure, contre 62 à 66 % sur les archs à état
+#   récurrent du parc. Le prefill froid de 1,4k tokens coûte 5,1 s.
 # Spéculation DFlash 2, test isolé du 16/09/2026 (fork strix-0007bc6, Vulkan0,
 #   hors service, np 1, 2 passes, 1200 tokens, -c 32768, médiane hors 1re
 #   passe, spec-test.txt / spec-refactor.txt, strength low) :
@@ -1280,6 +1299,14 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 #   des deux mondes (batch 16 hors du noyau mat-vec, cf. n-max 15 ci-dessus).
 # parallel 1 : batch déjà à 8 colonnes avec n-max 7 (np 2 en ferait 16), et
 #   régime agentic sérialisé.
+# Device : Vulkan0 hérité du défaut, --bench-devices non lancé (un seul device
+#   sur le fork, la commande refuse) : pas de ligne dans bench-devices.conf.
+# Mesuré le 16/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
+#   passes, bench-task) : prefill 266 t/s, décode 38,0 t/s, acceptance 0,635.
+#   Contre qwen3.8-27b-dflash-nothink sur le même fork (359 / 32,6 / 0,595) :
+#   décode +17 %, prefill -26 %. Jamais mesuré au paquet Arch.
+# --bench-load du 16/09/2026 : 3,5 s chargement + 1er token (15 Go lus), TTFT
+#   à chaud 88 ms.
 # Mémoire : 21 Go résidents au test isolé à -c 32768 (free après mesures) ;
 #   compter ~24 Go à 131072 (poids 15,9 + drafter 3,0 + KV en q8_0 sur V, KV
 #   réduit par le GQA 2 têtes et la SWA).

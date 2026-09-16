@@ -236,9 +236,12 @@ prefill et +20 % de décode contre elle, et très au-dessus sur les benchmarks
 agentic de l'éditeur), cf. `docs/HISTORIQUE.md`. La section
 thinking du 27B a été retirée le 13/09/2026, `laguna-s-2.1` le 15/09 et
 `gpt-oss` le 16/09/2026, ces deux géants n'étant pas utiles dans l'usage réel
-(cf. `docs/HISTORIQUE.md`).
+(cf. `docs/HISTORIQUE.md`). Deux sections sont ajoutées le 16/09/2026, toutes
+deux avec drafter externe à un slot : `lfm2.5-8b-a1b-nothink` (grand frère du
+2.6B, DSpark officiel) et `muse-glimmer-30b-dflash` (DFlash 2 z-lab, concurrent
+direct du 27B), cf. `docs/HISTORIQUE.md`.
 Réglages exacts dans `lib/models.sh` ; toutes les mesures sont celles du fork
-strix-0007bc6 (Vulkan0, `--bench` 3 passes, les 12, 13 et 15/09/2026, prompt
+strix-0007bc6 (Vulkan0, `--bench` 3 passes, les 12, 13, 15 et 16/09/2026, prompt
 générique à long contexte). Acceptance vide = pas de spéculation. La dernière
 colonne situe le décode contre la dernière mesure du paquet Arch (série
 `bNNNNN`, 21/08 au 05/09/2026) : deux séries distinctes, un ordre de grandeur,
@@ -247,10 +250,12 @@ pas une comparaison à la décimale.
 | Modèle (section) | Quant et taille | Device | Réglage spéculatif | Prefill t/s | Décode t/s | Acceptance | Écart décode contre paquet |
 |---|---|---|---|---|---|---|---|
 | lfm2.5-2.6b | Q8_0, 2,7 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 (KV f16) | 2875 | 108,8 | 0,50 | +61 % (paquet sans drafter, 67,7 t/s à 4 slots) |
+| lfm2.5-8b-a1b-nothink | Q8_0, 9,0 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 47, min-hits 2, drafter DSpark officiel Liquid AI Q8_0, n-max 3, reasoning-budget 0 (thinking coupé, clé du fork), parallel 1 (KV f16) | 3079 | 108,1 | 0,55 | jamais mesuré au paquet |
 | ornith-1.5-9b-mtp-nothink | Q8_0, 9,79 Go (GGUF fusionné tiers protoLabsAI, tête MTP nextn distillée) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 3, parallel 1 | 828 | 39,5 | 0,56 | jamais mesuré au paquet (+20 % de décode contre `qwen3.5-9b`, remplacée le même jour) |
 | ornith-1.5-35b-a3b-parallel | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
 | ornith-1.5-35b-a3b-mtp | Q4_K_M, 22 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 1073 | 76,2 | 0,55 | non mesuré au paquet |
 | qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |
+| muse-glimmer-30b-dflash | UD-Q4_K_XL, 15,9 Go (+ drafter DFlash 2 3,0 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, `reasoning_strength` low et reasoning-budget 4096, parallel 1 (cache-type-v q8_0, swa-full) | 266 | 38,0 | 0,635 | jamais mesuré au paquet (+17 % de décode et -26 % de prefill contre `qwen3.8-27b-dflash-nothink`, même jour, même fork) |
 | qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | Vulkan0 | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 727 | 52,2 | 0,515 | +19 % (paquet en n-gram seul) |
 | deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 (parallel 2 essayé et retiré le 15/09 : x1,16 de tâches au bench agentic à 2 boucles, latence doublée) | 196 | 28,8 | 0,69 | +134 % (paquet en n-gram seul, 19,9 sur le fork en n-gram seul) |
@@ -304,6 +309,7 @@ contournée par modèle et signalée en amont :
 | `logs/bench-load.log` | journal TSV des `--bench-load` |
 | `logs/spec-batch.log` / `.tsv` | journal des balayages `tools/bench-spec-batch.sh` |
 | `logs/spec-isolate/<tag>/` | sorties de `tools/spec-isolate.sh` : `serveur.log`, `mesures.tsv`, `gen-*.txt` |
+| `logs/qualif/<tag>/` | sorties de `tools/qualif-modele.sh` : un journal par étape (`01-devices.log` … `07-agentic.log`) et `resume.md` (tableau de perfs) |
 
 Côté `~/models/` : `models.ini`, généré. Ne jamais l'éditer : relancer
 `--preload` ou `--setup`. Le routeur ne le lit qu'au démarrage, toute
@@ -358,6 +364,7 @@ dans `AGENTS.md`.
 | `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
 | `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices (`DEV=Vulkan0,ROCm0`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
 | `spec-isolate.sh` | Test isolé d'un réglage spéculatif AVANT sa déclaration dans `lib/models.sh` : `tools/spec-isolate.sh <tag> -- <args llama-server...>` monte un serveur jetable sur `PORT` (8099) avec les arguments bruts, mesure acceptance, prefill, décode et sanité de la sortie (`py/spec_isolate_bench.py`), puis relance le service. Variables : `PORT`, `NP` (salve simultanée en plus), `PASSES`, `PROMPTS`, `MAX_TOKENS`, `OUT`, `LLAMA_BIN_DIR` (binaires d'un build à part du fork, pour mesurer un patch sans toucher au moteur servi). Refuse de démarrer si un `--bench*` / `--spec*` ou un conteneur `bench-agentic-*` tourne. Sorties dans `logs/spec-isolate/<tag>/`. À confirmer ensuite sur le service par `--spec-ab` |
+| `qualif-modele.sh` | Qualification d'un modèle DÉJÀ déclaré et servi : `tools/qualif-modele.sh <section>` enchaîne les étapes 3, 5, 6 et 7 de la skill ajout-modele (`--bench-devices`, `--spec-ab` sur `spec-refactor.txt` puis `spec-test.txt`, `--bench`, `--bench-cache`, `--bench-load`, `--bench-agentic`), une à la fois (un seul GPU), lit le drafter et le `size-m` réellement servis dans `status.args` de `/v1/models`, et écrit `logs/qualif/<tag>/resume.md` (tableau de perfs prêt à coller) plus un journal par étape. Options : `--passes`, `--size-m`, `--devices`, `--sans-agentic`, `--sans-cache`, `--sans-load`, `--tag`. Une étape en échec n'arrête pas les suivantes (code de retour non nul). Refuse de démarrer si un `--bench*` / `--spec*`, un `spec-isolate.sh` ou un conteneur `bench-agentic-*` tourne. N'écrit ni `lib/models.sh` ni les `.conf` (sauf `bench-devices.conf`, par `--bench-devices`) ; ne joue ni le test isolé ni `--spec-tune` |
 | `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k, KV q8_0 comme le service), par device, avec le tour simulé de `--bench-devices` recalculé à chaque profondeur : c'est le régime agentic réel, où le classement des devices peut s'inverser. Journal `logs/bench-depth.log` + `.tsv` |
 | `mtp-rename-hc-head.py` | Renomme les trois tenseurs du mixeur final des hyper-connexions d'un sidecar MTP Qwen3.8-Flash-Next (`blk.<n>.nextn.hc_head_*` chez unsloth, convention de la PR mainline #28243) vers les noms que lit le fork strix-llama.cpp (`output_hc_*`). Données recopiées telles quelles. `PYTHONPATH=$HOME/llm/strix-llama.cpp/gguf-py python3 tools/mtp-rename-hc-head.py <in> <out>` ; appelé aussi par `--setup`. Inutile sur un moteur mainline portant #28243 |
 | `py/perf_graphs.py` | Régénère les trois SVG de `docs/graphs/` (prefill, décode, écarts en %) à partir de `docs/perfs.tsv`, en rendu sobre (barres pleines, fond blanc). Aucune dépendance, aucun service : `python3 py/perf_graphs.py [<tsv> [<dossier>]]`. À relancer après toute modification du TSV |
