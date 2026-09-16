@@ -754,11 +754,20 @@ download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
 #   raisonnement (avant le budget 0) donnait 100,9 / 109,6 en n-max 3 contre
 #   107,3 / 100,3 sans spéculation, acceptance 0,53 / 0,62 : le drafter
 #   devine bien mieux la réponse que la pensée.
-#   n-gram AJOUTÉ d'emblée (ngram-map-k size-m 7, min-hits 2, contrairement au
-#   2.6B) : le 8B vise aussi l'édition de code, où le prompt se ré-émet. Sur un
-#   MoE la pente sous la marche des 8 colonnes est raide (cf. bloc 27B), donc
-#   gain attendu faible : --spec-ngram-tune décide (étape 5), et le bloc
-#   n-gram se retire si aucun size-m ne bat la référence.
+#   n-gram AJOUTÉ (contrairement au 2.6B) : le 8B vise aussi l'édition de code,
+#   où le prompt se ré-émet. --spec-ngram-tune n'a pas été utilisé : sur un
+#   modèle sans tête MTP il prend « sans spéculation » pour référence, ce qui
+#   n'a pas de sens avec un drafter externe ; réglé par --spec-ab tel que
+#   servi, le 16/09/2026 (strix-0007bc6, Vulkan0, 4 passes, décode médian) :
+#     spec-refactor.txt : none 106,0 ; draft-dspark seul 126,6 (acc. 0,78) ;
+#       ngram 7 + dspark 146,2 (0,78) ; ngram 15 = 144,2 (0,70) ;
+#       ngram 47 = 169,6 (0,61)
+#     spec-test.txt : draft-dspark seul 120,3 (0,71) ; ngram 7 = 118,3 (0,68)
+#   RETENU size-m 47, min-hits 2 : +34 % contre le drafter seul et +60 % contre
+#   rien sur le refactor, neutre en générique (les hits y sont rares, un miss
+#   ne coûte qu'une sonde de hash). Même régime large que le 27B dense : la
+#   pente MoE sous la marche n'a pas empêché le 47 de gagner ici, parce que
+#   1,5B actifs font un forward court même à 48 colonnes.
 # parallel 1 : np 2 x (3 + 1) = 8 colonnes, pile au seuil, mais le 2.6B y a
 #   mesuré ~x1,1 agrégé pour une latence doublée : pas mesuré ici, 1 gardé.
 # Mémoire : ~16 Go chargé (poids 9 + drafter 0,36 + KV du ctx 131072).
@@ -776,7 +785,7 @@ cache-reuse      = 0
 spec-type        = ngram-map-k,draft-dspark
 spec-draft-model = $LFM25_8B_DSPARK_PATH
 spec-draft-n-max = 3
-spec-ngram-map-k-size-m   = 7
+spec-ngram-map-k-size-m   = 47
 spec-ngram-map-k-min-hits = 2
 reasoning-budget-enable = true
 reasoning-budget = 0
@@ -1257,8 +1266,18 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 #   passante de bigchuck (le 27B UD-Q4_K_XL de 17 Go est du même ordre) : ce
 #   modèle ne vit que par son drafter. --spec-tune refuse draft-dflash : tout
 #   re-réglage passe par --spec-ab.
-#   size-m 7 / min-hits 2 de départ ; dense à pente plate sous la marche comme
-#   le 27B (où 47 l'emporte) : --spec-ngram-tune décide (étape 5).
+#   n-gram : size-m réglé par --spec-ab tel que servi le 16/09/2026
+#   (--spec-ngram-tune écarté : référence « sans spéculation » sur un modèle
+#   sans tête MTP, sans sens avec un drafter externe ; strix-0007bc6, Vulkan0,
+#   4 passes, décode médian) :
+#     spec-refactor.txt : draft-dflash seul 37,2 (acc. 0,63) ; ngram 7 +
+#       dflash 41,8 (0,62) ; ngram 15 = 29,2 (0,52) ; ngram 47 = 37,1 (0,53)
+#     spec-test.txt : draft-dflash seul 42,0 (0,73) ; ngram 7 = 43,5 (0,73)
+#   RETENU size-m 7, min-hits 2 : +12,5 % sur le refactor, +3,5 % en
+#   générique. Contrairement au 27B (où 47 gagne), le régime large PERD ici :
+#   le DFlash 2 accepte déjà 6 tokens par étape, et un draft n-gram de 47
+#   colonnes accepté à moitié lui vole des pas plus rentables ; 15 est le pire
+#   des deux mondes (batch 16 hors du noyau mat-vec, cf. n-max 15 ci-dessus).
 # parallel 1 : batch déjà à 8 colonnes avec n-max 7 (np 2 en ferait 16), et
 #   régime agentic sérialisé.
 # Mémoire : 21 Go résidents au test isolé à -c 32768 (free après mesures) ;
