@@ -59,6 +59,11 @@
 #                   Acceptance | Source », meilleur size-m, verdict agentic.
 # resume.md est affiché à la fin.
 #
+# Plusieurs sous-commandes (--spec-ab, --bench-devices, --bench-load)
+# redémarrent le service et rendent la main SANS attendre son retour : chaque
+# étape commence donc par attendre /health ET une liste /v1/models exploitable
+# (_attendre_service), sinon la suivante sort aussitôt sur « ne répond pas ».
+#
 # Une étape en échec n'arrête pas les suivantes : elle est marquée ÉCHEC dans
 # resume.md et le code de retour final est non nul. Seules les vérifications
 # initiales (section servie, service actif, aucune autre mesure en cours)
@@ -272,6 +277,56 @@ warn "Un seul GPU : les étapes s'enchaînent en séquence. Certaines redémarre
 ETAPES=()
 RC_GLOBAL=0
 
+# Attente du service entre deux étapes.
+#
+# Constaté sur bigchuck : --spec-ab se termine par _spec_ab_restore
+# (lib/spec.sh) qui régénère le ini et relance $SERVICE_NAME SANS attendre le
+# retour de /health ; l'étape suivante démarrait donc sur un serveur encore
+# éteint. Or toutes les sous-commandes appelées ici commencent par un
+# « curl -sf /health || error » à froid, sans réessai (lib/bench/bench.sh:190,
+# lib/bench/bench-cache.sh:32, lib/bench/bench-agentic.sh:170,
+# lib/spec.sh:145) : elles échouaient immédiatement. --bench-load passait par
+# hasard, parce qu'il redémarre et attend lui-même (lib/bench/bench-load.sh:45).
+# Même chose après --bench-devices, qui relance aussi à la fin sans attendre.
+#
+# lib/common.sh n'expose AUCUN helper d'attente : la boucle est recopiée à
+# l'identique dans lib/spec.sh:432,678,698,819, lib/bench/bench-devices.sh:184
+# et lib/bench/bench-load.sh:45. On reprend donc la même (poll toutes les 2 s),
+# avec une condition de plus : /health répond dès que le routeur écoute, AVANT
+# d'avoir fini de précharger et de publier sa liste de modèles, et c'est cette
+# liste que lisent toutes les mesures. On attend donc aussi un /v1/models
+# exploitable. Plafond 180 s (contre 120 s dans lib/) : les préchargés d'un
+# gros parc sont plus longs à revenir qu'un modèle seul.
+#
+# Jamais bloquant : au-delà du plafond on avertit et on lance quand même, pour
+# que l'échec soit celui de l'étape (journalisé, marqué ÉCHEC dans resume.md)
+# et non un arrêt muet de tout l'enchaînement.
+_attendre_service() {
+  local t=0 annonce=0 json
+  while :; do
+    if curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; then
+      # Pas de « curl | grep -q » : sous pipefail, grep -q sort au 1er match et
+      # curl meurt sur EPIPE (141), ce qui ferait boucler indéfiniment.
+      json="$(curl -sf --max-time 10 "$SPEC_TEST_URL/v1/models" 2>/dev/null || true)"
+      if [[ "$json" == *'"data"'* ]]; then
+        [[ "$annonce" -eq 0 ]] || info "  $SERVICE_NAME prêt après $t s."
+        return 0
+      fi
+    fi
+    if [[ "$annonce" -eq 0 ]]; then
+      info "  attente de $SERVICE_NAME sur $SPEC_TEST_URL (180 s max)..."
+      annonce=1
+    fi
+    if [[ "$t" -ge 180 ]]; then
+      warn "  $SERVICE_NAME ne répond toujours pas après 180 s : l'étape est lancée quand même."
+      warn "  Diagnostic : journalctl --user -u $SERVICE_NAME -e"
+      return 0
+    fi
+    sleep 2
+    t=$(( t + 2 ))
+  done
+}
+
 _etape_sautee() {
   local libelle="$1" raison="$2"
   info "──── $libelle : SAUTÉE ($raison)"
@@ -286,6 +341,10 @@ _etape_sautee() {
 _etape() {
   local fichier="$1" libelle="$2"; shift 2
   local log="$OUT/$fichier" t0 t1 rc=0 duree
+  # L'étape précédente a pu redémarrer le service sans l'attendre : le laisser
+  # revenir AVANT de lancer, sinon la commande sort sur « ne répond pas ».
+  # L'attente n'est pas comptée dans la durée de l'étape (t0 après).
+  _attendre_service
   t0="$(date +%s)"
   echo ""
   info "──── $libelle : début $(date '+%T') ────"
@@ -333,14 +392,8 @@ fi
 # pour des mesures faites sur le nouveau. Repli sur la valeur précédente si le
 # serveur ne répond pas (rien de pire qu'avant).
 _relire_dev() {
-  local t=0 json d
-  until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
-    sleep 2; t=$((t + 2))
-    if [[ "$t" -ge 60 ]]; then
-      warn "llama-server ne répond pas après 60 s : device supposé inchangé ($DEV)."
-      return 0
-    fi
-  done
+  local json d
+  _attendre_service
   json="$(curl -s --max-time 30 "$SPEC_TEST_URL/v1/models" 2>/dev/null || true)"
   [[ -n "$json" ]] || return 0
   MODELS_JSON="$json"
