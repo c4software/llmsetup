@@ -188,8 +188,13 @@ HEADER
     if [[ -n "${BENCH_DEVICE_FORCE:-}" && "${BENCH_DEVICE_FORCE_PRESET:-}" == "$name" ]]; then
       mdev="$BENCH_DEVICE_FORCE"
     fi
-    if [[ -n "$mdev" && "$mdev" != "$DEFAULT_DEVICE" ]]; then
-      echo "device           = $mdev"
+    # device toujours écrit : sans lui le serveur répartit le modèle sur tous
+    # les devices exposés, et un drafter qui partage token_embd avec la cible
+    # avorte (tenseur Vulkan0, contexte du drafter sur ROCm0).
+    mdev="${mdev:-$DEFAULT_DEVICE}"
+    echo "device           = $mdev"
+    if grep -q "^spec-draft-model" <<< "${MODEL_INI[$name]}"; then
+      echo "device-draft     = $mdev"
     fi
     # Corps du modèle + préchargement piloté par preload.conf
     # (pas de stop-timeout : l'éviction est gérée par le LRU de --models-max)
