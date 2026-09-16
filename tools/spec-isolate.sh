@@ -85,6 +85,19 @@ export PATH="${LLAMA_BIN_DIR:+$LLAMA_BIN_DIR:}$HOME/.local/bin:$PATH"
 # ROCm/HIP sur iGPU : allocations en mémoire unifiée, comme lib/service.sh.
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
+# Mode d'alimentation de l'APU appliqué par le contrôleur embarqué, même règle
+# que _ec_power_mode (lib/common.sh) : ce script ne source pas lib/common.sh (il
+# monte un serveur jetable hors service), comme tools/bench-depth.sh pour
+# l'étiquette de moteur. Journalisé parce qu'un run en "balanced" perd 10 à 13 %
+# de décode (mesuré le 16/09/2026) et ne se compare donc qu'à même mode. Jamais
+# bloquant : "inconnu" et un avertissement si le sysfs ne répond pas.
+EC_POWER_MODE_FILE="${EC_POWER_MODE_FILE:-/sys/class/ec_su_axb35/apu/power_mode}"
+EC_MODE="$(tr -d '[:space:]' < "$EC_POWER_MODE_FILE" 2>/dev/null || true)"
+[[ -n "$EC_MODE" ]] || {
+  EC_MODE="inconnu"
+  echo "mode d'alimentation EC illisible ($EC_POWER_MODE_FILE) : journalisé \"inconnu\"" >&2
+}
+
 command -v llama-server >/dev/null || { echo "llama-server introuvable" >&2; exit 1; }
 command -v python3      >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
 
@@ -133,6 +146,7 @@ trap _fin EXIT INT TERM
 echo "# spec-isolate — $(date '+%F %T')  tag=$TAG"
 echo "# host=$(hostname)  port=$PORT  np=$NP  passes=$PASSES  max_tokens=$MAX_TOKENS"
 echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)  ($(command -v llama-server))"
+echo "# mode EC  : $EC_MODE (alimentation de l'APU ; ne comparer qu'à même mode)"
 echo "# args     : ${SRV_ARGS[*]}"
 echo ""
 echo "→ arrêt du service llama-server (un seul GPU)…"
@@ -181,14 +195,15 @@ grep -iE 'speculativ|draft|mtp|nextn|dflash|dspark|ngram|n_parallel|n_slots|erro
 echo ""
 python3 "$ROOT_DIR/py/spec_isolate_bench.py" \
   --port "$PORT" --tag "$TAG" --out "$OUT" \
-  --prompts "$PROMPTS" --passes "$PASSES" --max-tokens "$MAX_TOKENS" --np "$NP"
+  --prompts "$PROMPTS" --passes "$PASSES" --max-tokens "$MAX_TOKENS" --np "$NP" \
+  --ec-mode "$EC_MODE"
 
 echo ""
 echo "--- mémoire après mesures (free -g) :"
 free -g | sed -n 2p
 echo ""
 echo "→ log serveur : $LOG"
-echo "→ à faire : reporter ces chiffres (date, moteur, device, quant) dans le"
+echo "→ à faire : reporter ces chiffres (date, moteur, mode EC, device, quant) dans le"
 echo "  commentaire du bloc lib/models.sh, déclarer le réglage, puis CONFIRMER"
 echo "  sur le service par ./setup-llm.sh --spec-ab <modèle> <n> - <variante>"
 echo "  (ou --spec-test), qui mesure le modèle tel qu'il est réellement servi."

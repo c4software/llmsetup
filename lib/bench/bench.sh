@@ -112,17 +112,22 @@ _bench_one() {
   BENCH_ROW="$preset|$pp$pp_mark|$med|$acc"
 
   # Journal logs/bench.log (TSV, append) :
-  #   date modèle gguf device build prefill décode acceptance passes prefill_cache
+  #   date modèle gguf device build prefill décode acceptance passes prefill_cache ec_mode
   # device = état RÉEL du serveur (status.args), comme pour le n-max des spec-test ;
-  # prefill_cache = 1 si la passe 1 était contaminée (le "*" du récap).
-  local gguf dev
+  # prefill_cache = 1 si la passe 1 était contaminée (le "*" du récap) ;
+  # ec_mode = mode d'alimentation de l'APU au moment de la mesure (11e colonne,
+  # ajoutée le 16/09/2026 ; les lignes plus anciennes n'en ont pas et sont lues
+  # comme "inconnu" par bench_compare.py). Un run en "balanced" perd 10 à 13 %
+  # de décode : deux modes différents ne se comparent pas (cf. _ec_power_mode).
+  local gguf dev ec
+  ec="$(_ec_power_mode)"
   gguf="$(basename "$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)")"
   dev="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
     | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --device 2>/dev/null || true)"
   [[ -n "$dev" ]] || dev="$DEFAULT_DEVICE"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$(date '+%F %T')" "$preset" "$gguf" "$dev" "$(_llama_build)" \
-    "$pp" "$med" "$acc" "$passes" "${pp_mark:+1}" >> "$BENCH_LOG" 2>/dev/null || true
+    "$pp" "$med" "$acc" "$passes" "${pp_mark:+1}" "$ec" >> "$BENCH_LOG" 2>/dev/null || true
   return 0
 }
 
@@ -211,6 +216,9 @@ cmd_bench() {
   fi
 
   info "À bencher : ${BENCH_TARGETS[*]} — $passes passes chacun"
+  # Moteur et mode d'alimentation de l'APU : les deux conditions qui décident de
+  # la comparabilité d'une campagne à l'autre (cf. _ec_power_mode, lib/common.sh).
+  info "Moteur : $(_llama_build), mode EC : $(_ec_power_mode)"
   echo ""
 
   local -a rows=()

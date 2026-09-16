@@ -51,6 +51,11 @@ def load_runs(log, modèle, gguf, dev):
         # la même acceptance : les mélanger fausserait α. Seul le prompt de
         # référence calibre ; absent = ligne antérieure, c'était spec-test.txt.
         prompt = f[11] if len(f) > 11 and f[11] else "spec-test.txt"
+        # 13e colonne = build llama.cpp, 14e = mode d'alimentation de l'APU
+        # (16/09/2026) : ni l'un ni l'autre n'entre dans la calibration α, qui
+        # porte sur un même modèle/gguf/device. Le mode EC se lit dans le
+        # journal quand un t/s surprend (balanced = 10 à 13 % de décode en
+        # moins) ; les colonnes ajoutées en FIN ne déplacent rien ici.
         if prompt != "spec-test.txt":
             n_autre_prompt += 1
             continue

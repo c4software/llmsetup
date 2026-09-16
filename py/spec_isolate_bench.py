@@ -20,10 +20,13 @@
 # Sorties :
 #   - un tableau texte lisible sur stdout (une ligne par mesure) ;
 #   - <out>/mesures.tsv en APPEND : date tag prompt np mesure pp gen n
-#     draft_n accepted acceptance sain agrege ; agrege est vide sur les
+#     draft_n accepted acceptance sain agrege ec_mode ; agrege est vide sur les
 #     lignes de passe séquentielle, et sur les lignes de salve (np > 1) porte
 #     le débit agrégé de la salve (somme des predicted_n / temps mur), la
-#     colonne gen y restant la médiane par requête ;
+#     colonne gen y restant la médiane par requête ; ec_mode (dernière colonne,
+#     16/09/2026) = mode d'alimentation de l'APU passé par --ec-mode, "inconnu"
+#     par défaut : un run "balanced" perd 10 à 13 % de décode et ne se compare
+#     qu'à un run de même mode ;
 #   - <out>/gen-<prompt>-p<N>.txt : reasoning_content + content de chaque
 #     passe, à relire quand un chiffre semble trop beau.
 #
@@ -49,7 +52,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from timings import degenere  # noqa: E402  (même seuils que --bench / --spec-test)
 
-TSV_HDR = "date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain\tagrege"
+TSV_HDR = "date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain\tagrege\tec_mode"
 
 
 def mot_dominant(texte):
@@ -104,9 +107,9 @@ def requete(url, prompt, seed, max_tokens, temp):
     }
 
 
-def ligne_tsv(fh, tag, prompt, np_, mesure, r, agrege=None):
+def ligne_tsv(fh, tag, prompt, np_, mesure, r, agrege=None, ec_mode="inconnu"):
     fh.write(
-        "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
+        "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n"
         % (
             datetime.now().strftime("%F %T"),
             tag,
@@ -121,6 +124,7 @@ def ligne_tsv(fh, tag, prompt, np_, mesure, r, agrege=None):
             "n/a" if r.get("acc") is None else "%.3f" % r["acc"],
             "non" if r.get("degen") else "oui",
             "" if agrege is None else "%.2f" % agrege,
+            ec_mode,
         )
     )
     fh.flush()
@@ -167,7 +171,7 @@ def sequentiel(args, fh, chemin_prompts):
                 encoding="utf-8",
             ) as g:
                 g.write(r["reasoning"] + "\n=====CONTENT=====\n" + r["content"])
-            ligne_tsv(fh, args.tag, nom, args.np, "passe%d" % i, r)
+            ligne_tsv(fh, args.tag, nom, args.np, "passe%d" % i, r, ec_mode=args.ec_mode)
             if i > 1:
                 mesures.append(r)
         if mesures:
@@ -246,6 +250,7 @@ def multi_slot(args, fh, chemin_prompts):
                 "degen": degen,
             },
             agrege=agg,
+            ec_mode=args.ec_mode,
         )
         print("    agrégé = somme des tokens générés / temps mur de la salve")
 
@@ -261,6 +266,9 @@ def main(argv=None):
     p.add_argument("--np", type=int, default=1)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--temp", type=float, default=0.7)
+    # Mode d'alimentation de l'APU, lu par tools/spec-isolate.sh sur le
+    # contrôleur embarqué (jamais bloquant : "inconnu" si illisible).
+    p.add_argument("--ec-mode", default="inconnu")
     p.add_argument(
         "--prompts-dir",
         default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "prompts"),

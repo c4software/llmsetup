@@ -245,6 +245,43 @@ _llama_build() {
   b="$(paru -Q llama-cpp 2>/dev/null | awk '{print $2}')"
   echo "${b:-?}"
 }
+# Mode d'alimentation de l'APU appliqué par le contrôleur embarqué de la
+# machine du service (bigchuck, Ryzen AI Max+ 395) : fichier sysfs
+# /sys/class/ec_su_axb35/apu/power_mode, valeurs vues "balanced" et
+# "performance". Ce n'est PAS le profil de powerprofilesctl, qui est décorrélé :
+# l'espace utilisateur peut afficher "performance" pendant que l'EC tient l'APU
+# en "balanced".
+# Pourquoi le journaliser, comme l'étiquette de moteur (_llama_build) : mesuré
+# le 16/09/2026, en "balanced" le décode perd 10 à 13 % sur tous les modèles
+# sauf un dense (3 %), alors que le comparateur de --bench annonce une
+# régression dès 5 %. Deux runs pris dans des modes différents s'accusent donc
+# d'une régression qui n'existe pas : la colonne en fin de journal sert à ne
+# comparer que des runs de même mode.
+# Jamais bloquant : une mesure vaut d'être faite même si le mode est inconnu
+# (autre machine, module EC absent, sysfs illisible). Le mode vaut alors
+# "inconnu", un warn est émis une seule fois par processus (garde
+# _EC_POWER_MODE_WARNED) et la fonction sort toujours en 0 ; le warn part sur
+# stderr, la fonction étant appelée en substitution de commande.
+# EC_POWER_MODE_FILE surcharge le chemin (tests, autre plateforme).
+EC_POWER_MODE_FILE="${EC_POWER_MODE_FILE:-/sys/class/ec_su_axb35/apu/power_mode}"
+_EC_POWER_MODE_WARNED=0
+_ec_power_mode() {
+  local m=""
+  if [[ -r "$EC_POWER_MODE_FILE" ]]; then
+    m="$(tr -d '[:space:]' < "$EC_POWER_MODE_FILE" 2>/dev/null || true)"
+  fi
+  if [[ -z "$m" ]]; then
+    if [[ "${_EC_POWER_MODE_WARNED:-0}" -eq 0 ]]; then
+      _EC_POWER_MODE_WARNED=1
+      warn "Mode d'alimentation EC illisible ($EC_POWER_MODE_FILE) : journalisé \"inconnu\"." >&2
+      warn "  Mesure faite quand même ; elle ne se compare qu'aux runs de même mode." >&2
+    fi
+    m="inconnu"
+  fi
+  printf '%s\n' "$m"
+  return 0
+}
+
 # Surcharges spec-draft-n-max par modèle (à côté du script, comme
 # bench-devices.conf) — écrit par --spec-tune, appliqué par generate_models_ini
 # par-dessus la valeur de MODEL_INI (qui reste le défaut). Format "modèle = k".

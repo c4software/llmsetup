@@ -174,8 +174,15 @@ serveur (`/v1/models`), jamais le script ni le ini.
 La mesure est passive : rien n'est écrit, pas de restart, pas de purge de cache.
 Si la passe 1 a été partiellement servie par le cache, le prefill est marqué `*`
 au récap : non comparable, jamais corrigé. Chaque `--bench` est journalisé dans
-`logs/bench.log` avec le build et comparé au run précédent du même modèle, GGUF
-et device : un écart de plus de 5 % est signalé, le changement de build rappelé.
+`logs/bench.log` avec le build et le mode d'alimentation de l'APU (colonne
+`ec_mode`, lue sur le contrôleur embarqué : `balanced`, `performance`, ou
+`inconnu` si le sysfs se tait, jamais bloquant), et comparé au run précédent du
+même modèle, GGUF et device : un écart de plus de 5 % est signalé, le changement
+de build rappelé. La référence est cherchée d'abord parmi les runs du même mode
+EC ; à défaut, le dernier run sert quand même de référence avec la mention
+« mode EC différent : X contre Y, écart non comparable ». Mesuré le 16/09/2026,
+`balanced` coûte 10 à 13 % de décode (3 % sur un dense) : au-dessus du seuil de
+5 %, il inventerait une régression à lui seul.
 
 Comparabilité : les chiffres dépendent des prompts de `prompts/`. Modifier
 `bench-context.txt` ou `bench-task.txt` invalide la comparaison avec les
@@ -302,7 +309,7 @@ contournée par modèle et signalée en amont :
 | `spec-nmax.conf` | modèle = spec-draft-n-max retenu par les mesures |
 | `spec-ngram.conf` | modèle = spec-ngram-map-k-size-m retenu par les mesures |
 | `logs/spec-tests.log` | journal TSV des runs `--spec-test` |
-| `logs/bench.log` | journal TSV des `--bench` (avec le build llama.cpp) ; chaque `--bench` se compare au run précédent du même modèle/GGUF/device et signale un écart de plus de 5 % |
+| `logs/bench.log` | journal TSV des `--bench` (avec le build llama.cpp et le mode EC en queue) ; chaque `--bench` se compare au run précédent du même modèle/GGUF/device et du même mode EC, et signale un écart de plus de 5 % |
 | `logs/bench-parallel.log` | journal TSV des `--bench-parallel` |
 | `logs/bench-agentic.log` | journal TSV des `--bench-agentic` (une ligne par scénario, colonne `N` en queue = boucles simultanées) |
 | `logs/bench-cache.log` | journal TSV des `--bench-cache` |

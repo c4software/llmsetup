@@ -7,7 +7,13 @@
 #
 # Usage : bench_compare.py <bench.log> <modèle> [<modèle>...]
 # Colonnes du log (cf. _bench_one) :
-#   date modèle gguf device build prefill décode acceptance passes prefill_cache
+#   date modèle gguf device build prefill décode acceptance passes prefill_cache ec_mode
+# ec_mode (11e colonne, 16/09/2026) = mode d'alimentation de l'APU lu sur le
+# contrôleur embarqué. Un run en "balanced" perd 10 à 13 % de décode (3 % sur un
+# dense) : au-dessus du seuil de 5 %, donc de quoi inventer une régression à lui
+# seul. La référence est donc cherchée d'abord parmi les runs du MÊME mode ; à
+# défaut on garde le dernier run (même calcul) en disant que l'écart n'est pas
+# comparable. Les lignes antérieures n'ont pas la colonne : mode "inconnu".
 import sys
 
 SEUIL = 0.05
@@ -26,7 +32,8 @@ def lire(log):
         try:
             runs.append(dict(date=f[0], modele=f[1], gguf=f[2], device=f[3], build=f[4],
                              pp=float(f[5]), gen=float(f[6]), acc=f[7], passes=f[8],
-                             ppcache=(f[9] == "1") if len(f) > 9 else False))
+                             ppcache=(f[9] == "1") if len(f) > 9 else False,
+                             ec=(f[10] if len(f) > 10 and f[10] else "inconnu")))
         except ValueError:
             continue
     return runs
@@ -57,11 +64,16 @@ def main():
         if not prev:
             print("  %s (%s, %s) : première mesure journalisée sur ce GGUF/device" % (m, cur["device"], cur["build"]))
             continue
-        p = prev[-1]
+        # Référence de même mode EC d'abord ; sinon le dernier run tout court,
+        # avec la mention qui dit que l'écart ne se lit pas.
+        meme_ec = [r for r in prev if r["ec"] == cur["ec"]]
+        p = (meme_ec or prev)[-1]
+        ec_note = "" if p["ec"] == cur["ec"] else \
+            "  (mode EC différent : %s contre %s, écart non comparable)" % (cur["ec"], p["ec"])
         dpp, dgen = pct(p["pp"], cur["pp"]), pct(p["gen"], cur["gen"])
         build = "" if p["build"] == cur["build"] else "  (build %s → %s)" % (p["build"], cur["build"])
         note_pp = " (prefill contaminé par le cache, écart non significatif)" if (cur["ppcache"] or p["ppcache"]) else drapeau(dpp)
-        print("  %s (%s) vs %s%s" % (m, cur["device"], p["date"], build))
+        print("  %s (%s) vs %s%s%s" % (m, cur["device"], p["date"], build, ec_note))
         print("    prefill %.0f → %.0f t/s (%+.1f %%)%s" % (p["pp"], cur["pp"], dpp, note_pp))
         print("    décode  %.2f → %.2f t/s (%+.1f %%)%s" % (p["gen"], cur["gen"], dgen, drapeau(dgen)))
         if p["acc"] != cur["acc"] and cur["acc"] != "-":

@@ -184,7 +184,7 @@ près — voir `tests/py-golden.sh`.
 | `check_answer.py <json> <attendu>` | réponse `/v1/chat/completions` | ligne lisible ; code 0 si la valeur attendue est dans la réponse (ou le raisonnement), 1 sinon | `_bench_sanity_one` (bench.sh, aussi appelé par `cmd_bench_devices`) |
 | `cache_stats.py <json> <étiquette>` | réponse `/v1/chat/completions` | ligne lisible + `PN=` (tokens du prompt) `CN=` (servis du cache) `PMS=` (prefill ms) | `cmd_bench_cache` |
 | `parallel_agg.py <temps_mur_s> <réponse.json>...` | réponses d'une salve de requêtes simultanées | ligne lisible + `AGG=` (tokens / temps mur) `MED=` (décode médian par requête) `TOK=` `ERR=` | `_bench_parallel_salve` (bench.sh) |
-| `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device, build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
+| `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device **et du même mode EC** (à défaut, le dernier run avec la mention « mode EC différent »), build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
 | `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `logs/spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
 | `perf_graphs.py [<tsv> [<dossier>]]` | `docs/perfs.tsv` (TSV versionné, une ligne par section servie) | `docs/graphs/prefill.svg`, `decode.svg`, `ecarts.svg` (SVG statiques, rendu sobre, tracé déterministe → sortie reproductible) | personne : lancé à la main quand la table du parc change (README, skill `ajout-modele` étape 6) |
 
@@ -240,9 +240,10 @@ de texte ; t(k) affine ; le modèle sert à suggérer le prochain k à mesurer,
 pas à remplacer la mesure.
 
 Journal `logs/spec-tests.log` (TSV) : `date modèle gguf device nmax gen acc
-drafted accepted predicted spectype prompt build`. Les colonnes 11 et 12
+drafted accepted predicted spectype prompt build ec_mode`. Les colonnes 11 et 12
 datent du support des listes et du prompt paramétrable, la 13 du passage en
-`logs/` ; absentes = `draft-mtp` seul sur `spec-test.txt`, build inconnu. `spec_analyze.py` écarte (sans quarantaine : ils sont
+`logs/`, la 14 du mode d'alimentation de l'APU (16/09/2026) ; absentes =
+`draft-mtp` seul sur `spec-test.txt`, build et mode inconnus. `spec_analyze.py` écarte (sans quarantaine : ils sont
 valides, juste hors modèle) les runs en spec-type mixte, dont le k varie
 par forward, et ceux d'un autre prompt ; sans ce filtre le garde-fou
 tokens/forward > k+1 les commenterait tous. C'est pourquoi `--spec-tune`
@@ -361,8 +362,8 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 
 | Fichier | Écrit par | Colonnes |
 |---|---|---|
-| `spec-tests.log` | `cmd_spec_test` | `date modèle gguf device nmax gen acc drafted accepted predicted spectype prompt build` |
-| `bench.log` | `_bench_one` | `date modèle gguf device build prefill décode acceptance passes prefill_cache` ; lu par `bench_compare.py` |
+| `spec-tests.log` | `cmd_spec_test` | `date modèle gguf device nmax gen acc drafted accepted predicted spectype prompt build ec_mode` |
+| `bench.log` | `_bench_one` | `date modèle gguf device build prefill décode acceptance passes prefill_cache ec_mode` ; lu par `bench_compare.py` |
 | `bench-parallel.log` | `cmd_bench_parallel` | `date modèle device build parallel_srv n agrégé décode_par_requête passes` |
 | `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
 | `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N` (une ligne par scénario et par passe, passe 0 = appel froid ; `N` = boucles simultanées de la salve, 1 pour la référence solo ; colonne ajoutée en queue le 15/09/2026, les lignes antérieures à 13 colonnes restent lisibles ; sur les lignes `N > 1`, `prompt_tok`..`decode_tps` valent `n/c`, chaque conteneur lisant le compteur global du serveur) |
@@ -370,7 +371,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
 | `qualif/<tag>/` | `tools/qualif-modele.sh` | `01-devices.log` … `07-agentic.log` (sortie brute de chaque étape) et `resume.md` (en-tête, tableau de perfs, table des étapes) |
-| `spec-isolate/<tag>/mesures.tsv` | `tools/spec-isolate.sh` | `date tag prompt np mesure pp gen n draft_n accepted acceptance sain agrege` (`agrege` vide sur les passes séquentielles, débit agrégé de la salve sur les lignes np > 1 ; à côté de `serveur.log` et des `gen-*.txt` du même dossier) |
+| `spec-isolate/<tag>/mesures.tsv` | `tools/spec-isolate.sh` | `date tag prompt np mesure pp gen n draft_n accepted acceptance sain agrege ec_mode` (`agrege` vide sur les passes séquentielles, débit agrégé de la salve sur les lignes np > 1 ; à côté de `serveur.log` et des `gen-*.txt` du même dossier) |
 
 `device` est l'état réel du serveur (`/v1/models`, flag `--device`) partout
 où le serveur est en cause, le device demandé pour les outils `llama-bench`.

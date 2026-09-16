@@ -190,12 +190,16 @@ cmd_spec_test() {
 
   # --- En-tête : contexte complet du run, à coller tel quel dans un échange ---
   load_bench_conf
-  local mkey mdev gguf gsize llver
+  local mkey mdev gguf gsize llver ecmode
   mkey="$(_preset_model_key "$preset" || true)"
   mdev="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE}"
   gguf="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
   gsize="$(du -h "$gguf" 2>/dev/null | cut -f1 || echo '?')"
   llver="$(_llama_build) ($(llama-server --version 2>&1 | head -1))"
+  # Mode d'alimentation de l'APU (cf. _ec_power_mode, lib/common.sh) : affiché
+  # et journalisé au même titre que le moteur, un run "balanced" perdant 10 à
+  # 13 % de décode. Jamais bloquant, "inconnu" si le sysfs ne répond pas.
+  ecmode="$(_ec_power_mode)"
   local kernel cpu
   kernel="$(uname -r)"
   cpu="$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
@@ -214,6 +218,7 @@ cmd_spec_test() {
   echo "date       : $(date '+%F %T')"
   echo "host       : $(hostname) — $cpu — $kernel"
   echo "llama.cpp  : ${llver:-?}"
+  echo "mode EC    : $ecmode (alimentation de l'APU ; ne comparer qu'à même mode)"
   echo "modèle     : $preset"
   echo "gguf       : $(basename "$gguf") ($gsize)"
   echo "device     : $mdev"
@@ -298,14 +303,15 @@ cmd_spec_test() {
 
   # --- Journal + analyse n-max ---------------------------------------------
   if [[ -n "$nmax" && -n "$med_gen" && "$sum_dn" -gt 0 ]]; then
-    # date modèle gguf device nmax gen acc drafted accepted predicted spectype prompt build
+    # date modèle gguf device nmax gen acc drafted accepted predicted spectype prompt build ec_mode
     # (colonnes 11 et 12 ajoutées avec le support des listes et du prompt
-    #  paramétrable, 13 = build llama.cpp ; les lignes plus anciennes n'en ont
-    #  pas et sont lues comme "draft-mtp" seul sur spec-test.txt, build inconnu)
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    #  paramétrable, 13 = build llama.cpp, 14 = mode d'alimentation de l'APU
+    #  (16/09/2026) ; les lignes plus anciennes n'en ont pas et sont lues comme
+    #  "draft-mtp" seul sur spec-test.txt, build et mode inconnus)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$(date '+%F %T')" "$preset" "$(basename "$gguf")" "$mdev" "$nmax" \
       "$med_gen" "$med_acc" "$sum_dn" "$sum_da" "$sum_pn" "${stype:-draft-mtp}" \
-      "$(basename "$prompt_file")" "$(_llama_build)" >> "$SPEC_LOG"
+      "$(basename "$prompt_file")" "$(_llama_build)" "$ecmode" >> "$SPEC_LOG"
     echo "--- analyse n-max ---"
     if [[ "$stype" == *,* || "$(basename "$prompt_file")" != "spec-test.txt" ]]; then
       # Le run courant est hors modèle α (k variable, ou acceptance d'un autre
@@ -788,6 +794,7 @@ cmd_spec_ab() {
     [[ "$v" == "base" || "$v" == *=* ]] || error "Variante invalide : '$v' (attendu clé=val[;clé=val] ou base)"
   done
   info "spec-ab '$preset' — ${#variantes[@]} variante(s), $passes passes chacune, prompt $(basename "$prompt_file")"
+  info "Moteur : $(_llama_build), mode EC : $(_ec_power_mode)"
   warn "Chaque variante = régénération du ini + restart de $SERVICE_NAME. Rien n'est écrit dans les .conf."
 
   SPEC_AB_DIRTY=0

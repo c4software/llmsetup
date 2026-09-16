@@ -90,8 +90,13 @@ python3 "$PY/parallel_agg.py" 60 "$F/chat-spec.json" "$F/chat-plain.json" "$F/ch
 # --- bench_compare.py : 9b = régression décode -6 % et build changé ; 27b =
 #     prefill contaminé (pas de drapeau) + acceptance ; lfm2.5 = 1re mesure ;
 #     inconnu = absent du journal ; ROCm0 du 9b ne doit pas servir de référence
-#     au run Vulkan0
-python3 "$PY/bench_compare.py" "$F/bench.log" qwen3.5-9b qwen3.8-27b-mtp-nothink lfm2.5-2.6b inconnu > "$TMP/o"; _ck bench-compare.txt "$TMP/o"
+#     au run Vulkan0.
+#     Mode EC (11e colonne, 16/09/2026) : muse-glimmer = un run "balanced"
+#     intercalé, la référence doit être le run "performance" plus ancien (même
+#     mode, aucune mention) ; lfm2.5-8b = aucun run de même mode, référence
+#     gardée mais mention "mode EC différent" (ligne sans colonne = inconnu)
+python3 "$PY/bench_compare.py" "$F/bench.log" qwen3.5-9b qwen3.8-27b-mtp-nothink lfm2.5-2.6b inconnu \
+  muse-glimmer-30b-dflash lfm2.5-8b-a1b-nothink > "$TMP/o"; _ck bench-compare.txt "$TMP/o"
 python3 "$PY/bench_compare.py" "$F/absent.log" qwen3.5-9b > "$TMP/o"; _ck bench-compare-absent.txt "$TMP/o"
 
 # --- depth_curve.py : courbe synthétique 0/16k/32k, tour simulé 2000/3000
@@ -228,9 +233,11 @@ else
   T="$TMP/isolate/mesures.tsv"
   if [[ -s "$T" ]]; then
     # $'…' : les motifs portent de VRAIS tabulateurs, grep -E ne connaît pas \t
-    _ckgrep "spec_isolate_bench : en-tête TSV" $'^date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain\tagrege$' "$T"
-    _ckgrep "spec_isolate_bench : TSV passe saine"  $'bouchon-sain[.]txt\t1\tpasse1\t2500\t120[.]50\t200\t300\t120\t0[.]400\toui\t$'  "$T"
-    _ckgrep "spec_isolate_bench : TSV passe dégénérée" $'bouchon-degen[.]txt\t1\tpasse2\t.*\t0[.]400\tnon\t$' "$T"
+    # ec_mode = dernière colonne (16/09/2026) : "inconnu" ici, --ec-mode n'est
+    # pas passé par le test (pas de contrôleur embarqué sur la machine de test)
+    _ckgrep "spec_isolate_bench : en-tête TSV" $'^date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain\tagrege\tec_mode$' "$T"
+    _ckgrep "spec_isolate_bench : TSV passe saine"  $'bouchon-sain[.]txt\t1\tpasse1\t2500\t120[.]50\t200\t300\t120\t0[.]400\toui\t\tinconnu$'  "$T"
+    _ckgrep "spec_isolate_bench : TSV passe dégénérée" $'bouchon-degen[.]txt\t1\tpasse2\t.*\t0[.]400\tnon\t\tinconnu$' "$T"
     n="$(grep -c . "$T")"
     if [[ "$n" -eq 5 ]]; then echo "[OK]   spec_isolate_bench : 4 mesures + en-tête"
     else echo "[FAIL] spec_isolate_bench : $n lignes de TSV, 5 attendues"; cat "$T"; rc=1; fi

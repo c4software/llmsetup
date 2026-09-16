@@ -7,3 +7,10 @@
     acceptance 0.82 → 0.75
   lfm2.5-2.6b (Vulkan0, b10433) : première mesure journalisée sur ce GGUF/device
   inconnu : rien dans le journal (journal non inscriptible ?)
+  muse-glimmer-30b-dflash (Vulkan0) vs 2026-09-15 08:00:00
+    prefill 300 → 301 t/s (+0.3 %)
+    décode  40.00 → 40.40 t/s (+1.0 %)
+    acceptance 0.60 → 0.61
+  lfm2.5-8b-a1b-nothink (Vulkan0) vs 2026-09-15 08:30:00  (mode EC différent : balanced contre inconnu, écart non comparable)
+    prefill 600 → 590 t/s (-1.7 %)
+    décode  60.00 → 53.00 t/s (-11.7 %)  ⚠ RÉGRESSION

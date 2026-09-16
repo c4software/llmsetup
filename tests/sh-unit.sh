@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Test unitaire des helpers bash de lib/common.sh qui dépendent de
-# l'ENVIRONNEMENT plutôt que d'une entrée : _llama_bin et _llama_build.
+# l'ENVIRONNEMENT plutôt que d'une entrée : _llama_bin, _llama_build et
+# _ec_power_mode (mode d'alimentation de l'APU lu sur le contrôleur embarqué).
 #
 # Pourquoi : le 12/09/2026, deux lignes de logs/bench.log ont été étiquetées
 # "b10809" (paquet Arch) pour des mesures faites par le fork strix-llama.cpp —
@@ -449,6 +450,31 @@ _ck "garde mémoire : place suffisante" "" "$(_run_room $(( 500 * 1024 * 1024 ))
 _ck "garde mémoire : le plus gros non préchargé" "gros" "$(_run_room $(( 50 * 1024 * 1024 )))"
 # (c) BENCH_NO_UNLOAD=1 : garde désactivée, rien déchargé malgré le manque.
 _ck "garde mémoire : BENCH_NO_UNLOAD=1" "" "$(_run_room $(( 50 * 1024 * 1024 )) BENCH_NO_UNLOAD=1)"
+
+# 4bis. Mode d'alimentation de l'APU (_ec_power_mode) : lecture du sysfs, repli
+#       sur "inconnu", et surtout JAMAIS d'échec : aucune mesure ne doit être
+#       refusée parce que le contrôleur embarqué est muet.
+_run_ec() {  # $1 = chemin de EC_POWER_MODE_FILE
+  HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
+    EC_POWER_MODE_FILE="$1" \
+    bash -c "source '$REPO_DIR/lib/common.sh'; _ec_power_mode" 2>/dev/null
+}
+printf 'balanced\n' > "$TMP/ec-mode"
+_ck "mode EC : lu dans le sysfs" "balanced" "$(_run_ec "$TMP/ec-mode")"
+printf 'performance' > "$TMP/ec-mode"   # sans saut de ligne final
+_ck "mode EC : sans saut de ligne"  "performance" "$(_run_ec "$TMP/ec-mode")"
+: > "$TMP/ec-vide"
+_ck "mode EC : fichier vide"        "inconnu"     "$(_run_ec "$TMP/ec-vide")"
+_ck "mode EC : fichier absent"      "inconnu"     "$(_run_ec "$TMP/ec-absent")"
+# set -e chez l'appelant : la fonction sort toujours en 0, même sans fichier.
+if HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
+   EC_POWER_MODE_FILE="$TMP/ec-absent" \
+   bash -c "set -euo pipefail; source '$REPO_DIR/lib/common.sh'; _ec_power_mode >/dev/null; echo suite" 2>/dev/null \
+   | grep -q '^suite$'; then
+  echo "[OK]   mode EC : ne tue pas un script sous set -e"
+else
+  echo "[FAIL] mode EC : la fonction a fait échouer l'appelant sous set -e"; rc=1
+fi
 
 # 5. Étiquette utilisable en colonne TSV : ni espace, ni tabulation.
 etiquette="$(_run '_llama_build')"

@@ -408,8 +408,10 @@ service dans son état normal, puis selon le rôle du modèle :
 ```
 
 `--bench` écrit dans `logs/bench.log` et signale tout écart de plus de 5 %
-avec le run précédent du même GGUF/device : à relancer après chaque changement
-de moteur (paquet ou commit du fork). Le comparateur ne sait pas qu'un réglage
+avec le run précédent du même GGUF/device **et du même mode EC** : à relancer
+après chaque changement de moteur (paquet ou commit du fork). Faute de run de
+même mode, le comparateur garde le dernier run et le dit (« mode EC différent :
+X contre Y, écart non comparable »). Le comparateur ne sait pas qu'un réglage
 a changé entre deux runs : une « régression » annoncée après un retrait
 d'option se justifie dans le récap, elle ne se corrige pas.
 
@@ -423,11 +425,16 @@ gros. Le service se relance seul, mais la mesure en cours est perdue.
 
 Puis rassembler les chiffres dans un tableau unique, à coller dans le message
 de commit, le README ou un artefact partagé. Toujours préciser machine,
-moteur (`bNNNNN` ou `strix-<commit>`), quant, device et date : un chiffre sans
-ces cinq colonnes n'est pas comparable.
+moteur (`bNNNNN` ou `strix-<commit>`), quant, device, date et mode EC
+(`/sys/class/ec_su_axb35/apu/power_mode` : `balanced` ou `performance`, lu et
+journalisé par les mesures) : un chiffre sans ces six colonnes n'est pas
+comparable. Mesuré le 16/09/2026, `balanced` coûte 10 à 13 % de décode sur tous
+les modèles sauf un dense (Muse, 3 %) ; un tableau pris en `balanced` ne se
+compare pas à un tableau pris en `performance`. Ce n'est pas le profil de
+`powerprofilesctl`, qui en est décorrélé.
 
 ```markdown
-### qwen3.8-27b-dflash-nothink : Qwen3.8-27B-UD-Q4_K_XL.gguf (17 Go), bigchuck (Ryzen AI MAX+ 395), fork strix-0007bc6, 13/09/2026
+### qwen3.8-27b-dflash-nothink : Qwen3.8-27B-UD-Q4_K_XL.gguf (17 Go), bigchuck (Ryzen AI MAX+ 395), fork strix-0007bc6, mode EC performance, 13/09/2026
 
 | Configuration | Device | Prompt t/s | Gen t/s | Acceptance | Source |
 |---|---|---|---|---|---|
@@ -453,6 +460,10 @@ Règles du tableau :
   `spec-refactor.txt` ne se comparent pas entre eux ;
 - une seule série de moteur par tableau ; la valeur de l'autre série se cite
   entre parenthèses ou en note, jamais dans la même colonne ;
+- un seul mode EC par tableau, pour la même raison (10 à 13 % de décode) : le
+  mode est affiché en en-tête de `--bench`, `--spec-test`, `--spec-ab`,
+  `tools/spec-isolate.sh` et `tools/qualif-modele.sh`, et journalisé en fin de
+  ligne de `logs/bench.log`, `logs/spec-tests.log` et `mesures.tsv` ;
 - la dernière ligne dit ce qui est retenu et dans quel `.conf` ;
 - les mêmes chiffres vont, résumés, à trois endroits versionnés : le
   commentaire du bloc `lib/models.sh` (date, moteur, device, quant), la table

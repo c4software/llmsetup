@@ -54,7 +54,7 @@
 # Sorties, toutes dans logs/qualif/<tag>/ (donc non versionné) :
 #   01-devices.log  02-ngram-refactor.log  03-ngram-generic.log  04-bench.log
 #   05-cache.log    06-load.log            07-agentic.log
-#   resume.md       en-tête (section, machine, moteur, device, date), tableau
+#   resume.md       en-tête (section, machine, moteur, mode EC, device, date), tableau
 #                   « Configuration | Device | Prompt t/s | Gen t/s |
 #                   Acceptance | Source », meilleur size-m, verdict agentic.
 # resume.md est affiché à la fin.
@@ -265,10 +265,14 @@ fi
 
 mkdir -p "$OUT"
 MOTEUR="$(_llama_build)"
+# Mode d'alimentation de l'APU au moment de la campagne (cf. _ec_power_mode,
+# lib/common.sh) : en "balanced" le décode perd 10 à 13 %, de quoi rendre deux
+# qualifications incomparables. Jamais bloquant : "inconnu" si le sysfs se tait.
+EC_MODE="$(_ec_power_mode)"
 DEBUT_GLOBAL="$(date '+%F %T')"
 
 info "qualif-modele '$SECTION' : sortie $OUT"
-info "  moteur $MOTEUR, device servi $DEV, machine $(hostname)"
+info "  moteur $MOTEUR, mode EC $EC_MODE, device servi $DEV, machine $(hostname)"
 info "  spec-type servi : ${SPEC_TYPE:-aucun} (drafter ${DRAFTER:-aucun}, n-gram ${NGRAM_TYPE:-aucun}, size-m ${SIZE_M_SERVI:-n/c}, n-max ${NMAX:-n/c})"
 warn "Un seul GPU : les étapes s'enchaînent en séquence. Certaines redémarrent $SERVICE_NAME."
 
@@ -592,11 +596,12 @@ _vainqueur_device() {
 }
 
 {
-  echo "### $SECTION : $(hostname), moteur $MOTEUR, device $DEV, $(date '+%d/%m/%Y')"
+  echo "### $SECTION : $(hostname), moteur $MOTEUR, mode EC $EC_MODE, device $DEV, $(date '+%d/%m/%Y')"
   echo ""
   echo "- section : \`$SECTION\`"
   echo "- machine : $(hostname)"
   echo "- moteur : $MOTEUR"
+  echo "- mode EC : $EC_MODE (alimentation de l'APU ; ne comparer qu'à même mode)"
   echo "- device servi : $DEV"
   echo "- spec-type servi : ${SPEC_TYPE:-aucun} (n-max ${NMAX:-n/c}${NGRAM_TYPE:+, $NGRAM_TYPE size-m ${SIZE_M_SERVI:-n/c}})"
   echo "- lancé le : $DEBUT_GLOBAL, terminé le : $(date '+%F %T')"
