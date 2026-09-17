@@ -48,7 +48,7 @@ cmd_bench_parallel() {
   local preset="${1:-}" n="${2:-}" passes="${3:-2}"
   command -v curl >/dev/null || error "curl introuvable"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — ./setup-llm.sh --start"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL - ./setup-llm.sh --start"
   if [[ -z "$preset" ]]; then
     _bench_select_one
     [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné — bench-parallel annulé."; return; }

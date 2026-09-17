@@ -168,7 +168,7 @@ cmd_bench_agentic() {
   [[ "$passes" =~ ^[1-9][0-9]*$ ]] || error "passes doit être un entier >= 1 (reçu : '$passes')"
   [[ "$n" =~ ^[1-9][0-9]*$ ]] || error "N doit être un entier >= 1 (reçu : '$n')"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — ./setup-llm.sh --start"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL - ./setup-llm.sh --start"
   if [[ -z "$preset" ]]; then
     _bench_select_one
     [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné — bench-agentic annulé."; return; }

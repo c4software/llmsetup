@@ -8,9 +8,9 @@
 # https://github.com/halo-box/strix-llama.cpp, construit ici et exposé par
 # quatre liens dans $HOME/.local/bin, que l'unité systemd mettait en tête du
 # PATH. Le service tourne désormais sur l'image (lib/runtime.sh, lib/compose.sh)
-# et ces liens restent le moteur des outils HORS service — llama-bench des
+# et ces liens restent le moteur des outils HORS service - llama-bench des
 # courbes de batch, tools/bench-depth.sh, tools/spec-isolate.sh (common.sh pose
-# le même PATH) — ainsi que le filet de retour arrière de la migration.
+# le même PATH) - ainsi que le filet de retour arrière de la migration.
 #
 # Le paquet Arch reste installé : retirer les liens (--unset-fork) suffit à
 # revenir dessus. Les binaires portent un RUNPATH ABSOLU vers leur dossier
@@ -50,7 +50,7 @@ FORK_CONF="$SCRIPT_DIR/fork.conf"
 # 'ngram-on-disk' not recognized in preset ... », vérifié le 12/09/2026 sur le
 # paquet Arch b10809). Le dépôt ne gère pas deux moteurs : il ne filtre rien et
 # ne réécrit rien, il se contente de SIGNALER ces clés quand le moteur de
-# l'hôte est upstream (_fork_keys_guard), avec un message qui dit quoi faire —
+# l'hôte est upstream (_fork_keys_guard), avec un message qui dit quoi faire -
 # au lieu de laisser llama-server échouer sur un message qui ne nomme qu'une
 # clé. Depuis la bascule du service en conteneur, cmd_start ne l'appelle plus :
 # le moteur servi est celui de l'image, un seul et connu ; la garde ne
@@ -69,7 +69,7 @@ FORK_ONLY_KEYS=(
   spec-prefill-p
 )
 
-# _fork_keys_guard [fichier ini] — garde-fou moteur/ini. Ne dit rien si le
+# _fork_keys_guard [fichier ini] - garde-fou moteur/ini. Ne dit rien si le
 # moteur résolu est le fork (étiquette non numérique) ou inconnu ; sort en
 # erreur s'il est upstream (étiquette bNNNNN, forme du paquet) et que le ini
 # porte une clé de FORK_ONLY_KEYS, en nommant le modèle et la clé.
@@ -717,7 +717,7 @@ cmd_unset_fork() {
     warn "⚠ Les clés ini propres au fork (${FORK_ONLY_KEYS[*]})"
     warn "  font ÉCHOUER le démarrage du ROUTEUR ENTIER sur le paquet Arch :"
     warn "  llama-server refuse toute clé inconnue (« option ... not recognized »)."
-    warn "  Le dépôt ne les retire pas tout seul — il ne fait que le signaler"
+    warn "  Le dépôt ne les retire pas tout seul - il ne fait que le signaler"
     warn "  (_fork_keys_guard, sur le moteur de l'hôte)."
     warn "  Pour rester sur le paquet : retirer ces clés de lib/models.sh, puis"
     warn "  ./setup-llm.sh --preload (régénère le ini) avant le restart."

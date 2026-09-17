@@ -30,7 +30,7 @@ Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTO
 - **docker et son démon activé au boot** (`systemctl enable --now docker`) :
   le service llama-server est un **conteneur**, décrit par un
   `docker-compose.yml` généré dans `~/models`. Sans démon actif au boot, le
-  service ne revient pas après un redémarrage de la machine — c'est `docker`
+  service ne revient pas après un redémarrage de la machine - c'est `docker`
   qui remplace le `loginctl enable-linger` d'avant.
 - `hf` (python-huggingface-hub, python-hf-xet). `gum` optionnel (menus).
 - Paquets llama.cpp : `llama-cpp`, plus les backends ggml splittés :
@@ -66,7 +66,7 @@ cd ~/models && docker compose logs -f
 Le `docker-compose.yml` de `~/models` est **généré** (`lib/compose.sh`), au même
 titre que `models.ini` : il n'est pas versionné, il n'est pas à éditer, et
 `--start` le réécrit à chaque démarrage. Il porte toutes les valeurs en clair
-(pas de `${VAR}`, pas de `.env`), y compris `seccomp=unconfined` — **exigé par
+(pas de `${VAR}`, pas de `.env`), y compris `seccomp=unconfined` - **exigé par
 ROCr**, dont les ioctl du KFD sortent du profil seccomp par défaut de docker.
 C'est le seul assouplissement, et il est compensé : `cap_drop: [ALL]`,
 `no-new-privileges`, aucun `privileged`, aucun accès à `docker.sock`, `~/models`
@@ -87,9 +87,9 @@ exposé par quatre liens (`llama-server`, `llama-bench`, `llama-cli`,
 
 > Depuis la conteneurisation du service, **le fork n'est plus le moteur servi** :
 > c'est l'image (section suivante). Il reste le moteur des outils **hors
-> service** — `llama-bench` des courbes de batch (`--spec-ngram-tune`,
+> service** - `llama-bench` des courbes de batch (`--spec-ngram-tune`,
 > `tools/bench-spec-batch.sh`, `tools/bench-depth.sh`) et le `llama-server`
-> jetable de `tools/spec-isolate.sh` — et le filet de retour arrière tant que la
+> jetable de `tools/spec-isolate.sh` - et le filet de retour arrière tant que la
 > migration n'est pas terminée.
 
 ```bash
@@ -173,7 +173,7 @@ Ce qui tient l'ensemble :
   quelques minutes, on n'en collectionne pas. Ce qu'elle contient se lit dans
   ses étiquettes (`llm-setup.engine_rev`, `llm-setup.rocm_rev`,
   `llm-setup.build_date`), dans `/opt/strix/versions.txt` et dans
-  `logs/images.tsv` — et c'est de là que vient l'étiquette de toutes les
+  `logs/images.tsv` - et c'est de là que vient l'étiquette de toutes les
   mesures (`_llama_build`, forme `strix-<engine7>+r<rocm7>`).
 - L'image ne contient **que le moteur et son runtime** : pas de modèle, pas de
   configuration, pas d'état. `~/models` est monté en lecture seule au même
@@ -211,7 +211,7 @@ d'avancer sans accord explicite.
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | A/B de réglages spéculatifs sur mesure réelle : chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
 | `--spec-ngram-tune [modèle] [n] [prompt]` | Règle la longueur de draft n-gram (`spec-ngram-map-k-size-m`) : courbe `t_forward(batch)` pour localiser la marche de noyau ggml, puis arbitrage des candidats sur mesure réelle (prompt de refactor par défaut) |
-| `--start` | Démarre le service : `docker-compose.yml` régénéré dans `~/models`, conteneur recréé, puis **attente de `/health`** — la commande ne rend la main que quand le routeur répond sur le port 8009 |
+| `--start` | Démarre le service : `docker-compose.yml` régénéré dans `~/models`, conteneur recréé, puis **attente de `/health`** - la commande ne rend la main que quand le routeur répond sur le port 8009 |
 | `--stop` | Arrête le conteneur (SIGINT, jusqu'à 180 s : le déchargement des préchargés est long) |
 | `--restart` | `--stop` puis `--start`. Jamais `docker compose restart`, qui garderait l'ancienne image, l'ancienne ligne de commande et l'ancien `--models-max` |
 | `--status` | `docker compose ps` et réponse de `/health` |

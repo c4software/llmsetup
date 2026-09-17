@@ -1,4 +1,4 @@
-# lib/compose.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
+# lib/compose.sh - sourcé par setup-llm.sh (ne pas exécuter directement)
 # Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
@@ -20,7 +20,7 @@
 #
 # TOUT est résolu ici et écrit EN CLAIR : pas de ${VAR}, pas de fichier .env.
 # Un compose qui dépend de l'environnement du shell qui lance `docker compose`
-# est un compose qui ne dit pas ce qu'il fait — et il serait lu par des mains
+# est un compose qui ne dit pas ce qu'il fait - et il serait lu par des mains
 # différentes (le dépôt, un `cd ~/models && docker compose ps` à la main).
 #
 # ⚠ Le ini et le compose ne se régénèrent PAS ensemble : les tuners
@@ -46,7 +46,7 @@ COMPOSE_CACHE_DIR="$HOME/.local/state/llm-setup/cache"
 # permet de la restreindre sans toucher au code.
 BIND_ADDR="${BIND_ADDR:-0.0.0.0}"
 
-# _compose_gid <groupe> — gid NUMÉRIQUE d'un groupe de l'hôte.
+# _compose_gid <groupe> - gid NUMÉRIQUE d'un groupe de l'hôte.
 # Les groupes render et video sont ceux de L'HÔTE et n'existent pas dans
 # l'image Fedora : passer leur NOM à docker échoue, seul le nombre marche
 # (même raison que dans _dk_run, lib/runtime.sh). Sans eux, le conteneur n'a
@@ -64,11 +64,11 @@ _compose_gid() {
   printf '%s\n' "$gid"
 }
 
-# _compose_check — prérequis de la génération, tous vérifiés AVANT d'écrire la
+# _compose_check - prérequis de la génération, tous vérifiés AVANT d'écrire la
 # moindre ligne. Renvoie 1 en expliquant (sur stderr), sans effet de bord.
 _compose_check() {
   if ! command -v docker >/dev/null 2>&1; then
-    warn "docker introuvable — le service tourne en conteneur, il ne peut pas démarrer ici." >&2
+    warn "docker introuvable - le service tourne en conteneur, il ne peut pas démarrer ici." >&2
     return 1
   fi
   if ! _image_ref >/dev/null 2>&1; then
@@ -77,7 +77,7 @@ _compose_check() {
     return 1
   fi
   [[ -f "$CONFIG_DIR/models.ini" ]] \
-    || { warn "$CONFIG_DIR/models.ini absent — lancer d'abord ./setup-llm.sh --setup." >&2; return 1; }
+    || { warn "$CONFIG_DIR/models.ini absent - lancer d'abord ./setup-llm.sh --setup." >&2; return 1; }
   local g
   for g in render video; do
     _compose_gid "$g" >/dev/null || return 1
@@ -85,7 +85,7 @@ _compose_check() {
   return 0
 }
 
-# generate_compose — écrit le YAML sur STDOUT et ne touche à rien d'autre :
+# generate_compose - écrit le YAML sur STDOUT et ne touche à rien d'autre :
 # c'est ce qui le rend testable (tests/sh-unit.sh le compare à ce qu'on attend,
 # sur un faux docker et un faux getent) et diffable à la main.
 generate_compose() {
@@ -106,7 +106,7 @@ generate_compose() {
 
   cat <<YAML
 # =============================================================================
-# GÉNÉRÉ par ./setup-llm.sh (lib/compose.sh) — NE PAS ÉDITER
+# GÉNÉRÉ par ./setup-llm.sh (lib/compose.sh) - NE PAS ÉDITER
 #
 # Toute modification à la main est perdue au prochain démarrage du service :
 # ./setup-llm.sh --start régénère ce fichier avant chaque « docker compose up ».
@@ -161,7 +161,7 @@ services:
       - "--jinja"
     environment:
       # Sans effet côté Vulkan, nécessaire côté ROCm/HIP sur iGPU (allocations
-      # en mémoire unifiée/GTT au lieu de la VRAM dédiée) — l'unité systemd le
+      # en mémoire unifiée/GTT au lieu de la VRAM dédiée) - l'unité systemd le
       # posait déjà d'office, l'image est en HIP seul : il n'est plus optionnel.
       GGML_CUDA_ENABLE_UNIFIED_MEMORY: "1"
     # Les deux seuls accès matériels dont le backend HIP a besoin.
@@ -193,7 +193,7 @@ services:
     # Pas de mem_limit : la garde mémoire du dépôt (_ensure_room_for) raisonne
     # sur le « available » de l'HÔTE et décharge des modèles par l'API du
     # routeur. Un plafond cgroup ferait tuer le routeur par l'OOM killer du
-    # groupe avant que la garde n'ait la main — exactement ce qu'elle évite.
+    # groupe avant que la garde n'ait la main - exactement ce qu'elle évite.
     ports:
       - "$BIND_ADDR:$SERVER_PORT:$SERVER_PORT"
     volumes:
@@ -231,7 +231,7 @@ services:
 YAML
 }
 
-# regen_compose — écrit $COMPOSE_FILE, par un fichier temporaire, et ne
+# regen_compose - écrit $COMPOSE_FILE, par un fichier temporaire, et ne
 # remplace que si le contenu diffère. Ne rien réécrire quand rien ne change
 # garde une date de modification qui veut dire quelque chose (« le compose a
 # bougé au dernier démarrage »), et évite de toucher le fichier sous les yeux
@@ -242,7 +242,7 @@ regen_compose() {
   mkdir -p "$COMPOSE_CACHE_DIR" 2>/dev/null || true
 
   local tmp
-  tmp="$(mktemp)" || { warn "mktemp en échec — docker-compose.yml non régénéré."; return 1; }
+  tmp="$(mktemp)" || { warn "mktemp en échec - docker-compose.yml non régénéré."; return 1; }
   if ! generate_compose > "$tmp"; then
     rm -f "$tmp"
     return 1

@@ -43,7 +43,7 @@ Trois conséquences pour toute la procédure ci-dessous :
   `-grace-tokens`, `spec-draft-adaptive`, `spec-prefill*`. Le paquet Arch
   refuse toute clé inconnue et c'est le **routeur entier** qui ne démarre pas,
   pas seulement le modèle fautif. En poser une dans un bloc verrouille donc le
-  parc sur un moteur qui les comprend — l'image du service les comprend, le
+  parc sur un moteur qui les comprend - l'image du service les comprend, le
   paquet Arch non (`_fork_keys_guard` le signale côté hôte). Pour revenir au
   paquet : retirer ces lignes de `lib/models.sh`, puis `--preload`.
 - **Ne pas proposer `spec-prefill*`** : mesuré le 12-13/09/2026 sur

@@ -91,7 +91,7 @@ _bench_sanity_one() {
 cmd_bench_sanity() {
   local target="${1:-}"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — ./setup-llm.sh --start"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL - ./setup-llm.sh --start"
   local -a cibles=()
   if [[ "$target" == "all" ]]; then
     _bench_presets; cibles=("${BENCH_PRESETS[@]}")
@@ -179,7 +179,7 @@ cmd_bench_devices() {
     BENCH_DEV_DIRTY=1
     regen_models_ini
     # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
-    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+    _svc_restart || error "Restart de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
     # Justesse d'abord : un device qui répond faux (texte propre mais dérive
     # numérique) ne doit pas entrer dans la comparaison, ses t/s sont sans objet.
     if ! _bench_sanity_one "$preset"; then

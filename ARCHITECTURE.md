@@ -560,7 +560,7 @@ tout seul rend les séries de mesures incomparables.
   `_svc_restart` est un `stop` puis un `start`.
 - Le compose est **régénéré à chaque démarrage** (`_svc_start`), jamais édité :
   `--models-max` suit `preload.conf`, l'image suit `runtime/image.conf`, les
-  gid suivent l'hôte. Toutes les valeurs y sont écrites **en clair** — pas de
+  gid suivent l'hôte. Toutes les valeurs y sont écrites **en clair** - pas de
   `${VAR}`, pas de `.env`.
 - Les tuners (`--spec-ab`, `--spec-tune`, `--spec-ngram-tune`, `--bench-load`)
   ne régénèrent que le **ini** (`regen_models_ini`), jamais le compose : leurs
@@ -585,7 +585,7 @@ tout seul rend les séries de mesures incomparables.
   colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 - Tout journal de mesure porte l'étiquette du moteur SERVI (`_llama_build`) :
   un chiffre sans son build ne se compare pas. L'étiquette est une CHAÎNE, pas
-  un nombre — `strix-<engine7>+r<rocm7>`, lue sur les `LABEL` de l'image
+  un nombre - `strix-<engine7>+r<rocm7>`, lue sur les `LABEL` de l'image
   (repli : dernière ligne de `logs/images.tsv`, puis `?`). L'étiquette du
   moteur de l'HÔTE (`_host_llama_build` : `bNNNNN` pour le paquet,
   `strix-<commit>` pour le fork) ne sert plus qu'aux outils hors service et au

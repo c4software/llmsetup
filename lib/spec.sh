@@ -16,7 +16,7 @@
 # puisque la spéculation est sans perte → comparaisons sans bruit de sampling,
 # tout en couvrant plusieurs trajectoires), et affiche prompt/gen t/s
 # depuis `timings` de llama-server, plus l'acceptance MTP (draft_n_accepted /
-# draft_n, renvoyés dans le même `timings` — pas besoin des journaux). La 1re
+# draft_n, renvoyés dans le même `timings` - pas besoin des journaux). La 1re
 # passe est marquée (cache froid), comparer les médianes des suivantes.
 # L'en-tête reprend tout le contexte (host, versions llama-cpp/ggml, GGUF,
 # device, corps du modèle) pour que le bloc soit auto-suffisant à partager.
@@ -143,7 +143,7 @@ cmd_spec_test() {
   command -v curl >/dev/null || error "curl introuvable"
   command -v python3 >/dev/null || error "python3 introuvable"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — ./setup-llm.sh --start"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL - ./setup-llm.sh --start"
 
   load_spec_conf
   local nmax nmax_cfg nmax_srv
@@ -381,7 +381,7 @@ cmd_spec_tune() {
   _preset_has_spec_type "$preset" draft-mtp \
     || error "'$preset' n'a pas de tête MTP (draft-mtp attendu dans spec-type, seul ou en liste)"
   _svc_installed \
-    || error "Service $SERVICE_NAME non montable ici — --spec-tune a besoin de le redémarrer entre deux n-max (docker + ./setup-llm.sh --image-build)."
+    || error "Service $SERVICE_NAME non montable ici - --spec-tune a besoin de le redémarrer entre deux n-max (docker + ./setup-llm.sh --image-build)."
 
   local -a ks=()
   local k
@@ -435,7 +435,7 @@ cmd_spec_tune() {
     SPEC_TUNE_DIRTY=1
     regen_models_ini
     # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
-    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+    _svc_restart || error "Restart de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
     cmd_spec_test "$preset" "$passes"
   done
   unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
@@ -459,7 +459,7 @@ cmd_spec_tune() {
   regen_models_ini
   info "✅ $preset : spec-draft-n-max = $rec enregistré dans $SPEC_CONF (avant : $before)"
   info "Restart final de $SERVICE_NAME sur la valeur retenue..."
-  _svc_restart || warn "Restart en échec — ./setup-llm.sh --restart"
+  _svc_restart || warn "Restart en échec - ./setup-llm.sh --restart"
   SPEC_TUNE_DIRTY=0
   trap - EXIT
 }
@@ -554,7 +554,7 @@ cmd_spec_ngram_tune() {
   [[ "$passes" =~ ^[0-9]+$ && "$passes" -ge 2 ]] || error "Passes invalide : '$passes' (>= 2)"
   command -v llama-bench >/dev/null || error "llama-bench introuvable (paquet llama-cpp)"
   _svc_installed \
-    || error "Service $SERVICE_NAME non montable ici — l'arbitrage a besoin de le redémarrer (docker + ./setup-llm.sh --image-build)."
+    || error "Service $SERVICE_NAME non montable ici - l'arbitrage a besoin de le redémarrer (docker + ./setup-llm.sh --image-build)."
 
   # Défaut spec-refactor.txt et non spec-test.txt : ce dernier écrit un module
   # de zéro, sans une répétition à retrouver, donc sans un seul hit n-gram — les
@@ -605,7 +605,7 @@ cmd_spec_ngram_tune() {
 
   if [[ "$SPEC_NGRAM_SERVICE_ACTIF" -eq 1 ]]; then
     info "Arrêt de $SERVICE_NAME le temps du balayage (contention GPU)."
-    _svc_stop || warn "Arrêt en échec — mesures potentiellement faussées."
+    _svc_stop || warn "Arrêt en échec - mesures potentiellement faussées."
   fi
   export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
@@ -673,7 +673,7 @@ cmd_spec_ngram_tune() {
     export SPEC_TYPE_FORCE="none" SPEC_TYPE_FORCE_PRESET="$preset"
     regen_models_ini
     # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
-    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+    _svc_restart || error "Restart de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
     cmd_spec_test "$preset" "$passes" "$prompt_file"
     ref_gen="${SPEC_TEST_MED_GEN:-}"
     unset SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
@@ -687,7 +687,7 @@ cmd_spec_ngram_tune() {
     export SPEC_NGRAM_FORCE="$m" SPEC_NGRAM_FORCE_PRESET="$preset"
     regen_models_ini
     # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
-    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+    _svc_restart || error "Restart de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
     cmd_spec_test "$preset" "$passes" "$prompt_file"
     mesures+=("${SPEC_TEST_MED_GEN:-0}")
   done
@@ -730,7 +730,7 @@ cmd_spec_ngram_tune() {
   regen_models_ini
   info "✅ $preset : spec-ngram-map-k-size-m = $best_m enregistré dans $SPEC_NGRAM_CONF (avant : ${avant:-défaut})"
   info "Restart final sur la valeur retenue..."
-  _svc_restart || warn "Restart en échec — ./setup-llm.sh --restart"
+  _svc_restart || warn "Restart en échec - ./setup-llm.sh --restart"
   trap - EXIT
 }
 
@@ -767,7 +767,7 @@ cmd_spec_ab() {
   fi
   [[ -f "$prompt_file" ]] || error "Prompt introuvable : $prompt_file"
   _svc_installed \
-    || error "Service $SERVICE_NAME non montable ici — --spec-ab redémarre le service entre deux variantes (docker + ./setup-llm.sh --image-build)."
+    || error "Service $SERVICE_NAME non montable ici - --spec-ab redémarre le service entre deux variantes (docker + ./setup-llm.sh --image-build)."
 
   local -a variantes=("$@")
   local v
@@ -802,7 +802,7 @@ cmd_spec_ab() {
     SPEC_AB_DIRTY=1
     regen_models_ini
     # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
-    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+    _svc_restart || error "Restart de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
     cmd_spec_test "$preset" "$passes" "$prompt_file"
     gens+=("${SPEC_TEST_MED_GEN:-0}"); accs+=("${SPEC_TEST_MED_ACC:--}")
   done

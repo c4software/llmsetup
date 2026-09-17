@@ -886,14 +886,14 @@ _ckin() {  # $1 = libellé, $2 = motif attendu dans $YML
   if grep -qF -- "$2" <<<"$YML"; then
     echo "[OK]   compose : $1"
   else
-    echo "[FAIL] compose : $1 — motif absent : $2"; rc=1
+    echo "[FAIL] compose : $1 - motif absent : $2"; rc=1
   fi
 }
 # Les motifs INTERDITS sont cherchés hors commentaires : le YAML explique
 # justement pourquoi il n'y a ni mem_limit, ni docker.sock, ni network_mode.
 _ckout() {  # $1 = libellé, $2 = motif INTERDIT
   if grep -v '^[[:space:]]*#' <<<"$YML" | grep -qF -- "$2"; then
-    echo "[FAIL] compose : $1 — motif présent alors qu'il ne devrait pas : $2"; rc=1
+    echo "[FAIL] compose : $1 - motif présent alors qu'il ne devrait pas : $2"; rc=1
   else
     echo "[OK]   compose : $1"
   fi
@@ -985,7 +985,7 @@ else
 fi
 
 # (d) LE test qui compte côté pilotage : _svc_restart ne doit JAMAIS émettre
-#     « compose restart », qui relancerait le conteneur existant — donc
+#     « compose restart », qui relancerait le conteneur existant - donc
 #     l'ancienne image, l'ancienne ligne de commande et l'ancien --models-max.
 #     Un stop puis un up --force-recreate, rien d'autre.
 : > "$SVC/etat/docker.log"
@@ -1046,7 +1046,7 @@ fi
 
 # (h) --migrate-off-systemd : idempotente. Elle sera jouée une fois par
 #     machine, éventuellement deux (reprise après interruption), et une
-#     machine neuve — sans unité — doit la traverser sans erreur.
+#     machine neuve - sans unité - doit la traverser sans erreur.
 mkdir -p "$SVC/home/.config/systemd/user"
 : > "$SVC/home/.config/systemd/user/llama-server.service"
 : > "$SVC/etat/systemctl.log"

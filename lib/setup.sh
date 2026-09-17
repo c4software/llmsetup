@@ -102,7 +102,7 @@ cmd_setup() {
   # Le compose n'est pas indispensable au reste du setup : _svc_start le
   # régénère de toute façon. Le générer ici sert à échouer TÔT et clairement
   # (image absente, groupe render manquant) plutôt qu'au premier --start.
-  regen_compose || warn "docker-compose.yml non généré (voir ci-dessus) — --start le retentera."
+  regen_compose || warn "docker-compose.yml non généré (voir ci-dessus) - --start le retentera."
 
   info "✅ Config générée : $CONFIG_DIR/models.ini"
   info "Setup terminé → ./setup-llm.sh --start"
@@ -115,7 +115,7 @@ cmd_setup() {
   _maybe_restart_service
 }
 
-# Moteur du SERVICE : docker et l'image du dépôt. Jamais bloquant — un --setup
+# Moteur du SERVICE : docker et l'image du dépôt. Jamais bloquant - un --setup
 # sert aussi à télécharger des poids sur une machine qui ne servira rien.
 # Isolée de cmd_setup pour être testable seule, comme _setup_propose_fork.
 _setup_check_docker() {
@@ -134,18 +134,18 @@ _setup_check_docker() {
   if ref="$(_image_ref 2>/dev/null)"; then
     info "  Image du moteur : $ref (étiquette des mesures : $(_llama_build))"
   else
-    warn "  Aucune image du moteur ici — ./setup-llm.sh --image-build (40 à 60 min à froid)."
+    warn "  Aucune image du moteur ici - ./setup-llm.sh --image-build (40 à 60 min à froid)."
   fi
   return 0
 }
 
 # Proposition du moteur HORS SERVICE, en fin de --setup (et donc de --update).
 # Le fork n'est plus le moteur du service (c'est l'image), mais il reste celui
-# des outils hors service — llama-bench de --spec-ngram-tune, tools/bench-depth.sh,
-# tools/spec-isolate.sh — et le filet de retour arrière de la migration.
-# Isolée de
-# cmd_setup pour être testable seule (tests/sh-unit.sh) : cmd_setup fait paru,
-# hf et réseau, cette fonction ne lit que l'état du disque.
+# des outils hors service (llama-bench de --spec-ngram-tune,
+# tools/bench-depth.sh, tools/spec-isolate.sh) et le filet de retour arrière de
+# la migration.
+# Isolée de cmd_setup pour être testable seule (tests/sh-unit.sh) : cmd_setup
+# fait paru, hf et réseau, cette fonction ne lit que l'état du disque.
 #
 # Le fork strix-llama.cpp n'est pas un agrément : le parc est réglé pour lui
 # (FORK_ONLY_KEYS dans le ini, sidecar MTP de Flash-Next) et le retour arrière
@@ -254,8 +254,8 @@ cmd_update() {
 # Les modèles en shards sont protégés au niveau du dossier de quant : KNOWN_FILES
 # ne cite que le shard 00001, les suivants ne doivent évidemment pas sauter.
 #
-# ⚠ Les deux artefacts GÉNÉRÉS de $MODELS_BASE — `models.ini` (lib/ini.sh) et
-# `docker-compose.yml` (lib/compose.sh) — sont hors d'atteinte PAR
+# ⚠ Les deux artefacts GÉNÉRÉS de $MODELS_BASE - `models.ini` (lib/ini.sh) et
+# `docker-compose.yml` (lib/compose.sh) - sont hors d'atteinte PAR
 # CONSTRUCTION, et les deux `find` ci-dessous ne doivent donc jamais être
 # « corrigés » en ce sens : le premier ne liste que des DOSSIERS de premier
 # niveau (`-maxdepth 1 -type d`), le second que des fichiers `*.gguf` à partir

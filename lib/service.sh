@@ -2,12 +2,12 @@
 # Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
-# Sortie de systemd — commande de bascule, TEMPORAIRE
+# Sortie de systemd - commande de bascule, TEMPORAIRE
 #
 # Le service n'est plus une unité systemd user : c'est un conteneur décrit par
 # le docker-compose.yml généré (lib/compose.sh) et piloté par les _svc_*
 # (lib/svc.sh). Il ne reste ici que la commande qui débranche l'ancienne unité
-# sur une machine qui l'avait installée — elle sera retirée du dépôt quand le
+# sur une machine qui l'avait installée - elle sera retirée du dépôt quand le
 # parc sera passé.
 #
 # Ce qui a disparu avec l'unité : cmd_install_service / cmd_uninstall_service,
@@ -16,7 +16,7 @@
 # vit dans l'image, plus dans ~/.local/bin).
 # =============================================================================
 
-# cmd_migrate_off_systemd — débranche l'unité systemd user, dans l'ordre :
+# cmd_migrate_off_systemd - débranche l'unité systemd user, dans l'ordre :
 # arrêt, désactivation, suppression du fichier d'unité, daemon-reload, puis
 # contrôle que le port du routeur est bien libre avant de rendre la main.
 # Idempotente : une machine sans unité la traverse sans rien casser.
@@ -30,7 +30,7 @@ cmd_migrate_off_systemd() {
     systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
     info "  unité arrêtée et désactivée (si elle existait)."
   else
-    warn "  systemctl introuvable — aucune unité à débrancher ici."
+    warn "  systemctl introuvable - aucune unité à débrancher ici."
   fi
 
   if [[ -f "$SERVICE_FILE" ]]; then
@@ -60,7 +60,7 @@ cmd_migrate_off_systemd() {
       info "  port $SERVER_PORT libre."
     fi
   else
-    warn "  ss introuvable — port $SERVER_PORT non vérifié."
+    warn "  ss introuvable - port $SERVER_PORT non vérifié."
   fi
 
   # Les liens du fork ne gênent pas le conteneur (le moteur vit dans l'image),

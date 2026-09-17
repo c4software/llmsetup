@@ -13,7 +13,7 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-# Propose un restart du service si actif — appelé en fin de setup /
+# Propose un restart du service si actif - appelé en fin de setup /
 # update / cleanup / preload (config ou poids modifiés). Rappel : les poids
 # déjà mmap'és restent sur l'ancien inode tant que le serveur n'a pas redémarré.
 # Non-interactif : jamais de restart automatique, juste le rappel.
@@ -33,10 +33,10 @@ _maybe_restart_service() {
     if _svc_restart; then
       info "✅ $SERVICE_NAME redémarré."
     else
-      warn "Redémarrage en échec — voir : ./setup-llm.sh --logs --tail 50"
+      warn "Redémarrage en échec - voir : ./setup-llm.sh --logs --tail 50"
     fi
   else
-    info "Redémarrage sauté — appliquer plus tard : ./setup-llm.sh --restart"
+    info "Redémarrage sauté - appliquer plus tard : ./setup-llm.sh --restart"
   fi
 }
 
@@ -214,7 +214,7 @@ _llama_bin() {
 # Depuis la conteneurisation du service, ce qui sert les modèles est l'image
 # (runtime/, lib/runtime.sh) : l'étiquette vient de ses LABEL, pas d'un binaire
 # de l'hôte que plus personne n'appelle pour servir. Forme retenue :
-# "strix-<engine7>+r<rocm7>" — les deux révisions comptent, un même moteur
+# "strix-<engine7>+r<rocm7>" - les deux révisions comptent, un même moteur
 # compilé sur un autre ROCr/HIP ne donne pas les mêmes chiffres, et c'est
 # précisément le couple que runtime/image.conf épingle.
 # Mémoïsée dans le processus : une campagne --bench all appelle cette fonction
@@ -257,7 +257,7 @@ _llama_build() {
 }
 
 # Étiquette du moteur de l'HÔTE (fork strix-llama.cpp ou paquet Arch). Ce
-# n'est plus l'étiquette des mesures du service — c'est celle du binaire que
+# n'est plus l'étiquette des mesures du service - c'est celle du binaire que
 # lib/fork.sh installe et que les outils hors service appellent.
 # Deux formes, parce que deux moteurs coexistent sur l'hôte
 # (cf. README « Moteur : fork strix-llama.cpp ») :

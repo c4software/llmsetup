@@ -70,7 +70,7 @@ résumer ou la supprimer, non.
 ## Règles de terrain
 
 - Les scripts Python sont appelés **par chemin absolu depuis `SCRIPT_DIR`**
-  (`python3 "$SCRIPT_DIR/py/x.py"`) — les commandes du dépôt sont lancées
+  (`python3 "$SCRIPT_DIR/py/x.py"`) - les commandes du dépôt sont lancées
   depuis n'importe où.
 - Les prompts de mesure vivent dans `prompts/`. **Toute modification d'un
   prompt invalide les comparaisons avec les runs antérieurs de

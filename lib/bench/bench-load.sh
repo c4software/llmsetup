@@ -22,7 +22,7 @@ BENCH_LOAD_LOG="$LOG_DIR/bench-load.log"
 cmd_bench_load() {
   local target="${1:-}"
   _svc_installed \
-    || error "Service $SERVICE_NAME non montable ici — --bench-load redémarre le service entre deux modèles (docker + ./setup-llm.sh --image-build)."
+    || error "Service $SERVICE_NAME non montable ici - --bench-load redémarre le service entre deux modèles (docker + ./setup-llm.sh --image-build)."
   local -a cibles=()
   if [[ "$target" == "all" ]]; then
     _bench_presets; cibles=("${BENCH_PRESETS[@]}")
@@ -41,7 +41,7 @@ cmd_bench_load() {
     echo ""
     info "── $p ──"
     # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
-    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+    _svc_restart || error "Restart de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
     body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$p" 1 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
     local code
     t0="$(date +%s.%N)"

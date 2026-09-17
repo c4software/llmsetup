@@ -115,7 +115,7 @@ _svc_is_active && SERVICE_STATE="EN MARCHE"
 echo "# bench-depth — $(date '+%F %T')"
 echo "# host=$(hostname)  build=${BUILD:-?}  devices=${DEVS[*]}  depths=$DEPTHS  pp=$PP  tg=$TG  reps=$REPS  kv=$CTK/$CTV  fa=$FA"
 echo "# service llama-server : $SERVICE_STATE"
-[[ "$SERVICE_STATE" == "EN MARCHE" ]] && echo "#   ⚠ contention GPU/mémoire — pour un run propre : ./setup-llm.sh --stop"
+[[ "$SERVICE_STATE" == "EN MARCHE" ]] && echo "#   ⚠ contention GPU/mémoire - pour un run propre : ./setup-llm.sh --stop"
 echo
 for gguf in "$@"; do
   [[ -f "$gguf" ]] || { echo "absent, ignoré : $gguf" >&2; continue; }

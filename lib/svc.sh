@@ -1,8 +1,8 @@
-# lib/svc.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
+# lib/svc.sh - sourcé par setup-llm.sh (ne pas exécuter directement)
 # Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
-# Pilotage du service — couche unique au-dessus de docker compose
+# Pilotage du service - couche unique au-dessus de docker compose
 #
 # Tout le dépôt passe par les _svc_* de ce module : plus un seul
 # `docker compose` du service ailleurs, comme il n'y avait plus qu'un seul
@@ -26,24 +26,24 @@
 # _svc_restart est un stop puis un start, et le start régénère le compose.
 # =============================================================================
 
-# _svc_compose [args...] — le seul point d'appel de docker compose du service.
+# _svc_compose [args...] - le seul point d'appel de docker compose du service.
 # --project-directory $CONFIG_DIR : le compose vit à côté de models.ini, et
 # c'est ce dossier qui doit servir de base, quel que soit le cwd de l'appelant
 # (les mesures sont lancées depuis le dépôt, le service depuis n'importe où).
 _svc_compose() {
   command -v docker >/dev/null 2>&1 || { warn "docker introuvable."; return 1; }
-  [[ -f "$COMPOSE_FILE" ]] || { warn "$COMPOSE_FILE absent — ./setup-llm.sh --start le génère."; return 1; }
+  [[ -f "$COMPOSE_FILE" ]] || { warn "$COMPOSE_FILE absent - ./setup-llm.sh --start le génère."; return 1; }
   docker compose --project-directory "$CONFIG_DIR" -f "$COMPOSE_FILE" "$@"
 }
 
-# _svc_installed — le service est-il montable ici ? Compose générable (docker,
+# _svc_installed - le service est-il montable ici ? Compose générable (docker,
 # image locale, models.ini) : le compose lui-même n'a pas à exister, il se
 # régénère. Remplace le `systemctl --user is-enabled` des mesures.
 _svc_installed() {
   _compose_check >/dev/null 2>&1
 }
 
-# _svc_is_active — le conteneur tourne-t-il ? Interrogation directe de docker
+# _svc_is_active - le conteneur tourne-t-il ? Interrogation directe de docker
 # sur le nom du conteneur, sans passer par compose : c'est appelé souvent
 # (fin de --setup, de --update, de --cleanup) et un `docker compose ps` coûte
 # nettement plus cher qu'un inspect.
@@ -52,7 +52,7 @@ _svc_is_active() {
   [[ "$(docker inspect -f '{{.State.Running}}' "$SERVICE_NAME" 2>/dev/null || true)" == "true" ]]
 }
 
-# _svc_wait_ready [timeout=300] — attendre que le routeur réponde.
+# _svc_wait_ready [timeout=300] - attendre que le routeur réponde.
 #
 # Deux sorties : /health répond (0), ou le conteneur est mort / le plafond est
 # atteint (1, avec le message qui renvoie aux journaux). Le plafond est large
@@ -60,7 +60,7 @@ _svc_is_active() {
 # minutes à revenir ; l'attente ne coûte rien quand le service est déjà prêt.
 _svc_wait_ready() {
   local timeout="${1:-300}" t=0 annonce=0 etat code
-  command -v curl >/dev/null 2>&1 || { warn "curl introuvable — attente de /health sautée."; return 0; }
+  command -v curl >/dev/null 2>&1 || { warn "curl introuvable - attente de /health sautée."; return 0; }
   while :; do
     if curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; then
       if [[ "$annonce" -eq 1 ]]; then
@@ -94,10 +94,10 @@ _svc_wait_ready() {
   done
 }
 
-# _svc_start — compose régénéré PUIS démarrage PUIS attente.
+# _svc_start - compose régénéré PUIS démarrage PUIS attente.
 #
 # --force-recreate : le conteneur est recréé même si compose juge que rien n'a
-# changé. C'est voulu — ce qui a changé est souvent hors du compose (models.ini
+# changé. C'est voulu - ce qui a changé est souvent hors du compose (models.ini
 # régénéré, poids retéléchargés), et un conteneur réutilisé servirait l'ancien
 # état. --remove-orphans ramasse les conteneurs d'un service renommé.
 _svc_start() {
@@ -106,7 +106,7 @@ _svc_start() {
   _svc_wait_ready
 }
 
-# _svc_stop [timeout=180] — arrêt propre (SIGINT, cf. stop_signal du compose).
+# _svc_stop [timeout=180] - arrêt propre (SIGINT, cf. stop_signal du compose).
 # Le conteneur est arrêté, pas supprimé : `docker compose ps -a` garde la trace
 # du dernier code de sortie, et _svc_start le recrée de toute façon.
 _svc_stop() {
@@ -116,14 +116,14 @@ _svc_stop() {
   return 0
 }
 
-# _svc_restart — stop puis start. JAMAIS `docker compose restart`, qui
+# _svc_restart - stop puis start. JAMAIS `docker compose restart`, qui
 # garderait l'ancienne image, l'ancienne commande et l'ancien --models-max.
 _svc_restart() {
-  _svc_stop || warn "Arrêt de $SERVICE_NAME en échec — démarrage tenté quand même."
+  _svc_stop || warn "Arrêt de $SERVICE_NAME en échec - démarrage tenté quand même."
   _svc_start
 }
 
-# _svc_logs [args...] — --no-color : les journaux sont lus dans un fichier ou
+# _svc_logs [args...] - --no-color : les journaux sont lus dans un fichier ou
 # dans un tube aussi souvent qu'à l'écran.
 _svc_logs() {
   _svc_compose logs --no-color "$@"
@@ -133,7 +133,7 @@ _svc_logs() {
 # Commandes publiques
 # =============================================================================
 
-# cmd_start — démarre la stack (commande par défaut, comme avant la bascule).
+# cmd_start - démarre la stack (commande par défaut, comme avant la bascule).
 # L'ancien --start exécutait llama-server au premier plan, pour l'unité
 # systemd ; il n'y a plus d'unité, et le moteur de l'hôte n'est plus celui qui
 # sert. Son garde-fou moteur/ini (_fork_keys_guard) n'a donc plus d'objet ici :
@@ -141,16 +141,16 @@ _svc_logs() {
 # reste en place (filet de retour arrière tant que la migration n'est pas
 # terminée) et ses commandes --setup-fork / --update-fork sont inchangées.
 cmd_start() {
-  [[ -f "$CONFIG_DIR/models.ini" ]] || error "Config introuvable — lance d'abord --setup"
+  [[ -f "$CONFIG_DIR/models.ini" ]] || error "Config introuvable - lance d'abord --setup"
   _compose_check || error "Le service ne peut pas démarrer ici (voir ci-dessus)."
 
   load_preload_conf
   local models_max=$(( ${#PRELOADED[@]} + 1 ))
   (( models_max < 2 )) && models_max=2
   info "Démarrage de $SERVICE_NAME (conteneur, router mode) sur $BIND_ADDR:$SERVER_PORT..."
-  info "  Préchargés : $(_preload_summary) — models-max=$models_max"
+  info "  Préchargés : $(_preload_summary) - models-max=$models_max"
 
-  _svc_start || error "Démarrage de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+  _svc_start || error "Démarrage de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
   info "✅ $SERVICE_NAME répond sur $SPEC_TEST_URL (WebUI comprise)."
 }
 
@@ -160,17 +160,17 @@ cmd_stop() {
     return 0
   fi
   info "Arrêt de $SERVICE_NAME (jusqu'à 180 s : déchargement des modèles préchargés)..."
-  _svc_stop || error "Arrêt de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+  _svc_stop || error "Arrêt de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
   info "✅ $SERVICE_NAME arrêté."
 }
 
 cmd_restart() {
   info "Redémarrage de $SERVICE_NAME (compose régénéré, conteneur recréé)..."
-  _svc_restart || error "Redémarrage de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
+  _svc_restart || error "Redémarrage de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
   info "✅ $SERVICE_NAME redémarré et prêt sur $SPEC_TEST_URL."
 }
 
-# cmd_status — état du conteneur (compose) plus la seule chose qui compte
+# cmd_status - état du conteneur (compose) plus la seule chose qui compte
 # vraiment pour les mesures : le routeur répond-il ?
 cmd_status() {
   if [[ -f "$COMPOSE_FILE" ]]; then
@@ -187,12 +187,12 @@ cmd_status() {
       warn "  Suivre : ./setup-llm.sh --logs -f"
     fi
   else
-    warn "$SERVICE_NAME n'est pas en marche — ./setup-llm.sh --start"
+    warn "$SERVICE_NAME n'est pas en marche - ./setup-llm.sh --start"
   fi
   return 0
 }
 
-# cmd_logs [-f] [--tail N] — journaux du conteneur.
+# cmd_logs [-f] [--tail N] - journaux du conteneur.
 cmd_logs() {
   local -a args=()
   while [[ $# -gt 0 ]]; do

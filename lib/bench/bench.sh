@@ -193,7 +193,7 @@ cmd_bench() {
   command -v curl >/dev/null || error "curl introuvable"
   command -v python3 >/dev/null || error "python3 introuvable"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — ./setup-llm.sh --start"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL - ./setup-llm.sh --start"
 
   if [[ -z "$target" ]]; then
     if [[ -t 0 ]]; then

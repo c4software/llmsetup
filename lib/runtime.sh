@@ -11,7 +11,7 @@
 #
 # ⚠ Depuis la bascule, cette image EST le moteur du service : le compose généré
 # (lib/compose.sh) la nomme par _image_ref, et _svc_restart la reprend. Une
-# image neuve n'est donc servie qu'au prochain redémarrage — --image-build,
+# image neuve n'est donc servie qu'au prochain redémarrage - --image-build,
 # --image-update et --image-status ne redémarrent rien d'eux-mêmes. Le fork de
 # lib/fork.sh reste le moteur des outils HORS service (llama-bench) et le filet
 # de retour arrière de la migration.

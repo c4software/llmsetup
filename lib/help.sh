@@ -187,7 +187,7 @@ Commandes :
   --start                  Démarre le service $SERVICE_NAME (défaut sans argument) :
                            docker-compose.yml régénéré dans $CONFIG_DIR, conteneur
                            recréé (docker compose up -d --force-recreate), puis
-                           ATTENTE de /health — la commande ne rend la main que
+                           ATTENTE de /health - la commande ne rend la main que
                            quand le routeur répond sur :$SERVER_PORT
   --stop                   Arrête le conteneur (SIGINT, jusqu'à 180 s : le
                            déchargement des modèles préchargés prend du temps)
@@ -229,7 +229,7 @@ Fichiers versionnés (runtime/, moteur conteneurisé) :
   runtime/Dockerfile.rocm-strix
                            copie vendorisée du Dockerfile amont (PR 133) ;
                            écarts et resynchronisation dans runtime/AMONT.md
-Fichiers ($CONFIG_DIR, générés — ne pas éditer à la main) :
+Fichiers ($CONFIG_DIR, générés - ne pas éditer à la main) :
   models.ini               configuration des modèles, relancer --preload/--setup
   docker-compose.yml       description du service, régénérée à chaque --start
                            (lib/compose.sh) ; usage manuel :
