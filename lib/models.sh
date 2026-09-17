@@ -1552,7 +1552,8 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 # partagé) + 51B d'embeddings n-gram (bigrammes/trigrammes à la couche 2, table
 # de hash lue une fois par forward), arch GDN (3 couches sur 4) + Qwen Sparse
 # Attention (QSA, budget 2048, ratio 4) + hyper-connections, vision Qwen3-VL,
-# ctx natif 256K (1M via YaRN). Shards UD-IQ4_XS (93,7 Go).
+# ctx natif 256K (1M via YaRN). Quant AP-Q4_K_XL d'agentionai (94,2 Gio, fichier
+# unique) depuis le 17/09/2026.
 # SUPPORT llama.cpp : general.architecture = qwen4exp, PR #27742 (unsloth,
 #   mergée le 27/08/2026 dans b10661 : convertisseur, graphe texte, QSA avec un
 #   troisième cache dans llama_memory_hybrid_idx, vision, 3 correctifs de
@@ -1574,6 +1575,21 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   (82 Go), changer l'entrée, le glob suit.
 #   ré-upload redouté : n'a pas eu lieu, vérifié le 04/09 (tailles des shards
 #   consignées dans docs/HISTORIQUE.md). Pas de --update.
+#   MIGRATION du 17/09/2026 vers AP-Q4_K_XL d'agentionai
+#   (agentionai/Signal-3.8-Flash-Next-GGUF, fichier unique de 101 142 769 536
+#   octets = 94,2 Gio, imatrix bartowski v5 sémantique, 1540 chunks) : mêmes
+#   metadata que le GGUF unsloth (mêmes 64 clés hors imatrix et file_type,
+#   mêmes 1224 tenseurs, même vocabulaire 248320 et même n_embd 2560, vérifié
+#   au lecteur gguf le 17/09/2026), mais des experts en Q4_K au lieu d'IQ4_XS.
+#   Raison : sur le runtime ROCm de la PR kyuz0/amd-strix-halo-toolboxes#133 la
+#   quant Q4_K y est nettement plus rapide que l'UD-IQ4_XS à configuration
+#   égale, 877 contre 526 t/s de prefill et 52,2 contre 45,3 t/s de décode
+#   (chiffres de la PR, AUTRE moteur : ils ne se comparent pas aux mesures
+#   ci-dessous, ils ont seulement motivé l'essai). Ce que vaut cette quant sur
+#   le moteur du service (fork strix-0007bc6, Vulkan0) est mesuré plus bas.
+#   Les shards UD-IQ4_XS restent sur disque pour les comparaisons ; n'étant
+#   plus déclarés, le dossier UD-IQ4_XS/ est ORPHELIN (93,7 Go)
+#   → un futur ./setup-llm.sh --cleanup le purgera (non lancé).
 # Sampling officiel (guide unsloth + model card) : même table que Qwen3.8-27B
 #   (cf. l'en-tête du bloc Qwen3.8-27B plus haut), thinking et instruct.
 # Thinking ON par défaut (<think>), reasoning_effort xhigh (défaut) / medium /
@@ -1596,8 +1612,22 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   glissante) : à revoir si la PR expose des checkpoints pour l'état GDN.
 # jinja : template unsloth (developer role, systèmes fusionnés, tool calling
 #   au format <function=...><parameter=...>).
-# Vision : mmproj-F16.gguf publié le 27/08 mais pas téléchargé, incompatible
-#   MTP de toute façon : texte seul.
+# Vision : ACTIVÉE depuis le 17/09/2026 (mmproj-BF16.gguf d'unsloth, 907 542 944
+#   octets, arch clip, projecteur qwen3vl_merger, 27 blocs, images 768,
+#   deepstack). Réglages repris de la configuration de référence de l'auteur des
+#   fichiers : mmproj, mmproj-device = le device du modèle (injecté par
+#   generate_models_ini, cf. lib/ini.sh, comme device-draft) et
+#   image-min-tokens 1024, Qwen-VL ayant besoin d'au moins 1024 tokens d'image
+#   pour le grounding (le fork le dit lui-même : tools/mtmd/clip.cpp avertit
+#   « try adding --image-min-tokens 1024 »).
+#   Les trois clés sont comprises AUSSI par le paquet Arch (vérifié le
+#   17/09/2026 sur b10964, --help) : rien à ajouter à FORK_ONLY_KEYS.
+#   Le dépôt affirmait jusqu'ici « mmproj incompatible avec un drafter » (cf.
+#   en-tête) : cette phrase vient de la même doc unsloth que le « np > 1 non
+#   supporté », et le fork servi ne porte aucune garde de ce genre (lecture de
+#   tools/server/server-context.cpp au commit 0007bc6 le 17/09/2026 : mctx et
+#   contexte spéculatif sont initialisés indépendamment). Vision ET spéculation
+#   sont donc servies ensemble ici, et c'est la validation du jour qui tranche.
 # MTP : la tête n'est PAS dans le GGUF principal (retirée par unsloth le
 #   01/09), elle est publiée en sidecar dans MTP/ du repo HF. Deux familles de
 #   fichiers : les « shared- » (2,60 Go) empruntent embeddings et projection de
@@ -1605,6 +1635,18 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   strix-llama.cpp ne sait PAS emprunter les tenseurs partagés du modèle
 #   principal : c'est donc la version autonome Q8_0 (4,1 Go) qui est déclarée
 #   ci-dessous, et elle seule.
+#   RE-VÉRIFIÉ le 17/09/2026 sur le commit épinglé 0007bc6, la tête « shared »
+#   ayant été retéléchargée pour la migration : elle reste INUTILISABLE, et le
+#   renommage des hc_head n'y change rien. Le chargeur qwen4exp crée
+#   token_embd.weight en tenseur REQUIS (flag 0, src/models/qwen4exp.cpp) avant
+#   même le mixeur des hyper-connexions ; le fichier « shared » ne porte ni
+#   token_embd ni output (32 tenseurs contre 34). Essai de chargement CPU seul
+#   (llama-cli --device none), tel quel PUIS renommé par
+#   tools/mtp-rename-hc-head.py : les deux échouent sur
+#   « check_tensor_dims: tensor 'token_embd.weight' not found », alors que le
+#   sidecar autonome renommé charge sans une erreur. Le fichier « shared »
+#   (2 786 568 256 octets) est rangé dans MTP/ sans être déclaré : il servira le
+#   jour où le moteur saura emprunter les tenseurs de la cible.
 #   Le paquet Arch, lui, ne sait charger ni l'une ni l'autre : ni graphe MTP
 #   pour qwen4exp, ni emprunt de tenseurs entre modèles, ni --spec-type
 #   draft-mtp pour cette arch — c'est la PR #28243, toujours non mergée au
@@ -1620,7 +1662,9 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   unsloth, pas du fork (vérifié le 15/09/2026 dans strix-0007bc6, cf.
 #   en-tête). draft-mtp y est vectorisé par séquence et sans assert sur n_seq :
 #   NON ÉPROUVÉ à np > 1, pas interdit. La raison qui tient, elle, est la
-#   mémoire, et elle suffit : 93,7 Go de poids sur 124 Go, un deuxième slot de
+#   mémoire, et elle suffit : 101 Go de poids sur 124 Go depuis l'AP-Q4_K_XL
+#   (93,7 Go en UD-IQ4_XS), dont 28,8 Go de table n-gram restés sur disque
+#   (ngram-on-disk), plus le mmproj ; un deuxième slot de
 #   KV à 128k mangerait la marge ; et ctx-size étant un pool partagé, passer à
 #   2 slots couperait aussi en deux le contexte par requête. Valeur inchangée
 #   après la campagne multi-slot du 15/09/2026 (cf. en-tête) : cette section
@@ -1630,8 +1674,18 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   « LAMPAMPAMPAMP... » dégénérée, le même symptôme que DeepSeek V4 et
 #   Qwen3-Coder-Next (MoE à opérateurs fusionnés). Re-tester à chaque bump
 #   de ggml-hip, en lisant le texte généré.
-download_hf_shards qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
-  QWEN38_FLASH_NEXT_PATH="UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
+# Fichier UNIQUE (pas de shards) : download_hf suffit, le sous-dossier de quant
+# est recréé tel quel sous le dossier modèle. La clé de bench-devices.conf reste
+# le dossier de premier niveau (_key, lib/common.sh) : « qwen3.8-flash-next =
+# Vulkan0 » continue donc de s'appliquer sans rien ajouter. --cleanup protège en
+# bloc le dossier de quant AP-Q4_K_XL/, comme il le faisait pour les shards.
+# Téléchargé et vérifié (sha256) sur bigchuck le 17/09/2026.
+download_hf qwen3.8-flash-next "agentionai/Signal-3.8-Flash-Next-GGUF" \
+  QWEN38_FLASH_NEXT_PATH="AP-Q4_K_XL/Signal-3.8-Flash-Next-AP-Q4_K_XL.gguf"
+# Projecteur vision, repo unsloth, à la racine du dossier modèle. Fichier plat :
+# --cleanup protège le fichier lui-même, pas un dossier.
+download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
+  QWEN38_FLASH_NEXT_MMPROJ_PATH="mmproj-BF16.gguf"
 # Tête MTP en sidecar, même repo, sous-dossier MTP/ (recréé tel quel sous le
 # dossier modèle par _dl). Téléchargée sur bigchuck le 12/09/2026. Version
 # AUTONOME Q8_0 (4,1 Go, 34 tenseurs) : le fork ne sait pas emprunter les
@@ -1657,7 +1711,16 @@ derive_gguf qwen3.8-flash-next \
   QWEN38_FLASH_NEXT_MTP_STRIX_PATH="MTP/mtp-Qwen3.8-Flash-Next-strix-Q8_0.gguf" \
   "$QWEN38_FLASH_NEXT_MTP_PATH" tools/mtp-rename-hc-head.py
 
-# Qwen3.8-Flash-Next nothink : spéculation mixte n-gram + MTP, sampling instruct.
+# Qwen3.8-Flash-Next nothink : spéculation mixte n-gram + MTP, sampling instruct,
+# et vision depuis le 17/09/2026.
+# MIGRATION du 17/09/2026 : la section sert désormais la quant AP-Q4_K_XL
+#   d'agentionai (cf. la déclaration plus haut) au lieu des shards UD-IQ4_XS
+#   d'unsloth, avec le mmproj BF16 et son image-min-tokens 1024. Le NOM de la
+#   section ne change pas (décision utilisateur) : le drafter, lui, n'a pas
+#   bougé, c'est toujours la tête MTP en sidecar. Toutes les mesures citées
+#   ci-dessous sont ANTÉRIEURES à la migration et portent sur l'UD-IQ4_XS :
+#   elles ne se comparent à la quant AP que sur le même moteur et le même
+#   device, ligne à ligne.
 # Renommée -nothink le 04/09, quand draft-mtp avait été retiré faute de moteur
 #   capable de charger le sidecar ; revenue à -mtp-nothink le 12/09/2026 avec le
 #   retour de draft-mtp sur le fork, comme l'était alors
@@ -1678,8 +1741,8 @@ derive_gguf qwen3.8-flash-next \
 #   par le fork (« unused tensor », sans effet).
 #   Référence à battre, n-gram seul sur le fork : prefill 414 t/s, décode
 #   30,9 t/s (--bench du 12/09/2026, strix-0007bc6, Vulkan0, ngram-on-disk).
-#   MESURÉ le 12/09/2026 via le routeur (strix-0007bc6, Vulkan0, mode mixte
-#   ngram-map-k 7 + draft-mtp n-max 4, ngram-on-disk) :
+#   MESURÉ le 12/09/2026 via le routeur (strix-0007bc6, Vulkan0, UD-IQ4_XS,
+#   mode mixte ngram-map-k 7 + draft-mtp n-max 4, ngram-on-disk) :
 #   --spec-test 4 passes (spec-test.txt) : 48,8 t/s, acceptance 0,86 agrégée ;
 #   --bench 3 passes : prefill 383 t/s, décode 50,0 t/s, acceptance 0,87,
 #   soit +62 % de décode et -7 % de prefill contre le n-gram seul. MTP GARDÉ.
@@ -1734,6 +1797,8 @@ presence-penalty = 1.5
 reasoning            = off
 cache-type-v     = q8_0
 cache-reuse      = 0
+mmproj           = $QWEN38_FLASH_NEXT_MMPROJ_PATH
+image-min-tokens = 1024
 spec-type        = ngram-map-k,draft-mtp
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2

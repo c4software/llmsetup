@@ -196,6 +196,12 @@ HEADER
     if grep -q "^spec-draft-model" <<< "${MODEL_INI[$name]}"; then
       echo "device-draft     = $mdev"
     fi
+    # Même raison pour le projecteur vision : sans mmproj-device, l'encodeur
+    # d'images atterrit où le serveur veut, pas sur le device mesuré du modèle
+    # (17/09/2026, Qwen3.8-Flash-Next).
+    if grep -q "^mmproj[[:space:]]*=" <<< "${MODEL_INI[$name]}"; then
+      echo "mmproj-device    = $mdev"
+    fi
     # Corps du modèle + préchargement piloté par preload.conf
     # (pas de stop-timeout : l'éviction est gérée par le LRU de --models-max)
     # spec-draft-n-max : surcharge spec-nmax.conf / --spec-tune si présente
