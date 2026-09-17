@@ -7,7 +7,7 @@
 
 cmd_help() {
   cat <<HELP
-setup-llm.sh — llama-server en router mode natif (Strix Halo, image ROCm)
+setup-llm.sh : llama-server en router mode natif (Strix Halo, image ROCm)
 
 Usage : ./setup-llm.sh [commande] [options]
 

@@ -87,7 +87,7 @@ LOG="$OUT/serveur.log"
 export PATH="${LLAMA_BIN_DIR:+$LLAMA_BIN_DIR:}$HOME/.local/bin:$PATH"
 # ROCm/HIP sur iGPU : allocations en mémoire unifiée. Moteur de l'HÔTE
 # UNIQUEMENT : cette variable ne doit JAMAIS être passée à _dk_run
-# (lib/runtime.sh) ni au compose du service — sur le runtime retained-PM4 de
+# (lib/runtime.sh) ni au compose du service : sur le runtime retained-PM4 de
 # l'image elle corrompt la sortie (cf. runtime/AMONT.md et lib/compose.sh).
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 

@@ -363,7 +363,7 @@ Le moteur du service est l'image de `runtime/`, construite en **HIP seul** :
 elle n'expose que `ROCm0`. `--bench-devices`, `bench-devices.conf`,
 `BENCH_DEVICE*`, `_bench_save_device` et `lib/bench/bench-devices.sh` ont donc
 été retirés, et `DEFAULT_DEVICE` (`lib/models.sh`) est la seule valeur écrite
-dans le ini — sur quatre lignes par section : `device`, `device-draft`,
+dans le ini, sur quatre lignes par section : `device`, `device-draft`,
 `spec-draft-ngl = all` et `mmproj-device`, pour qu'aucun morceau du modèle
 (drafter, projecteur vision) n'atterrisse ailleurs que sur sa cible.
 
@@ -378,7 +378,7 @@ Ce qui en reste :
 - **`--list-devices`** : un contrôle, plus un choix. Il montre le moteur de
   l'HÔTE (fork ou paquet Arch, qui sert les outils hors service), les backends
   ggml installés, puis les devices de l'IMAGE (`_dk_run llama-bench
-  --list-devices`), et alerte si `ROCm0` manque — auquel cas rien ne charge.
+  --list-devices`), et alerte si `ROCm0` manque : sans lui, rien ne charge.
 - **le verdict de tour simulé** (`t = PP_froid/prefill + GEN/décode`, profil
   2000 / 3000) n'a plus de commande, mais il reste la bonne façon de trancher
   un compromis prefill contre décode à la main : c'est ainsi que se lit le cas
@@ -401,7 +401,7 @@ coupé le temps du `Restart=on-failure`).
 
 `_ensure_room_for <modèle>` (lib/common.sh) est donc appelé avant la première
 requête de chaque mesure (`_bench_one`, `_bench_sanity_one`, `cmd_bench_cache`,
-`cmd_bench_parallel`, `cmd_spec_test` — donc aussi `--spec-ab`). Dans l'ordre :
+`cmd_bench_parallel`, `cmd_spec_test`, donc aussi `--spec-ab`). Dans l'ordre :
 
 1. taille estimée du modèle = somme des GGUF de sa ligne `model =` (shards
    compris : le ini ne nomme que le premier, le routeur charge la série) plus

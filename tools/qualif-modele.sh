@@ -381,7 +381,7 @@ _llm() { "$ROOT_DIR/setup-llm.sh" "$@"; }
 # --- Étape 3 de la skill : justesse (--bench-sanity), BLOQUANTE -------------
 # Le moteur du service n'expose qu'un device (image ROCm, cf. lib/models.sh) :
 # --bench-devices a disparu le 18/09/2026, et l'étape 3 devient ce qui en
-# faisait la valeur — la question de contrôle. Elle est jouée EN PREMIER et
+# faisait la valeur : la question de contrôle. Elle est jouée EN PREMIER et
 # elle ARRÊTE la qualification si la réponse est fausse : mesurer les t/s d'un
 # moteur qui produit du charabia n'a aucun sens, et c'est exactement ce qui est
 # arrivé deux fois (DeepSeek V4 et Qwen3-Coder-Next couronnés sur un ROCm qui

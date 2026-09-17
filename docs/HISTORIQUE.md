@@ -6,8 +6,80 @@ sections correspondantes du README, repris tel quel : chiffres, protocoles et
 récits datés. L'état courant du parc (réglages retenus et perfs sur le fork)
 reste dans `README.md`, section « Parc au 17/09/2026 ».
 
-Deux séries de mesures cohabitent ici et ne se comparent jamais entre elles :
-le paquet Arch (`bNNNNN`) et le fork strix-llama.cpp (`strix-<commit>`).
+Trois séries de mesures cohabitent ici et ne se comparent jamais entre elles :
+le paquet Arch (`bNNNNN`), le fork strix-llama.cpp (`strix-<commit>`) et, depuis
+le 18/09/2026, l'image ROCm du service (`strix-<engine>+r<rocm>`).
+
+## Campagne du moteur conteneurisé (17 au 18/09/2026)
+
+Première campagne sur le moteur qui devient celui du service : l'image ROCm de
+`runtime/` (ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 compilé depuis
+pwilkin/rocm-systems + halo-box/strix-llama.cpp en HIP seul). Série
+**`strix-8c1c282+r7dda3ac`** (moteur `8c1c282`, runtime `7dda3ac`), image
+construite à la main depuis la PR kyuz0/amd-strix-halo-toolboxes#133.
+
+**Méthode, et ses limites.** `llama-server` lancé **hors dépôt** par un script
+de test, pas par `--bench` : ces chiffres ne sont donc PAS dans
+`logs/bench.log`, ils n'entrent pas dans `docs/perfs.tsv` (dont le format n'a
+que deux colonnes de série) et ils ne se comparent pas à la décimale aux
+tableaux `--bench` ci-dessus. Ils seront rejoués par le dépôt après la bascule.
+Conditions communes : device `ROCm0` (le seul de l'image), `-fit off`,
+`--load-mode none`, `-ctk f16 -ctv f16`, prompt court d'environ 1 400 tokens et
+1 000 générés, médianes de 3 passes. La justesse a été vérifiée à part, par
+comptage de lignes sur des prompts de 40 à 51k tokens.
+
+| Modèle (section) | Prefill t/s | Décode t/s | Fork strix-0007bc6, Vulkan0 | Prefill à 2k / 8k / 25k / 51k | Lecture |
+|---|---|---|---|---|---|
+| lfm2.5-2.6b | 4187 | 138,5 | 2875 / 108,8 | 4399 / 4181 / 3695 / 2954 | +46 % de prefill, +27 % de décode. Texte cohérent, mais 3 comptages justes sur 4 (251 au lieu de 260) : probable limite du modèle, comparaison en cours |
+| ornith-1.5-9b-mtp-nothink | 1468 | 49,8 | 828 / 39,5 | 1355 / 1460 / 1294 / 1080 | +77 % de prefill, +26 % de décode |
+| ornith-1.5-35b-a3b-mtp | 1673 | 82,4 | 1073 / 76,2 | 1703 / 1700 / 1429 / 1145 | +56 % de prefill, +8 % de décode. Testé à ctx 262144, pas aux 1048576 de production : à vérifier à la bascule, le f16 pesant deux fois le q8_0 par token de KV |
+| qwen3.8-27b-dflash-nothink | 229 | 40,7 | 302 / 32,2 | 244 / 239 / 225 / 202 | **le seul compromis du parc** : décode +26 %, prefill -24 %. Le tour simulé 2000/3000 donne 81,4 s contre 99,8 s, donc l'image gagne sur ce profil, mais le profil est une convention : décision utilisateur, `--bench-agentic` à l'appui |
+| muse-glimmer-30b-dflash | 318 | 36,4 | 266 / 38,0 (301 / 38,5 au contrôle à froid du 17/09) | 328 / 323 / 293 / 259 | +7 à +19 % de prefill, -4 à -10 % de décode : à peu près l'inverse de son concurrent le 27B |
+| qwen3.8-flash-next-mtp-nothink | 877 | 52,2 | 364 / 52,4 | 938 / 1108 / 1111 / 1079 | prefill x2,4, décode égal. Seul modèle dont le prefill MONTE avec la profondeur (effet du batch 16384). 28 Gio restants une fois chargé |
+| qwen3-coder-next | 1352 | 65,1 | 727 / 52,2 | 1417 / 1455 / 1245 / 1006 | +86 % de prefill, +25 % de décode, quatre comptages justes |
+| deepseek-v4-flash | 162 | 29,3 (acceptance 0,83) | 196 / 28,8 (0,69) | 173 / 161 / 136 / 111 | décode +2 %, acceptance de 0,69 à 0,83, prefill -17 %, quatre comptages justes |
+
+Non mesurés : `lfm2.5-8b-a1b-nothink` et `ornith-1.5-35b-a3b-parallel`. Leurs
+réglages sont restés ceux du fork, et leurs blocs le disent.
+
+**Bogue du batch 16384.** `batch-size` / `ubatch-size` 16384 provoque une erreur
+de segmentation (code de sortie 139) dès un prompt de 8k tokens sur TOUS les
+modèles essayés SAUF Qwen3.8-Flash-Next, et coûte environ 33 Gio de tampons. Sur
+Flash-Next il tient, et c'est lui qui donne les 877 t/s de prefill et la courbe
+qui monte avec la profondeur. D'où le garde-fou de `generate_models_ini` : refus
+d'émettre plus de `INI_BATCH_MAX` (4096) pour une section absente de
+`INI_BIG_BATCH_OK`, surcharges `--spec-ab` comprises, avec la section, la valeur
+et la raison dans le message.
+
+**Leviers mémoire de DeepSeek : aucun.** Chargé, `deepseek-v4-flash` ne laisse
+que 9 Gio disponibles, QUEL QUE SOIT le cache KV (f16 et q8_0 sont équivalents,
+en mémoire comme en débit), le `fit` (on et off donnent le même résultat) ou le
+contexte. Les trois leviers ont été essayés le 18/09. Conséquence pratique : ce
+modèle se sert seul, et c'est la garde mémoire `_ensure_room_for` qui décharge
+les autres avant de le charger.
+
+**`mmap` disqualifié.** En `--load-mode mmap`, DeepSeek met plus de 13 minutes à
+charger. Toute la campagne a tourné en `--load-mode none`, qui devient le réglage
+global du parc.
+
+**Les deux charabias ROCm sont guéris.** Le « Nous dev dev dev » de DeepSeek V4
+et le « LAMPAMPAMP » de Qwen3-Coder-Next, tous deux constatés sur le ROCm
+SYSTÈME (paquet `ggml-hip`, b10433) et qui avaient fait exclure ROCm0 de ces
+deux architectures MoE à opérateurs fusionnés, n'apparaissent plus sur le
+runtime retained-PM4 de l'image : quatre comptages de lignes justes sur chacun.
+Le charabia venait du runtime, pas de l'architecture. Les exclusions restent en
+commentaire daté dans `lib/models.sh`, et `--bench-sanity` reste (c'est elle qui
+attrape un texte propre mais faux) : elle devient la première étape, bloquante,
+de `tools/qualif-modele.sh`.
+
+**Conséquences dans le dépôt** (commit du 18/09/2026) : `DEFAULT_DEVICE` passe à
+`ROCm0` ; `fit = off`, `load-mode = none` et le cache K et V `f16` deviennent des
+flags globaux ; `spec-draft-ngl = all` rejoint les injections automatiques ;
+`--bench-devices`, `bench-devices.conf` et `lib/bench/bench-devices.sh` sont
+retirés, faute de deuxième device ; `derive_gguf`, `_derive` et
+`tools/mtp-rename-hc-head.py` partent avec la copie renommée du sidecar MTP de
+Flash-Next, le moteur de l'image sachant lire la tête « shared » d'unsloth telle
+quelle ; `fit`, `load-mode` et `lazy-mode` entrent dans `FORK_ONLY_KEYS`.
 
 ## Résultats mesurés (bigchuck), campagnes du paquet Arch et du fork
 

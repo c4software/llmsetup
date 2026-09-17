@@ -282,14 +282,14 @@ _bench_select_one() {
 }
 
 # =============================================================================
-# bench-sanity — le modèle répond-il JUSTE ?
+# bench-sanity : le modèle répond-il JUSTE ?
 #
 # Usage : ./setup-llm.sh --bench-sanity [modèle|all]
 #
 # Une tâche à réponse connue (prompts/bench-sanity.txt : recopier un code
 # exact). Volontairement triviale : la première version demandait un petit
 # calcul (93), que le 9b nothink a raté (33) sans que le backend y soit pour
-# rien — une question qui teste le modèle condamnerait un moteur sain. La
+# rien : une question qui teste le modèle condamnerait un moteur sain. La
 # recopie, tout modèle la réussit ; un backend qui dérive (noyau faux, tokens
 # corrompus) la rate forcément. Le garde-fou « sortie dégénérée » de timings.py
 # attrape le charabia ; celui-ci attrape un texte propre et faux.
@@ -341,7 +341,7 @@ cmd_bench_sanity() {
 }
 
 # =============================================================================
-# list-devices — ce que le moteur expose réellement
+# list-devices : ce que le moteur expose réellement
 #
 # Depuis le 18/09/2026 le moteur du SERVICE est l'image (lib/runtime.sh), qui
 # n'expose qu'un device, ROCm0 : la liste n'est plus un choix à faire mais un
@@ -370,7 +370,7 @@ cmd_list_devices() {
 
   echo ""
   if ! _image_ref >/dev/null 2>&1; then
-    warn "Aucune image du moteur ici — ./setup-llm.sh --image-build."
+    warn "Aucune image du moteur ici : ./setup-llm.sh --image-build."
     return 0
   fi
   info "Devices exposés par l'image du service (llama-bench --list-devices) :"

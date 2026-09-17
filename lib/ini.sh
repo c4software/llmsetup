@@ -7,7 +7,7 @@
 # Le device n'est plus une variable : l'image du service (runtime/) est
 # construite en HIP SEUL, elle n'expose que ROCm0. bench-devices.conf, sa
 # commande --bench-devices et le mécanisme BENCH_DEVICE ont donc été retirés le
-# 18/09/2026 — il n'y a plus rien à comparer. Les trois injections device,
+# 18/09/2026 : il n'y a plus rien à comparer. Les trois injections device,
 # device-draft et mmproj-device restent (elles empêchent le serveur de répartir
 # un modèle, son drafter ou son projecteur ailleurs que sur le device visé) et
 # une quatrième les rejoint, spec-draft-ngl.
@@ -117,7 +117,7 @@ _preset_nmax() {
   echo "${SPEC_NMAX[$p]:-$v}"
 }
 
-# _ini_guard_batch <section> <corps ini> — refuse un batch-size ou un
+# _ini_guard_batch <section> <corps ini> : refuse un batch-size ou un
 # ubatch-size au-delà de $INI_BATCH_MAX pour une section qui n'est pas dans
 # INI_BIG_BATCH_OK (lib/models.sh). Appelée sur le corps FINAL, donc après les
 # surcharges de --spec-ab : une valeur passée par SPEC_AB_OVERRIDES est refusée
@@ -142,7 +142,7 @@ _ini_guard_batch() {
   return 0
 }
 
-# _ini_warn_conf_nmax <section> — avertit quand spec-nmax.conf impose au
+# _ini_warn_conf_nmax <section> : avertit quand spec-nmax.conf impose au
 # modèle une valeur DIFFÉRENTE de celle du dépôt. Sans cet avertissement, un
 # changement de spec-type ou de n-max commité dans lib/models.sh est écrasé en
 # silence par une valeur locale calibrée sur un autre moteur (cas de la
@@ -233,7 +233,7 @@ HEADER
       # spec-draft-ngl = all : même raisonnement que device-draft. Sans lui,
       # le nombre de couches du drafter est décidé par le moteur (et par le
       # -fit, qui peut en renvoyer au CPU), alors qu'un drafter tient toujours
-      # sur le GPU — il pèse de 0,36 à 10,9 Go dans ce parc. Le moteur de
+      # sur le GPU, et il pèse de 0,36 à 10,9 Go dans ce parc. Le moteur de
       # l'image accepte "all" sur --spec-draft-ngl (alias --gpu-layers-draft).
       # Pas injecté si la section pose déjà la clé : on ne suppose rien sur la
       # tolérance du routeur à une clé répétée dans une même section.

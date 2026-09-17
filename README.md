@@ -13,14 +13,17 @@ Ce qu'il gère :
 - génération de `~/models/models.ini` : les réglages de chaque modèle vivent
   dans `lib/models.sh` avec leurs justifications en commentaire ;
 - préchargement always-on ou chargement à la demande (LRU) ;
-- mesure des perfs par l'API du serveur (`--bench`, `--bench-devices`) et
+- mesure des perfs par l'API du serveur (`--bench`, `--bench-sanity`) et
   réglage de la spéculation par mesure : drafter (`spec-draft-n-max`,
   calibration α) et n-gram (`spec-ngram-map-k-size-m`) ;
-- installation et suivi du moteur, service systemd user.
+- installation et suivi du moteur, service en conteneur.
 
-Les backends ggml (Vulkan par défaut, ROCm/HIP optionnel) sont des paquets
-Arch séparés. Tout est piloté par des fichiers de conf locaux à côté du script
-(non versionnés, propres à la machine). Le `models.ini` est généré, jamais édité.
+Le service tourne sur une image ROCm construite localement (`runtime/`), qui
+n'expose qu'un device, `ROCm0` : depuis le 18/09/2026 il n'y a plus de choix de
+backend, plus de `--bench-devices` et plus de `bench-devices.conf`. Les paquets
+ggml d'Arch (Vulkan, HIP) ne servent plus que les outils **hors service**. Tout
+est piloté par des fichiers de conf locaux à côté du script (non versionnés,
+propres à la machine). Le `models.ini` est généré, jamais édité.
 
 Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTORIQUE.md).
 
@@ -35,9 +38,11 @@ Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTO
 - `hf` (python-huggingface-hub, python-hf-xet). `gum` optionnel (menus).
 - Paquets llama.cpp : `llama-cpp`, plus les backends ggml splittés :
   `ggml-cpu` et `ggml-vulkan` (obligatoires, installés par `--setup`).
-- Pour ROCm0 : `ggml-hip` et le runtime ROCm (`rocm-hip-runtime`, `hipblas`,
-  `rocblas`, `hipblaslt`). Le runtime seul ne suffit pas. Contrôle :
-  `rocminfo | grep gfx` doit donner `gfx1151`.
+- Pour un `ROCm0` **hors service** (outils sur l'hôte) : `ggml-hip` et le
+  runtime ROCm (`rocm-hip-runtime`, `hipblas`, `rocblas`, `hipblaslt`). Le
+  runtime seul ne suffit pas. Contrôle : `rocminfo | grep gfx` doit donner
+  `gfx1151`. Le service, lui, embarque son propre ROCm dans l'image et ne
+  dépend d'aucun de ces paquets.
 
 ## Installation
 
@@ -194,10 +199,9 @@ d'avancer sans accord explicite.
 | `--cleanup [--yes]` | Supprime les dossiers et GGUF orphelins (dry-run par défaut) |
 | `--preload` | Re-sélectionne les modèles always-on et régénère le ini |
 | `--bench [modèle\|all] [n]` | Mesure le serveur tel qu'il tourne : prefill, décode médian, acceptance MTP, tableau récapitulatif. N'écrit rien ; avant de charger un modèle, décharge les plus gros modèles résidents si la RAM ne suffit pas (`BENCH_NO_UNLOAD=1` pour désactiver) |
-| `--bench-devices [modèle] [devices] [n]` | Compare les devices d'un modèle (défaut Vulkan0,ROCm0) : bench avec restart par device, verdict par temps de tour simulé, vainqueur écrit dans `bench-devices.conf` (détail dans ARCHITECTURE.md) |
 | `--bench-parallel [modèle] [n] [passes]` | Débit sous `n` requêtes simultanées (défaut : le `parallel` du modèle) : agrégé et décode par requête contre 1 requête ; montre ce que vaut `parallel = N` et la file d'attente au-delà |
 | `--bench-cache [modèle]` | Efficacité du cache de prompt sur le pattern agentic (contexte froid, tour suivant, édition au premier tiers, requête identique) : part du prompt servie du cache et prefill à chaque fois ; c'est la mesure de `cache-ram` / `ctx-checkpoints` / `cache-reuse` |
-| `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : un device qui répond faux est exclu de `--bench-devices`, en plus du garde-fou anti-charabia |
+| `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : complète le garde-fou anti-charabia, qui n'attrape pas un texte propre et faux. Première étape, **bloquante**, de `tools/qualif-modele.sh` |
 | `--bench-agentic [modèle] [passes] [N]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels). 3e argument `N` > 1 : chaque passe joue la suite seule puis à `N` boucles pi **simultanées** (orchestrateur + sous-agents), avec le facteur de débit de tâches et le décode agrégé |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
 | `--setup-fork [commit] [raison]` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin`. Avec un commit (ou tag, ou branche) : épingle le moteur dessus et l'écrit dans `fork.conf` ; sans argument, dépingle et reprend la branche (voir « Moteur ») |
@@ -206,7 +210,7 @@ d'avancer sans accord explicite.
 | `--image-build [--no-cache]` | Construit l'image du moteur **conteneurisé** (`runtime/`) sur les révisions de `runtime/image.conf`, sous un tag temporaire ; vérifie `/opt/strix/versions.txt` et les quatre binaires, puis seulement promeut en `llm-rocm-strix:latest` et supprime les images sans tag issues de nos builds. Un build raté laisse l'image en place intacte. **C'est le moteur du service** : une image neuve n'est servie qu'au prochain `--restart` |
 | `--image-update [engine-rev] [rocm-rev]` | Suivi d'amont de l'image : sans argument, montre l'écart avec les sommets des deux branches et s'arrête (`IMAGE_UPDATE_YES=1` vaut accord, comme `FORK_UPDATE_YES`) ; avec accord ou révisions données, réécrit `image.conf` puis construit. C'est aussi le retour arrière du moteur conteneurisé |
 | `--image-status` | Révisions demandées, image `:latest` en place avec ses étiquettes, verdict de conformité, taille, images sans tag restantes et place du cache de build. Ne construit ni ne purge rien |
-| `--list-devices` | Moteur résolu (paquet Arch ou fork) avec sa version, backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
+| `--list-devices` | Moteur de l'**hôte** (paquet Arch ou fork) avec sa version et les backends ggml installés, puis les devices exposés par l'**image** du service ; alerte si `ROCm0` manque |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | A/B de réglages spéculatifs sur mesure réelle : chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
@@ -227,7 +231,7 @@ d'avancer sans accord explicite.
 ./setup-llm.sh --image-update         # 2. moteur du service (image, si bump accepté)
 ./setup-llm.sh --restart              # 3. appliquer
 ./setup-llm.sh --bench all            # 4. perfs de tous les modèles présents : régressions
-./setup-llm.sh --bench-devices        # Vulkan ou ROCm pour un modèle ?
+./setup-llm.sh --bench-sanity <m>     # le moteur répond-il juste ?
 ./setup-llm.sh --spec-tune            # règle spec-draft-n-max d'un modèle à drafter
 ./setup-llm.sh --spec-ngram-tune      # règle la longueur de draft n-gram
 ./setup-llm.sh --spec-ab <m> 4 - base "spec-ngram-map-k-min-hits=1"   # compare des réglages
@@ -277,7 +281,7 @@ tableaux antérieurs ; ne jamais les toucher au détour d'un autre changement.
 **Garde mémoire et OOM.** Le routeur évince en LRU sans connaître la taille des
 modèles : deux géants résidents suffisent à dépasser les 124 Go et l'OOM killer
 prend le routeur (deux fois le 13/09/2026). Une garde mémoire précède donc
-chaque chargement (`--bench`, `--bench-devices`, `--bench-cache`,
+chaque chargement (`--bench`, `--bench-sanity`, `--bench-cache`,
 `--bench-parallel`, `--spec-test`, `--spec-ab`) : taille estimée contre mémoire
 disponible, puis déchargement par l'API des plus gros résidents, jamais un
 préchargé tant qu'un autre peut partir, sans restart (`BENCH_NO_UNLOAD=1` la
@@ -289,7 +293,7 @@ laquelle lancer selon le rôle du modèle.
 
 | Commande | Question à laquelle elle répond | Méthode |
 |---|---|---|
-| `--bench-sanity [modèle\|all]` | Le backend produit-il un texte juste ? | recopie exacte d'un code (`prompts/bench-sanity.txt`), trivial pour ne tester que le backend ; `--bench-devices` l'applique avant chaque device, en plus du garde-fou anti-charabia de `timings.py` (mot dominant, mots distincts, répétition périodique de caractères) |
+| `--bench-sanity [modèle\|all]` | Le backend produit-il un texte juste ? | recopie exacte d'un code (`prompts/bench-sanity.txt`), trivial pour ne tester que le backend ; complète le garde-fou anti-charabia de `timings.py` (mot dominant, mots distincts, répétition périodique de caractères), qui ne voit pas un texte propre et faux |
 | `--bench-parallel [modèle] [n] [passes]` | Que vaut `parallel = N` ? | salves de 1 puis n requêtes simultanées (spec-test.txt, 400 tokens), débit agrégé et décode médian par requête ; `parallel` réel lu sur `/v1/models`, au-delà les requêtes font la queue |
 | `--bench-cache [modèle]` | Combien du prompt est repayé à chaque tour ? | quatre requêtes : contexte froid, tour suivant, édition au premier tiers (préfixe commun 2/3, au-dessus du seuil `slot-prompt-similarity 0.5`), requête identique ; part servie du cache (`cache_n`) et prefill |
 | `--bench-agentic [modèle] [passes] [N]` | Que vaut le modèle en boucle agentic, seul puis à `N` boucles en même temps ? | pi dans un conteneur (`bench-agentic/`, réseau hôte) joue un appel froid puis N passes de 5 scénarios de tool calls en direct sur `:8009` ; delta de `/metrics?model=` par scénario : prompt (part du cache), généré, prefill et décode t/s, plus PASS et temps mur, médianes sur les passes. À `N` > 1, chaque passe est jouée seule puis par `N` conteneurs simultanés : facteur de débit de tâches `(N x solo) / parallèle`, décode agrégé lu sur `/metrics` autour de la salve |
@@ -297,13 +301,13 @@ laquelle lancer selon le rôle du modèle.
 | `--bench-load [modèle\|all]` | Que coûte un modèle à la demande ? | restart du service, première requête chronométrée (chargement + premier token), puis TTFT à chaud |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | Ce réglage vaut-il mieux que celui-là ? | chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée au ini, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
 
-`--bench-devices` et `--spec-ngram-tune` règlent en mesurant : le premier
-compare Vulkan0 et ROCm0 d'un modèle (restart par device, verdict par temps de
-tour simulé `2000/prefill + 3000/décode`, vainqueur écrit dans
-`bench-devices.conf`), le second cherche la longueur de draft n-gram (courbe
-`t_forward(batch)` par `llama-bench` service arrêté, pour localiser la marche de
-noyau ggml, puis arbitrage réel des candidats sur `prompts/spec-refactor.txt`,
-écrit dans `spec-ngram.conf`). Formules, garde-fous et limites : ARCHITECTURE.md.
+`--spec-ngram-tune` règle en mesurant : il cherche la longueur de draft n-gram
+(courbe `t_forward(batch)` par `llama-bench` service arrêté, pour localiser la
+marche de noyau ggml, puis arbitrage réel des candidats sur
+`prompts/spec-refactor.txt`, écrit dans `spec-ngram.conf`). ⚠ Cette courbe est
+tracée par le `llama-bench` de l'HÔTE, donc sur le fork Vulkan : les seuils du
+moteur de l'image n'ont pas été re-tracés. Formules, garde-fous et limites :
+ARCHITECTURE.md.
 Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 
 ## Parc au 17/09/2026
@@ -346,6 +350,14 @@ colonne situe le décode contre la dernière mesure du paquet Arch (série
 `bNNNNN`, 21/08 au 05/09/2026) : deux séries distinctes, un ordre de grandeur,
 pas une comparaison à la décimale.
 
+⚠ La colonne **Device** de cette table dit `Vulkan0` partout : c'est le device
+du moteur de l'époque (fork Vulkan). Elle est gardée pour que la série reste
+lisible, mais elle n'a plus de sens pour le service, qui tourne depuis le
+18/09/2026 sur une image ROCm à device unique. Les chiffres du nouveau moteur
+sont dans la table suivante ; les réglages servis ont aussi changé (cache K et V
+`f16` globaux, `fit off`, `load-mode none`, et pour Flash-Next `batch` 16384,
+`lazy-mode on-direct`, `draft-mtp,ngram-mod` n-max 3), cf. `lib/models.sh`.
+
 | Modèle (section) | Quant et taille | Device | Réglage spéculatif | Prefill t/s | Décode t/s | Acceptance | Écart décode contre paquet |
 |---|---|---|---|---|---|---|---|
 | lfm2.5-2.6b | Q8_0, 2,7 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 (KV f16) | 2875 | 108,8 | 0,50 | +61 % (paquet sans drafter, 67,7 t/s à 4 slots) |
@@ -358,6 +370,49 @@ pas une comparaison à la décimale.
 | qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | Vulkan0 | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 727 | 52,2 | 0,515 | +19 % (paquet en n-gram seul) |
 | deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 (parallel 2 essayé et retiré le 15/09 : x1,16 de tâches au bench agentic à 2 boucles, latence doublée) | 196 | 28,8 | 0,69 | +134 % (paquet en n-gram seul, 19,9 sur le fork en n-gram seul) |
+
+### Moteur conteneurisé ROCm0 (campagne du 17 au 18/09/2026)
+
+La table ci-dessus est celle du **fork Vulkan**, moteur du service jusqu'au
+18/09/2026 : elle est conservée telle quelle tant que le dépôt n'a pas rejoué
+ses `--bench` sur le nouveau moteur. Les chiffres ci-dessous sont une **autre
+série** : ils viennent d'un `llama-server` lancé **hors dépôt** par un script de
+test, sur l'image ROCm de `runtime/` (série `strix-8c1c282+r7dda3ac` : moteur
+halo-box/strix-llama.cpp `8c1c282`, runtime pwilkin/rocm-systems `7dda3ac`,
+image construite à la main depuis la PR kyuz0/amd-strix-halo-toolboxes#133).
+Ils NE viennent PAS de `--bench` et ne sont pas dans `logs/bench.log` ni dans
+`docs/perfs.tsv`, dont le format n'a que deux séries (paquet et fork) : à
+rejouer par le dépôt après la bascule.
+
+Conditions communes : device `ROCm0`, `fit off`, `load-mode none`, cache K et V
+`f16`, prompt court (environ 1 400 tokens, 1 000 générés), médianes de 3 passes,
+justesse vérifiée par comptage de lignes jusqu'à 40 à 51k tokens.
+
+| Modèle (section) | Prefill t/s | Décode t/s | Contre le fork Vulkan (prefill / décode) | Prefill à 2k / 8k / 25k / 51k | Justesse |
+|---|---|---|---|---|---|
+| lfm2.5-2.6b | 4187 | 138,5 | 2875 / 108,8 | 4399 / 4181 / 3695 / 2954 | texte cohérent, 3 comptages justes sur 4 (251 au lieu de 260 : probable limite du modèle, à confirmer) |
+| ornith-1.5-9b-mtp-nothink | 1468 | 49,8 | 828 / 39,5 | 1355 / 1460 / 1294 / 1080 | juste |
+| ornith-1.5-35b-a3b-mtp | 1673 | 82,4 | 1073 / 76,2 | 1703 / 1700 / 1429 / 1145 | juste (ctx testé 262144, pas les 1048576 de production) |
+| qwen3.8-27b-dflash-nothink | 229 | 40,7 | 302 / 32,2 | 244 / 239 / 225 / 202 | juste (décode +26 %, prefill -24 % : compromis à trancher) |
+| muse-glimmer-30b-dflash | 318 | 36,4 | 266 / 38,0 | 328 / 323 / 293 / 259 | juste |
+| qwen3.8-flash-next-mtp-nothink | 877 | 52,2 | 364 / 52,4 | 938 / 1108 / 1111 / 1079 | juste jusqu'à 51k (batch 16384, 28 Gio restants) |
+| qwen3-coder-next | 1352 | 65,1 | 727 / 52,2 | 1417 / 1455 / 1245 / 1006 | 4 comptages justes, le charabia « LAMPAMPAMP » est guéri |
+| deepseek-v4-flash | 162 | 29,3 | 196 / 28,8 | 173 / 161 / 136 / 111 | 4 comptages justes, acceptance 0,83 (0,69 sur le fork), le charabia « Nous dev dev dev » est guéri ; ne laisse que 9 Gio, à servir seul |
+
+Non mesurées sur ce moteur, donc non qualifiées : `lfm2.5-8b-a1b-nothink` et
+`ornith-1.5-35b-a3b-parallel` (les seules à garder un cache `V q8_0`).
+
+Trois faits de la campagne, à ne pas perdre :
+
+- **`batch-size` / `ubatch-size` 16384 est une erreur de segmentation** (code
+  139) dès un prompt de 8k tokens sur tous les modèles SAUF Flash-Next, et coûte
+  environ 33 Gio de tampons. `generate_models_ini` refuse désormais toute valeur
+  au-delà de 4096 hors liste blanche.
+- **`--load-mode mmap` est disqualifié** : DeepSeek met plus de 13 minutes à
+  charger. `none` partout.
+- **`GGML_CUDA_ENABLE_UNIFIED_MEMORY` est interdit** sur ce runtime (sortie
+  corrompue) : il reste exporté par les outils de l'hôte, jamais par le compose
+  ni par `_dk_run`.
 
 ![Prefill paquet contre fork](docs/graphs/prefill.svg)
 
@@ -395,7 +450,6 @@ contournée par modèle et signalée en amont :
 
 | Fichier | Rôle |
 |---|---|
-| `bench-devices.conf` | clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par `--bench-devices`, édition manuelle OK |
 | `preload.conf` | modèles préchargés, un par ligne |
 | `fork.conf` | épinglage du moteur : `pin = <commit>` et `raison = <texte>`, écrit par `--setup-fork <commit>`, retiré par `--setup-fork` sans argument |
 | `spec-nmax.conf` | modèle = spec-draft-n-max retenu par les mesures |
@@ -449,11 +503,6 @@ parallel         = 4"
 - `download_hf <dossier> <repo> VAR=<fichier>` déclare le fichier (chemin,
   inventaire pour `--cleanup`, téléchargement) ; `download_hf_shards` pour un
   modèle en shards (shard 00001 et sous-dossier de quant) ;
-- `derive_gguf <dossier> VAR=<fichier> <source> <script>` déclare un GGUF
-  **produit en local** à partir d'un fichier déjà déclaré (aucun repo ne le
-  porte) : même inventaire `--cleanup`, et `--setup` lance le script après les
-  téléchargements si le fichier manque ou si la source a bougé. Unique cas : le
-  sidecar MTP de Qwen3.8-Flash-Next renommé pour le fork ;
 - `llama_model <section> "<corps ini>"` déclare la section ; deux sections
   peuvent partager le même `*_PATH` (Ornith depuis le 15/09/2026 : section de
   base à 4 slots et variante `-mtp` mono-utilisateur ; les deux sections
@@ -472,9 +521,8 @@ dans `AGENTS.md`.
 | `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
 | `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices (`DEV=Vulkan0,ROCm0`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
 | `spec-isolate.sh` | Test isolé d'un réglage spéculatif AVANT sa déclaration dans `lib/models.sh` : `tools/spec-isolate.sh <tag> -- <args llama-server...>` monte un serveur jetable sur `PORT` (8099) avec les arguments bruts, mesure acceptance, prefill, décode et sanité de la sortie (`py/spec_isolate_bench.py`), puis relance le service. Variables : `PORT`, `NP` (salve simultanée en plus), `PASSES`, `PROMPTS`, `MAX_TOKENS`, `OUT`, `LLAMA_BIN_DIR` (binaires d'un build à part du fork, pour mesurer un patch sans toucher au moteur servi). Refuse de démarrer si un `--bench*` / `--spec*` ou un conteneur `bench-agentic-*` tourne. Sorties dans `logs/spec-isolate/<tag>/`. À confirmer ensuite sur le service par `--spec-ab` |
-| `qualif-modele.sh` | Qualification d'un modèle DÉJÀ déclaré et servi : `tools/qualif-modele.sh <section>` enchaîne les étapes 3, 5, 6 et 7 de la skill ajout-modele (`--bench-devices`, `--spec-ab` sur `spec-refactor.txt` puis `spec-test.txt`, `--bench`, `--bench-cache`, `--bench-load`, `--bench-agentic`), une à la fois (un seul GPU), lit le drafter et le `size-m` réellement servis dans `status.args` de `/v1/models`, et écrit `logs/qualif/<tag>/resume.md` (tableau de perfs prêt à coller) plus un journal par étape. Options : `--passes`, `--size-m`, `--devices`, `--sans-agentic`, `--sans-cache`, `--sans-load`, `--tag`. Une étape en échec n'arrête pas les suivantes (code de retour non nul). Refuse de démarrer si un `--bench*` / `--spec*`, un `spec-isolate.sh` ou un conteneur `bench-agentic-*` tourne. N'écrit ni `lib/models.sh` ni les `.conf` (sauf `bench-devices.conf`, par `--bench-devices`) ; ne joue ni le test isolé ni `--spec-tune` |
-| `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k, KV q8_0 comme le service), par device, avec le tour simulé de `--bench-devices` recalculé à chaque profondeur : c'est le régime agentic réel, où le classement des devices peut s'inverser. Journal `logs/bench-depth.log` + `.tsv` |
-| `mtp-rename-hc-head.py` | Renomme les trois tenseurs du mixeur final des hyper-connexions d'un sidecar MTP Qwen3.8-Flash-Next (`blk.<n>.nextn.hc_head_*` chez unsloth, convention de la PR mainline #28243) vers les noms que lit le fork strix-llama.cpp (`output_hc_*`). Données recopiées telles quelles. `PYTHONPATH=$HOME/llm/strix-llama.cpp/gguf-py python3 tools/mtp-rename-hc-head.py <in> <out>` ; appelé aussi par `--setup`. Inutile sur un moteur mainline portant #28243 |
+| `qualif-modele.sh` | Qualification d'un modèle DÉJÀ déclaré et servi : `tools/qualif-modele.sh <section>` enchaîne les étapes 3, 5, 6 et 7 de la skill ajout-modele (`--bench-sanity`, `--spec-ab` sur `spec-refactor.txt` puis `spec-test.txt`, `--bench`, `--bench-cache`, `--bench-load`, `--bench-agentic`), une à la fois (un seul GPU), lit le drafter et le `size-m` réellement servis dans `status.args` de `/v1/models`, et écrit `logs/qualif/<tag>/resume.md` (tableau de perfs prêt à coller) plus un journal par étape. Options : `--passes`, `--size-m`, `--sans-agentic`, `--sans-cache`, `--sans-load`, `--tag`. Une étape en échec n'arrête pas les suivantes (code de retour non nul), **sauf la justesse** : un moteur qui répond faux arrête la qualification. Refuse de démarrer si un `--bench*` / `--spec*`, un `spec-isolate.sh` ou un conteneur `bench-agentic-*` tourne. N'écrit ni `lib/models.sh` ni les `.conf` ; ne joue ni le test isolé ni `--spec-tune` |
+| `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k), avec un tour simulé recalculé à chaque profondeur : c'est le régime agentic réel. ⚠ Tourne sur le `llama-bench` de l'**hôte** (fork Vulkan), pas sur l'image du service : ordre de grandeur, pas mesure de production. Journal `logs/bench-depth.log` + `.tsv` |
 | `py/perf_graphs.py` | Régénère les trois SVG de `docs/graphs/` (prefill, décode, écarts en %) à partir de `docs/perfs.tsv`, en rendu sobre (barres pleines, fond blanc). Aucune dépendance, aucun service : `python3 py/perf_graphs.py [<tsv> [<dossier>]]`. À relancer après toute modification du TSV |
 | `llm-proxy.ts` | Extension pi / omp : découvre les modèles `text-generation` du proxy Albert (`/v1/models`, ctx, coûts, reasoning déduit de l'id) et enregistre le provider `albert`. A copier dans `~/.pi/agent/extensions/` et `~/.omp/agent/extensions/` (une seule extension provider par agent). Endpoint `http://llmproxy` et clé en dur pour l'instant (à passer sur `process.env` avant diffusion) |
 
@@ -483,8 +531,10 @@ Les scripts shell pointent sur `http://bigchuck:8009` par défaut (surchargeable
 ## FAQ
 
 **Un modèle échoue au chargement, ROCm0 a disparu.**
-`--list-devices` croise `bench-devices.conf` avec les devices réellement
-exposés. Réinstaller `ggml-hip`, ou forcer Vulkan0 dans la conf puis `--preload`.
+`--list-devices` demande ses devices à l'image du service et alerte si `ROCm0`
+manque : c'est le device de tout le ini, sans lui rien ne charge. Reconstruire
+l'image (`--image-build`) et vérifier `/dev/kfd`, `/dev/dri` et les groupes
+`render` et `video` de l'hôte.
 
 **Je peux éditer models.ini ?**
 Non, il est régénéré à chaque `--setup`, `--preload` ou `--spec-*`.

@@ -2,7 +2,7 @@
 # Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
-# BACKEND — UN SEUL, ROCm0
+# BACKEND : UN SEUL, ROCm0
 #
 # Depuis la bascule en conteneur (18/09/2026) le moteur du service est l'image
 # de runtime/ : ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 + halo-box/
@@ -286,7 +286,7 @@ download_hf_shards() {
 #  sidecar MTP de Qwen3.8-Flash-Next, nécessaire au seul commit 0007bc6 du fork.
 #  Le moteur de l'image lit la tête « shared » telle quelle. _derive
 #  (lib/common.sh), le cas "derive" de cmd_setup et tools/mtp-rename-hc-head.py
-#  sont partis avec — tout est dans l'historique git si le besoin revient.)
+#  sont partis avec ; tout est dans l'historique git si le besoin revient.)
 
 # groupe <ligne> [<ligne>...]
 #   En-tête de groupe du ini, émis (suivi d'une ligne vide) juste avant la
@@ -945,7 +945,7 @@ download_hf qwen3-coder-next "transmutator/Qwen3-Coder-Next-DFlash-GGUF" \
 #   HISTORIQUE, --bench-devices 21/08/2026 (b10433, ROCm SYSTÈME) : Vulkan0
 #   prefill 470 t/s, décode 46,7 t/s, et ROCm0 INUTILISABLE sur cette arch avec
 #   ce build, qui répondait « LAMPAMPAMPAMP… » à la recopie de contrôle (exclu
-#   par --bench-sanity avant toute mesure) — deuxième arch MoE à opérateurs
+#   par --bench-sanity avant toute mesure) : deuxième arch MoE à opérateurs
 #   fusionnés cassée sur le ROCm système après DeepSeek V4, quand les denses et
 #   le 35B-A3B passaient.
 #   ⚠ GUÉRI par le runtime retained-PM4 de l'image, constaté le 18/09/2026 :
@@ -1025,7 +1025,7 @@ download_hf qwen3-coder-next "transmutator/Qwen3-Coder-Next-DFlash-GGUF" \
 #   script de test HORS DÉPÔT, prompt court d'environ 1 400 tokens et 1 000
 #   générés, médianes de 3 passes ; UD-Q4_K_XL, draft-dflash n-max 7) :
 #   prefill 1352 t/s, décode 65,1 t/s. Contre la même section sur le fork
-#   0007bc6 Vulkan0 (727 / 52,2) : prefill +86 %, décode +25 % — le meilleur
+#   0007bc6 Vulkan0 (727 / 52,2) : prefill +86 %, décode +25 %, le meilleur
 #   gain de prefill du parc avec le 9b. Prefill en profondeur (2k / 8k / 25k /
 #   51k) : 1417 / 1455 / 1245 / 1006 t/s, quatre comptages de lignes justes.
 #   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
@@ -1321,7 +1321,7 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   le prefill compte (relecture de fichiers) autant que le décode ; le tour
 #   simulé de l'ancien --bench-devices (2000/prefill + 3000/décode) donnerait
 #   81,4 s sur l'image contre 99,8 s sur le fork, donc l'image gagne sur ce
-#   profil — mais ce profil est une convention, pas une mesure de l'usage.
+#   profil, mais ce profil est une convention, pas une mesure de l'usage.
 #   Décision utilisateur à prendre à la bascule, avec --bench-agentic.
 #   Prefill en profondeur (2k / 8k / 25k / 51k) : 244 / 239 / 225 / 202 t/s,
 #   justesse vérifiée par comptage de lignes. À noter : Muse-Glimmer, son
@@ -1602,7 +1602,7 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 # Device : ROCm0 depuis le 18/09/2026 (device unique de l'image, cf. en-tête).
 #   HISTORIQUE, --bench-devices 21/08/2026 (b10433, ROCm SYSTÈME) : Vulkan0
 #   prefill 120 t/s, décode 11,2 t/s, et ROCm0 INUTILISABLE sur cette arch avec
-#   ce build — le serveur répondait à ~500 t/s un charabia répétitif (« Nous dev
+#   ce build : le serveur répondait à ~500 t/s un charabia répétitif (« Nous dev
 #   dev dev… »), réponse finale vide, sans erreur loggée, seulement des
 #   opérateurs fusionnés DeepSeek V4 (Lightning Indexer, HC pre/comb/post)
 #   renvoyés sur CPU. C'est ce cas qui a motivé le garde-fou « sortie
@@ -1685,14 +1685,14 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   strix-8c1c282+r7dda3ac, ROCm0, fit off, load-mode none, cache K et V f16,
 #   script de test HORS DÉPÔT, prompt court d'environ 1 400 tokens et 1 000
 #   générés, médianes de 3 passes ; UD-IQ3_XXS, ngram-map-k 7 + draft-dspark
-#   n-max 3, reasoning-budget 6144, contexte 131072 — la conf de référence
+#   n-max 3, reasoning-budget 6144, contexte 131072, soit la conf de référence
 #   ci-dessous, inchangée) : prefill 162 t/s, décode 29,3 t/s, acceptance 0,83.
 #   Contre la même section sur le fork 0007bc6 Vulkan0 (196 / 28,8 / 0,69) :
 #   décode +2 %, acceptance de 0,69 à 0,83, prefill -17 %. Prefill en
 #   profondeur (2k / 8k / 25k / 51k) : 173 / 161 / 136 / 111 t/s, quatre
 #   comptages de lignes justes.
 #   ⚠ MÉMOIRE : chargé, ce modèle ne laisse plus que 9 Gio disponibles, QUEL
-#   QUE SOIT le cache KV (f16 ou q8_0), le fit ou le contexte — ces trois
+#   QUE SOIT le cache KV (f16 ou q8_0), le fit ou le contexte : ces trois
 #   leviers ont été essayés le 18/09 et n'y changent rien. Il se sert donc
 #   SEUL : la garde mémoire _ensure_room_for (lib/common.sh) décharge les
 #   autres modèles avant de le charger, c'est le comportement attendu.
@@ -1810,7 +1810,7 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   la cible ; la campagne l'a chargée telle quelle, sans renommage, avec une
 #   acceptance de 0,87. Conséquences : la tête AUTONOME Q8_0 (4,1 Go) n'est plus
 #   déclarée, la copie renommée « strix » n'existe plus du tout, et avec elle
-#   partent derive_gguf, _derive et tools/mtp-rename-hc-head.py — plus aucune
+#   partent derive_gguf, _derive et tools/mtp-rename-hc-head.py, plus aucune
 #   section du parc ne dérivait de fichier (cf. le commentaire de KNOWN_FILES).
 #   HISTORIQUE, vérifié le 17/09/2026 sur le commit épinglé 0007bc6 (fork
 #   Vulkan) : la tête « shared » y était INUTILISABLE, et le renommage des
@@ -1971,7 +1971,7 @@ download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 #   au lieu d'environ 100.
 #   ⚠ Le paquet Arch (b10809) ne connaît NI ngram-on-disk NI lazy-mode, et
 #   refuse alors de démarrer le routeur ENTIER (« option 'ngram-on-disk' not
-#   recognized in preset », vérifié le 12/09/2026 — l'ini n'est pas tolérant
+#   recognized in preset », vérifié le 12/09/2026 : l'ini n'est pas tolérant
 #   aux clés inconnues). Revenir au paquet impose de retirer cette ligne à la
 #   main puis de relancer --preload ; le dépôt ne filtre rien, il refuse
 #   seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
@@ -1992,7 +1992,7 @@ download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 #       ⚠ spec-nmax.conf (local, non versionné) porte encore « 4 » pour cette
 #       section sur bigchuck : il écraserait le 3. generate_models_ini
 #       avertit maintenant quand une valeur locale contredit le dépôt
-#       (_ini_warn_conf_nmax, lib/ini.sh) — la retirer à la bascule. Idem pour
+#       (_ini_warn_conf_nmax, lib/ini.sh) : la retirer à la bascule. Idem pour
 #       la ligne de spec-ngram.conf, devenue inerte (plus de ngram-map-k) ;
 #     tête MTP « shared » d'unsloth en drafter, sans renommage, avec
 #       spec-draft-ngl = all injecté par generate_models_ini ;
@@ -2004,7 +2004,7 @@ download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 #   1 400 tokens et 1 000 générés, médianes de 3 passes) : prefill 877 t/s,
 #   décode 52,2 t/s. Contre la même quant AP-Q4_K_XL sur le fork 0007bc6
 #   Vulkan0 (364 / 52,4) : prefill x2,4, décode égal. Prefill en profondeur
-#   (2k / 8k / 25k / 51k) : 938 / 1108 / 1111 / 1079 t/s — le seul modèle du
+#   (2k / 8k / 25k / 51k) : 938 / 1108 / 1111 / 1079 t/s, le seul modèle du
 #   parc dont le prefill MONTE avec la profondeur, effet du batch 16384.
 #   Justesse vérifiée par comptage de lignes jusqu'à 51k tokens. Mémoire :
 #   28 Gio restants une fois chargé.

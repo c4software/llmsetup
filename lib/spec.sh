@@ -467,7 +467,7 @@ cmd_spec_tune() {
 #
 # 1. COURBE (llama-bench, service arrêté, ~2 min) : balayage grossier puis
 #    raffinement automatique autour de la marche détectée, sur le device
-#    EFFECTIF du modèle (ROCm0, device unique) — la marche n'est pas au même
+#    EFFECTIF du modèle (ROCm0, device unique) : la marche n'est pas au même
 #    endroit d'un backend à l'autre. Sortie : deux candidats, le « sûr » (sous
 #    la marche, ne peut pas perdre) et le « large » (amortit le coût fixe).
 #    Détail du raisonnement dans py/batch_curve.py.

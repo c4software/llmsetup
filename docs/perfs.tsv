@@ -3,6 +3,13 @@
 # Prefill et decode en t/s, acceptance sans unite (vide = pas de speculation).
 # Decimales avec un point ici, virgule a l'affichage (py/perf_graphs.py).
 # Regenerer docs/graphs/ apres toute modification : python3 py/perf_graphs.py
+# 18/09/2026 : la campagne du moteur CONTENEURISE (serie strix-8c1c282+r7dda3ac)
+# n'est PAS reportee ici. Ce format n'a que deux series, paquet et fork, et les
+# chiffres de la campagne ne viennent pas de --bench mais d'un script de test
+# hors depot : les mettre dans une de ces deux colonnes rendrait la provenance
+# illisible. Ils sont dans README.md (table du moteur conteneurise) et dans
+# docs/HISTORIQUE.md. A reporter ici, avec une troisieme paire de colonnes,
+# quand le depot aura rejoue ses --bench sur ce moteur.
 modele	prefill_paquet	prefill_fork	decode_paquet	decode_fork	acceptance_paquet	acceptance_fork	reglage	source
 lfm2.5-2.6b	2279	2875	67.7	108.8		0.50	draft-dspark 3, drafter DSpark officiel Liquid AI Q8_0, parallel 1 (KV f16) ; paquet sans drafter, parallel 4	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
 lfm2.5-8b-a1b-nothink		3079		108.1		0.55	ngram-map-k 47 + draft-dspark 3, min-hits 2, drafter DSpark officiel Liquid AI Q8_0, reasoning-budget 0 (thinking coupe), parallel 1 (KV f16)	jamais mesure au paquet ; strix-0007bc6 16/09/2026

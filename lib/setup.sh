@@ -14,7 +14,7 @@ ROCM_PKGS=(rocm-hip-runtime hipblas rocblas hipblaslt ggml-hip)
 cmd_setup() {
   info "Vérification des dépendances..."
   # ggml-cpu + ggml-vulkan : backends splittés d'extra/ggml (optdeps, donc
-  # à imposer — sans ggml-vulkan plus de Vulkan0, sans ggml-cpu plus d'ops CPU).
+  # à imposer : sans ggml-vulkan plus de Vulkan0, sans ggml-cpu plus d'ops CPU).
   # ⚠ Ces paquets ne concernent PLUS le service, qui tourne dans l'image ROCm
   # (runtime/) : ils servent les outils hors service (llama-bench des courbes
   # de batch, llama-server jetable de tools/spec-isolate.sh).
@@ -50,9 +50,9 @@ cmd_setup() {
     fi
     if [[ "$reply" =~ ^[oOyY]$ ]]; then
       paru -S --noconfirm "${rocm_to_install[@]}" \
-        || warn "Installation ROCm en échec — sans effet sur le service, qui tourne dans l'image."
+        || warn "Installation ROCm en échec, sans effet sur le service, qui tourne dans l'image."
     else
-      info "Runtime ROCm de l'hôte non installé — sans effet sur le service."
+      info "Runtime ROCm de l'hôte non installé, sans effet sur le service."
       info "  (relancer --setup plus tard pour l'ajouter ; il ne sert qu'aux outils hors service)"
     fi
   fi
@@ -79,7 +79,7 @@ cmd_setup() {
 
   # Téléchargements pilotés par les déclarations de models.sh (DL_SPECS),
   # dans l'ordre de déclaration (= ordre du ini)
-  # p1/p2 : sens dépendant du mode — repo + fichier (plat), repo + glob (shard).
+  # p1/p2 : sens dépendant du mode : repo + fichier (plat), repo + glob (shard).
   # (le mode "derive", fichier calculé en local après coup, a disparu le
   # 18/09/2026 avec son seul usage, cf. lib/models.sh)
   local spec mode cible p1 p2

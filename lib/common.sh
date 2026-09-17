@@ -111,7 +111,7 @@ CONFIG_DIR="$MODELS_BASE"
 # Port du routeur llama-server (service --start et mesures via l'API)
 SERVER_PORT=8009
 
-# (BENCH_CONF / bench-devices.conf — device retenu par GGUF — a été retiré le
+# (BENCH_CONF / bench-devices.conf, le device retenu par GGUF, a été retiré le
 #  18/09/2026 : le moteur du service est une image construite en HIP seul, elle
 #  n'expose qu'un device. Le fichier reste peut-être sur la machine, il n'est
 #  plus lu par personne et peut être supprimé.)

@@ -104,7 +104,7 @@ else
 fi
 
 # ROCm/HIP sur iGPU : sans ça les allocations visent la VRAM dédiée (petite)
-# au lieu de la mémoire unifiée/GTT — les gros modèles échouent.
+# au lieu de la mémoire unifiée/GTT : les gros modèles échouent.
 # ⚠ Variable du moteur de l'HÔTE UNIQUEMENT. Elle ne doit JAMAIS être passée à
 # _dk_run (lib/runtime.sh) ni au compose du service : sur le runtime
 # retained-PM4 de l'image elle fait passer chaque allocation par
