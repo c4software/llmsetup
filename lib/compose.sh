@@ -159,11 +159,14 @@ services:
       - "$models_max"
       - "--models-autoload"
       - "--jinja"
-    environment:
-      # Sans effet côté Vulkan, nécessaire côté ROCm/HIP sur iGPU (allocations
-      # en mémoire unifiée/GTT au lieu de la VRAM dédiée) - l'unité systemd le
-      # posait déjà d'office, l'image est en HIP seul : il n'est plus optionnel.
-      GGML_CUDA_ENABLE_UNIFIED_MEMORY: "1"
+    # PAS de bloc environment, et surtout PAS GGML_CUDA_ENABLE_UNIFIED_MEMORY
+    # (que l'ancienne unité systemd posait pour le ROCm du système) : sur ce
+    # runtime retained-PM4 il fait passer chaque allocation par
+    # hipMallocManaged et la sortie se corrompt (charabia sans spéculation,
+    # « init: invalid token » avec un draft MTP), cf. runtime/AMONT.md. Les
+    # variables utiles (HSA_OVERRIDE_GFX_VERSION, DEBUG_HIP_GRAPH_PM4,
+    # GPU_MAX_HW_QUEUES) sont déjà dans l'image. Toute la campagne de mesures
+    # du 17/09/2026 a tourné sans cette variable.
     # Les deux seuls accès matériels dont le backend HIP a besoin.
     devices:
       - "/dev/kfd:/dev/kfd"

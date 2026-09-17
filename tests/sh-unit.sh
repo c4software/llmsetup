@@ -922,6 +922,8 @@ _ckout "jamais de mem_limit"             "mem_limit"
 _ckout "jamais privileged"               "privileged: true"
 _ckout "jamais docker.sock"              "docker.sock"
 _ckout "jamais network_mode host"        "network_mode"
+# Interdit par l'amont sur le runtime retained-PM4 : sortie corrompue.
+_ckout "jamais GGML_CUDA_ENABLE_UNIFIED_MEMORY" "GGML_CUDA_ENABLE_UNIFIED_MEMORY"
 _ckout "aucune variable non résolue"     '${'
 
 # (b) Image absente : rien n'est généré, et le message nomme --image-build.
