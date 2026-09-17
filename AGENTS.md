@@ -9,7 +9,10 @@ résumer ou la supprimer, non.
 
 1. **Comportement identique** à confs égales : `models.ini` byte-identique,
    mêmes CLI, mêmes sorties, mêmes fichiers. Le point d'entrée reste
-   `./setup-llm.sh <commande>` (le service systemd l'appelle via `realpath`).
+   `./setup-llm.sh <commande>`. Le service est un **conteneur** décrit par
+   `~/models/docker-compose.yml`, généré par `lib/compose.sh` et piloté par les
+   `_svc_*` de `lib/svc.sh` : aucun `docker compose` du service ailleurs dans
+   le dépôt, et **jamais** `docker compose restart`.
 2. **Bash pur, `set -euo pipefail`**, pas de dépendance nouvelle
    (bash ≥ 4.3, python3 stdlib, curl, sed/awk, paru, hf, gum optionnel).
    Pas de framework, pas de bats.
@@ -47,27 +50,37 @@ résumer ou la supprimer, non.
 - Toute modif de `spec_analyze.py` ⇒ aussi `python3 tests/py-unit.py`
   (tests unitaires de `fit_alpha`/`fit_timing`/`predict`/`recommend` sur
   données synthétiques exactes).
-- Toute modif de `_llama_bin` / `_llama_build` (lib/common.sh), de
-  `FORK_ONLY_KEYS` / `_fork_keys_guard` (lib/fork.sh) ou de `lib/runtime.sh`
-  (moteur conteneurisé) ⇒ `./tests/sh-unit.sh` :
-  résolution du binaire comme le service, forme de l'étiquette de moteur
-  (`bNNNNN` upstream, `strix-<commit>` pour le fork), refus de démarrer un
-  moteur upstream sur un ini qui porte des clés du fork, et, pour l'image :
-  lecture de `runtime/image.conf`, promotion en `:latest` seulement après
-  vérification de `versions.txt`, ménage limité à nos images sans tag.
+- Toute modif de `_llama_bin` / `_llama_build` / `_host_llama_build`
+  (lib/common.sh), de `FORK_ONLY_KEYS` / `_fork_keys_guard` (lib/fork.sh), de
+  `lib/runtime.sh` (image), de `lib/compose.sh` (compose généré) ou de
+  `lib/svc.sh` (pilotage du service) ⇒ `./tests/sh-unit.sh` : résolution du
+  binaire de l'hôte, forme des deux étiquettes de moteur (`bNNNNN` upstream et
+  `strix-<commit>` pour le fork côté hôte, `strix-<engine7>+r<rocm7>` pour
+  l'image servie), garde-fou moteur/ini, promotion en `:latest` seulement après
+  vérification de `versions.txt`, ménage limité à nos images sans tag, et pour
+  le service : contenu du compose généré (montage au même chemin en `:ro`, gid
+  numériques, `cap_drop ALL`, pas de `mem_limit`, `--models-max` suivant
+  `preload.conf`), régénération qui ne réécrit pas un fichier identique,
+  `_svc_restart` qui n'émet jamais `compose restart`, `_svc_wait_ready` qui
+  échoue vite sur un conteneur sorti, `--cleanup` qui épargne les deux
+  artefacts générés et `--migrate-off-systemd` idempotente.
 - `bash -n` sur chaque fichier touché ; `shellcheck` si dispo (signaler
   plutôt que refactorer ; le style SC2155-like existant est assumé).
 
 ## Règles de terrain
 
 - Les scripts Python sont appelés **par chemin absolu depuis `SCRIPT_DIR`**
-  (`python3 "$SCRIPT_DIR/py/x.py"`) — le service systemd démarre ailleurs.
+  (`python3 "$SCRIPT_DIR/py/x.py"`) — les commandes du dépôt sont lancées
+  depuis n'importe où.
 - Les prompts de mesure vivent dans `prompts/`. **Toute modification d'un
   prompt invalide les comparaisons avec les runs antérieurs de
   `spec-tests.log`** : le signaler dans le message de commit et le récap ;
   ne jamais modifier un prompt au détour d'un autre changement.
   
-- Ne pas éditer `~/models/models.ini` (généré).
+- Ne pas éditer `~/models/models.ini` ni `~/models/docker-compose.yml` : les
+  deux sont **générés**, non versionnés, et réécrits (`regen_models_ini`,
+  `regen_compose`). Le compose est régénéré à chaque `--start` ; les tuners qui
+  surchargent le ini le temps d'une mesure n'y touchent pas.
 - Les fichiers `.conf` (`bench-devices.conf`, `preload.conf`,
   `spec-nmax.conf`, `spec-ngram.conf`, `fork.conf`) sont des **choix utilisateur** : ne pas les régénérer ni
   les « corriger » sans demande. Les .conf et les journaux de `logs/` sont

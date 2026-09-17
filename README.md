@@ -27,6 +27,11 @@ Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTO
 ## Prérequis
 
 - Arch/CachyOS, `paru`, bash 4.3 ou plus, python3 (stdlib seule), curl.
+- **docker et son démon activé au boot** (`systemctl enable --now docker`) :
+  le service llama-server est un **conteneur**, décrit par un
+  `docker-compose.yml` généré dans `~/models`. Sans démon actif au boot, le
+  service ne revient pas après un redémarrage de la machine — c'est `docker`
+  qui remplace le `loginctl enable-linger` d'avant.
 - `hf` (python-huggingface-hub, python-hf-xet). `gum` optionnel (menus).
 - Paquets llama.cpp : `llama-cpp`, plus les backends ggml splittés :
   `ggml-cpu` et `ggml-vulkan` (obligatoires, installés par `--setup`).
@@ -37,10 +42,36 @@ Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTO
 ## Installation
 
 ```bash
-./setup-llm.sh --setup            # dépendances, GGUF, préchargement, models.ini
-./setup-llm.sh --install-service  # service systemd user llama-server (démarrage au boot via linger)
-systemctl --user start llama-server
+./setup-llm.sh --setup        # dépendances, GGUF, préchargement, models.ini + docker-compose.yml
+./setup-llm.sh --image-build  # moteur conteneurisé (40 à 60 min à froid)
+./setup-llm.sh --start        # monte le conteneur et ATTEND que /health réponde
 ```
+
+Le service ensuite :
+
+```bash
+./setup-llm.sh --status            # docker compose ps + réponse de /health
+./setup-llm.sh --logs -f           # journaux du conteneur
+./setup-llm.sh --restart           # stop puis start (compose régénéré, conteneur recréé)
+./setup-llm.sh --stop
+```
+
+À la main, sans passer par le dépôt (même conteneur, mêmes journaux) :
+
+```bash
+cd ~/models && docker compose ps
+cd ~/models && docker compose logs -f
+```
+
+Le `docker-compose.yml` de `~/models` est **généré** (`lib/compose.sh`), au même
+titre que `models.ini` : il n'est pas versionné, il n'est pas à éditer, et
+`--start` le réécrit à chaque démarrage. Il porte toutes les valeurs en clair
+(pas de `${VAR}`, pas de `.env`), y compris `seccomp=unconfined` — **exigé par
+ROCr**, dont les ioctl du KFD sortent du profil seccomp par défaut de docker.
+C'est le seul assouplissement, et il est compensé : `cap_drop: [ALL]`,
+`no-new-privileges`, aucun `privileged`, aucun accès à `docker.sock`, `~/models`
+monté en lecture seule et un seul volume inscriptible hors du parc
+(`~/.local/state/llm-setup/cache`).
 
 En fin de `--setup`, si le fork n'est pas le moteur résolu, son installation est
 **proposée** (défaut oui, `--setup-fork` derrière ; en entrée non interactive
@@ -52,12 +83,18 @@ Le fork apporte les clés de réglage dont le parc dépend (n-gram sur disque,
 budget de réflexion, drafter externe, MTP de Qwen3.8-Flash-Next) et gagne le
 prefill sur tout le parc. Il est construit dans `~/llm/strix-llama.cpp` et
 exposé par quatre liens (`llama-server`, `llama-bench`, `llama-cli`,
-`llama-quantize`) dans `~/.local/bin`, que l'unité systemd met en tête du PATH.
+`llama-quantize`) dans `~/.local/bin`.
+
+> Depuis la conteneurisation du service, **le fork n'est plus le moteur servi** :
+> c'est l'image (section suivante). Il reste le moteur des outils **hors
+> service** — `llama-bench` des courbes de batch (`--spec-ngram-tune`,
+> `tools/bench-spec-batch.sh`, `tools/bench-depth.sh`) et le `llama-server`
+> jetable de `tools/spec-isolate.sh` — et le filet de retour arrière tant que la
+> migration n'est pas terminée.
 
 ```bash
 ./setup-llm.sh --setup-fork   # installe ou réinstalle (clone si besoin, build, liens)
 ./setup-llm.sh --update-fork  # suivi d'amont du fork déjà en place
-systemctl --user restart llama-server
 ./setup-llm.sh --list-devices # quel binaire répond, et sa version
 ./setup-llm.sh --unset-fork   # retire les liens : retour au paquet Arch
 ```
@@ -101,12 +138,12 @@ moteur upstream sur un tel ini, en nommant le modèle et la clé. Pour revenir a
 paquet Arch : retirer ces clés de `lib/models.sh`, puis `--preload` (régénère le
 ini) avant le restart.
 
-Étiquette des mesures : chaque bump du fork ouvre une **nouvelle série**,
-étiquetée au commit (`strix-<commit>` en colonne build des journaux, `bNNNNN`
-pour un build upstream). Les deux séries ne se comparent pas
+Étiquette des mesures : elle vient des `LABEL` de l'image servie et vaut
+`strix-<engine7>+r<rocm7>` (colonne build des journaux). Chaque bump de l'image
+ouvre une **nouvelle série** ; les séries ne se comparent pas
 (cf. ARCHITECTURE.md, comparabilité des journaux).
 
-## Moteur conteneurisé (en préparation)
+## Moteur conteneurisé (moteur du service)
 
 Le dépôt sait aussi construire un **second moteur**, en image docker : ROCm 10.0
 gfx1151, un runtime ROCr/HIP retained-PM4 recompilé, et
@@ -115,10 +152,10 @@ dans `runtime/` depuis la PR 133 de `kyuz0/amd-strix-halo-toolboxes` ;
 provenance, écarts exacts et procédure de resynchronisation dans
 [`runtime/AMONT.md`](runtime/AMONT.md).
 
-> ⚠ **Le moteur du service reste le fork ci-dessus.** `--image-build`,
-> `--image-update` et `--image-status` construisent et inventorient des images ;
-> aucune ne touche à systemd, au ini ni aux liens de `~/.local/bin`. La bascule
-> du service (compose généré dans `~/models`) est une étape à venir.
+> ⚠ **C'est le moteur du service.** `--image-build`, `--image-update` et
+> `--image-status` construisent et inventorient des images sans rien redémarrer :
+> une image neuve n'est servie qu'au prochain `./setup-llm.sh --restart`, qui
+> régénère le compose et recrée le conteneur.
 
 ```bash
 ./setup-llm.sh --image-status   # ce qui est demandé, ce qui est en place
@@ -136,7 +173,8 @@ Ce qui tient l'ensemble :
   quelques minutes, on n'en collectionne pas. Ce qu'elle contient se lit dans
   ses étiquettes (`llm-setup.engine_rev`, `llm-setup.rocm_rev`,
   `llm-setup.build_date`), dans `/opt/strix/versions.txt` et dans
-  `logs/images.tsv`.
+  `logs/images.tsv` — et c'est de là que vient l'étiquette de toutes les
+  mesures (`_llama_build`, forme `strix-<engine7>+r<rocm7>`).
 - L'image ne contient **que le moteur et son runtime** : pas de modèle, pas de
   configuration, pas d'état. `~/models` est monté en lecture seule au même
   chemin absolu au moment de lancer un binaire.
@@ -164,8 +202,8 @@ d'avancer sans accord explicite.
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
 | `--setup-fork [commit] [raison]` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin`. Avec un commit (ou tag, ou branche) : épingle le moteur dessus et l'écrit dans `fork.conf` ; sans argument, dépingle et reprend la branche (voir « Moteur ») |
 | `--update-fork` | Suivi d'amont du moteur, juste après un `--update` : `git fetch`, changelog des commits reçus et confirmation, puis mise à jour du fork **déjà installé** (`git pull --ff-only`, rebuild et liens), s'arrête si rien n'a bougé, ne redémarre rien et ne mesure rien. Si le moteur est épinglé (`fork.conf`), ne tire rien et se contente du changelog en attente (voir « Moteur ») |
-| `--unset-fork` | Retire les liens du fork : retour au paquet Arch au prochain restart |
-| `--image-build [--no-cache]` | Construit l'image du moteur **conteneurisé** (`runtime/`) sur les révisions de `runtime/image.conf`, sous un tag temporaire ; vérifie `/opt/strix/versions.txt` et les quatre binaires, puis seulement promeut en `llm-rocm-strix:latest` et supprime les images sans tag issues de nos builds. Un build raté laisse l'image en place intacte. **Ne bascule aucun service** |
+| `--unset-fork` | Retire les liens du fork : retour au paquet Arch pour les outils **hors service** (le service tourne sur l'image) |
+| `--image-build [--no-cache]` | Construit l'image du moteur **conteneurisé** (`runtime/`) sur les révisions de `runtime/image.conf`, sous un tag temporaire ; vérifie `/opt/strix/versions.txt` et les quatre binaires, puis seulement promeut en `llm-rocm-strix:latest` et supprime les images sans tag issues de nos builds. Un build raté laisse l'image en place intacte. **C'est le moteur du service** : une image neuve n'est servie qu'au prochain `--restart` |
 | `--image-update [engine-rev] [rocm-rev]` | Suivi d'amont de l'image : sans argument, montre l'écart avec les sommets des deux branches et s'arrête (`IMAGE_UPDATE_YES=1` vaut accord, comme `FORK_UPDATE_YES`) ; avec accord ou révisions données, réécrit `image.conf` puis construit. C'est aussi le retour arrière du moteur conteneurisé |
 | `--image-status` | Révisions demandées, image `:latest` en place avec ses étiquettes, verdict de conformité, taille, images sans tag restantes et place du cache de build. Ne construit ni ne purge rien |
 | `--list-devices` | Moteur résolu (paquet Arch ou fork) avec sa version, backends ggml installés et devices exposés, croisés avec `bench-devices.conf` |
@@ -173,8 +211,12 @@ d'avancer sans accord explicite.
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | A/B de réglages spéculatifs sur mesure réelle : chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
 | `--spec-ngram-tune [modèle] [n] [prompt]` | Règle la longueur de draft n-gram (`spec-ngram-map-k-size-m`) : courbe `t_forward(batch)` pour localiser la marche de noyau ggml, puis arbitrage des candidats sur mesure réelle (prompt de refactor par défaut) |
-| `--start` | Lance llama-server sur le port 8009 (commande du service) |
-| `--install-service`, `--uninstall-service` | Service systemd user (systemctl --user) |
+| `--start` | Démarre le service : `docker-compose.yml` régénéré dans `~/models`, conteneur recréé, puis **attente de `/health`** — la commande ne rend la main que quand le routeur répond sur le port 8009 |
+| `--stop` | Arrête le conteneur (SIGINT, jusqu'à 180 s : le déchargement des préchargés est long) |
+| `--restart` | `--stop` puis `--start`. Jamais `docker compose restart`, qui garderait l'ancienne image, l'ancienne ligne de commande et l'ancien `--models-max` |
+| `--status` | `docker compose ps` et réponse de `/health` |
+| `--logs [-f] [--tail N]` | Journaux du conteneur |
+| `--migrate-off-systemd` | **Temporaire** : débranche l'ancienne unité systemd user (stop, disable, suppression, `daemon-reload`), vérifie que le port 8009 est libre et signale les liens `~/.local/bin/llama-*` restants. Idempotente ; à jouer une fois avant le premier `--start` |
 | `--help` | Aide, liste des modèles et des clés de téléchargement |
 
 ## Workflow typique
@@ -182,8 +224,8 @@ d'avancer sans accord explicite.
 ```bash
 ./setup-llm.sh --setup                # première mise en place
 ./setup-llm.sh --update               # 1. modèles (etags)
-./setup-llm.sh --update-fork          # 2. moteur (rebuild + liens si bump)
-systemctl --user restart llama-server # 3. appliquer
+./setup-llm.sh --image-update         # 2. moteur du service (image, si bump accepté)
+./setup-llm.sh --restart              # 3. appliquer
 ./setup-llm.sh --bench all            # 4. perfs de tous les modèles présents : régressions
 ./setup-llm.sh --bench-devices        # Vulkan ou ROCm pour un modèle ?
 ./setup-llm.sh --spec-tune            # règle spec-draft-n-max d'un modèle à drafter

@@ -15,6 +15,36 @@ generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
                           ⚠ lu AU DÉMARRAGE SEULEMENT → restart requis
 ```
 
+Le service est un **conteneur**, décrit par un second fichier généré, à côté du
+ini et du même statut (produit, non versionné, jamais édité à la main) :
+
+```
+runtime/image.conf ──► --image-build ──► image llm-rocm-strix:latest
+preload.conf       ──┐                            │
+lib/compose.sh     ──┴─► regen_compose ──► ~/models/docker-compose.yml
+                                                   │
+                        _svc_start ────────────────┘
+                        docker compose up -d --force-recreate
+                                                   │
+                                                   ▼
+   conteneur « llama-server »            hôte
+   ┌──────────────────────────┐          ┌──────────────────────────────┐
+   │ /usr/local/bin/llama-    │          │                              │
+   │   server (image)         │          │                              │
+   │ --models-preset          │◄── ro ───┤ ~/models  (MÊME chemin       │
+   │   ~/models/models.ini    │          │            absolu, en :ro)   │
+   │ --host 0.0.0.0 --port … ─┼── :8009 ─┤ $BIND_ADDR:8009 (défaut      │
+   │ /var/cache/llama   (rw)  │◄── rw ───┤ 0.0.0.0, comme l'ancien      │
+   │ /dev/kfd, /dev/dri       │◄─────────┤ --host 0.0.0.0 de l'unité)   │
+   └──────────────────────────┘          │ ~/.local/state/llm-setup/    │
+                                         │   cache                      │
+                                         └──────────────────────────────┘
+```
+
+`~/models` est monté **au même chemin absolu** des deux côtés : `models.ini`
+porte des chemins absolus de l'hôte et n'a donc jamais à être réécrit pour le
+conteneur. En lecture seule : le moteur n'a rien à écrire dans les poids.
+
 À part, hors de ce flux : `fork.conf` (épinglage du moteur — `pin = <commit>`,
 `raison = <texte>`), lu par `lib/fork.sh` seul. Il ne touche pas au ini, il
 décide quel commit du fork est construit et bloque le suivi d'amont.
@@ -32,7 +62,7 @@ régresser.
 ordre imposé :
 
 ```
-common → models → ini → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
@@ -45,6 +75,18 @@ common → models → ini → preload → setup → fork → runtime → bench �
   `SERVICE_FILE`, `REFRESH`/`ONLY`. Elles vivent ici parce que plusieurs modules les
   consomment (`_maybe_restart_service` utilise `SERVICE_NAME`, `cmd_bench`
   utilise `SPEC_TEST_URL`) — définies **avant** toute fonction qui les utilise.
+- `svc.sh` : **le seul point d'appel de `docker compose` pour le service**.
+  `_svc_compose` (`--project-directory $CONFIG_DIR -f $CONFIG_DIR/docker-compose.yml`),
+  `_svc_start` (régénère le compose, `up -d --force-recreate --remove-orphans`,
+  puis `_svc_wait_ready`), `_svc_stop [timeout=180]`, `_svc_restart` (stop puis
+  start), `_svc_is_active` (`docker inspect` sur le nom du conteneur),
+  `_svc_installed` (compose générable : docker, image locale, `models.ini`),
+  `_svc_wait_ready [timeout=300]` (boucle `/health`, sortie anticipée avec le
+  code de sortie si le conteneur est `exited`), `_svc_logs`, et les commandes
+  `cmd_start` / `cmd_stop` / `cmd_restart` / `cmd_status` / `cmd_logs`.
+  Sourcé juste après `common.sh` parce que `_maybe_restart_service` en dépend.
+  Ne pas confondre avec le compose **jetable** de `bench-agentic/`, qui lance le
+  client pi et ne sert aucun modèle.
 - `models.sh` : `DEFAULT_DEVICE` et la **déclaration des modèles**, un bloc
   par modèle **avec ses commentaires métier** (sampling officiels, contraintes
   cache/MTP/SWA, historique des choix, repo/quant). Quatre helpers déclaratifs :
@@ -65,6 +107,15 @@ common → models → ini → preload → setup → fork → runtime → bench �
   liste, `none` pour la référence de `--spec-ngram-tune` sans MTP ; et
   `SPEC_AB_OVERRIDES` + `SPEC_AB_PRESET` : surcharges libres de `--spec-ab`,
   via `_apply_overrides`).
+- `compose.sh` : **génération du `docker-compose.yml`** de `$CONFIG_DIR`
+  (`~/models`, à côté de `models.ini`). `generate_compose` écrit le YAML sur
+  **stdout** (aucun effet de bord, donc testable et diffable), `regen_compose`
+  l'écrit sur disque par un fichier temporaire et **ne remplace que si le
+  contenu diffère**. `_compose_check` valide les prérequis avant d'écrire une
+  seule ligne (docker, image locale via `_image_ref`, `models.ini`, gid de
+  `render` et `video`), `_compose_gid` résout un groupe de l'hôte en **nombre**.
+  `BIND_ADDR` (défaut `0.0.0.0`) et `COMPOSE_CACHE_DIR`
+  (`~/.local/state/llm-setup/cache`) vivent ici.
 - `preload.sh` : sélection interactive (`select_preload_models`, gum ou
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
@@ -121,8 +172,9 @@ common → models → ini → preload → setup → fork → runtime → bench �
   `--shm-size 8g`, memlock illimité, `~/models` monté au MÊME chemin absolu en
   lecture seule, `--network none` par défaut — jamais `--privileged`, jamais
   `docker.sock`).
-  ⚠ Aucune de ces commandes ne bascule le service : à ce stade le moteur servi
-  reste le fork épinglé. Comme pour lui, une image = une série de mesures.
+  ⚠ Cette image EST le moteur du service (le compose la nomme par `_image_ref`),
+  mais aucune de ces commandes ne redémarre quoi que ce soit : une image neuve
+  n'est servie qu'au prochain `--restart`. Une image = une série de mesures.
 - `bench/bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`, précédée
   de la garde mémoire `_ensure_room_for`), les
   sélections (`_bench_presets`, `_bench_select_presets`, `_bench_select_one`)
@@ -177,11 +229,12 @@ common → models → ini → preload → setup → fork → runtime → bench �
   `_preset_has_spec_type` (un `spec-type` peut être une liste : ne jamais
   ancrer un grep sur `= draft-mtp`), sélection des modèles MTP et n-gram ;
   l'analyse est déléguée à `py/spec_analyze.py` et `py/batch_curve.py`.
-- `service.sh` : `cmd_start` (`--models-max` = préchargés + 1, min 2),
-  `cmd_install_service` (service **user** piloté par `systemctl --user`, linger
-  activé pour le démarrage au boot, `ExecStart` via `realpath` du
-  script, `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` posé d'office pour ROCm/iGPU),
-  `cmd_uninstall_service`.
+- `service.sh` : ne contient plus que `cmd_migrate_off_systemd`, commande
+  **temporaire** de bascule (stop, disable, suppression de l'unité,
+  `daemon-reload`, contrôle que le port 8009 est libre, signalement des liens
+  `~/.local/bin/llama-*` restants). Idempotente, à retirer quand le parc sera
+  passé. L'unité systemd, `--install-service`, le linger et le PATH de l'unité
+  ont disparu avec la conteneurisation.
 - `help.sh` : `cmd_help`.
 
 Les fichiers de conf restent à côté du **point d'entrée** (`SCRIPT_DIR`),
@@ -190,7 +243,8 @@ jamais dans les sous-dossiers.
 ## Scripts Python (`py/`)
 
 Appelés par chemin absolu `python3 "$SCRIPT_DIR/py/x.py"` (jamais relatif
-au cwd : le service systemd démarre ailleurs). Python 3 stdlib uniquement.
+au cwd : les commandes du dépôt sont lancées depuis n'importe où).
+Python 3 stdlib uniquement.
 Leurs sorties sont contractuelles : le bash les consomme au `sed -n`/`grep`
 près — voir `tests/py-golden.sh`.
 
@@ -459,8 +513,9 @@ Trois choix structurent le reste :
 
 1. **L'image ne contient que le moteur et son runtime** — pas de modèle, pas de
    configuration, pas de cache, pas d'état. Les poids arrivent par le montage en
-   lecture seule de `_dk_run`, `models.ini` reste dans `~/models`. Une image est
-   donc jetable, et un `COPY` amont d'outil ou de données ne se reprend pas.
+   lecture seule (compose du service, ou `_dk_run`), `models.ini` reste dans
+   `~/models`. Une image est donc jetable, et un `COPY` amont d'outil ou de
+   données ne se reprend pas.
 2. **Un seul tag, `llm-rocm-strix:latest`.** Reconstruire prend quelques
    minutes, on ne collectionne pas les images. La traçabilité tient aux trois
    `LABEL` (`llm-setup.engine_rev`, `llm-setup.rocm_rev`,
@@ -488,7 +543,11 @@ tout seul rend les séries de mesures incomparables.
   non supporté avec MTP » affirmé ici jusqu'au 15/09/2026 venait d'une doc
   unsloth, absente du fork servi (vérifié le 15/09/2026) ; seul `--mmproj`
   reste incompatible avec un drafter.
-- `--cleanup` piloté uniquement par `KNOWN_FILES`.
+- `--cleanup` piloté uniquement par `KNOWN_FILES`. Les deux artefacts générés
+  de `~/models` (`models.ini`, `docker-compose.yml`) sont hors d'atteinte **par
+  construction** : le premier `find` ne liste que des dossiers de premier
+  niveau, le second que des `*.gguf` à partir de la profondeur 2. Ne pas
+  « corriger » ces `find`.
 - Le ménage d'images ne touche QUE des images sans tag portant
   `llm-setup.engine_rev` : jamais `docker system prune`, jamais
   `docker image prune -a`, jamais une image taguée qu'on n'a pas construite.
@@ -496,6 +555,25 @@ tout seul rend les séries de mesures incomparables.
   `/opt/strix/versions.txt` contre les révisions demandées : un échec laisse
   l'image précédente en place.
 - Restart requis après toute régénération du ini (routeur = lecture au boot).
+- **Jamais `docker compose restart`** : il relance le conteneur existant, donc
+  l'ancienne image, l'ancienne ligne de commande et l'ancien `--models-max`.
+  `_svc_restart` est un `stop` puis un `start`.
+- Le compose est **régénéré à chaque démarrage** (`_svc_start`), jamais édité :
+  `--models-max` suit `preload.conf`, l'image suit `runtime/image.conf`, les
+  gid suivent l'hôte. Toutes les valeurs y sont écrites **en clair** — pas de
+  `${VAR}`, pas de `.env`.
+- Les tuners (`--spec-ab`, `--spec-tune`, `--spec-ngram-tune`, `--bench-load`)
+  ne régénèrent que le **ini** (`regen_models_ini`), jamais le compose : leurs
+  surcharges sont temporaires et n'ont rien à voir avec la forme du service.
+  `regen_models_ini` n'appelle donc pas `regen_compose`.
+- L'attente de `/health` vit à UN seul endroit, `_svc_wait_ready` (appelée par
+  `_svc_start` / `_svc_restart`) : plus de boucle recopiée dans les mesures.
+  Une commande qui rend la main a un service qui répond, ou elle a échoué.
+- `seccomp=unconfined` est le seul assouplissement du conteneur (exigé par les
+  ioctl du KFD côté ROCr) ; il est compensé par `cap_drop: [ALL]` et
+  `no-new-privileges`. Jamais `privileged`, jamais `docker.sock`, jamais
+  `network_mode: host`, jamais de `mem_limit` (la garde mémoire raisonne sur le
+  `available` de l'hôte).
 - Mesures spec : l'état réel vient de `/v1/models`, jamais du script/ini.
 - Une mesure ne redémarre pas le routeur pour faire de la place : la garde
   mémoire (`_ensure_room_for`) ne décharge que par l'API, jamais un modèle
@@ -505,9 +583,13 @@ tout seul rend les séries de mesures incomparables.
   (`_preset_has_spec_type`), jamais un grep ancré sur `= draft-mtp`.
 - Les lignes existantes des journaux (`logs/*.log`) restent lisibles : toute
   colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
-- Tout journal de mesure porte la version de llama.cpp (`_llama_build`) : un
-  chiffre sans son build ne se compare pas. L'étiquette est une CHAÎNE, pas un
-  nombre : `bNNNNN` pour un build upstream, `strix-<commit>` pour le fork
-  (lib/fork.sh). Deux séries distinctes, jamais comparables entre elles.
+- Tout journal de mesure porte l'étiquette du moteur SERVI (`_llama_build`) :
+  un chiffre sans son build ne se compare pas. L'étiquette est une CHAÎNE, pas
+  un nombre — `strix-<engine7>+r<rocm7>`, lue sur les `LABEL` de l'image
+  (repli : dernière ligne de `logs/images.tsv`, puis `?`). L'étiquette du
+  moteur de l'HÔTE (`_host_llama_build` : `bNNNNN` pour le paquet,
+  `strix-<commit>` pour le fork) ne sert plus qu'aux outils hors service et au
+  garde-fou `_fork_keys_guard`. Chaque révision d'image ouvre une série
+  distincte, jamais comparable à une autre.
 - Entrée non interactive (`! -t 0`) gérée partout : jamais de question, jamais
   de restart automatique.

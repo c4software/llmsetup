@@ -43,9 +43,9 @@ Trois conséquences pour toute la procédure ci-dessous :
   `-grace-tokens`, `spec-draft-adaptive`, `spec-prefill*`. Le paquet Arch
   refuse toute clé inconnue et c'est le **routeur entier** qui ne démarre pas,
   pas seulement le modèle fautif. En poser une dans un bloc verrouille donc le
-  parc sur le fork ; `--start` le signale au lieu de laisser llama-server
-  échouer. Pour revenir au paquet : retirer ces lignes de `lib/models.sh`,
-  puis `--preload`.
+  parc sur un moteur qui les comprend — l'image du service les comprend, le
+  paquet Arch non (`_fork_keys_guard` le signale côté hôte). Pour revenir au
+  paquet : retirer ces lignes de `lib/models.sh`, puis `--preload`.
 - **Ne pas proposer `spec-prefill*`** : mesuré le 12-13/09/2026 sur
   qwen3.8-27b, il triple le prefill mais met le cache de prompt à 0 %, même
   sur une requête identique : perdant en boucle agentic, retiré.
@@ -264,7 +264,7 @@ contrôle (`--bench-sanity`, recopie exacte d'un code) ; si un device semble
 curl -s localhost:8009/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"<modèle>","messages":[{"role":"user","content":"Écris une fonction Python qui inverse une liste chaînée."}],"max_tokens":200}' \
   | python3 -c 'import json,sys; m=json.load(sys.stdin)["choices"][0]["message"]; print(repr((m.get("reasoning_content") or "")[:300])); print(repr(m["content"][:300]))'
-journalctl --user -u llama-server --since "-10 min" --no-pager | grep -i "warn\|error\|cpu"
+./setup-llm.sh --logs --tail 400 | grep -i "warn\|error\|cpu"
 ```
 
 Pour un modèle destiné à l'agentic long (gros dossiers en contexte), le
@@ -272,9 +272,9 @@ bench à ~1500 tokens ne suffit pas : mesurer aussi en profondeur, hors
 service, et lire le verdict à 32k :
 
 ```bash
-systemctl --user stop llama-server
+./setup-llm.sh --stop
 DEV=Vulkan0,ROCm0 tools/bench-depth.sh ~/models/<dossier>/<gguf>    # 0 / 16k / 32k
-systemctl --user start llama-server
+./setup-llm.sh --start
 ```
 
 Le device est mesuré avec le moteur en place : un `--setup-fork`,
@@ -323,9 +323,9 @@ MTP** (ou avant d'ajouter n-gram à un modèle MTP déjà réglé), commencer
 par la courbe seule, hors service :
 
 ```bash
-systemctl --user stop llama-server
+./setup-llm.sh --stop
 DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh ~/models/<dossier>/<gguf>
-systemctl --user start llama-server
+./setup-llm.sh --start
 ```
 
 Sortie dans `logs/spec-batch.log` (lisible) et `logs/spec-batch.tsv`. La courbe ne
