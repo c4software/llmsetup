@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Test unitaire des helpers bash de lib/common.sh qui dépendent de
-# l'ENVIRONNEMENT plutôt que d'une entrée : _llama_bin, _llama_build et
-# _ec_power_mode (mode d'alimentation de l'APU lu sur le contrôleur embarqué).
+# Test unitaire des helpers bash qui dépendent de l'ENVIRONNEMENT plutôt que
+# d'une entrée : _llama_bin / _host_llama_build (moteur de l'HÔTE),
+# _llama_build (étiquette du moteur SERVI, lue sur les LABEL de l'image),
+# _ec_power_mode (mode d'alimentation de l'APU lu sur le contrôleur embarqué),
+# et la génération et le pilotage du service conteneurisé (lib/compose.sh,
+# lib/svc.sh).
 #
 # Pourquoi : le 12/09/2026, deux lignes de logs/bench.log ont été étiquetées
 # "b10809" (paquet Arch) pour des mesures faites par le fork strix-llama.cpp —
@@ -11,8 +14,9 @@
 # llama-server qui n'impriment qu'une ligne de --version.
 #
 # S'y sont ajoutés depuis : le garde-fou moteur/ini et l'épinglage du fork
-# (lib/fork.sh), la garde mémoire (lib/common.sh) et le moteur conteneurisé
-# (lib/runtime.sh, sur un faux docker et un faux git ls-remote).
+# (lib/fork.sh), la garde mémoire (lib/common.sh), le moteur conteneurisé
+# (lib/runtime.sh, sur un faux docker et un faux git ls-remote) et la bascule
+# du service en conteneur (compose généré, _svc_*, --migrate-off-systemd).
 #
 # Lancement : ./tests/sh-unit.sh (aucune dépendance, aucun modèle, aucun réseau)
 # =============================================================================
@@ -40,7 +44,7 @@ echo "built with GNU 16.2.1 for Linux x86_64"
 EOF
 chmod +x "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$TMP/bin/llama-server"
 
-# _llama_build dans un environnement maîtrisé : HOME et PATH bidons, et
+# _host_llama_build dans un environnement maîtrisé : HOME et PATH bidons, et
 # SCRIPT_DIR pointé sur un dossier jetable (common.sh crée son logs/).
 _run() {
   HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
@@ -61,7 +65,7 @@ mkdir -p "$TMP/repo"
 #    contient pas (c'est le cas de la session ssh qui a produit le défaut).
 ln -sfn "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$TMP/home/.local/bin/llama-server"
 _ck "fork : binaire résolu" "$TMP/home/.local/bin/llama-server" "$(_run '_llama_bin llama-server')"
-_ck "fork : étiquette"      "strix-0007bc6"                     "$(_run '_llama_build')"
+_ck "fork : étiquette hôte" "strix-0007bc6"                     "$(_run '_host_llama_build')"
 # 1bis. Clone approfondi : le fork affiche alors un vrai numéro ("build 2224",
 #    arrivé le 13/09/2026 après --update-fork) ; l'étiquette reste celle du
 #    commit, sinon _fork_keys_guard le prendrait pour un paquet upstream.
@@ -72,25 +76,25 @@ echo "version: 0.4.0-dev (build 2224, commit 654803517)"
 EOF2
 chmod +x "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server.deep"
 ln -sfn "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server.deep" "$TMP/home/.local/bin/llama-server"
-_ck "fork approfondi : étiquette" "strix-6548035" "$(_run '_llama_build')"
+_ck "fork approfondi : étiquette hôte" "strix-6548035" "$(_run '_host_llama_build')"
 ln -sfn "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$TMP/home/.local/bin/llama-server"
 
 # 2. Sans lien : repli sur le PATH, étiquette bNNNNN inchangée (c'est elle qui
 #    figure dans toutes les campagnes antérieures, à ne pas casser).
 rm -f "$TMP/home/.local/bin/llama-server"
 _ck "paquet : binaire résolu" "$TMP/bin/llama-server" "$(_run '_llama_bin llama-server')"
-_ck "paquet : étiquette"      "b10809"                "$(_run '_llama_build')"
+_ck "paquet : étiquette hôte" "b10809"                "$(_run '_host_llama_build')"
 
 # 3. Dépôt au nom quelconque : le préfixe tombe sur le nom du dossier, et sur
 #    "fork" si le binaire n'est pas dans un <dépôt>/build/bin.
 mkdir -p "$TMP/home/llm/essai/build/bin"
 cp "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$TMP/home/llm/essai/build/bin/llama-server"
 ln -sfn "$TMP/home/llm/essai/build/bin/llama-server" "$TMP/home/.local/bin/llama-server"
-_ck "autre dépôt : étiquette" "essai-0007bc6" "$(_run '_llama_build')"
+_ck "autre dépôt : étiquette hôte" "essai-0007bc6" "$(_run '_host_llama_build')"
 
 rm -f "$TMP/home/.local/bin/llama-server"
 cp "$TMP/home/llm/strix-llama.cpp/build/bin/llama-server" "$TMP/home/.local/bin/llama-server"
-_ck "hors build/bin : étiquette" "fork-0007bc6" "$(_run '_llama_build')"
+_ck "hors build/bin : étiquette hôte" "fork-0007bc6" "$(_run '_host_llama_build')"
 
 # 4. Garde-fou moteur/ini : _fork_keys_guard (lib/fork.sh) doit refuser un
 #    moteur upstream sur un ini qui porte une clé propre au fork, et se taire
@@ -754,13 +758,328 @@ else
   sed 's/^/       conf: /' "$IMG/repo/runtime/image.conf"; rc=1
 fi
 
-# 5. Étiquette utilisable en colonne TSV : ni espace, ni tabulation.
-etiquette="$(_run '_llama_build')"
-if [[ "$etiquette" =~ ^[A-Za-z0-9._-]+$ ]]; then
+# 7. Service en conteneur : compose généré (lib/compose.sh) et pilotage
+# (lib/svc.sh). Ce qui est testé ici est ce qui, en cas de bug, casse
+# SILENCIEUSEMENT ou coûte une campagne : un compose qui perdrait une option de
+# la ligne de commande du routeur ou un durcissement, un --models-max qui ne
+# suivrait plus preload.conf, un `docker compose restart` qui resservirait
+# l'ancienne image, une attente de /health qui tournerait cinq minutes sur un
+# conteneur déjà mort, et un --cleanup qui ramasserait la configuration du
+# service. Tout passe par un faux `docker`, un faux `getent`, un faux `curl`
+# et un faux `systemctl` : aucun démon, aucun conteneur, aucun réseau.
+SVC="$TMP/svc"
+mkdir -p "$SVC/bin" "$SVC/repo/runtime" "$SVC/home/models" "$SVC/etat"
+
+cat > "$SVC/repo/runtime/image.conf" <<'EOF'
+ENGINE_REPO=https://example.invalid/moteur.git
+ENGINE_BRANCH=master
+ENGINE_REV=abcdef1234567890abcdef1234567890abcdef12
+ROCM_SYSTEMS_REPO=https://example.invalid/rocm.git
+ROCM_SYSTEMS_BRANCH=ilintar-experiments
+ROCM_SYSTEMS_REV=9876543210fedcba9876543210fedcba98765432
+IMAGE_NAME=llm-rocm-strix
+EOF
+# preload.conf factice : deux modèles préchargés ⇒ --models-max attendu = 3.
+printf 'un\ndeux\n' > "$SVC/repo/preload.conf"
+: > "$SVC/home/models/models.ini"
+
+# Faux docker : journalise chaque appel (c'est lui qui prouve qu'aucun
+# « compose restart » n'est émis) et lit l'état du conteneur dans des fichiers
+# que le test pose. ETAT_IMAGE=0 simule une image absente.
+cat > "$SVC/bin/docker" <<EOF
+#!/usr/bin/env bash
+E="$SVC/etat"
+EOF
+cat >> "$SVC/bin/docker" <<'EOF'
+printf '%s\n' "$*" >> "$E/docker.log"
+case "$1" in
+  info) exit 0 ;;
+  image)
+    [[ "$2" == "inspect" ]] || exit 1
+    [[ "$(cat "$E/image" 2>/dev/null || echo 1)" == "1" ]] || exit 1
+    [[ "$3" == "llm-rocm-strix:latest" ]] || exit 1
+    case "$*" in
+      *engine_rev*) echo abcdef1234567890abcdef1234567890abcdef12 ;;
+      *rocm_rev*)   echo 9876543210fedcba9876543210fedcba98765432 ;;
+    esac
+    exit 0 ;;
+  inspect)
+    case "$*" in
+      *State.Running*)  cat "$E/running"  2>/dev/null || echo false ;;
+      *State.Status*)   cat "$E/status"   2>/dev/null || echo running ;;
+      *State.ExitCode*) cat "$E/exitcode" 2>/dev/null || echo 0 ;;
+    esac
+    exit 0 ;;
+  compose) exit 0 ;;
+esac
+exit 1
+EOF
+
+cat > "$SVC/bin/getent" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == "group" ]] || exit 2
+case "$2" in
+  render) echo "render:x:303:" ;;
+  video)  echo "video:x:986:" ;;
+  *) exit 2 ;;
+esac
+EOF
+
+# Faux curl : /health répond selon un fichier d'état.
+cat > "$SVC/bin/curl" <<EOF
+#!/usr/bin/env bash
+[[ "\$(cat "$SVC/etat/health" 2>/dev/null || echo ok)" == "ok" ]] || exit 7
+exit 0
+EOF
+
+# Faux systemctl : journalise et réussit toujours (une unité absente ne doit
+# de toute façon pas faire échouer la migration).
+cat > "$SVC/bin/systemctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$SVC/etat/systemctl.log"
+exit 0
+EOF
+# Faux ss : port libre.
+printf '#!/usr/bin/env bash\necho "State Recv-Q Send-Q Local"\nexit 0\n' > "$SVC/bin/ss"
+chmod +x "$SVC/bin/docker" "$SVC/bin/getent" "$SVC/bin/curl" "$SVC/bin/systemctl" "$SVC/bin/ss"
+
+echo 1 > "$SVC/etat/image"
+echo ok > "$SVC/etat/health"
+echo true > "$SVC/etat/running"
+echo running > "$SVC/etat/status"
+
+# Deux modèles déclarés, pour que load_preload_conf retienne les deux lignes du
+# preload.conf factice (elle ignore un modèle inconnu du script).
+SVC_DECL="
+declare -A MODEL_INI
+MODEL_INI[un]='model = $SVC/home/models/un/a.gguf'
+MODEL_INI[deux]='model = $SVC/home/models/deux/b.gguf'
+PRESET_ORDER=(un deux)
+declare -A GROUPE_AVANT
+DEFAULT_DEVICE=Vulkan0
+DEFAULT_PRELOAD=()
+KNOWN_FILES=($SVC/home/models/un/a.gguf)
+"
+_run_svc() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé
+  env -i HOME="$SVC/home" PATH="$SVC/bin:/usr/bin:/bin" SCRIPT_DIR="$SVC/repo" ${2:-} \
+    bash -c "set -euo pipefail
+      source '$REPO_DIR/lib/common.sh'
+      source '$REPO_DIR/lib/svc.sh'
+      $SVC_DECL
+      source '$REPO_DIR/lib/ini.sh'
+      source '$REPO_DIR/lib/compose.sh'
+      source '$REPO_DIR/lib/setup.sh'
+      source '$REPO_DIR/lib/runtime.sh'
+      source '$REPO_DIR/lib/service.sh'
+      $1" </dev/null 2>&1
+}
+
+# (a) Le YAML généré. Chaque assertion correspond à une décision qui a coûté
+#     une mise au point : le nom de projet (sinon « models »), le nom de
+#     conteneur (tous les messages du dépôt le nomment), le montage AU MÊME
+#     CHEMIN et en lecture seule (models.ini porte des chemins absolus), les
+#     gid NUMÉRIQUES (les noms n'existent pas dans l'image), cap_drop ALL avec
+#     seccomp=unconfined, l'absence de mem_limit (la garde mémoire raisonne
+#     sur l'hôte) et --models-max dérivé de preload.conf.
+YML="$(_run_svc 'generate_compose')"
+_ckin() {  # $1 = libellé, $2 = motif attendu dans $YML
+  if grep -qF -- "$2" <<<"$YML"; then
+    echo "[OK]   compose : $1"
+  else
+    echo "[FAIL] compose : $1 — motif absent : $2"; rc=1
+  fi
+}
+# Les motifs INTERDITS sont cherchés hors commentaires : le YAML explique
+# justement pourquoi il n'y a ni mem_limit, ni docker.sock, ni network_mode.
+_ckout() {  # $1 = libellé, $2 = motif INTERDIT
+  if grep -v '^[[:space:]]*#' <<<"$YML" | grep -qF -- "$2"; then
+    echo "[FAIL] compose : $1 — motif présent alors qu'il ne devrait pas : $2"; rc=1
+  else
+    echo "[OK]   compose : $1"
+  fi
+}
+_ckin "en-tête GÉNÉRÉ, NE PAS ÉDITER"   "GÉNÉRÉ par ./setup-llm.sh"
+_ckin "nom de projet explicite"          "name: llm-setup"
+_ckin "nom de conteneur = SERVICE_NAME"  "container_name: llama-server"
+_ckin "image locale"                     "image: llm-rocm-strix:latest"
+_ckin "pas de pull"                      "pull_policy: never"
+_ckin "montage au même chemin, en ro"    "- \"$SVC/home/models:$SVC/home/models:ro\""
+_ckin "cache inscriptible hors de ~/models" ":/var/cache/llama:rw\""
+_ckin "gid numérique de render"          "- \"303\""
+_ckin "gid numérique de video"           "- \"986\""
+_ckin "cap_drop ALL"                     "- ALL"
+_ckin "seccomp exigé par ROCr"           "- \"seccomp=unconfined\""
+_ckin "no-new-privileges"                "- \"no-new-privileges:true\""
+_ckin "port publié sur 0.0.0.0"          "- \"0.0.0.0:8009:8009\""
+_ckin "models-max = préchargés + 1"      "\"3\""
+_ckin "ini passé au routeur"             "$SVC/home/models/models.ini"
+_ckin "jinja conservé"                   "\"--jinja\""
+_ckin "autoload conservé"                "\"--models-autoload\""
+_ckin "host interne 0.0.0.0"             "\"--host\""
+_ckin "arrêt long et SIGINT"             "stop_grace_period: 180s"
+_ckin "sonde sans curl"                  "/dev/tcp/127.0.0.1/8009"
+_ckout "jamais de mem_limit"             "mem_limit"
+_ckout "jamais privileged"               "privileged: true"
+_ckout "jamais docker.sock"              "docker.sock"
+_ckout "jamais network_mode host"        "network_mode"
+_ckout "aucune variable non résolue"     '${'
+
+# (b) Image absente : rien n'est généré, et le message nomme --image-build.
+#     Un compose qui nommerait une image inexistante démarrerait « bien » et
+#     échouerait au premier up, sur un message de docker.
+echo 0 > "$SVC/etat/image"
+out="$(_run_svc 'generate_compose')"; grc=$?
+if [[ "$grc" -ne 0 && "$out" == *"--image-build"* ]]; then
+  echo "[OK]   compose : image absente ⇒ refus nommant --image-build"
+else
+  echo "[FAIL] compose : image absente, code $grc, sortie : $out"; rc=1
+fi
+echo 1 > "$SVC/etat/image"
+
+# (c) regen_compose : écrit, puis NE RÉÉCRIT PAS un contenu identique (la date
+#     de modification doit vouloir dire « la configuration a bougé »), et
+#     réécrit dès qu'une source change (ici preload.conf ⇒ --models-max).
+_run_svc 'regen_compose' >/dev/null
+CF="$SVC/home/models/docker-compose.yml"
+if [[ -f "$CF" ]]; then
+  touch -d '2020-01-01 00:00' "$CF"
+  avant="$(stat -c %Y "$CF")"
+  _run_svc 'regen_compose' >/dev/null
+  apres="$(stat -c %Y "$CF")"
+  if [[ "$avant" == "$apres" ]]; then
+    echo "[OK]   compose : contenu identique ⇒ fichier non réécrit"
+  else
+    echo "[FAIL] compose : fichier réécrit sans changement de contenu"; rc=1
+  fi
+  printf 'un\n' > "$SVC/repo/preload.conf"
+  _run_svc 'regen_compose' >/dev/null
+  if [[ "$(stat -c %Y "$CF")" != "$avant" ]] && grep -q '"2"' "$CF"; then
+    echo "[OK]   compose : preload.conf changé ⇒ --models-max suivi"
+  else
+    echo "[FAIL] compose : --models-max n'a pas suivi preload.conf"; rc=1
+  fi
+  printf 'un\ndeux\n' > "$SVC/repo/preload.conf"
+  _run_svc 'regen_compose' >/dev/null
+  # Validation par l'outil lui-même quand il est là : aucune assertion de
+  # forme ne remplace le parseur de compose (une clé mal placée, un scalaire
+  # mal cité, un ulimit à la mauvaise profondeur passeraient nos greps).
+  # `config -q` est purement client, il ne parle pas au démon. À défaut,
+  # python3 + PyYAML valide au moins que c'est du YAML bien formé.
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    if out="$(docker compose -f "$CF" config -q 2>&1)"; then
+      echo "[OK]   compose : accepté par « docker compose config -q »"
+    else
+      echo "[FAIL] compose : refusé par docker compose : $out"; rc=1
+    fi
+  elif python3 -c 'import yaml' 2>/dev/null; then
+    if out="$(python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "$CF" 2>&1)"; then
+      echo "[OK]   compose : YAML bien formé (python3-yaml ; docker compose absent)"
+    else
+      echo "[FAIL] compose : YAML invalide : $out"; rc=1
+    fi
+  else
+    echo "[SKIP] compose : ni docker compose ni python3-yaml pour valider le fichier"
+  fi
+else
+  echo "[FAIL] compose : regen_compose n'a rien écrit dans $CF"; rc=1
+fi
+
+# (d) LE test qui compte côté pilotage : _svc_restart ne doit JAMAIS émettre
+#     « compose restart », qui relancerait le conteneur existant — donc
+#     l'ancienne image, l'ancienne ligne de commande et l'ancien --models-max.
+#     Un stop puis un up --force-recreate, rien d'autre.
+: > "$SVC/etat/docker.log"
+out="$(_run_svc '_svc_restart')"; grc=$?
+log="$(cat "$SVC/etat/docker.log")"
+if [[ "$grc" -eq 0 ]] && ! grep -qE 'compose .* restart' <<<"$log" \
+   && grep -q 'force-recreate' <<<"$log" && grep -q ' stop ' <<<"$log"; then
+  echo "[OK]   svc : restart = stop + up --force-recreate (jamais compose restart)"
+else
+  echo "[FAIL] svc : restart, code $grc, appels docker :"
+  sed 's/^/       /' <<<"$log"; rc=1
+fi
+
+# (e) Attente de /health : le conteneur est sorti, il ne répondra jamais. La
+#     boucle doit rendre la main tout de suite en donnant le code de sortie,
+#     pas attendre les 300 s du plafond (deux mesures perdues autrement).
+echo ko > "$SVC/etat/health"
+echo exited > "$SVC/etat/status"
+echo 137 > "$SVC/etat/exitcode"
+t0="$(date +%s)"
+out="$(_run_svc '_svc_wait_ready 300')"; grc=$?
+t1="$(date +%s)"
+if [[ "$grc" -ne 0 && "$out" == *"137"* && $(( t1 - t0 )) -lt 20 ]]; then
+  echo "[OK]   svc : conteneur sorti ⇒ échec immédiat, code de sortie donné"
+else
+  echo "[FAIL] svc : attente sur conteneur sorti, code $grc, $(( t1 - t0 )) s, sortie : $out"; rc=1
+fi
+echo ok > "$SVC/etat/health"
+echo running > "$SVC/etat/status"
+
+# (f) Étiquette de moteur du SERVICE : les deux LABEL de l'image, en clair,
+#     puis les replis. C'est la colonne build de tous les journaux TSV : une
+#     étiquette fausse rend une campagne entière incomparable.
+_ck "étiquette : LABEL de l'image" "strix-abcdef1+r9876543" "$(_run_svc '_llama_build')"
+echo 0 > "$SVC/etat/image"
+mkdir -p "$SVC/repo/logs"
+printf 'date\ttag\tengine_rev\trocm_rev\ttaille_octets\n' > "$SVC/repo/logs/images.tsv"
+printf '2026-09-18 00:00\tlatest\t1111111111111111111111111111111111111111\t2222222222222222222222222222222222222222\t8000000000\n' >> "$SVC/repo/logs/images.tsv"
+_ck "étiquette : repli sur logs/images.tsv" "strix-1111111+r2222222" "$(_run_svc '_llama_build')"
+rm -f "$SVC/repo/logs/images.tsv"
+_ck "étiquette : repli final" "?" "$(_run_svc '_llama_build')"
+echo 1 > "$SVC/etat/image"
+
+# (g) --cleanup : les deux artefacts GÉNÉRÉS de ~/models (models.ini et
+#     docker-compose.yml) sont hors d'atteinte par construction des deux find.
+#     Le test le fige : un « find -type f » à la racine les ferait apparaître
+#     ici, et --cleanup --yes supprimerait la configuration du service.
+mkdir -p "$SVC/home/models/un" "$SVC/home/models/orphelin"
+: > "$SVC/home/models/un/a.gguf"
+: > "$SVC/home/models/orphelin/vieux.gguf"
+out="$(_run_svc 'cmd_cleanup')"; grc=$?
+if [[ "$grc" -eq 0 && "$out" == *"orphelin"* \
+      && "$out" != *"models.ini"* && "$out" != *"docker-compose.yml"* ]]; then
+  echo "[OK]   cleanup : dossier orphelin listé, models.ini et docker-compose.yml intouchés"
+else
+  echo "[FAIL] cleanup : code $grc, sortie : $out"; rc=1
+fi
+
+# (h) --migrate-off-systemd : idempotente. Elle sera jouée une fois par
+#     machine, éventuellement deux (reprise après interruption), et une
+#     machine neuve — sans unité — doit la traverser sans erreur.
+mkdir -p "$SVC/home/.config/systemd/user"
+: > "$SVC/home/.config/systemd/user/llama-server.service"
+: > "$SVC/etat/systemctl.log"
+out="$(_run_svc 'cmd_migrate_off_systemd')"; grc=$?
+out2="$(_run_svc 'cmd_migrate_off_systemd')"; grc2=$?
+if [[ "$grc" -eq 0 && "$grc2" -eq 0 \
+      && ! -f "$SVC/home/.config/systemd/user/llama-server.service" \
+      && "$out" == *"port 8009 libre"* && "$out2" == *"--start"* ]] \
+   && grep -q 'stop llama-server' "$SVC/etat/systemctl.log" \
+   && grep -q 'disable llama-server' "$SVC/etat/systemctl.log" \
+   && grep -q 'daemon-reload' "$SVC/etat/systemctl.log"; then
+  echo "[OK]   migrate-off-systemd : unité débranchée, port vérifié, rejouable"
+else
+  echo "[FAIL] migrate-off-systemd : codes $grc/$grc2"
+  echo "$out"  | sed 's/^/       1: /'
+  echo "$out2" | sed 's/^/       2: /'; rc=1
+fi
+
+# 5. Étiquette utilisable en colonne TSV : ni espace, ni tabulation. Le "+" de
+# la forme conteneurisée (strix-<engine>+r<rocm>) est admis, il ne casse ni un
+# TSV ni un sed.
+etiquette="$(_run '_host_llama_build')"
+if [[ "$etiquette" =~ ^[A-Za-z0-9._+-]+$ ]]; then
   echo "[OK]   étiquette sans espace ni tabulation"
 else
   echo "[FAIL] étiquette impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
+etiquette="$(_run_img '_llama_build')"
+if [[ "$etiquette" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+  echo "[OK]   étiquette d'image sans espace ni tabulation"
+else
+  echo "[FAIL] étiquette d'image impropre à une colonne TSV : '$etiquette'"; rc=1
+fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire, --update-fork (refus, changelog, confirmation), épinglage du moteur (fork.conf), proposition du fork en fin de --setup et moteur conteneurisé (image.conf, promotion après vérification, ménage ciblé, --image-update sans accord) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire, --update-fork (refus, changelog, confirmation), épinglage du moteur (fork.conf), proposition du fork en fin de --setup, moteur conteneurisé (image.conf, promotion après vérification, ménage ciblé, --image-update sans accord) et service en conteneur (compose généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd) conformes. ──"
 exit "$rc"
