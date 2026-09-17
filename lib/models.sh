@@ -1719,6 +1719,9 @@ spec-ngram-map-k-min-hits = 2
 spec-draft-model = $QWEN38_FLASH_NEXT_MTP_STRIX_PATH
 spec-draft-n-max = 4
 ngram-on-disk    = true
+lazy-mode        = on-direct
+batch-size       = 16384
+ubatch-size      = 16384
 jinja            = true
 parallel         = 1"
 
