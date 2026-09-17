@@ -73,7 +73,7 @@ En extraire et vérifier :
 | Architecture llama.cpp (`general.architecture`) | metadata GGUF, ou `gguf-dump` | support mainline, version minimale de llama.cpp |
 | Contexte natif, YaRN | guide unsloth, model card | `ctx-size` |
 | Sampling officiel (temp, top-k, top-p, min-p, presence) | guide unsloth, model card | corps ini |
-| Thinking : défaut, kwargs de désactivation | template chat | `chat-template-kwargs`, `reasoning` |
+| Thinking : défaut, désactivation | template chat | `reasoning = off` (`chat-template-kwargs` seulement pour les niveaux : reasoning_effort, reasoning_strength) |
 | État récurrent (GDN, conv, Mamba) ou SWA | architecture | `cache-reuse 0`, `swa-full`, `ctx-checkpoints` |
 | Vision (mmproj) | Files | texte seul sauf besoin, incompatible MTP |
 | Drafter externe (DFlash, Eagle, sidecar MTP) | Files, repo `-DFlash`/`MTP/` | `download_hf` supplémentaire, `spec-draft-model` |

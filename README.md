@@ -220,7 +220,7 @@ noyau ggml, puis arbitrage réel des candidats sur `prompts/spec-refactor.txt`,
 écrit dans `spec-ngram.conf`). Formules, garde-fous et limites : ARCHITECTURE.md.
 Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 
-## Parc au 16/09/2026
+## Parc au 17/09/2026
 
 Une ligne par section servie du `models.ini`. Campagne du 15/09/2026 : tout
 modèle qui dispose d'un drafter le sert à un slot (DSpark sur DeepSeek et
@@ -246,9 +246,15 @@ thinking du 27B a été retirée le 13/09/2026, `laguna-s-2.1` le 15/09 et
 (cf. `docs/HISTORIQUE.md`). Deux sections sont ajoutées le 16/09/2026, toutes
 deux avec drafter externe à un slot : `lfm2.5-8b-a1b-nothink` (grand frère du
 2.6B, DSpark officiel) et `muse-glimmer-30b-dflash` (DFlash 2 z-lab, concurrent
-direct du 27B), cf. `docs/HISTORIQUE.md`.
+direct du 27B), cf. `docs/HISTORIQUE.md`. Le 17/09/2026,
+`qwen3.8-27b-dflash-nothink` passe en `cache-type-v f16` (302 / 32,2 / 0,625
+contre 305 / 30,3 / 0,595 en q8_0, les deux mesurés le même soir, à froid, sur
+le même moteur : +6 % de décode, prefill égal) et ses chiffres de référence
+sont ceux de cette mesure ; le même jour, les cinq sections nothink du parc
+déclarent `reasoning = off`, option native de llama-server, à la place de
+`chat-template-kwargs` `enable_thinking`, obsolète, cf. `docs/HISTORIQUE.md`.
 Réglages exacts dans `lib/models.sh` ; toutes les mesures sont celles du fork
-strix-0007bc6 (Vulkan0, `--bench` 3 passes, les 12, 13, 15 et 16/09/2026, prompt
+strix-0007bc6 (Vulkan0, `--bench` 3 passes, les 12, 13, 15, 16 et 17/09/2026, prompt
 générique à long contexte). Acceptance vide = pas de spéculation. La dernière
 colonne situe le décode contre la dernière mesure du paquet Arch (série
 `bNNNNN`, 21/08 au 05/09/2026) : deux séries distinctes, un ordre de grandeur,
@@ -261,8 +267,8 @@ pas une comparaison à la décimale.
 | ornith-1.5-9b-mtp-nothink | Q8_0, 9,79 Go (GGUF fusionné tiers protoLabsAI, tête MTP nextn distillée) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 3, parallel 1 | 828 | 39,5 | 0,56 | jamais mesuré au paquet (+20 % de décode contre `qwen3.5-9b`, remplacée le même jour) |
 | ornith-1.5-35b-a3b-parallel | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
 | ornith-1.5-35b-a3b-mtp | Q4_K_M, 22 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 1073 | 76,2 | 0,55 | non mesuré au paquet |
-| qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 | 359 | 32,6 | 0,595 | +11 % (paquet en MTP n-max 6) |
-| muse-glimmer-30b-dflash | UD-Q4_K_XL, 15,9 Go (+ drafter DFlash 2 3,0 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, `reasoning_strength` low et reasoning-budget 4096, parallel 1 (cache-type-v q8_0, swa-full) | 266 | 38,0 | 0,635 | jamais mesuré au paquet (+17 % de décode et -26 % de prefill contre `qwen3.8-27b-dflash-nothink`, même jour, même fork) |
+| qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 (cache-type-v f16 depuis le 17/09/2026) | 302 | 32,2 | 0,625 | +9,2 % (paquet en MTP n-max 6) |
+| muse-glimmer-30b-dflash | UD-Q4_K_XL, 15,9 Go (+ drafter DFlash 2 3,0 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, `reasoning_strength` low et reasoning-budget 4096, parallel 1 (cache-type-v q8_0, swa-full) | 266 | 38,0 | 0,635 | jamais mesuré au paquet (+20 % de décode et prefill équivalent contre `qwen3.8-27b-dflash-nothink`, contrôle à froid des deux le 17/09/2026 sur le même fork : 301 / 38,5 contre 302 / 32,2) |
 | qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | Vulkan0 | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 727 | 52,2 | 0,515 | +19 % (paquet en n-gram seul) |
 | deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 (parallel 2 essayé et retiré le 15/09 : x1,16 de tâches au bench agentic à 2 boucles, latence doublée) | 196 | 28,8 | 0,69 | +134 % (paquet en n-gram seul, 19,9 sur le fork en n-gram seul) |

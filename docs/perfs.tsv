@@ -1,5 +1,5 @@
 # Mesures paquet Arch contre fork strix-llama.cpp, une ligne par section servie
-# du models.ini (table « Parc au 16/09/2026 » du README, qui fait foi).
+# du models.ini (table « Parc au 17/09/2026 » du README, qui fait foi).
 # Prefill et decode en t/s, acceptance sans unite (vide = pas de speculation).
 # Decimales avec un point ici, virgule a l'affichage (py/perf_graphs.py).
 # Regenerer docs/graphs/ apres toute modification : python3 py/perf_graphs.py
@@ -9,8 +9,8 @@ lfm2.5-8b-a1b-nothink		3079		108.1		0.55	ngram-map-k 47 + draft-dspark 3, min-hi
 ornith-1.5-9b-mtp-nothink		827.9		39.5		0.56	ngram-map-k 7 + draft-mtp 3, min-hits 2, tete MTP tierce embarquee (GGUF fusionne protoLabsAI), parallel 1 (remplace qwen3.5-9b : 745 / 33.0 / 0.58 le meme jour sur le meme fork)	jamais mesure au paquet ; strix-0007bc6 15/09/2026
 ornith-1.5-35b-a3b-parallel	974	1129	70.7	73.3			aucun, parallel 4 (cache-type-v q8_0)	b10566 28/08/2026 contre strix-0007bc6 13/09/2026
 ornith-1.5-35b-a3b-mtp		1073		76.2		0.55	ngram-map-k 7 + draft-mtp 4, parallel 1 (meme GGUF que la ligne ci-dessus)	jamais mesure au paquet ; strix-0007bc6 15/09/2026
-qwen3.8-27b-dflash-nothink	261	359	29.5	32.6	0.65	0.595	ngram-map-k 47 + draft-dflash 7 (MTP n-max 6 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 13/09/2026
-muse-glimmer-30b-dflash		266		38.0		0.635	ngram-map-k 7 + draft-dflash 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, reasoning_strength low + reasoning-budget 4096, parallel 1 (cache-type-v q8_0, swa-full)	jamais mesure au paquet ; strix-0007bc6 16/09/2026 (qwen3.8-27b-dflash-nothink : 359 / 32.6 / 0.595 sur le meme fork)
+qwen3.8-27b-dflash-nothink	261	302	29.5	32.2	0.65	0.625	ngram-map-k 47 + draft-dflash 7, cache-type-v f16 depuis le 17/09/2026 (MTP n-max 6 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 17/09/2026
+muse-glimmer-30b-dflash		266		38.0		0.635	ngram-map-k 7 + draft-dflash 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, reasoning_strength low + reasoning-budget 4096, parallel 1 (cache-type-v q8_0, swa-full)	jamais mesure au paquet ; strix-0007bc6 16/09/2026 (qwen3.8-27b-dflash-nothink : 302 / 32.2 / 0.625, controle a froid du 17/09/2026 sur le meme fork)
 qwen3.8-flash-next-mtp-nothink	197	383	25.9	50.0	0.75	0.87	ngram-map-k 7 + draft-mtp 4 et ngram-on-disk (n-gram seul sur le paquet)	b10809 05/09/2026 contre strix-0007bc6 12/09/2026
 qwen3-coder-next	468	727	43.7	52.2	0.29	0.515	draft-dflash 7, drafter DFlash z-lab Q8_0 (ngram-map-k 47 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
 deepseek-v4-flash	110	196	12.3	28.8		0.69	ngram-map-k 7 + draft-dspark 3 (drafter DSpark unsloth Q8_0 ; n-gram seul sur le paquet), reasoning-budget 6144	b10433 21/08/2026 contre strix-0007bc6 15/09/2026

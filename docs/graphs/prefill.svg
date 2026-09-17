@@ -43,8 +43,8 @@
 <text x="246.0" y="429.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-27b-dflash-nothink</text>
 <rect x="258.0" y="411.0" width="37.1" height="16.0" fill="#9aa0a6"/>
 <text x="303.1" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">261</text>
-<rect x="258.0" y="432.0" width="51.0" height="16.0" fill="#2f6fdd"/>
-<text x="317.0" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">359</text>
+<rect x="258.0" y="432.0" width="42.9" height="16.0" fill="#2f6fdd"/>
+<text x="308.9" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">302</text>
 <text x="246.0" y="486.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">muse-glimmer-30b-dflash</text>
 <text x="266.0" y="481.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
 <rect x="258.0" y="489.0" width="37.8" height="16.0" fill="#2f6fdd"/>

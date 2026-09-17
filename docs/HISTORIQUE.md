@@ -4,7 +4,7 @@ Archive des campagnes de mesure et des essais du dépôt, sortie du README le
 13/09/2026 pour n'y garder que l'état courant. Le contenu est celui des
 sections correspondantes du README, repris tel quel : chiffres, protocoles et
 récits datés. L'état courant du parc (réglages retenus et perfs sur le fork)
-reste dans `README.md`, section « Parc au 16/09/2026 ».
+reste dans `README.md`, section « Parc au 17/09/2026 ».
 
 Deux séries de mesures cohabitent ici et ne se comparent jamais entre elles :
 le paquet Arch (`bNNNNN`) et le fork strix-llama.cpp (`strix-<commit>`).
@@ -36,7 +36,7 @@ le cas n-gram) ne se comparent pas entre elles.
 | ornith-1.5-35b-a3b-parallel | Q4_K_M (22 Go) | Vulkan0 (mesuré : ROCm0 931 / 57,6) | parallel 4, sans spéculation | **1129** (974 au paquet b10566) | **73,3** (70,7 au paquet ; 136,8 agrégés à 4, x1,93) | fork strix-0007bc6, 13/09/2026 ; cache 62 % ; remplace les trois Qwen3.6-35B-A3B le 28/08/2026 ; **section renommée `-parallel` le 15/09/2026** (le suffixe dit l'usage, comme `-mtp`) : partout plus bas, les entrées datées et les mesures gardent le nom d'alors `ornith-1.5-35b-a3b`, qui reste aussi celui du dossier de GGUF |
 | ornith-1.5-35b-a3b-mtp | idem (même GGUF) | Vulkan0 (hérité : bench-devices.conf est indexé par dossier de GGUF) | **ngram-map-k 7 + draft-mtp 4**, parallel 1 (tête MTP embarquée blk.40.nextn, découverte le 15/09/2026) | **1073** (jamais mesuré au paquet) | **76,2** (acc. 0,55 ; 73,3 pour la section de base sans spéculation) ; **113,2** (refactor, acc. 0,83) et **90,3** (générique, acc. 0,65) en test isolé | fork strix-0007bc6, 15/09/2026 ; section créée pour l'usage mono-utilisateur (+24 % en solo, 88,7 contre 71,6 t/s) ; la section de base reste le défaut agentic, elle bat la variante MTP en concurrence réelle (138 t/s agrégés à 4 requêtes contre 102) |
 | qwen3.8-27b (thinking) | UD-Q4_K_XL (17 Go) | Vulkan0 (mesuré) | **draft-dflash 7** (DFlash 2 z-lab, retenu le 13/09/2026 sur le fork ; spec-prefill essayé et retiré, cache de prompt à 0 %) | **349** (215 au paquet b10433 ; 289 → 183 à 32k en llama-bench) | **21,7** (acc. 0,35 ; 12,1 sans spéculation au paquet, +79 %) | fork strix-0007bc6, 13/09/2026 ; reasoning-budget 4096 (fork) ; spec-prefill lossy et incompatible avec le cache de prompt, perdant en agentic |
-| qwen3.8-27b-dflash-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + **draft-dflash 7** (drafter DFlash 2 z-lab, 2,0 Go ; remplace la tête MTP le 13/09/2026 : le batch de vérification 8 se découpe en 4+4 et échappe au pire cas du découpage mat-vec) | **359** (261 au paquet b10433) | **32,6** (acc. 0,595 ; 29,5 acc. 0,65 au paquet, +11 % ; 26,6 acc. 0,59 en MTP n-max 6 sur le fork, +23 %) ; **64,5** (refactor, acc. 0,67) et **35,9** (générique, acc. 0,70) en `--spec-ab` | fork strix-0007bc6, 13/09/2026 ; DFlash 2 bat la tête MTP sur les deux prompts (+12 % en refactor, +18 % en générique) et annule le retrait de décode du fork ; réglage non mesuré sur le paquet Arch ; chargement 4,4 s |
+| qwen3.8-27b-dflash-nothink | idem | Vulkan0 (mesuré) | ngram-map-k 47 + **draft-dflash 7** (drafter DFlash 2 z-lab, 2,0 Go ; remplace la tête MTP le 13/09/2026 : le batch de vérification 8 se découpe en 4+4 et échappe au pire cas du découpage mat-vec) | **302** (359 en cache-type-v q8_0 le 13/09 ; 261 au paquet b10433) | **32,2** (acc. 0,625, cache-type-v f16 ; 30,3 acc. 0,595 en q8_0 le même soir, soit +6 % ; 32,6 acc. 0,595 en q8_0 le 13/09, autre série ; 29,5 acc. 0,65 au paquet, +9,2 % ; 26,6 acc. 0,59 en MTP n-max 6 sur le fork) ; **64,5** (refactor, acc. 0,67) et **35,9** (générique, acc. 0,70) en `--spec-ab` du 13/09 | fork strix-0007bc6, **17/09/2026** pour les chiffres de référence (cache-type-v f16, cf. « Campagne du 17/09/2026 ») ; DFlash 2 bat la tête MTP sur les deux prompts (+12 % en refactor, +18 % en générique) et annule le retrait de décode du fork ; réglage non mesuré sur le paquet Arch ; chargement 4,4 s |
 | deepseek-v4-flash | UD-IQ3_XXS (104 Go) + drafter DSpark unsloth Q8_0 (10,9 Go) | Vulkan0 (mesuré) | ngram-map-k 7 + **draft-dspark 3**, **parallel 1** (parallel 2 retenu le matin du 15/09/2026 puis annulé le soir même, cf. « Multi-slot et drafters » ; pas de tête MTP dans le GGUF, le 0731 ne publie qu'un drafter DSpark) | **196** (199 à parallel 1 le matin du 15/09 ; 205 en n-gram seul le 13/09 ; 110 au paquet b10433) | **28,8** (acc. 0,69, mesure du run à parallel 2 gardée comme référence chiffrée ; 28,9 acc. 0,68 à parallel 1, le réglage servi depuis le soir du 15/09, l'écart est dans le bruit ; 19,9 acc. 0,65 en n-gram seul sur le fork ; 12,3 au paquet) ; **39,0** agrégés à 2 requêtes (x1,16, 19,9 par requête, `--bench-parallel`) ; **38,7** (refactor, acc. 0,87) en `--spec-ab` contre 31,2 en n-gram seul, 35,6 en DSpark seul, 35,0 à n-max 2, 22,7 à n-max 5 | fork strix-0007bc6, 15/09/2026, plus gros gain de décode du parc (+135 % contre le paquet, +45 % contre le n-gram seul) ; ROCm0 inutilisable (b10433) ; cache 99 % (attention pure) ; reasoning-budget 6144 (fork) ; 115 Go de poids, la garde mémoire décharge lfm2.5 pour le charger |
 | qwen3-coder-next | UD-Q4_K_XL (47 Go) + drafter DFlash z-lab Q8_0 (0,51 Go, conversion transmutator) | Vulkan0 (mesuré, ROCm0 exclu) | **draft-dflash 7** seul (retenu le 15/09/2026 ; remplace ngram-map-k 47, dont le compromis +47 % refactor / -5 % générique disparaît) | **727** (763 en ngram-map-k 47 le 13/09 ; 468 au paquet b10433) | **52,2** (bench, acc. 0,515 ; 48,7 acc. 0,27 en n-gram seul sur le fork ; 43,7 au paquet) ; **100,0** (refactor, acc. 0,92) et **70,5** (générique, acc. 0,70) en test isolé | fork strix-0007bc6, 15/09/2026 ; les n-grams par-dessus le drafter font retomber l'acceptance (0,92 → 0,82 en refactor) sans rien apporter : retirés ; ROCm0 répond « LAMPAMPAMP… » ; cache 64 % ; chargement 72 s depuis le disque |
 | gpt-oss | UD-Q4_K_XL (59 Go, MoE) | Vulkan0 (mesuré : ROCm0 219 / 31,5, juste lent) | ngram-map-k 7 | **599** (333 au paquet b10548) | **52,9** (bench, acc. 0,57 ; 51,9 au paquet) ; 59,8 (refactor, paquet) | fork strix-0007bc6, 13/09/2026 ; cache 99 % (attention, pas d'état récurrent) ; chargement 91 s depuis le disque ; drafter DFlash z-lab converti le 15/09/2026 mais refusé par le fork (biais d'attention, issue #61), le n-gram reste seul |
@@ -1285,7 +1285,10 @@ Retenu : `ngram-map-k` size-m 7 min-hits 2 + `draft-dflash` n-max 7 sur Vulkan0,
 `bench-devices.conf`, aucun tune n'a tourné et `--spec-tune` refuse de toute
 façon `draft-dflash`). Jamais mesuré au paquet Arch. Contre le concurrent direct
 `qwen3.8-27b-dflash-nothink`, mesuré le même mois sur le même fork
-(359 / 32,6 / 0,595) : +17 % de décode, -26 % de prefill.
+(359 / 32,6 / 0,595) : +17 % de décode, -26 % de prefill. Ces deux écarts sont
+repris le 17/09/2026 par un contrôle à froid des deux modèles le même soir, sur
+le même moteur (Muse 301 / 38,5, le 27B 302 / 32,2 en cache-type-v f16) :
++20 % de décode et un prefill équivalent, cf. « Campagne du 17/09/2026 ».
 
 Lectures. Le décode nu à 14 t/s est celui d'un dense de 16 Go sur la bande
 passante de bigchuck : ce modèle ne vit que par son drafter, qui rend x3,1. La
@@ -1328,6 +1331,84 @@ pi 0.84.3 en conteneur, appel froid puis 3 passes de 5 scénarios, bigchuck, for
 | | boucle sans fin | bug sans toucher au test | tué après 36 min | contexte à 47k | 18 700 requêtes de 20 à 50 tok | | |
 
 Lecture : Muse-Glimmer tient la boucle complète, le cache sert 97 à 99 % à chaque tour (attention pure) et le décode en boucle (34 à 41 t/s) rejoint le `--bench` (38,0) ; le raisonnement en `reasoning_strength` low ne fait échouer aucun scénario. LFM2.5-8B-A1B (thinking coupé) réussit les tool calls simples mais rate la réponse simple et la création de module (fichiers écrits, test jamais relancé jusqu'au vert), et part en boucle de tool calls sur la correction de bug : `--bench-agentic` n'a pas de limite de tours, le conteneur a été tué à la main. C'est le résultat, pas un défaut du serveur (le 2.6B, lui, reste le modèle de tool calling). La section est gardée avec ce verdict, à retirer si elle ne sert pas dans l'usage réel.
+
+## Campagne du 17/09/2026 : cache V f16 sur le 27B, `reasoning = off`, essais retirés sur Flash-Next
+
+Toutes les mesures de cette section : bigchuck (Ryzen AI Max+ 395, 124 Go),
+fork strix-0007bc6 épinglé, Vulkan0, mode EC performance, `--bench` 3 passes, à
+froid juste après un redémarrage de la machine, le 17/09/2026. Sauf la dernière
+sous-section, qui porte sur un autre commit du fork et le dit.
+
+### `qwen3.8-27b-dflash-nothink` : cache-type-v f16 au lieu de q8_0
+
+| Configuration | Device | Prompt t/s | Gen t/s | Acceptance | Source |
+|---|---|---|---|---|---|
+| ngram 47 + draft-dflash 7, cache-type-v f16 | Vulkan0 | 302 | 32,2 | 0,625 | --bench, 3 passes (bench-task), à froid |
+| ngram 47 + draft-dflash 7, cache-type-v q8_0 | Vulkan0 | 305 | 30,3 | 0,595 | --bench, 3 passes (bench-task), à froid, même soir |
+
+Retenu : `cache-type-v f16` (`lib/models.sh`, rien dans les `.conf`). Le f16
+rend +6 % de décode et monte l'acceptance de 0,595 à 0,625, le prefill est égal
+(302 contre 305, dans le bruit). C'est la première comparaison propre des deux
+caches V sur cette section : même moteur, même soir, même état de machine.
+La convention du parc (V q8_0 pour l'agentic, précision des tool calls et des
+diffs) cède ici devant la mesure ; la justesse des sorties n'a pas bougé au
+contrôle de sanité.
+
+Ces 302 / 32,2 / 0,625 remplacent les 359 / 32,6 / 0,595 du 13/09/2026 comme
+chiffres de référence de la section dans le README et dans `docs/perfs.tsv` :
+l'ancienne mesure appartient à une autre soirée et à une autre série, elle reste
+citée ici et dans le commentaire daté de `lib/models.sh`. Contre le paquet Arch
+b10433 (261 / 29,5 / 0,65), le décode est à +9,2 % ; contre `muse-glimmer-30b-dflash`
+contrôlé le même soir (301 / 38,5), le 27B décode 20 % plus lentement pour un
+prefill équivalent, là où la campagne du 16/09 lisait +17 % et -26 % sur les
+chiffres d'alors.
+
+### `reasoning = off` à la place de `chat-template-kwargs` `enable_thinking`
+
+Cinq sections nothink passent à l'option native de llama-server :
+`ornith-1.5-9b-mtp-nothink`, `ornith-1.5-35b-a3b-parallel`,
+`ornith-1.5-35b-a3b-mtp`, `qwen3.8-27b-dflash-nothink` et
+`qwen3.8-flash-next-mtp-nothink`. Motif : `chat-template-kwargs` est obsolète,
+`--reasoning off` fait le travail côté serveur et est présent sur 0007bc6.
+
+Contrôle sur `qwen3.8-flash-next-mtp-nothink` : `reasoning_content` vide,
+réponse directe sans balise, et vitesse inchangée, 342 / 48,1 / 0,87 après le
+changement contre 338 / 48,3 / 0,87 avant, même moteur. La sortie des quatre
+autres sections n'a pas été contrôlée une à une : le changement est le même
+partout, mais rien ne le dit modèle par modèle.
+
+### Contrôle à froid des deux autres modèles touchés par la session
+
+Configuration inchangée, même soir, mêmes conditions que ci-dessus, pour situer
+les mesures de la section précédente et non pour remplacer les références :
+
+| Modèle | Prompt t/s | Gen t/s | Acceptance |
+|---|---|---|---|
+| qwen3.8-flash-next-mtp-nothink | 342 | 48,1 | 0,87 |
+| muse-glimmer-30b-dflash | 301 | 38,5 | 0,63 |
+
+### Essai retiré sur Flash-Next : `batch-size` / `ubatch-size` 16384 et `lazy-mode on-direct`
+
+Essai mené sur le fork 0636c9aee (b11111), pas sur 0007bc6. Avec
+`batch-size 16384`, `ubatch-size 16384` et `lazy-mode on-direct` :
+
+- prefill `--bench` 389 à 397 t/s contre 343, décode 45,3 à 46,5 contre 49,5 ;
+- `lazy-mode on-direct` neutre, double emploi avec `ngram-on-disk` ;
+- surtout, le prefill servi sur Vulkan0 s'effondre en profondeur : 135 t/s à
+  12 000 tokens, puis le GPU décroche à 25 000 tokens
+  (`vk::Queue::submit: ErrorDeviceLost`, reset de file amdgpu), après quoi
+  toute la machine perd 12 à 20 % de prefill jusqu'au redémarrage ;
+- ROCm0 tient 445 t/s à 25 000 tokens mais rend une génération dégénérée et un
+  « Invalid input batch ».
+
+Le gain de prefill au bench court est donc payé deux fois : en décode, et par un
+prefill servi qui s'écroule là où ce modèle sert justement. Paramètres retirés,
+retour au batch par défaut et à `cache-type-v q8_0` sur cette section.
+
+Le fork 0636c9aee lui-même n'est pas retenu : le 27B y tombe à 255 / 25,5
+(cache-type-v f16) contre 302 / 32,2 sur 0007bc6. Ré-épinglage sur 0007bc6 le
+soir même, cf. « Mise à jour du fork vers 654803517 (13/09/2026) : régression,
+retour à 0007bc6 », même schéma.
 
 ## Choix du device (--bench-devices) : méthode et exemples datés
 

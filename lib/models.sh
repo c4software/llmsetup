@@ -329,8 +329,10 @@ download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
 # ⚠ PIÈGE THINKING, nothink OBLIGATOIRE : thinking ON, les 1200 tokens du test
 #   partent en raisonnement sans jamais atteindre </think> (aucune réponse
 #   rendue) et l'acceptance tombe à 0,42 contre 0,69 en nothink (test isolé
-#   ornith9b-mtp3-think du 15/09/2026). D'où chat-template-kwargs
-#   {"enable_thinking":false}, et le suffixe -nothink du nom de section.
+#   ornith9b-mtp3-think du 15/09/2026). D'où reasoning = off, et le suffixe
+#   -nothink du nom de section. (Réglage posé par chat-template-kwargs
+#   {"enable_thinking":false} jusqu'au 17/09/2026 : clé obsolète, remplacée
+#   par l'option native reasoning de llama-server, présente sur 0007bc6.)
 # Test ISOLÉ du 15/09/2026 (tools/spec-isolate.sh, fork strix-0007bc6, Vulkan0,
 #   hors service, Q8_0, ctx 32768, np 1, 2 passes, 1200 tokens ; t/s de décode
 #   passe 2, spec-test.txt / spec-refactor.txt) :
@@ -462,10 +464,12 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   de référence de la fiche ; pas de quant unsloth UD sur ce repo
 #   (grille : Q4_K_M 21,7 / Q5_K_M 25,3 / Q6_K 29,2 / Q8_0 37,8 Go).
 # Sampling : reco officielle temp 0.6 / top-p 0.95 / top-k 20 (la fiche donne
-#   temp 1.0 pour les benchs seulement). Thinking par défaut ; nothink via
-#   chat-template-kwargs (le template gère enable_thinking:false en
-#   émettant <think>\n\n</think>), reasoning off en plus pour ne rien
-#   renvoyer dans reasoning_content.
+#   temp 1.0 pour les benchs seulement). Thinking par défaut ; nothink par
+#   reasoning = off depuis le 17/09/2026, option native de llama-server
+#   (présente sur 0007bc6), qui ferme le canal et ne renvoie rien dans
+#   reasoning_content. Elle remplace chat-template-kwargs
+#   {"enable_thinking":false}, obsolète (le template émettait
+#   <think>\n\n</think>).
 # ctx 1048576 : llama-server partage ctx-size entre les slots, 4 x 262144 =
 #   le contexte natif entier pour chaque requête (au-delà : YaRN facteur 4,
 #   non activé).
@@ -495,7 +499,6 @@ llama_model ornith-1.5-35b-a3b-parallel "
 model                = $ORNITH15_35B_A3B_PATH
 ctx-size             = 1048576
 cache-ram            = 12288
-reasoning            = off
 reasoning            = off
 temp                 = 0.6
 top-k                = 20
@@ -558,7 +561,6 @@ llama_model ornith-1.5-35b-a3b-mtp "
 model                = $ORNITH15_35B_A3B_PATH
 ctx-size             = 1048576
 cache-ram            = 12288
-reasoning            = off
 reasoning            = off
 temp                 = 0.6
 top-k                = 20
@@ -1179,11 +1181,25 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   ⚠ Non mesuré sur le paquet Arch : b10809 expose bien draft-dflash (la
 #   carte du modèle renvoie à la PR mainline #27342), mais ce réglage n'y a
 #   jamais tourné, les chiffres ci-dessus sont ceux du fork seulement.
-#   Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) :
-#   prefill 359 t/s, décode 32,6 t/s, acceptance 0,595, contre 261 / 29,5 /
+#   Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes, alors
+#   en cache-type-v q8_0) : prefill 359 t/s, décode 32,6 t/s, acceptance
+#   0,595, contre 261 / 29,5 /
 #   0,65 au paquet b10433 (+11 % de décode) et 360 / 26,6 / 0,59 en MTP
 #   n-max 6 sur le même fork (+23 %). Le retrait de décode du fork est annulé,
 #   le réglage passe au gain net des deux côtés.
+# reasoning = off : nothink du suffixe de section, option native de
+#   llama-server (présente sur 0007bc6), posée le 17/09/2026 à la place de
+#   chat-template-kwargs {"enable_thinking":false}, obsolète. Sortie non
+#   contrôlée individuellement ici : le contrôle a porté sur Flash-Next
+#   (reasoning_content vide, réponse directe, vitesse inchangée).
+# cache-type-v f16 (était q8_0, 17/09/2026) : les deux réglages mesurés le
+#   même soir, à froid après redémarrage, même moteur (strix-0007bc6,
+#   Vulkan0, mode EC performance, --bench 3 passes) : f16 302 / 32,2 / 0,625
+#   contre q8_0 305 / 30,3 / 0,595, soit +6 % de décode, acceptance 0,595 vers
+#   0,625, prefill égal. Le f16 est donc gardé malgré la convention V q8_0 du
+#   parc pour l'agentic. Ces 302 / 32,2 / 0,625 REMPLACENT les 359 / 32,6 /
+#   0,595 du 13/09 comme référence du README et de docs/perfs.tsv : autre
+#   jour, autre série, la comparaison propre est celle de ce soir-là.
 # swa-full : inopérant sur cette architecture (le journal du serveur dit
 #   « swa_full is not supported by this model »). La clé est gardée telle
 #   quelle : elle ne coûte rien et redeviendra utile si l'arch est supportée.
@@ -1563,7 +1579,12 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 # Thinking ON par défaut (<think>), reasoning_effort xhigh (défaut) / medium /
 #   low, "high" est replié sur xhigh par le template ; enable_thinking false =
 #   nothink. preserve_thinking (garde les traces des tours précédents) : true
-#   par défaut, côté client. Le modèle ci-dessous est en NOTHINK avec le
+#   par défaut, côté client. Le modèle ci-dessous est en NOTHINK par
+#   reasoning = off (option native de llama-server, posée le 17/09/2026 à la
+#   place de chat-template-kwargs {"enable_thinking":false}, obsolète ;
+#   contrôlé le soir même : reasoning_content vide, réponse directe, vitesse
+#   inchangée, 342 / 48,1 / 0,87 contre 338 / 48,3 / 0,87 avant le changement,
+#   même moteur), avec le
 #   sampling instruct ; variante « low » si on veut un peu de raisonnement :
 #     chat-template-kwargs = {"reasoning_effort":"low"}  + sampling thinking
 #     (temp 1.0 / top-p 0.95, presence-penalty 0)

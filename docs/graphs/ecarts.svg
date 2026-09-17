@@ -57,10 +57,10 @@
 <text x="550.0" y="367.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
 <text x="550.0" y="388.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
 <text x="246.0" y="429.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">qwen3.8-27b-dflash-nothink</text>
-<rect x="542.0" y="411.0" width="71.1" height="16.0" fill="#2f6fdd"/>
-<text x="621.1" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+37,5 %</text>
-<rect x="542.0" y="432.0" width="19.9" height="16.0" fill="#9aa0a6"/>
-<text x="569.9" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+10,5 %</text>
+<rect x="542.0" y="411.0" width="29.7" height="16.0" fill="#2f6fdd"/>
+<text x="579.7" y="424.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+15,7 %</text>
+<rect x="542.0" y="432.0" width="17.3" height="16.0" fill="#9aa0a6"/>
+<text x="567.3" y="445.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#3c4043" text-anchor="start">+9,2 %</text>
 <text x="246.0" y="486.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#3c4043" text-anchor="end">muse-glimmer-30b-dflash</text>
 <text x="550.0" y="481.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
 <text x="550.0" y="502.0" font-family="Inter, Helvetica, Arial, sans-serif" font-size="11" fill="#5f6368" text-anchor="start">n/c</text>
