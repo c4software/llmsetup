@@ -1721,6 +1721,25 @@ derive_gguf qwen3.8-flash-next \
 #   ci-dessous sont ANTÉRIEURES à la migration et portent sur l'UD-IQ4_XS :
 #   elles ne se comparent à la quant AP que sur le même moteur et le même
 #   device, ligne à ligne.
+#   MESURÉ le 17/09/2026, quant AP-Q4_K_XL (strix-0007bc6, Vulkan0, mode EC
+#   performance, mmproj chargé, ngram-map-k 7 + draft-mtp 4, ngram-on-disk) :
+#   --bench 3 passes = prefill 364 t/s, décode 52,4 t/s, acceptance 0,865,
+#   contre 342 / 48,1 / 0,87 pour l'UD-IQ4_XS le même soir et sur le même
+#   moteur, soit +6 % de prefill et +9 % de décode. Le gain est donc RÉEL mais
+#   sans rapport avec le facteur annoncé par la PR #133, qui mesurait un autre
+#   runtime. Mémoire utilisée, modèle chargé : 89 Go (79 Go en UD-IQ4_XS).
+#   Chargement du serveur complet (poids + sidecar MTP + mmproj) : 18,5 s,
+#   fichier encore chaud en cache de pages.
+#   Vision et spéculation COHABITENT, contrairement à ce que le dépôt affirmait
+#   (cf. le paragraphe Vision plus haut) : le journal montre « loaded
+#   multimodal model » puis le sidecar MTP chargé, et l'acceptance reste à 0,87
+#   pendant le bench. Contrôle vision du jour : un carré rouge de 64x64 en PNG
+#   (data URI, /v1/chat/completions) est décrit « Le carré que vous avez fourni
+#   est de couleur rouge. » Contrôle nothink : reasoning_content vide.
+#   Reste à faire sur cette quant (la migration ne les a pas rejoués) : le
+#   --bench-devices, le --spec-tune, le --spec-ngram-tune, le --bench-cache,
+#   le --bench-load et le --bench-agentic ; leurs réglages sont ceux mesurés
+#   sur l'UD-IQ4_XS et n'ont pas été revalidés ici.
 # Renommée -nothink le 04/09, quand draft-mtp avait été retiré faute de moteur
 #   capable de charger le sidecar ; revenue à -mtp-nothink le 12/09/2026 avec le
 #   retour de draft-mtp sur le fork, comme l'était alors
