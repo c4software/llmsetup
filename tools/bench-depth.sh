@@ -28,11 +28,24 @@
 #   OUT / TSV           journaux (défaut logs/bench-depth.log, logs/bench-depth.tsv)
 #
 # Arrêter le service avant (il occupe le GPU et la mémoire unifiée) :
-#   systemctl --user stop llama-server ; ... ; systemctl --user start llama-server
+#   ./setup-llm.sh --stop ; ... ; ./setup-llm.sh --start
 # =============================================================================
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# Modules du dépôt : uniquement pour _svc_is_active (état du service, journalisé
+# avec la mesure). lib/common.sh attend SCRIPT_DIR = racine du dépôt.
+# L'étiquette de moteur reste calculée ci-dessous : cet outil mesure llama-bench
+# sur l'HÔTE, pas le conteneur, et ne porte donc pas l'étiquette du service.
+SCRIPT_DIR="$ROOT_DIR"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/common.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/runtime.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/compose.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/svc.sh"
 mkdir -p "$ROOT_DIR/logs"
 OUT="${OUT:-$ROOT_DIR/logs/bench-depth.log}"
 TSV="${TSV:-$ROOT_DIR/logs/bench-depth.tsv}"
@@ -71,7 +84,7 @@ done
 
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
-# Étiquette de moteur, même règle que _llama_build (lib/common.sh) : "bNNNNN"
+# Étiquette de moteur, même règle que _host_llama_build (lib/common.sh) : "bNNNNN"
 # pour un build upstream, "<dépôt>-<commit>" pour le fork, qui ne numérote pas
 # ses builds ("build 1"). Deux séries de mesures, jamais comparables.
 _ver="$(llama-server --version 2>&1 | head -3)"
@@ -96,13 +109,13 @@ elif [[ "$(head -1 "$TSV")" != "$TSV_HDR" ]]; then
 fi
 
 SERVICE_STATE="arrêté"
-systemctl --user is-active llama-server &>/dev/null && SERVICE_STATE="EN MARCHE"
+_svc_is_active && SERVICE_STATE="EN MARCHE"
 
 {
 echo "# bench-depth — $(date '+%F %T')"
 echo "# host=$(hostname)  build=${BUILD:-?}  devices=${DEVS[*]}  depths=$DEPTHS  pp=$PP  tg=$TG  reps=$REPS  kv=$CTK/$CTV  fa=$FA"
 echo "# service llama-server : $SERVICE_STATE"
-[[ "$SERVICE_STATE" == "EN MARCHE" ]] && echo "#   ⚠ contention GPU/mémoire — pour un run propre : systemctl --user stop llama-server"
+[[ "$SERVICE_STATE" == "EN MARCHE" ]] && echo "#   ⚠ contention GPU/mémoire — pour un run propre : ./setup-llm.sh --stop"
 echo
 for gguf in "$@"; do
   [[ -f "$gguf" ]] || { echo "absent, ignoré : $gguf" >&2; continue; }

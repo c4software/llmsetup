@@ -1,5 +1,5 @@
 # lib/spec.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # spec-test — mesure le décode réel d'un modèle via l'API (chemin spéculatif
@@ -16,7 +16,7 @@
 # puisque la spéculation est sans perte → comparaisons sans bruit de sampling,
 # tout en couvrant plusieurs trajectoires), et affiche prompt/gen t/s
 # depuis `timings` de llama-server, plus l'acceptance MTP (draft_n_accepted /
-# draft_n, renvoyés dans le même `timings` — pas besoin de journalctl). La 1re
+# draft_n, renvoyés dans le même `timings` — pas besoin des journaux). La 1re
 # passe est marquée (cache froid), comparer les médianes des suivantes.
 # L'en-tête reprend tout le contexte (host, versions llama-cpp/ggml, GGUF,
 # device, corps du modèle) pour que le bloc soit auto-suffisant à partager.
@@ -143,7 +143,7 @@ cmd_spec_test() {
   command -v curl >/dev/null || error "curl introuvable"
   command -v python3 >/dev/null || error "python3 introuvable"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL — ./setup-llm.sh --start"
 
   load_spec_conf
   local nmax nmax_cfg nmax_srv
@@ -178,14 +178,14 @@ cmd_spec_test() {
   fi
   if [[ -n "$nmax_srv" && -n "$nmax_cfg" && "$nmax_srv" != "$nmax_cfg" ]]; then
     warn "Désaccord n-max : serveur=$nmax_srv, script/conf=$nmax_cfg → le ini a changé sans restart."
-    warn "  Ce run mesure et journalise n-max $nmax_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
+    warn "  Ce run mesure et journalise n-max $nmax_srv (réel). Appliquer la config : ./setup-llm.sh --restart"
   fi
   if [[ -n "${SPEC_TYPE_FORCE:-}" && "${SPEC_TYPE_FORCE_PRESET:-}" == "$preset" ]]; then
     # forçage voulu par un tuner, pas un ini oublié
     [[ -n "$stype_srv" ]] && echo "  (spec-type forcé à $stype_srv le temps du réglage ; script : $stype_cfg)"
   elif [[ -n "$stype_srv" && -n "$stype_cfg" && "$stype_srv" != "$stype_cfg" ]]; then
     warn "Désaccord spec-type : serveur=$stype_srv, script=$stype_cfg → le ini a changé sans restart."
-    warn "  Ce run mesure et journalise spec-type $stype_srv (réel). Appliquer la config : systemctl --user restart $SERVICE_NAME"
+    warn "  Ce run mesure et journalise spec-type $stype_srv (réel). Appliquer la config : ./setup-llm.sh --restart"
   fi
 
   # --- En-tête : contexte complet du run, à coller tel quel dans un échange ---
@@ -195,7 +195,9 @@ cmd_spec_test() {
   mdev="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE}"
   gguf="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
   gsize="$(du -h "$gguf" 2>/dev/null | cut -f1 || echo '?')"
-  llver="$(_llama_build) ($(llama-server --version 2>&1 | head -1))"
+  # Moteur du SERVICE = l'image (lib/runtime.sh), plus un binaire de l'hôte :
+  # l'étiquette vient de ses LABEL, et il n'y a plus de --version à afficher.
+  llver="$(_llama_build)"
   # Mode d'alimentation de l'APU (cf. _ec_power_mode, lib/common.sh) : affiché
   # et journalisé au même titre que le moteur, un run "balanced" perdant 10 à
   # 13 % de décode. Jamais bloquant, "inconnu" si le sysfs ne répond pas.
@@ -358,11 +360,11 @@ _spec_analyze() {
 #   modèle : sélection interactive si absent ; liste défaut "2,4,6" ; passes 4.
 #
 # Pour chaque k : models.ini régénéré avec le n-max forcé (SPEC_NMAX_FORCE),
-# restart du service systemd, attente /health, --spec-test (journalisé). À la
+# restart du service (conteneur), attente /health, --spec-test (journalisé). À la
 # fin : analyse sur tous les runs, choix = meilleur MESURÉ (à <2 %, le plus
 # petit k), écriture dans spec-nmax.conf, ini régénéré, restart final.
-# Le service systemd user est requis (un llama-server manuel ne peut pas être
-# relancé proprement) ; tout passe par systemctl --user.
+# Le service conteneurisé est requis (un llama-server manuel ne peut pas être
+# relancé proprement) ; tout passe par les _svc_* (lib/svc.sh).
 # =============================================================================
 
 cmd_spec_tune() {
@@ -378,8 +380,8 @@ cmd_spec_tune() {
   [[ -n "${MODEL_INI[$preset]:-}" ]] || error "Modèle inconnu : '$preset'"
   _preset_has_spec_type "$preset" draft-mtp \
     || error "'$preset' n'a pas de tête MTP (draft-mtp attendu dans spec-type, seul ou en liste)"
-  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
-    || error "Service $SERVICE_NAME non installé — --spec-tune a besoin de le redémarrer entre deux n-max (--install-service)."
+  _svc_installed \
+    || error "Service $SERVICE_NAME non montable ici — --spec-tune a besoin de le redémarrer entre deux n-max (docker + ./setup-llm.sh --image-build)."
 
   local -a ks=()
   local k
@@ -394,7 +396,7 @@ cmd_spec_tune() {
   info "spec-tune '$preset' — n-max à tester : ${ks[*]} ($passes passes chacun), valeur actuelle : $before"
   warn "Chaque n-max = régénération du ini + restart de $SERVICE_NAME (les modèles préchargés se rechargent)."
   info "Le routeur ne lit le ini qu'au démarrage : chaque n-max impose un"
-  info "  'systemctl --user restart $SERVICE_NAME' (service user)."
+  info "  './setup-llm.sh --restart' (conteneur recréé, compose régénéré)."
 
   local gguf mkey mdev
   gguf="$(basename "$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)")"
@@ -420,7 +422,7 @@ cmd_spec_tune() {
       warn "spec-tune interrompu — régénération du ini sans valeur forcée + restart."
       unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
       regen_models_ini
-      systemctl --user restart "$SERVICE_NAME" || true
+      _svc_restart || true
       SPEC_TUNE_DIRTY=0
     fi
   }
@@ -432,17 +434,8 @@ cmd_spec_tune() {
     export SPEC_NMAX_FORCE="$k" SPEC_NMAX_FORCE_PRESET="$preset"
     SPEC_TUNE_DIRTY=1
     regen_models_ini
-    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
-    # attente du routeur (les poids se chargent à la 1re requête, passe froide ignorée)
-    local t=0
-    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
-      sleep 2; t=$((t+2))
-      # if/fi obligatoire : "[[ ... ]] && error" retourne 1 tant que le timeout
-      # n'est pas atteint et set -e tuerait la boucle à la 1re itération
-      if [[ $t -ge 120 ]]; then
-        error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
-      fi
-    done
+    # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
+    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
     cmd_spec_test "$preset" "$passes"
   done
   unset SPEC_NMAX_FORCE SPEC_NMAX_FORCE_PRESET SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
@@ -456,7 +449,7 @@ cmd_spec_tune() {
   if [[ ! "$rec" =~ ^[0-9]+$ ]]; then
     warn "Pas de recommandation exploitable — config remise à l'état initial ($before)."
     regen_models_ini
-    systemctl --user restart "$SERVICE_NAME" || true
+    _svc_restart || true
     SPEC_TUNE_DIRTY=0
     return
   fi
@@ -466,7 +459,7 @@ cmd_spec_tune() {
   regen_models_ini
   info "✅ $preset : spec-draft-n-max = $rec enregistré dans $SPEC_CONF (avant : $before)"
   info "Restart final de $SERVICE_NAME sur la valeur retenue..."
-  systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec — systemctl --user restart $SERVICE_NAME"
+  _svc_restart || warn "Restart en échec — ./setup-llm.sh --restart"
   SPEC_TUNE_DIRTY=0
   trap - EXIT
 }
@@ -560,8 +553,8 @@ cmd_spec_ngram_tune() {
     || error "'$preset' n'a pas de spéculation n-gram (ngram-map-k attendu dans spec-type)."
   [[ "$passes" =~ ^[0-9]+$ && "$passes" -ge 2 ]] || error "Passes invalide : '$passes' (>= 2)"
   command -v llama-bench >/dev/null || error "llama-bench introuvable (paquet llama-cpp)"
-  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
-    || error "Service $SERVICE_NAME non installé — l'arbitrage a besoin de le redémarrer (--install-service)."
+  _svc_installed \
+    || error "Service $SERVICE_NAME non montable ici — l'arbitrage a besoin de le redémarrer (docker + ./setup-llm.sh --image-build)."
 
   # Défaut spec-refactor.txt et non spec-test.txt : ce dernier écrit un module
   # de zéro, sans une répétition à retrouver, donc sans un seul hit n-gram — les
@@ -597,14 +590,14 @@ cmd_spec_ngram_tune() {
   # Globale et non locale : le trap EXIT peut se déclencher après le retour de
   # la fonction, où une locale n'existerait plus (unbound sous set -u).
   SPEC_NGRAM_SERVICE_ACTIF=0
-  if systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+  if _svc_is_active; then
     SPEC_NGRAM_SERVICE_ACTIF=1
   fi
   _spec_ngram_restore() {
     unset SPEC_NGRAM_FORCE SPEC_NGRAM_FORCE_PRESET SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
     regen_models_ini
     if [[ "${SPEC_NGRAM_SERVICE_ACTIF:-0}" -eq 1 ]]; then
-      systemctl --user start "$SERVICE_NAME" >/dev/null 2>&1 || true
+      _svc_start >/dev/null 2>&1 || true
     fi
     return 0
   }
@@ -612,7 +605,7 @@ cmd_spec_ngram_tune() {
 
   if [[ "$SPEC_NGRAM_SERVICE_ACTIF" -eq 1 ]]; then
     info "Arrêt de $SERVICE_NAME le temps du balayage (contention GPU)."
-    systemctl --user stop "$SERVICE_NAME" || warn "Arrêt en échec — mesures potentiellement faussées."
+    _svc_stop || warn "Arrêt en échec — mesures potentiellement faussées."
   fi
   export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
@@ -679,34 +672,22 @@ cmd_spec_ngram_tune() {
     info "──── référence : sans spéculation (spec-type none) ────"
     export SPEC_TYPE_FORCE="none" SPEC_TYPE_FORCE_PRESET="$preset"
     regen_models_ini
-    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
-    t=0
-    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
-      sleep 2; t=$((t+2))
-      if [[ $t -ge 120 ]]; then
-        error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
-      fi
-    done
+    # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
+    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
     cmd_spec_test "$preset" "$passes" "$prompt_file"
     ref_gen="${SPEC_TEST_MED_GEN:-}"
     unset SPEC_TYPE_FORCE SPEC_TYPE_FORCE_PRESET
   fi
 
   local -a mesures=()
-  local m t
+  local m
   for m in "${cands[@]}"; do
     echo ""
     info "──── size_m = $m ────"
     export SPEC_NGRAM_FORCE="$m" SPEC_NGRAM_FORCE_PRESET="$preset"
     regen_models_ini
-    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
-    t=0
-    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
-      sleep 2; t=$((t+2))
-      if [[ $t -ge 120 ]]; then
-        error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
-      fi
-    done
+    # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
+    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
     cmd_spec_test "$preset" "$passes" "$prompt_file"
     mesures+=("${SPEC_TEST_MED_GEN:-0}")
   done
@@ -749,7 +730,7 @@ cmd_spec_ngram_tune() {
   regen_models_ini
   info "✅ $preset : spec-ngram-map-k-size-m = $best_m enregistré dans $SPEC_NGRAM_CONF (avant : ${avant:-défaut})"
   info "Restart final sur la valeur retenue..."
-  systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec — systemctl --user restart $SERVICE_NAME"
+  _svc_restart || warn "Restart en échec — ./setup-llm.sh --restart"
   trap - EXIT
 }
 
@@ -785,8 +766,8 @@ cmd_spec_ab() {
     prompt_file="$SCRIPT_DIR/prompts/$prompt_file"
   fi
   [[ -f "$prompt_file" ]] || error "Prompt introuvable : $prompt_file"
-  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
-    || error "Service $SERVICE_NAME non installé — --spec-ab redémarre le service entre deux variantes."
+  _svc_installed \
+    || error "Service $SERVICE_NAME non montable ici — --spec-ab redémarre le service entre deux variantes (docker + ./setup-llm.sh --image-build)."
 
   local -a variantes=("$@")
   local v
@@ -802,7 +783,7 @@ cmd_spec_ab() {
     if [[ "${SPEC_AB_DIRTY:-0}" -eq 1 ]]; then
       unset SPEC_AB_OVERRIDES SPEC_AB_PRESET
       regen_models_ini
-      systemctl --user restart "$SERVICE_NAME" >/dev/null 2>&1 || true
+      _svc_restart >/dev/null 2>&1 || true
       SPEC_AB_DIRTY=0
     fi
     return 0
@@ -810,7 +791,6 @@ cmd_spec_ab() {
   trap _spec_ab_restore EXIT
 
   local -a gens=() accs=()
-  local t
   for v in "${variantes[@]}"; do
     echo ""
     info "──── variante : $v ────"
@@ -821,14 +801,8 @@ cmd_spec_ab() {
     fi
     SPEC_AB_DIRTY=1
     regen_models_ini
-    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
-    t=0
-    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
-      sleep 2; t=$((t+2))
-      if [[ $t -ge 120 ]]; then
-        error "llama-server ne répond pas après 120 s — journalctl --user -u $SERVICE_NAME -e"
-      fi
-    done
+    # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
+    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
     cmd_spec_test "$preset" "$passes" "$prompt_file"
     gens+=("${SPEC_TEST_MED_GEN:-0}"); accs+=("${SPEC_TEST_MED_ACC:--}")
   done

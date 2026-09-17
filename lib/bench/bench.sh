@@ -1,5 +1,5 @@
 # lib/bench/bench.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # bench — mesure de perfs via le serveur, tel qu'il tourne
@@ -193,7 +193,7 @@ cmd_bench() {
   command -v curl >/dev/null || error "curl introuvable"
   command -v python3 >/dev/null || error "python3 introuvable"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL — ./setup-llm.sh --start"
 
   if [[ -z "$target" ]]; then
     if [[ -t 0 ]]; then

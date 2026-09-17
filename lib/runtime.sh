@@ -1,5 +1,5 @@
 # lib/runtime.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Moteur conteneurisé : image ROCm Strix Halo (runtime/)
@@ -9,17 +9,18 @@
 # retained-PM4 compilé depuis pwilkin/rocm-systems, et halo-box/strix-llama.cpp
 # construit en HIP seul. Provenance et écarts : runtime/AMONT.md.
 #
-# ⚠ À cette étape, RIEN ici ne bascule le service. Le moteur du service reste le
-# fork épinglé (fork.conf, ~/.local/bin en tête du PATH) : --image-build,
-# --image-update et --image-status construisent, comparent et inventorient,
-# sans toucher à systemd, au ini ni aux liens. La bascule (compose généré dans
-# ~/models à côté de models.ini) est une étape à part.
+# ⚠ Depuis la bascule, cette image EST le moteur du service : le compose généré
+# (lib/compose.sh) la nomme par _image_ref, et _svc_restart la reprend. Une
+# image neuve n'est donc servie qu'au prochain redémarrage — --image-build,
+# --image-update et --image-status ne redémarrent rien d'eux-mêmes. Le fork de
+# lib/fork.sh reste le moteur des outils HORS service (llama-bench) et le filet
+# de retour arrière de la migration.
 #
 # Modèle de gestion des images, décidé le 17/09/2026 :
 #   - l'image ne contient QUE le moteur et son runtime — pas de modèle, pas de
 #     configuration, pas de cache, pas d'état. Les poids arrivent par un montage
-#     en lecture seule (_dk_run), le ini vit dans ~/models. Une image est donc
-#     jetable et interchangeable.
+#     en lecture seule (compose généré, ou _dk_run), le ini vit dans ~/models.
+#     Une image est donc jetable et interchangeable.
 #   - UN SEUL tag : ${IMAGE_NAME}:latest. Pas de tag daté, pas de collection
 #     d'anciennes images en filet de sécurité : reconstruire depuis
 #     runtime/image.conf prend quelques minutes, et c'est l'HISTORIQUE GIT de
@@ -332,7 +333,8 @@ cmd_image_build() {
   cache="$(_image_build_cache_h)"
   [[ -n "$cache" ]] && info "Cache de build docker : $cache (non purgé — cf. --image-status)."
 
-  info "✅ $ref construite et vérifiée. Aucun service touché — le moteur en place reste le fork."
+  info "✅ $ref construite et vérifiée. Le service tourne encore sur l'image précédente :"
+  info "   l'appliquer par ./setup-llm.sh --restart (nouvelle série de mesures)."
 }
 
 # =============================================================================
@@ -551,7 +553,8 @@ cmd_image_status() {
 #     ici n'a de raison d'écrire dans les poids. C'est aussi ce qui permet à
 #     l'image de ne contenir AUCUN modèle et de rester jetable.
 #   --network none par défaut : une mesure n'a pas à sortir. DK_RUN_NET=host
-#     pour les cas qui exposent un port (le serveur, à l'étape de bascule).
+#     pour les cas qui exposent un port (le service, lui, passe par le compose
+#     et une publication de port, jamais par network_mode: host).
 _dk_run() {
   local bin="${1:-}"
   [[ -n "$bin" ]] || error "_dk_run : binaire manquant."

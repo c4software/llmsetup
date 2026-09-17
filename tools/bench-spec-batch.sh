@@ -36,11 +36,26 @@ set -euo pipefail
 # Racine du dépôt = parent de tools/ ; les journaux vivent dans logs/ comme
 # ceux de setup-llm.sh (locaux, .gitignore).
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# MODELS_BASE de l'appelant, relevé AVANT de sourcer lib/common.sh : celui-ci
+# repositionne la variable sur ~/models sans condition, et la surcharge par
+# l'environnement (documentée ci-dessus) serait perdue.
+_MODELS_BASE_ENV="${MODELS_BASE:-}"
+# Modules du dépôt : uniquement pour _svc_is_active (état du service, journalisé
+# avec la mesure). lib/common.sh attend SCRIPT_DIR = racine du dépôt.
+SCRIPT_DIR="$ROOT_DIR"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/common.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/runtime.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/compose.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/svc.sh"
 mkdir -p "$ROOT_DIR/logs"
 OUT="${OUT:-$ROOT_DIR/logs/spec-batch.log}"
 TSV="${TSV:-$ROOT_DIR/logs/spec-batch.tsv}"
 
-MODELS_BASE="${MODELS_BASE:-$HOME/models}"
+MODELS_BASE="${_MODELS_BASE_ENV:-$MODELS_BASE}"
 DEV="${DEV:-Vulkan0}"
 DEPTH="${DEPTH:-0}"
 BATCHES="${BATCHES:-1,8,16,32,48}"
@@ -88,7 +103,7 @@ fi
 
 # ROCm/HIP sur iGPU : sans ça les allocations visent la VRAM dédiée (petite)
 # au lieu de la mémoire unifiée/GTT — les gros modèles échouent, et surtout on
-# ne mesurerait pas ce que fait réellement le service (cf. lib/service.sh).
+# ne mesurerait pas ce que fait réellement le service (cf. lib/compose.sh).
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
 # En-tête TSV. Si un fichier existe avec un autre jeu de colonnes (ancienne
@@ -104,7 +119,7 @@ fi
 # L'état du service est relevé ici mais journalisé DANS le bloc tee : une mesure
 # dont on ignore si le service tournait n'est pas comparable à une autre.
 SERVICE_STATE="arrêté"
-systemctl --user is-active llama-server &>/dev/null && SERVICE_STATE="EN MARCHE"
+_svc_is_active && SERVICE_STATE="EN MARCHE"
 
 {
 echo "# bench-spec-batch — $(date '+%F %T')"
@@ -113,7 +128,7 @@ echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)"
 echo "# service llama-server : $SERVICE_STATE"
 if [[ "$SERVICE_STATE" == "EN MARCHE" ]]; then
   echo "#   ⚠ contention GPU/mémoire — pour un run propre :"
-  echo "#     systemctl --user stop llama-server"
+  echo "#     ./setup-llm.sh --stop"
 fi
 echo
 echo "# NB : les points à gros batch sont bornés compute et donc sensibles à"

@@ -1,5 +1,5 @@
 # lib/bench/bench-devices.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 #
 # Sorti de bench.sh (trop gros) : --bench-devices, --bench-sanity (que devices
 # applique avant chaque device) et --list-devices. Réutilise _bench_one et
@@ -28,7 +28,7 @@
 # d'écart, le device par défaut $DEFAULT_DEVICE est préféré, ex aequo =
 # moins de surprises) est écrit dans bench-devices.conf (clé = dossier GGUF),
 # ini régénéré, restart final sur la config retenue.
-# Restarts via systemctl --user. Les modèles préchargés se
+# Restarts via les _svc_* (lib/svc.sh). Les modèles préchargés se
 # rechargent à chaque restart : prévoir la durée.
 # =============================================================================
 
@@ -91,7 +91,7 @@ _bench_sanity_one() {
 cmd_bench_sanity() {
   local target="${1:-}"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL — ./setup-llm.sh --start"
   local -a cibles=()
   if [[ "$target" == "all" ]]; then
     _bench_presets; cibles=("${BENCH_PRESETS[@]}")
@@ -129,8 +129,8 @@ cmd_bench_devices() {
   [[ "$passes" =~ ^[0-9]+$ && "$passes" -ge 2 ]] || error "Nombre de passes invalide : '$passes' (minimum 2)"
   command -v curl >/dev/null || error "curl introuvable"
   command -v python3 >/dev/null || error "python3 introuvable"
-  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
-    || error "Service $SERVICE_NAME non installé : --bench-devices doit le redémarrer entre deux devices (--install-service)."
+  _svc_installed \
+    || error "Service $SERVICE_NAME non montable ici : --bench-devices doit le redémarrer entre deux devices (docker + ./setup-llm.sh --image-build)."
 
   # Devices demandés, croisés avec ceux réellement exposés par ggml
   local -a devs=()
@@ -156,7 +156,7 @@ cmd_bench_devices() {
 
   info "Comparaison '$preset' : ${devs[*]} ($passes passes chacun)"
   warn "Chaque device = régénération du ini + restart de $SERVICE_NAME (les modèles préchargés se rechargent)."
-  info "Le routeur ne lit le ini qu'au démarrage : chaque device impose un restart du service user."
+  info "Le routeur ne lit le ini qu'au démarrage : chaque device impose un restart du service."
 
   # Restore garanti (Ctrl-C en pleine comparaison : config non forcée remise)
   BENCH_DEV_DIRTY=0
@@ -165,30 +165,21 @@ cmd_bench_devices() {
       warn "Comparaison interrompue : régénération du ini sans device forcé + restart."
       unset BENCH_DEVICE_FORCE BENCH_DEVICE_FORCE_PRESET
       regen_models_ini
-      systemctl --user restart "$SERVICE_NAME" || true
+      _svc_restart || true
       BENCH_DEV_DIRTY=0
     fi
   }
   trap _bench_devices_restore EXIT
 
   local -a rows=()
-  local t
   for d in "${devs[@]}"; do
     echo ""
     info "════════ device = $d ════════"
     export BENCH_DEVICE_FORCE="$d" BENCH_DEVICE_FORCE_PRESET="$preset"
     BENCH_DEV_DIRTY=1
     regen_models_ini
-    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
-    t=0
-    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
-      sleep 2; t=$((t+2))
-      # if/fi obligatoire : "[[ ... ]] && error" retourne 1 tant que le timeout
-      # n'est pas atteint et set -e tuerait la boucle à la 1re itération
-      if [[ $t -ge 120 ]]; then
-        error "llama-server ne répond pas après 120 s : journalctl --user -u $SERVICE_NAME -e"
-      fi
-    done
+    # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
+    _svc_restart || error "Restart de $SERVICE_NAME en échec — ./setup-llm.sh --logs --tail 50"
     # Justesse d'abord : un device qui répond faux (texte propre mais dérive
     # numérique) ne doit pas entrer dans la comparaison, ses t/s sont sans objet.
     if ! _bench_sanity_one "$preset"; then
@@ -257,7 +248,7 @@ cmd_bench_devices() {
   regen_models_ini
   info "Vainqueur : $winner (tour simulé le plus court), enregistré dans $BENCH_CONF ($mkey = $winner, avant : $before), models.ini régénéré."
   info "Restart final de $SERVICE_NAME sur la config retenue..."
-  systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec : systemctl --user restart $SERVICE_NAME"
+  _svc_restart || warn "Restart en échec : ./setup-llm.sh --restart"
   BENCH_DEV_DIRTY=0
   trap - EXIT
 }

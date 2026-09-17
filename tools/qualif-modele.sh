@@ -140,13 +140,21 @@ done
 [[ -n "$TAG" ]] || TAG="$SECTION-$(date '+%Y%m%d-%H%M')"
 
 # lib/common.sh apporte SPEC_TEST_URL, SERVICE_NAME, _llama_build (étiquette de
-# moteur résolue comme le service) et les helpers info/warn/error. Il attend
-# SCRIPT_DIR : c'est la racine du dépôt, comme pour setup-llm.sh. Le PATH
-# ($HOME/.local/bin en tête, liens du fork) y est posé aussi, comme dans
-# tools/spec-isolate.sh : sans lui on étiquetterait le paquet Arch.
+# moteur, lue sur les LABEL de l'image qui sert) et les helpers info/warn/error.
+# Il attend SCRIPT_DIR : c'est la racine du dépôt, comme pour setup-llm.sh. Le
+# PATH ($HOME/.local/bin en tête, liens du fork) y est posé aussi, comme dans
+# tools/spec-isolate.sh : c'est le moteur des outils HORS service.
+# runtime.sh donne _image_ref/_image_label (étiquette de moteur), compose.sh les
+# chemins du compose généré, svc.sh les _svc_* (état du service).
 SCRIPT_DIR="$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/common.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/runtime.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/compose.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/svc.sh"
 
 OUT="$LOG_DIR/qualif/$TAG"
 RESUME="$OUT/resume.md"
@@ -202,8 +210,8 @@ else
   fi
 fi
 
-systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null \
-  || error "Service $SERVICE_NAME inactif : systemctl --user start $SERVICE_NAME"
+_svc_is_active \
+  || error "Service $SERVICE_NAME inactif : ./setup-llm.sh --start"
 curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
   || error "llama-server ne répond pas sur $SPEC_TEST_URL"
 
@@ -223,7 +231,7 @@ for m in d.get("data", []):
 if ! grep -Fxq "$SECTION" <<<"$SECTIONS_SERVIES"; then
   echo "Sections servies :" >&2
   sed 's/^/  /' <<<"$SECTIONS_SERVIES" >&2
-  error "Section '$SECTION' absente du ini servi : régénérer (--preload) puis redémarrer $SERVICE_NAME."
+  error "Section '$SECTION' absente du ini servi : régénérer (--preload) puis ./setup-llm.sh --restart."
 fi
 
 # --- Ce qui est réellement servi (status.args, pas le ini) ------------------
@@ -283,20 +291,21 @@ RC_GLOBAL=0
 
 # Attente du service entre deux étapes.
 #
-# Constaté sur bigchuck : --spec-ab se termine par _spec_ab_restore
-# (lib/spec.sh) qui régénère le ini et relance $SERVICE_NAME SANS attendre le
-# retour de /health ; l'étape suivante démarrait donc sur un serveur encore
-# éteint. Or toutes les sous-commandes appelées ici commencent par un
+# Constaté sur bigchuck avant la bascule en conteneur : --spec-ab se terminait
+# par _spec_ab_restore (lib/spec.sh) qui régénérait le ini et relançait
+# $SERVICE_NAME SANS attendre le retour de /health ; l'étape suivante démarrait
+# donc sur un serveur encore éteint. C'est maintenant _svc_restart qui attend
+# (lib/svc.sh), mais la garde reste ici : toutes les sous-commandes appelées
+# commencent par un
 # « curl -sf /health || error » à froid, sans réessai (lib/bench/bench.sh:190,
 # lib/bench/bench-cache.sh:32, lib/bench/bench-agentic.sh:170,
 # lib/spec.sh:145) : elles échouaient immédiatement. --bench-load passait par
 # hasard, parce qu'il redémarre et attend lui-même (lib/bench/bench-load.sh:45).
 # Même chose après --bench-devices, qui relance aussi à la fin sans attendre.
 #
-# lib/common.sh n'expose AUCUN helper d'attente : la boucle est recopiée à
-# l'identique dans lib/spec.sh:432,678,698,819, lib/bench/bench-devices.sh:184
-# et lib/bench/bench-load.sh:45. On reprend donc la même (poll toutes les 2 s),
-# avec une condition de plus : /health répond dès que le routeur écoute, AVANT
+# Depuis la bascule en conteneur, _svc_restart attend /health lui-même
+# (_svc_wait_ready, lib/svc.sh) et les boucles recopiées dans lib/ ont disparu.
+# Cette attente-ci reste néanmoins utile, avec une condition de plus : /health répond dès que le routeur écoute, AVANT
 # d'avoir fini de précharger et de publier sa liste de modèles, et c'est cette
 # liste que lisent toutes les mesures. On attend donc aussi un /v1/models
 # exploitable. Plafond 180 s (contre 120 s dans lib/) : les préchargés d'un
@@ -323,7 +332,7 @@ _attendre_service() {
     fi
     if [[ "$t" -ge 180 ]]; then
       warn "  $SERVICE_NAME ne répond toujours pas après 180 s : l'étape est lancée quand même."
-      warn "  Diagnostic : journalctl --user -u $SERVICE_NAME -e"
+      warn "  Diagnostic : ./setup-llm.sh --logs --tail 50"
       return 0
     fi
     sleep 2

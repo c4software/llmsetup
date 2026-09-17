@@ -56,8 +56,11 @@
 # ligne par mesure) et OUT/gen-*.txt (texte généré, à relire quand un chiffre
 # semble trop beau). Tout dans logs/, donc non versionné.
 #
-# Le service llama-server est ARRÊTÉ par le script (un seul GPU) et RELANCÉ par
-# son trap, y compris sur Ctrl-C ou sur échec du serveur jetable.
+# Le service llama-server (conteneur) est ARRÊTÉ par le script (un seul GPU) et
+# RELANCÉ par son trap, y compris sur Ctrl-C ou sur échec du serveur jetable :
+# tout passe par les _svc_* (lib/svc.sh), jamais par docker compose en direct.
+# Le serveur jetable, lui, reste un llama-server de L'HÔTE (liens du fork) :
+# porter ce test dans l'image est une étape à part.
 # =============================================================================
 set -euo pipefail
 
@@ -82,13 +85,30 @@ LOG="$OUT/serveur.log"
 # Arch en croyant mesurer le moteur servi (défaut réel du 12/09/2026).
 # LLAMA_BIN_DIR (optionnel) passe encore devant : un build à part du fork.
 export PATH="${LLAMA_BIN_DIR:+$LLAMA_BIN_DIR:}$HOME/.local/bin:$PATH"
-# ROCm/HIP sur iGPU : allocations en mémoire unifiée, comme lib/service.sh.
+# ROCm/HIP sur iGPU : allocations en mémoire unifiée, comme le compose du
+# service (lib/compose.sh).
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
-# Mode d'alimentation de l'APU appliqué par le contrôleur embarqué, même règle
-# que _ec_power_mode (lib/common.sh) : ce script ne source pas lib/common.sh (il
-# monte un serveur jetable hors service), comme tools/bench-depth.sh pour
-# l'étiquette de moteur. Journalisé parce qu'un run en "balanced" perd 10 à 13 %
+# Modules du dépôt : seuls les _svc_* sont nécessaires (arrêt et relance du
+# service le temps de la mesure), mais ils s'appuient sur common (helpers,
+# SERVICE_NAME, CONFIG_DIR), runtime (image) et compose (chemin du compose).
+# lib/common.sh attend SCRIPT_DIR = racine du dépôt, comme pour setup-llm.sh ;
+# il repose $HOME/.local/bin en tête du PATH, ce que ce script fait déjà
+# ci-dessus (LLAMA_BIN_DIR passe toujours devant).
+SCRIPT_DIR="$ROOT_DIR"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/common.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/runtime.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/compose.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/svc.sh"
+
+# Mode d'alimentation de l'APU appliqué par le contrôleur embarqué. La lecture
+# est refaite ici plutôt qu'appelée par _ec_power_mode : ce script écrit ses
+# propres en-têtes et veut la valeur brute, sans les messages du dépôt.
+# Journalisé parce qu'un run en "balanced" perd 10 à 13 %
 # de décode (mesuré le 16/09/2026) et ne se compare donc qu'à même mode. Jamais
 # bloquant : "inconnu" et un avertissement si le sysfs ne répond pas.
 EC_POWER_MODE_FILE="${EC_POWER_MODE_FILE:-/sys/class/ec_su_axb35/apu/power_mode}"
@@ -138,7 +158,7 @@ _fin() {
   fi
   echo ""
   echo "→ relance du service llama-server…"
-  systemctl --user start llama-server || echo "  ÉCHEC du restart : systemctl --user start llama-server" >&2
+  _svc_start || echo "  ÉCHEC du redémarrage : ./setup-llm.sh --start" >&2
   exit "$rc"
 }
 trap _fin EXIT INT TERM
@@ -150,7 +170,7 @@ echo "# mode EC  : $EC_MODE (alimentation de l'APU ; ne comparer qu'à même mod
 echo "# args     : ${SRV_ARGS[*]}"
 echo ""
 echo "→ arrêt du service llama-server (un seul GPU)…"
-systemctl --user stop llama-server || true
+_svc_stop || true
 sleep 3
 
 # Flags globaux du parc D'ABORD, args de l'appelant ENSUITE : llama-server

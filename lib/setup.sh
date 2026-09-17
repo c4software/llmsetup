@@ -1,5 +1,5 @@
 # lib/setup.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # setup
@@ -88,11 +88,21 @@ cmd_setup() {
     esac
   done
 
+  # --- Moteur du service : docker + image ----------------------------------
+  # Le service ne lance plus un binaire de l'hôte : il monte un conteneur
+  # décrit par le compose généré. Sans docker ou sans image, --setup va
+  # jusqu'au bout (les poids et le ini sont utiles quand même) mais le dit.
+  _setup_check_docker
+
   info "Sélection des modèles préchargés au démarrage..."
   select_preload_models
 
-  info "Génération de models.ini..."
+  info "Génération de models.ini et du docker-compose.yml..."
   regen_models_ini
+  # Le compose n'est pas indispensable au reste du setup : _svc_start le
+  # régénère de toute façon. Le générer ici sert à échouer TÔT et clairement
+  # (image absente, groupe render manquant) plutôt qu'au premier --start.
+  regen_compose || warn "docker-compose.yml non généré (voir ci-dessus) — --start le retentera."
 
   info "✅ Config générée : $CONFIG_DIR/models.ini"
   info "Setup terminé → ./setup-llm.sh --start"
@@ -105,16 +115,42 @@ cmd_setup() {
   _maybe_restart_service
 }
 
-# Proposition du moteur, en fin de --setup (et donc de --update). Isolée de
+# Moteur du SERVICE : docker et l'image du dépôt. Jamais bloquant — un --setup
+# sert aussi à télécharger des poids sur une machine qui ne servira rien.
+# Isolée de cmd_setup pour être testable seule, comme _setup_propose_fork.
+_setup_check_docker() {
+  info "Vérification du moteur du service (docker + image)..."
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "docker introuvable : le service tourne en CONTENEUR, il ne démarrera pas ici."
+    warn "  Installer docker, activer le démon au boot, puis ./setup-llm.sh --image-build."
+    return 0
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    warn "Le démon docker ne répond pas (non démarré, ou utilisateur hors du groupe docker)."
+    warn "  Sans lui, ni --image-build ni --start ne fonctionnent."
+    return 0
+  fi
+  local ref
+  if ref="$(_image_ref 2>/dev/null)"; then
+    info "  Image du moteur : $ref (étiquette des mesures : $(_llama_build))"
+  else
+    warn "  Aucune image du moteur ici — ./setup-llm.sh --image-build (40 à 60 min à froid)."
+  fi
+  return 0
+}
+
+# Proposition du moteur HORS SERVICE, en fin de --setup (et donc de --update).
+# Le fork n'est plus le moteur du service (c'est l'image), mais il reste celui
+# des outils hors service — llama-bench de --spec-ngram-tune, tools/bench-depth.sh,
+# tools/spec-isolate.sh — et le filet de retour arrière de la migration.
+# Isolée de
 # cmd_setup pour être testable seule (tests/sh-unit.sh) : cmd_setup fait paru,
 # hf et réseau, cette fonction ne lit que l'état du disque.
 #
 # Le fork strix-llama.cpp n'est pas un agrément : le parc est réglé pour lui
-# (FORK_ONLY_KEYS dans le ini, sidecar MTP de Flash-Next), et --start REFUSE de
-# démarrer le paquet Arch sur un ini qui porte ces clés (_fork_keys_guard). Un
-# --setup qui s'arrête au paquet laisse donc une machine qui ne démarre pas :
-# d'où la question, défaut OUI, contrairement à la proposition ROCm (défaut
-# non, simple option de mesure).
+# (FORK_ONLY_KEYS dans le ini, sidecar MTP de Flash-Next) et le retour arrière
+# de la migration passe par lui. D'où la question, défaut OUI, contrairement à
+# la proposition ROCm (défaut non, simple option de mesure).
 #
 # Le paquet Arch reste installé dans tous les cas : c'est le repli (--unset-fork)
 # et le seul chemin vers ROCm0.
@@ -124,9 +160,9 @@ cmd_setup() {
 # existent. Aucune variable de fork.sh n'est lue avant cet appel.
 _setup_propose_fork() {
   local etiquette reply
-  etiquette="$(_llama_build)"
+  etiquette="$(_host_llama_build)"
 
-  # Fork en place = étiquette non numérique (cf. _llama_build) ET les quatre
+  # Fork en place = étiquette non numérique (cf. _host_llama_build) ET les quatre
   # liens de ~/.local/bin pointant dans son build (_fork_links_ok) : un moteur
   # étiqueté "?" ou "bNNNNN" est le paquet, des liens partiels ne sont pas un
   # fork installé.
@@ -141,11 +177,11 @@ _setup_propose_fork() {
   fi
 
   echo ""
-  warn "Moteur : le fork strix-llama.cpp n'est pas en place (résolu : $etiquette)."
+  warn "Moteur hors service : le fork strix-llama.cpp n'est pas en place (résolu : $etiquette)."
   warn "  Les réglages du parc en dépendent : clés ini que seul le fork comprend"
   warn "  (${#FORK_ONLY_KEYS[@]} au total, dont ${FORK_ONLY_KEYS[0]} et reasoning-budget-*) et sidecar MTP de"
-  warn "  Flash-Next ; --start refuse de démarrer le paquet Arch sur un ini qui en"
-  warn "  porte une, car c'est le routeur ENTIER qui échouerait."
+  warn "  Flash-Next ; il reste aussi le moteur de llama-bench (--spec-ngram-tune,"
+  warn "  tools/bench-depth.sh) et le retour arrière de la migration en conteneur."
 
   if [[ ! -t 0 ]]; then
     warn "Entrée non interactive — rien n'est installé. À lancer :"
@@ -217,6 +253,17 @@ cmd_update() {
 #
 # Les modèles en shards sont protégés au niveau du dossier de quant : KNOWN_FILES
 # ne cite que le shard 00001, les suivants ne doivent évidemment pas sauter.
+#
+# ⚠ Les deux artefacts GÉNÉRÉS de $MODELS_BASE — `models.ini` (lib/ini.sh) et
+# `docker-compose.yml` (lib/compose.sh) — sont hors d'atteinte PAR
+# CONSTRUCTION, et les deux `find` ci-dessous ne doivent donc jamais être
+# « corrigés » en ce sens : le premier ne liste que des DOSSIERS de premier
+# niveau (`-maxdepth 1 -type d`), le second que des fichiers `*.gguf` à partir
+# de la profondeur 2 (`-mindepth 2 -name '*.gguf'`). Ces deux fichiers sont des
+# fichiers de premier niveau qui ne sont pas des .gguf : aucune des deux
+# recherches ne peut les voir. Les élargir (retirer `-maxdepth`, viser `-type f`
+# à la racine) supprimerait la configuration du service à chaque --cleanup,
+# alors qu'elle se régénère certes, mais pas au milieu d'un run.
 #
 # Dry-run par défaut ; --yes pour exécuter réellement.
 # =============================================================================

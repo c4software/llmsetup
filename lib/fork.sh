@@ -1,14 +1,16 @@
 # lib/fork.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Moteur : fork strix-llama.cpp
 #
-# Depuis le 12/09/2026 le service ne tourne plus sur le paquet Arch llama-cpp
-# mais sur https://github.com/halo-box/strix-llama.cpp, construit ici et exposé
-# par quatre liens dans $HOME/.local/bin. L'unité systemd met ce dossier en
-# tête du PATH (lib/service.sh), donc le service prend le fork sans autre
-# changement ; common.sh fait la même chose pour les mesures.
+# Du 12/09/2026 à la conteneurisation du service, le moteur SERVI était
+# https://github.com/halo-box/strix-llama.cpp, construit ici et exposé par
+# quatre liens dans $HOME/.local/bin, que l'unité systemd mettait en tête du
+# PATH. Le service tourne désormais sur l'image (lib/runtime.sh, lib/compose.sh)
+# et ces liens restent le moteur des outils HORS service — llama-bench des
+# courbes de batch, tools/bench-depth.sh, tools/spec-isolate.sh (common.sh pose
+# le même PATH) — ainsi que le filet de retour arrière de la migration.
 #
 # Le paquet Arch reste installé : retirer les liens (--unset-fork) suffit à
 # revenir dessus. Les binaires portent un RUNPATH ABSOLU vers leur dossier
@@ -16,7 +18,7 @@
 #
 # ⚠ Comparabilité : les mesures faites sous le fork forment une nouvelle série
 # (étiquette "strix-<commit>" dans la colonne build des journaux, cf.
-# _llama_build) et ne se comparent pas aux campagnes "bNNNNN" du paquet Arch.
+# _host_llama_build) et ne se comparent pas aux campagnes "bNNNNN" du paquet Arch.
 # =============================================================================
 
 FORK_REPO="https://github.com/halo-box/strix-llama.cpp"
@@ -47,10 +49,12 @@ FORK_CONF="$SCRIPT_DIR/fork.conf"
 # ENTIER qui ne démarre pas (« failed to initialize router models: option
 # 'ngram-on-disk' not recognized in preset ... », vérifié le 12/09/2026 sur le
 # paquet Arch b10809). Le dépôt ne gère pas deux moteurs : il ne filtre rien et
-# ne réécrit rien, il se contente de REFUSER de lancer un moteur upstream sur
-# un ini qui contient ces clés (_fork_keys_guard, appelé par cmd_start), avec
-# un message qui dit quoi faire — au lieu de laisser llama-server échouer sur
-# un message qui ne nomme qu'une clé.
+# ne réécrit rien, il se contente de SIGNALER ces clés quand le moteur de
+# l'hôte est upstream (_fork_keys_guard), avec un message qui dit quoi faire —
+# au lieu de laisser llama-server échouer sur un message qui ne nomme qu'une
+# clé. Depuis la bascule du service en conteneur, cmd_start ne l'appelle plus :
+# le moteur servi est celui de l'image, un seul et connu ; la garde ne
+# concerne plus que les outils hors service et le retour arrière.
 # Ne pas y mettre les clés que le paquet Arch connaît aussi (reasoning-budget,
 # spec-draft-n-min) : elles ne bloquent rien.
 FORK_ONLY_KEYS=(
@@ -65,7 +69,7 @@ FORK_ONLY_KEYS=(
   spec-prefill-p
 )
 
-# _fork_keys_guard [fichier ini] — garde-fou de démarrage. Ne dit rien si le
+# _fork_keys_guard [fichier ini] — garde-fou moteur/ini. Ne dit rien si le
 # moteur résolu est le fork (étiquette non numérique) ou inconnu ; sort en
 # erreur s'il est upstream (étiquette bNNNNN, forme du paquet) et que le ini
 # porte une clé de FORK_ONLY_KEYS, en nommant le modèle et la clé.
@@ -73,7 +77,7 @@ _fork_keys_guard() {
   local ini="${1:-$CONFIG_DIR/models.ini}"
   [[ -f "$ini" ]] || return 0
 
-  # Étiquette de moteur (_llama_build) : "bNNNNN" = build upstream, seul cas
+  # Étiquette de moteur (_host_llama_build) : "bNNNNN" = build upstream, seul cas
   # où la garde s'applique. Le fork ne numérote pas ses builds et s'étiquette
   # "<dépôt>-<commit>" ; "?" = moteur non identifié, on ne bloque pas.
   # Limite assumée : la distinction repose sur le numéro de build annoncé par
@@ -81,7 +85,7 @@ _fork_keys_guard() {
   # Un fork qui récupérerait ces tags s'annoncerait "bNNNNN" et se ferait
   # refuser à tort ; --list-devices montre alors le binaire réellement résolu.
   local etiquette
-  etiquette="$(_llama_build)"
+  etiquette="$(_host_llama_build)"
   [[ "$etiquette" =~ ^b[0-9]+(-[0-9]+)?$ ]] || return 0
 
   local ligne section="" cle k
@@ -176,7 +180,7 @@ _fork_status() {
   info "Moteur résolu : $bin"
   [[ -L "$bin" ]] && info "  → $(realpath "$bin" 2>/dev/null)"
   info "  $ver"
-  info "  Étiquette des journaux : $(_llama_build)"
+  info "  Étiquette des journaux : $(_host_llama_build)"
   if _fork_pin_read; then
     info "  Épinglé sur $FORK_PIN${FORK_PIN_RAISON:+ ($FORK_PIN_RAISON)} — $FORK_CONF"
     info "  Reprendre le suivi de la branche : ./setup-llm.sh --setup-fork (sans argument)"
@@ -577,7 +581,7 @@ cmd_setup_fork() {
   _fork_status
   echo ""
   warn "Le service ne redémarre pas tout seul : appliquer par"
-  warn "  systemctl --user restart $SERVICE_NAME"
+  warn "  ./setup-llm.sh --restart"
   warn "Mesures postérieures = nouvelle série, non comparable aux campagnes Arch."
   warn "Ne jamais déplacer $FORK_DIR (RUNPATH absolu) : relancer --setup-fork après."
 }
@@ -684,11 +688,11 @@ cmd_update_fork() {
   _fork_status
   echo ""
   warn "Rien n'est lancé automatiquement. Enchaînement :"
-  warn "  1. redémarrer le service : systemctl --user restart $SERVICE_NAME"
+  warn "  1. redémarrer le service : ./setup-llm.sh --restart"
   warn "  2. nouvelle série de mesures : lancer ./setup-llm.sh --bench à la main"
   warn "     quand vous voulez — aucun bench n'est déclenché ici."
   warn "Le moteur a changé de commit : les mesures qui suivent portent l'étiquette"
-  warn "  $(_llama_build) et forment une série à part des précédentes."
+  warn "  $(_host_llama_build) et forment une série à part des précédentes."
 }
 
 # =============================================================================
@@ -709,12 +713,12 @@ cmd_unset_fork() {
   if [[ "$n" -eq 0 ]]; then
     info "Aucun lien de fork dans $FORK_BIN_DIR — déjà sur le paquet Arch."
   else
-    warn "Retour au paquet Arch après : systemctl --user restart $SERVICE_NAME"
+    warn "Retour au paquet Arch après : ./setup-llm.sh --restart"
     warn "⚠ Les clés ini propres au fork (${FORK_ONLY_KEYS[*]})"
     warn "  font ÉCHOUER le démarrage du ROUTEUR ENTIER sur le paquet Arch :"
     warn "  llama-server refuse toute clé inconnue (« option ... not recognized »)."
-    warn "  Le dépôt ne les retire pas tout seul — il ne fait que le signaler :"
-    warn "  --start refuse de lancer un moteur upstream sur un tel ini."
+    warn "  Le dépôt ne les retire pas tout seul — il ne fait que le signaler"
+    warn "  (_fork_keys_guard, sur le moteur de l'hôte)."
     warn "  Pour rester sur le paquet : retirer ces clés de lib/models.sh, puis"
     warn "  ./setup-llm.sh --preload (régénère le ini) avant le restart."
   fi

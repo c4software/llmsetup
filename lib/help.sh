@@ -1,5 +1,5 @@
 # lib/help.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # help
@@ -38,7 +38,7 @@ Commandes :
                            Verdict = temps d'un tour d'usage simulé (2000 tokens de
                            prefill froid + 3000 générés, BENCH_PROFILE_PP/GEN pour
                            changer) ; vainqueur écrit dans bench-devices.conf,
-                           ini régénéré, restart final. Restarts via systemctl --user
+                           ini régénéré, restart final. Restarts par --restart
   --bench-parallel [modèle] [n] [passes]
                            Débit sous n requêtes simultanées (défaut : le parallel
                            du modèle) : agrégé et décode par requête, comparés à
@@ -102,21 +102,18 @@ Commandes :
                            rebuild si rien n'a bougé, et refuse si le fork n'est
                            pas le moteur en place (--setup-fork d'abord). Ne redémarre pas le service et
                            ne lance aucune mesure : enchaînement recommandé
-                           --update → --update-fork → systemctl --user restart
-                           $SERVICE_NAME → --bench à la main. ⚠ Chaque bump du
+                           --update → --update-fork → ./setup-llm.sh --restart
+                           → --bench à la main. ⚠ Chaque bump du
                            fork ouvre une nouvelle série de mesures, étiquetée au
                            commit (strix-<commit>). Si fork.conf porte un
                            épinglage : rien n'est tiré ni demandé, la commande
                            annonce le commit épinglé et sa raison, montre quand
                            même le changelog en attente et rappelle --setup-fork
                            sans argument pour reprendre le suivi
-  --unset-fork             Retire les quatre liens : retour au paquet Arch au
-                           prochain restart. ⚠ Retirer d'abord de lib/models.sh
-                           les clés ini propres au fork (ngram-on-disk,
-                           reasoning-budget-*, spec-draft-adaptive) puis
-                           --preload : le routeur Arch refuse de démarrer sur
-                           une clé inconnue, et --start le signale au lieu de
-                           le laisser échouer
+  --unset-fork             Retire les quatre liens de ~/.local/bin : retour au
+                           paquet Arch pour les outils HORS service (llama-bench
+                           de --spec-ngram-tune, tools/bench-depth.sh). Sans
+                           effet sur le service, qui tourne sur l'image
   --image-build [--no-cache]
                            Image : construit le moteur CONTENEURISÉ (runtime/,
                            ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
@@ -128,10 +125,11 @@ Commandes :
                            llm-rocm-strix:latest et supprime les images sans tag
                            issues de nos builds (label llm-setup.engine_rev).
                            Un build raté laisse l'image en place intacte.
-                           Journalise dans logs/images.tsv. ⚠ NE BASCULE AUCUN
-                           SERVICE : le moteur du service reste le fork
-                           (--setup-fork), et une image ouvre sa propre série de
-                           mesures. Compter 40 à 60 minutes à froid
+                           Journalise dans logs/images.tsv. ⚠ C'est le MOTEUR DU
+                           SERVICE : une image neuve n'est servie qu'au prochain
+                           --restart, et elle ouvre sa propre série de mesures
+                           (étiquette strix-<engine>+r<rocm>). Compter 40 à 60
+                           minutes à froid
   --image-update [engine-rev] [rocm-rev]
                            Image : suivi d'amont. Sans argument, compare les
                            révisions de runtime/image.conf aux sommets des deux
@@ -165,7 +163,7 @@ Commandes :
                            ini régénéré + restart + spec-test ; retient le meilleur
                            mesuré (à <2 %, le plus petit), l'écrit dans
                            spec-nmax.conf (surcharge du défaut script), restart final.
-                           Restarts via systemctl --user
+                           Restarts par --restart
                            Sans modèle : choix interactif parmi les MTP présents.
                            4 passes par défaut. Sert à régler
                            spec-draft-n-max (éditer le script, --preload, re-tester)
@@ -186,10 +184,25 @@ Commandes :
                            mesuré ; bilan comparé, rien d'écrit. Ex. :
                            --spec-ab qwen3.8-27b-dflash-nothink 4 - base \
                              "spec-ngram-map-k-min-hits=1" "spec-type=ngram-map-k4v,draft-mtp"
-  --start                  Lance llama-server sur :$SERVER_PORT (défaut sans argument)
-  --install-service        Installe/active le service systemd USER $SERVICE_NAME
-                           (systemctl --user) + linger (démarrage au boot)
-  --uninstall-service      Arrête, désactive et supprime le service user
+  --start                  Démarre le service $SERVICE_NAME (défaut sans argument) :
+                           docker-compose.yml régénéré dans $CONFIG_DIR, conteneur
+                           recréé (docker compose up -d --force-recreate), puis
+                           ATTENTE de /health — la commande ne rend la main que
+                           quand le routeur répond sur :$SERVER_PORT
+  --stop                   Arrête le conteneur (SIGINT, jusqu'à 180 s : le
+                           déchargement des modèles préchargés prend du temps)
+  --restart                --stop puis --start. Jamais « docker compose restart »,
+                           qui garderait l'ancienne image, l'ancienne ligne de
+                           commande et l'ancien --models-max
+  --status                 État du conteneur (docker compose ps) et réponse de
+                           /health
+  --logs [-f] [--tail N]   Journaux du conteneur (docker compose logs)
+  --migrate-off-systemd    TEMPORAIRE (migration) : arrête, désactive et supprime
+                           l'ancienne unité systemd user $SERVICE_NAME, recharge
+                           systemd, vérifie que le port $SERVER_PORT est libre et
+                           signale les liens ~/.local/bin/llama-* restants (sans
+                           les supprimer). Idempotente ; à lancer une fois avant
+                           le premier --start, puis à oublier
   --help, -h               Cette aide
 
 Fichiers (à côté du script, locaux, non versionnés) :
@@ -216,12 +229,15 @@ Fichiers versionnés (runtime/, moteur conteneurisé) :
   runtime/Dockerfile.rocm-strix
                            copie vendorisée du Dockerfile amont (PR 133) ;
                            écarts et resynchronisation dans runtime/AMONT.md
-Fichiers ($CONFIG_DIR) :
-  models.ini               généré — ne pas éditer à la main, relancer --preload/--setup
+Fichiers ($CONFIG_DIR, générés — ne pas éditer à la main) :
+  models.ini               configuration des modèles, relancer --preload/--setup
+  docker-compose.yml       description du service, régénérée à chaque --start
+                           (lib/compose.sh) ; usage manuel :
+                           cd $CONFIG_DIR && docker compose ps | logs -f
 
 Workflow typique :
-  ./setup-llm.sh --setup && ./setup-llm.sh --install-service
-  systemctl --user start $SERVICE_NAME ; journalctl --user -u $SERVICE_NAME -f
+  ./setup-llm.sh --setup && ./setup-llm.sh --image-build && ./setup-llm.sh --start
+  ./setup-llm.sh --status ; ./setup-llm.sh --logs -f
   ./setup-llm.sh --bench all          # perfs de tous les modèles présents
   ./setup-llm.sh --update qwen3.8-27b # après un re-upload unsloth
   ./setup-llm.sh --update-fork        # puis le moteur : fork à jour, rebuild, liens
