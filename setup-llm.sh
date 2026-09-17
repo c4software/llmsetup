@@ -22,17 +22,21 @@ set -euo pipefail
 # Point d'entrée — le corps du script vit dans lib/ (voir ARCHITECTURE.md).
 #
 # Ordre de source IMPOSÉ : common (helpers + variables globales de config,
-# dont les chemins *_CONF et SERVICE_NAME) → models (déclaration des modèles :
+# dont les chemins *_CONF et SERVICE_NAME) → svc (pilotage du service, utilisé
+# dès common par _maybe_restart_service) → models (déclaration des modèles :
 # téléchargements, chemins, corps MODEL_INI) → ini (génération, référence les
-# modèles) → le reste (préload/setup/bench/spec référencent ini). Toute
-# variable globale doit être définie avant les fonctions qui l'utilisent.
+# modèles) → compose (docker-compose.yml généré : a besoin de CONFIG_DIR et de
+# load_preload_conf) → le reste (préload/setup/bench/spec référencent ini).
+# Toute variable globale doit être définie avant les fonctions qui l'utilisent.
 # =============================================================================
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/svc.sh"
 source "$SCRIPT_DIR/lib/models.sh"
 source "$SCRIPT_DIR/lib/ini.sh"
+source "$SCRIPT_DIR/lib/compose.sh"
 source "$SCRIPT_DIR/lib/preload.sh"
 source "$SCRIPT_DIR/lib/setup.sh"
 source "$SCRIPT_DIR/lib/fork.sh"
@@ -75,8 +79,11 @@ case "${1:-}" in
   --spec-ngram-tune)   cmd_spec_ngram_tune "${2:-}" "${3:-}" "${4:-}" ;;
   --spec-ab)           shift; cmd_spec_ab "$@" ;;
   --start | "")        cmd_start ;;
-  --install-service)   cmd_install_service ;;
-  --uninstall-service) cmd_uninstall_service ;;
+  --stop)              cmd_stop ;;
+  --restart)           cmd_restart ;;
+  --status)            cmd_status ;;
+  --logs)              shift; cmd_logs "$@" ;;
+  --migrate-off-systemd) cmd_migrate_off_systemd ;;
   --help | -h)         cmd_help ;;
   *) cmd_help >&2; error "Commande inconnue : '$1'" ;;
 esac

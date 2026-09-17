@@ -1,106 +1,87 @@
 # lib/service.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
-# start
+# Sortie de systemd — commande de bascule, TEMPORAIRE
+#
+# Le service n'est plus une unité systemd user : c'est un conteneur décrit par
+# le docker-compose.yml généré (lib/compose.sh) et piloté par les _svc_*
+# (lib/svc.sh). Il ne reste ici que la commande qui débranche l'ancienne unité
+# sur une machine qui l'avait installée — elle sera retirée du dépôt quand le
+# parc sera passé.
+#
+# Ce qui a disparu avec l'unité : cmd_install_service / cmd_uninstall_service,
+# le linger (le démon docker démarre au boot, c'est lui qui relance le
+# conteneur grâce à restart: unless-stopped) et le PATH de l'unité (le moteur
+# vit dans l'image, plus dans ~/.local/bin).
 # =============================================================================
 
-cmd_start() {
-  # ($HOME/.local/bin est déjà en tête du PATH, posé par common.sh, et
-  #  l'unité systemd le pose aussi de son côté : le fork prime sur /usr/bin)
-  command -v llama-server >/dev/null || error "llama-server introuvable"
-  [[ -f "$CONFIG_DIR/models.ini" ]] || error "Config introuvable — lance d'abord --setup"
-  # Garde-fou moteur/ini (lib/fork.sh) : un moteur upstream sur un ini qui
-  # porte des clés du fork ne démarre pas du tout (le routeur refuse la clé
-  # inconnue, tous modèles confondus). Autant le dire ici, en nommant modèle
-  # et clé, plutôt que de laisser llama-server sortir sur « option ... not
-  # recognized » quelques lignes plus bas.
-  _fork_keys_guard "$CONFIG_DIR/models.ini"
+# cmd_migrate_off_systemd — débranche l'unité systemd user, dans l'ordre :
+# arrêt, désactivation, suppression du fichier d'unité, daemon-reload, puis
+# contrôle que le port du routeur est bien libre avant de rendre la main.
+# Idempotente : une machine sans unité la traverse sans rien casser.
+cmd_migrate_off_systemd() {
+  info "Sortie de systemd pour $SERVICE_NAME..."
 
-  # --models-max dérivé de preload.conf : nb de modèles préchargés + 1 slot
-  #   LRU pour le modèle appelé à la demande (minimum 2).
-  load_preload_conf
-  local models_max=$(( ${#PRELOADED[@]} + 1 ))
-  (( models_max < 2 )) && models_max=2
-
-  info "Lancement de llama-server (router mode) sur :$SERVER_PORT..."
-  info "  Préchargés : $(_preload_summary) — models-max=$models_max"
-
-  # --models-autoload : désormais activé par défaut côté llama-server, gardé
-  #   explicite par lisibilité.
-  # WebUI disponible sur http://0.0.0.0:<SERVER_PORT>
-  llama-server \
-    --host 0.0.0.0 \
-    --port "$SERVER_PORT" \
-    --models-preset "$CONFIG_DIR/models.ini" \
-    --models-max "$models_max" \
-    --models-autoload \
-    --jinja
-}
-
-# =============================================================================
-# Service systemd USER — piloté par systemctl --user.
-# loginctl enable-linger : les services user de ce compte démarrent au boot,
-# sans session ouverte (polkit autorise le linger sur son propre compte).
-# =============================================================================
-
-cmd_install_service() {
-  info "Génération du service systemd user..."
-
-  local script_path
-  script_path="$(realpath "$0")"
-
-  # GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 : sans effet côté Vulkan, nécessaire côté
-  # ROCm/HIP sur iGPU (alloc en mémoire unifiée/GTT au lieu de la VRAM dédiée) —
-  # posé d'office pour que la bascule d'un modèle en ROCm0 ne demande pas de
-  # retoucher le service.
-  mkdir -p "$(dirname "$SERVICE_FILE")"
-  cat > "$SERVICE_FILE" << SERVICE
-[Unit]
-Description=llama-server — LLM router mode natif
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=${script_path} --start
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-Environment="PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="GGML_CUDA_ENABLE_UNIFIED_MEMORY=1"
-
-[Install]
-WantedBy=default.target
-SERVICE
-
-  systemctl --user daemon-reload
-  systemctl --user enable "$SERVICE_NAME"
-  # linger : sans lui, les services user ne démarrent qu'à l'ouverture de
-  # session (et s'arrêtent à la fermeture) — indispensable pour un serveur
-  if loginctl enable-linger "$USER" 2>/dev/null; then
-    info "  Linger activé : le service démarre au boot, sans session ouverte."
+  if command -v systemctl >/dev/null 2>&1; then
+    # Aucun de ces appels n'est fatal : l'unité peut être déjà arrêtée, déjà
+    # désactivée, ou n'avoir jamais existé (machine neuve, ou commande rejouée).
+    systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
+    systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
+    info "  unité arrêtée et désactivée (si elle existait)."
   else
-    warn "  loginctl enable-linger a échoué — le service ne démarrera qu'à l'ouverture"
-    warn "  de session. Activer à la main : sudo loginctl enable-linger $USER"
+    warn "  systemctl introuvable — aucune unité à débrancher ici."
   fi
 
-  info "✅ Service installé : $SERVICE_FILE"
-  info "Commandes utiles :"
-  info "  systemctl --user start   $SERVICE_NAME"
-  info "  systemctl --user stop    $SERVICE_NAME"
-  info "  systemctl --user restart $SERVICE_NAME"
-  info "  systemctl --user status  $SERVICE_NAME"
-  info "  journalctl --user -u $SERVICE_NAME -f"
-}
-
-cmd_uninstall_service() {
-  if ! systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null && [[ ! -f "$SERVICE_FILE" ]]; then
-    warn "Service '$SERVICE_NAME' non installé, rien à faire."
-    return
+  if [[ -f "$SERVICE_FILE" ]]; then
+    rm -f "$SERVICE_FILE"
+    info "  unité supprimée : $SERVICE_FILE"
+  else
+    info "  aucune unité à supprimer ($SERVICE_FILE absent)."
   fi
-  systemctl --user disable --now "$SERVICE_NAME" 2>/dev/null || true
-  rm -f "$SERVICE_FILE"
-  systemctl --user daemon-reload
-  info "✅ Service user '$SERVICE_NAME' désinstallé."
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user daemon-reload 2>/dev/null || true
+  fi
+
+  # Le port doit être libre avant --start : un llama-server survivant ferait
+  # échouer la publication de port du conteneur, sur un message docker qui ne
+  # dit pas qui occupe la place.
+  # Pas de « ss | grep -q » : sous pipefail, grep -q sort au 1er match et ss
+  # meurt sur EPIPE (141), ce qui rendrait le contrôle faussement négatif.
+  if command -v ss >/dev/null 2>&1; then
+    local occupe
+    occupe="$(ss -ltn 2>/dev/null | grep -E "[:.]$SERVER_PORT[[:space:]]" || true)"
+    if [[ -n "$occupe" ]]; then
+      warn "  ⚠ le port $SERVER_PORT est ENCORE occupé :"
+      sed 's/^/      /' <<<"$occupe"
+      warn "    Un llama-server a survécu à l'arrêt de l'unité : le terminer avant --start."
+    else
+      info "  port $SERVER_PORT libre."
+    fi
+  else
+    warn "  ss introuvable — port $SERVER_PORT non vérifié."
+  fi
+
+  # Les liens du fork ne gênent pas le conteneur (le moteur vit dans l'image),
+  # mais ils restent le moteur des outils hors service (llama-bench de
+  # --spec-ngram-tune, tools/bench-depth.sh) : ils ne sont PAS supprimés ici,
+  # seulement signalés, pour que leur présence reste un choix conscient tant
+  # que lib/fork.sh est le filet de retour arrière.
+  local -a liens=()
+  local b
+  for b in llama-server llama-bench llama-cli llama-quantize; do
+    if [[ -e "$HOME/.local/bin/$b" || -L "$HOME/.local/bin/$b" ]]; then
+      liens+=("$b")
+    fi
+  done
+  if [[ ${#liens[@]} -gt 0 ]]; then
+    warn "  liens du fork encore en place dans ~/.local/bin : ${liens[*]}"
+    warn "    Sans effet sur le service (le moteur vit dans l'image), conservés"
+    warn "    comme moteur des outils hors service et comme retour arrière."
+  fi
+
+  echo ""
+  info "✅ Migration faite. Démarrer le service conteneurisé : ./setup-llm.sh --start"
+  return 0
 }

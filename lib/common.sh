@@ -1,5 +1,5 @@
 # lib/common.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Helpers
@@ -13,28 +13,30 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-# Propose un restart du service systemd si actif — appelé en fin de setup /
+# Propose un restart du service si actif — appelé en fin de setup /
 # update / cleanup / preload (config ou poids modifiés). Rappel : les poids
 # déjà mmap'és restent sur l'ancien inode tant que le serveur n'a pas redémarré.
 # Non-interactif : jamais de restart automatique, juste le rappel.
 _maybe_restart_service() {
-  systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null || return 0
+  _svc_is_active || return 0
   local reply="n"
   if [[ -t 0 ]]; then
     read -r -p "Le service $SERVICE_NAME tourne — redémarrer maintenant pour appliquer ? [O/n] " reply
     reply="${reply:-o}"
   else
     warn "Service $SERVICE_NAME actif — redémarrage non effectué (entrée non interactive)."
-    warn "  Appliquer : systemctl --user restart $SERVICE_NAME"
+    warn "  Appliquer : ./setup-llm.sh --restart"
     return 0
   fi
   if [[ "$reply" =~ ^[oOyY]$ ]]; then
     info "Redémarrage de $SERVICE_NAME..."
-    systemctl --user restart "$SERVICE_NAME" \
-      && info "✅ $SERVICE_NAME redémarré." \
-      || warn "Redémarrage en échec — voir : journalctl --user -u $SERVICE_NAME -e"
+    if _svc_restart; then
+      info "✅ $SERVICE_NAME redémarré."
+    else
+      warn "Redémarrage en échec — voir : ./setup-llm.sh --logs --tail 50"
+    fi
   else
-    info "Redémarrage sauté — appliquer plus tard : systemctl --user restart $SERVICE_NAME"
+    info "Redémarrage sauté — appliquer plus tard : ./setup-llm.sh --restart"
   fi
 }
 
@@ -189,13 +191,15 @@ SPEC_LOG="$LOG_DIR/spec-tests.log"
 # de la comparaison au run précédent (py/bench_compare.py).
 BENCH_LOG="$LOG_DIR/bench.log"
 
-# Binaire llama.cpp effectivement utilisé, résolu COMME LE SERVICE : le
-# service (lib/service.sh) met $HOME/.local/bin en tête du PATH, donc les
-# liens du fork y priment sur le paquet Arch de /usr/bin. Une session ssh
-# sans ce PATH lisait le binaire Arch et journalisait son build pour des
-# mesures faites par le fork (arrivé le 12/09/2026, deux lignes de
-# logs/bench.log) : on cherche donc d'abord dans ~/.local/bin, repli sur le
-# PATH. $1 = nom du binaire (défaut llama-server).
+# Binaire llama.cpp de l'HÔTE, résolu comme l'était le service avant sa
+# conteneurisation : $HOME/.local/bin d'abord (liens du fork strix-llama.cpp),
+# repli sur le PATH (paquet Arch). Une session ssh sans ce PATH lisait le
+# binaire Arch et journalisait son build pour des mesures faites par le fork
+# (arrivé le 12/09/2026, deux lignes de logs/bench.log).
+# Depuis la bascule du service en conteneur, ce binaire n'est PLUS celui qui
+# sert les modèles : il reste le moteur des outils hors service (llama-bench
+# de --spec-ngram-tune, tools/bench-depth.sh, tools/spec-isolate.sh).
+# $1 = nom du binaire (défaut llama-server).
 _llama_bin() {
   local n="${1:-llama-server}"
   if [[ -x "$HOME/.local/bin/$n" ]]; then
@@ -205,8 +209,58 @@ _llama_bin() {
   fi
 }
 
-# Étiquette de moteur, journalisée par toutes les mesures. Deux formes, parce
-# que deux moteurs coexistent (cf. README « Moteur : fork strix-llama.cpp ») :
+# Étiquette de moteur, journalisée par toutes les mesures.
+#
+# Depuis la conteneurisation du service, ce qui sert les modèles est l'image
+# (runtime/, lib/runtime.sh) : l'étiquette vient de ses LABEL, pas d'un binaire
+# de l'hôte que plus personne n'appelle pour servir. Forme retenue :
+# "strix-<engine7>+r<rocm7>" — les deux révisions comptent, un même moteur
+# compilé sur un autre ROCr/HIP ne donne pas les mêmes chiffres, et c'est
+# précisément le couple que runtime/image.conf épingle.
+# Mémoïsée dans le processus : une campagne --bench all appelle cette fonction
+# une fois par modèle et par journal, et chaque appel coûte deux docker inspect.
+# Replis, dans l'ordre : la dernière ligne de logs/images.tsv (l'image a pu
+# être supprimée après coup, le journal reste), puis "?".
+# Une étiquette n'est JAMAIS numérique pure côté consommateurs : elle est
+# traitée en chaîne partout (colonne build des journaux TSV, comparaison
+# « build X → Y » de py/bench_compare.py).
+_LLAMA_BUILD_CACHE="${_LLAMA_BUILD_CACHE:-}"
+_llama_build() {
+  if [[ -n "$_LLAMA_BUILD_CACHE" ]]; then
+    printf '%s\n' "$_LLAMA_BUILD_CACHE"
+    return 0
+  fi
+
+  local etiquette="" ref e="" r=""
+  # lib/runtime.sh est sourcé après common.sh : la résolution se fait à
+  # l'appel, mais un outil qui ne source que common.sh (aucun aujourd'hui)
+  # ne doit pas échouer ici.
+  if declare -F _image_ref >/dev/null 2>&1 && ref="$(_image_ref 2>/dev/null)"; then
+    e="$(_image_label "$ref" "$IMAGE_LABEL_ENGINE")"
+    r="$(_image_label "$ref" "$IMAGE_LABEL_ROCM")"
+  fi
+  # Repli : le journal des builds (date, tag, engine_rev, rocm_rev, taille).
+  if [[ -z "$e" && -f "${IMAGE_LOG:-$LOG_DIR/images.tsv}" ]]; then
+    e="$(awk -F'\t' 'END{print $3}' "${IMAGE_LOG:-$LOG_DIR/images.tsv}" 2>/dev/null || true)"
+    r="$(awk -F'\t' 'END{print $4}' "${IMAGE_LOG:-$LOG_DIR/images.tsv}" 2>/dev/null || true)"
+    [[ "$e" =~ ^[0-9a-f]+$ ]] || e=""
+    [[ "$r" =~ ^[0-9a-f]+$ ]] || r=""
+  fi
+  if [[ -n "$e" ]]; then
+    etiquette="strix-${e:0:7}"
+    [[ -n "$r" ]] && etiquette="${etiquette}+r${r:0:7}"
+  fi
+
+  _LLAMA_BUILD_CACHE="${etiquette:-?}"
+  printf '%s\n' "$_LLAMA_BUILD_CACHE"
+  return 0
+}
+
+# Étiquette du moteur de l'HÔTE (fork strix-llama.cpp ou paquet Arch). Ce
+# n'est plus l'étiquette des mesures du service — c'est celle du binaire que
+# lib/fork.sh installe et que les outils hors service appellent.
+# Deux formes, parce que deux moteurs coexistent sur l'hôte
+# (cf. README « Moteur : fork strix-llama.cpp ») :
 #   - upstream (paquet Arch) : "b10809", le numéro de build de
 #     `--version` ("version: 0.4.0-dev (build 10809, commit 5266f24da7)") ;
 #   - fork (binaire construit depuis les sources, realpath dans un build/bin) :
@@ -214,10 +268,9 @@ _llama_bin() {
 #     de build affiché (1 en clone superficiel, 2224 une fois approfondi). Règle du préfixe :
 #     nom du dossier du dépôt (realpath du binaire remonté de build/bin),
 #     amputé du suffixe "-llama.cpp" ; "fork" si le chemin ne dit rien.
-# Repli final sur la version du paquet. Une étiquette n'est JAMAIS numérique
-# pure côté consommateurs : elle est traitée en chaîne partout (colonne build
-# des journaux TSV, comparaison « build X → Y » de py/bench_compare.py).
-_llama_build() {
+# Repli final sur la version du paquet. C'est cette forme que lit
+# _fork_keys_guard pour distinguer le paquet upstream du fork.
+_host_llama_build() {
   local bin ver b commit repo
   bin="$(_llama_bin llama-server)"
   if [[ -n "$bin" ]]; then
@@ -294,9 +347,13 @@ SPEC_CONF="$SCRIPT_DIR/spec-nmax.conf"
 # backend à l'autre — d'où une conf locale plutôt qu'une valeur dans le script.
 SPEC_NGRAM_CONF="$SCRIPT_DIR/spec-ngram.conf"
 
+# Nom du service, et NOM DU CONTENEUR (container_name du compose généré) :
+# les deux sont volontairement le même, pour que tous les messages du dépôt
+# restent exacts et qu'un `docker logs llama-server` à la main marche.
 SERVICE_NAME="llama-server"
-# Service systemd USER : piloté par systemctl --user, démarre au
-# boot sans session via loginctl enable-linger (posé par --install-service)
+# Ancienne unité systemd user. Elle n'est plus ni générée ni utilisée : ce
+# chemin ne sert plus qu'à cmd_migrate_off_systemd (lib/service.sh), qui la
+# débranche sur les machines qui l'avaient installée. À retirer avec elle.
 SERVICE_FILE="$HOME/.config/systemd/user/${SERVICE_NAME}.service"
 
 # =============================================================================
