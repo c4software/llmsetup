@@ -32,7 +32,7 @@ régresser.
 ordre imposé :
 
 ```
-common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+common → models → ini → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
@@ -101,6 +101,28 @@ common → models → ini → preload → setup → fork → bench → bench-dev
   portent un RUNPATH absolu : déplacer le dépôt impose un rebuild. Les mesures
   faites sous le fork forment une série à part (`_llama_build` les étiquette
   `strix-<commit>` au lieu de `bNNNNN`).
+- `runtime.sh` : **second moteur**, conteneurisé (dossier `runtime/`, voir plus
+  bas). `_image_read_conf` (lecture stricte de `runtime/image.conf` : une clé
+  inconnue est une erreur, pas un silence), `_image_tag` / `_image_ref` (tag
+  unique `latest`), `_image_ls_remote` (résolution d'une branche en sha avant le
+  build : un `LABEL` ne peut pas lire `versions.txt`, produit pendant le build),
+  `cmd_image_build [--no-cache]` (build sous le tag TEMPORAIRE `:build`,
+  vérification que `/opt/strix/versions.txt` et les quatre binaires
+  correspondent à ce qui a été demandé, PUIS seulement promotion en `:latest`,
+  journal `logs/images.tsv` et ménage), `_image_purge_dangling` (ne supprime que
+  des images **sans tag portant `llm-setup.engine_rev`** : jamais de
+  `docker system prune`, jamais `docker image prune -a`, la machine héberge
+  d'autres images), `cmd_image_update [engine-rev] [rocm-rev]` (compare aux
+  sommets des deux branches et s'arrête ; `IMAGE_UPDATE_YES=1` vaut accord, même
+  convention que `FORK_UPDATE_YES` ; c'est aussi le retour arrière du moteur),
+  `cmd_image_status`, et `_dk_run <binaire> [args]` (exécution dans l'image :
+  `/dev/kfd` + `/dev/dri`, gid NUMÉRIQUES de `render` et `video` via `getent`,
+  `seccomp=unconfined` compensé par `no-new-privileges` et `cap-drop=ALL`,
+  `--shm-size 8g`, memlock illimité, `~/models` monté au MÊME chemin absolu en
+  lecture seule, `--network none` par défaut — jamais `--privileged`, jamais
+  `docker.sock`).
+  ⚠ Aucune de ces commandes ne bascule le service : à ce stade le moteur servi
+  reste le fork épinglé. Comme pour lui, une image = une série de mesures.
 - `bench/bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`, précédée
   de la garde mémoire `_ensure_room_for`), les
   sélections (`_bench_presets`, `_bench_select_presets`, `_bench_select_one`)
@@ -367,6 +389,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench-parallel.log` | `cmd_bench_parallel` | `date modèle device build parallel_srv n agrégé décode_par_requête passes` |
 | `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
 | `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N` (une ligne par scénario et par passe, passe 0 = appel froid ; `N` = boucles simultanées de la salve, 1 pour la référence solo ; colonne ajoutée en queue le 15/09/2026, les lignes antérieures à 13 colonnes restent lisibles ; sur les lignes `N > 1`, `prompt_tok`..`decode_tps` valent `n/c`, chaque conteneur lisant le compteur global du serveur) |
+| `images.tsv` | `cmd_image_build` | `date tag engine_rev rocm_rev taille_octets` (une ligne par image construite ET vérifiée ; complément de l'historique git de `runtime/image.conf`) |
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
@@ -421,6 +444,39 @@ avant la mesure) : prefill et décode à 0 / 16k / 32k (64k sur demande), KV
 en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 `logs/bench-depth.log` + `.tsv`.
 
+## Moteur conteneurisé (`runtime/`)
+
+Dossier **versionné**, consommé par `lib/runtime.sh` et par personne d'autre.
+
+| Fichier | Rôle |
+|---|---|
+| `Dockerfile.rocm-strix` | copie vendorisée du Dockerfile de la PR 133 de `kyuz0/amd-strix-halo-toolboxes` (ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 de `pwilkin/rocm-systems` + `halo-box/strix-llama.cpp` en HIP seul) |
+| `patches/` | les deux patchs que le build applique au moteur (grammaire, contournement llama.cpp #25992) |
+| `image.conf` | dépôts, branches, **révisions épinglées**, nom de l'image |
+| `AMONT.md` | provenance, **liste exacte des écarts** avec l'amont, procédure de resynchronisation |
+
+Trois choix structurent le reste :
+
+1. **L'image ne contient que le moteur et son runtime** — pas de modèle, pas de
+   configuration, pas de cache, pas d'état. Les poids arrivent par le montage en
+   lecture seule de `_dk_run`, `models.ini` reste dans `~/models`. Une image est
+   donc jetable, et un `COPY` amont d'outil ou de données ne se reprend pas.
+2. **Un seul tag, `llm-rocm-strix:latest`.** Reconstruire prend quelques
+   minutes, on ne collectionne pas les images. La traçabilité tient aux trois
+   `LABEL` (`llm-setup.engine_rev`, `llm-setup.rocm_rev`,
+   `llm-setup.build_date`), à `/opt/strix/versions.txt` dans l'image, à
+   `logs/images.tsv` sur la machine — et surtout à **l'historique git de
+   `image.conf`**, qui EST le journal des révisions. Il n'y a pas de rollback
+   par tag : revenir en arrière, c'est y remettre les anciennes révisions.
+3. **Construire ne promeut pas.** Le build se fait sous `:build`, la
+   vérification décide, la promotion suit. Un build raté ou une `versions.txt`
+   discordante laissent `:latest` intacte — c'est le seul filet qui reste, et
+   `tests/sh-unit.sh` le couvre (faux `docker`, faux `git ls-remote`).
+
+L'épinglage de `image.conf` est le seul écart de fond avec l'amont, qui assume
+de ne rien épingler. Le motif est celui de `fork.conf` : un moteur qui change
+tout seul rend les séries de mesures incomparables.
+
 ## Invariants (à ne pas casser)
 
 - `models.ini` **byte-identique** à confs égales : `generate_models_ini` est
@@ -433,6 +489,12 @@ en q8_0 comme le service, tour simulé par profondeur et par device. Journal
   unsloth, absente du fork servi (vérifié le 15/09/2026) ; seul `--mmproj`
   reste incompatible avec un drafter.
 - `--cleanup` piloté uniquement par `KNOWN_FILES`.
+- Le ménage d'images ne touche QUE des images sans tag portant
+  `llm-setup.engine_rev` : jamais `docker system prune`, jamais
+  `docker image prune -a`, jamais une image taguée qu'on n'a pas construite.
+- Une image n'est promue en `llm-rocm-strix:latest` qu'après vérification de
+  `/opt/strix/versions.txt` contre les révisions demandées : un échec laisse
+  l'image précédente en place.
 - Restart requis après toute régénération du ini (routeur = lecture au boot).
 - Mesures spec : l'état réel vient de `/v1/models`, jamais du script/ini.
 - Une mesure ne redémarre pas le routeur pour faire de la place : la garde

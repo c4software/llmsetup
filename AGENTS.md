@@ -47,11 +47,14 @@ résumer ou la supprimer, non.
 - Toute modif de `spec_analyze.py` ⇒ aussi `python3 tests/py-unit.py`
   (tests unitaires de `fit_alpha`/`fit_timing`/`predict`/`recommend` sur
   données synthétiques exactes).
-- Toute modif de `_llama_bin` / `_llama_build` (lib/common.sh) ou de
-  `FORK_ONLY_KEYS` / `_fork_keys_guard` (lib/fork.sh) ⇒ `./tests/sh-unit.sh` :
+- Toute modif de `_llama_bin` / `_llama_build` (lib/common.sh), de
+  `FORK_ONLY_KEYS` / `_fork_keys_guard` (lib/fork.sh) ou de `lib/runtime.sh`
+  (moteur conteneurisé) ⇒ `./tests/sh-unit.sh` :
   résolution du binaire comme le service, forme de l'étiquette de moteur
-  (`bNNNNN` upstream, `strix-<commit>` pour le fork) et refus de démarrer un
-  moteur upstream sur un ini qui porte des clés du fork.
+  (`bNNNNN` upstream, `strix-<commit>` pour le fork), refus de démarrer un
+  moteur upstream sur un ini qui porte des clés du fork, et, pour l'image :
+  lecture de `runtime/image.conf`, promotion en `:latest` seulement après
+  vérification de `versions.txt`, ménage limité à nos images sans tag.
 - `bash -n` sur chaque fichier touché ; `shellcheck` si dispo (signaler
   plutôt que refactorer ; le style SC2155-like existant est assumé).
 

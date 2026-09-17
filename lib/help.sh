@@ -117,6 +117,38 @@ Commandes :
                            --preload : le routeur Arch refuse de démarrer sur
                            une clé inconnue, et --start le signale au lieu de
                            le laisser échouer
+  --image-build [--no-cache]
+                           Image : construit le moteur CONTENEURISÉ (runtime/,
+                           ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
+                           halo-box/strix-llama.cpp en HIP seul) sur les
+                           révisions de runtime/image.conf, sous un tag
+                           temporaire ; vérifie que /opt/strix/versions.txt et
+                           les quatre binaires correspondent à ce qui a été
+                           demandé, puis seulement promeut en
+                           llm-rocm-strix:latest et supprime les images sans tag
+                           issues de nos builds (label llm-setup.engine_rev).
+                           Un build raté laisse l'image en place intacte.
+                           Journalise dans logs/images.tsv. ⚠ NE BASCULE AUCUN
+                           SERVICE : le moteur du service reste le fork
+                           (--setup-fork), et une image ouvre sa propre série de
+                           mesures. Compter 40 à 60 minutes à froid
+  --image-update [engine-rev] [rocm-rev]
+                           Image : suivi d'amont. Sans argument, compare les
+                           révisions de runtime/image.conf aux sommets des deux
+                           branches, affiche l'écart et S'ARRÊTE — rien n'est
+                           modifié sans confirmation (entrée non interactive :
+                           rien ; IMAGE_UPDATE_YES=1 vaut accord, comme
+                           FORK_UPDATE_YES). Avec accord ou avec des révisions
+                           données : réécrit image.conf puis enchaîne
+                           --image-build. C'est aussi le RETOUR ARRIÈRE du
+                           moteur conteneurisé (y remettre les anciennes
+                           révisions ; il n'y a pas de rollback par tag)
+  --image-status           Image : révisions demandées (runtime/image.conf),
+                           image llm-rocm-strix:latest en place avec ses
+                           étiquettes (moteur, rocm-systems, date), verdict de
+                           conformité entre les deux, taille, images sans tag
+                           restantes et place du cache de build. Ne construit ni
+                           ne purge rien
   --list-devices           Moteur résolu (paquet Arch ou fork) + backends ggml
                            installés + devices exposés par llama-bench,
                            croisés avec bench-devices.conf (alerte si device disparu)
@@ -174,8 +206,16 @@ Fichiers (à côté du script, locaux, non versionnés) :
   logs/bench-agentic.log   journal des --bench-agentic
   logs/bench-load.log      journal des --bench-load
   logs/spec-batch.log/.tsv journal des balayages tools/bench-spec-batch.sh
+  logs/images.tsv          journal des --image-build (date, tag, révisions, taille)
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
   spec-ngram.conf          modèle = spec-ngram-map-k-size-m retenu par --spec-ngram-tune
+Fichiers versionnés (runtime/, moteur conteneurisé) :
+  runtime/image.conf       dépôts, branches et RÉVISIONS épinglées de l'image,
+                           plus son nom ; son historique git est le journal des
+                           révisions (le retour arrière passe par lui)
+  runtime/Dockerfile.rocm-strix
+                           copie vendorisée du Dockerfile amont (PR 133) ;
+                           écarts et resynchronisation dans runtime/AMONT.md
 Fichiers ($CONFIG_DIR) :
   models.ini               généré — ne pas éditer à la main, relancer --preload/--setup
 

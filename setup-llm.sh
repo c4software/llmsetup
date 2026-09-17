@@ -36,6 +36,7 @@ source "$SCRIPT_DIR/lib/ini.sh"
 source "$SCRIPT_DIR/lib/preload.sh"
 source "$SCRIPT_DIR/lib/setup.sh"
 source "$SCRIPT_DIR/lib/fork.sh"
+source "$SCRIPT_DIR/lib/runtime.sh"
 source "$SCRIPT_DIR/lib/bench/bench.sh"
 source "$SCRIPT_DIR/lib/bench/bench-devices.sh"
 source "$SCRIPT_DIR/lib/bench/bench-parallel.sh"
@@ -65,6 +66,9 @@ case "${1:-}" in
   --setup-fork)        cmd_setup_fork "${2:-}" "${3:-}" ;;
   --update-fork)       cmd_update_fork ;;
   --unset-fork)        cmd_unset_fork ;;
+  --image-build)       cmd_image_build "${2:-}" ;;
+  --image-update)      cmd_image_update "${2:-}" "${3:-}" ;;
+  --image-status)      cmd_image_status ;;
   --list-devices)      cmd_list_devices ;;
   --spec-test)         cmd_spec_test "${2:-}" "${3:-}" "${4:-}" ;;
   --spec-tune)         cmd_spec_tune "${2:-}" "${3:-}" "${4:-}" ;;
