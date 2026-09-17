@@ -1,5 +1,5 @@
 # lib/fork.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Moteur : fork strix-llama.cpp
@@ -57,8 +57,18 @@ FORK_CONF="$SCRIPT_DIR/fork.conf"
 # concerne plus que les outils hors service et le retour arrière.
 # Ne pas y mettre les clés que le paquet Arch connaît aussi (reasoning-budget,
 # spec-draft-n-min) : elles ne bloquent rien.
+# Trois clés ajoutées le 18/09/2026 avec la bascule sur le moteur de l'image :
+# fit et load-mode sont des flags GLOBAUX du ini ([*], lib/ini.sh), lazy-mode
+# remplace ngram-on-disk sur la section Flash-Next. Aucune des trois n'existe
+# dans le paquet Arch, et elles suivent donc la même règle que les autres : le
+# retour au paquet impose de les retirer à la main puis de relancer --preload.
+# ngram-on-disk reste dans la liste bien que plus aucune section ne la pose :
+# la garde lit un ini sur disque, qui peut être plus ancien que le script.
 FORK_ONLY_KEYS=(
   ngram-on-disk
+  lazy-mode
+  fit
+  load-mode
   reasoning-budget-enable
   reasoning-budget-soft-ratio
   reasoning-budget-soft2-ratio
@@ -443,9 +453,10 @@ _fork_confirm() {
 }
 
 # Configuration cmake + construction des quatre cibles.
-# Vulkan toujours, plus ROCm (GGML_HIP, gfx1151) si /opt/rocm est présent :
-# --bench-devices doit pouvoir comparer Vulkan0 et ROCm0 sur le MÊME moteur,
-# les modèles MTP / DFlash n'existant que sur le fork.
+# Vulkan toujours, plus ROCm (GGML_HIP, gfx1151) si /opt/rocm est présent. Ce
+# fork est le moteur des outils HORS service et le filet de retour arrière de
+# la migration ; le moteur du SERVICE est l'image de runtime/, construite en
+# HIP seul (un seul device, plus de comparaison : cf. lib/models.sh).
 _fork_build() {
   if _fork_skip_build; then
     warn "FORK_SKIP_BUILD=1 — construction sautée (mode test uniquement)."

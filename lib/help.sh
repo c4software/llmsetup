@@ -1,5 +1,5 @@
 # lib/help.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # help
@@ -7,7 +7,7 @@
 
 cmd_help() {
   cat <<HELP
-setup-llm.sh — llama-server en router mode natif (Strix Halo, Vulkan/ROCm)
+setup-llm.sh — llama-server en router mode natif (Strix Halo, image ROCm)
 
 Usage : ./setup-llm.sh [commande] [options]
 
@@ -31,14 +31,6 @@ Commandes :
                            décode et acceptance MTP médians, tableau récapitulatif.
                            Pas de restart, rien d'écrit. Sans argument : sélection
                            interactive
-  --bench-devices [modèle] [devices] [n]
-                           Comparaison automatique des devices pour un modèle :
-                           pour chaque device (défaut Vulkan0,ROCm0), ini régénéré
-                           + restart + bench (n passes, défaut 3), tableau comparatif.
-                           Verdict = temps d'un tour d'usage simulé (2000 tokens de
-                           prefill froid + 3000 générés, BENCH_PROFILE_PP/GEN pour
-                           changer) ; vainqueur écrit dans bench-devices.conf,
-                           ini régénéré, restart final. Restarts par --restart
   --bench-parallel [modèle] [n] [passes]
                            Débit sous n requêtes simultanées (défaut : le parallel
                            du modèle) : agrégé et décode par requête, comparés à
@@ -64,8 +56,9 @@ Commandes :
                            Journal logs/bench-agentic.log
   --bench-sanity [modèle|all]
                            Le modèle répond-il juste (question à réponse connue) ?
-                           Complète le garde-fou anti-charabia ; --bench-devices
-                           l'applique avant chaque device
+                           Complète le garde-fou anti-charabia de timings.py, qui
+                           n'attrape que le charabia, pas un texte propre et faux.
+                           Première étape, BLOQUANTE, de tools/qualif-modele.sh
   --bench-load [modèle|all]
                            Temps de chargement + 1er token après restart, puis TTFT
                            à chaud — ce que coûte un modèle à la demande (preload,
@@ -147,9 +140,10 @@ Commandes :
                            conformité entre les deux, taille, images sans tag
                            restantes et place du cache de build. Ne construit ni
                            ne purge rien
-  --list-devices           Moteur résolu (paquet Arch ou fork) + backends ggml
-                           installés + devices exposés par llama-bench,
-                           croisés avec bench-devices.conf (alerte si device disparu)
+  --list-devices           Moteur de l'HÔTE (paquet Arch ou fork) + backends ggml
+                           installés, puis les devices exposés par l'IMAGE du
+                           service (llama-bench --list-devices dans le conteneur).
+                           Alerte si ROCm0, le device de tout le ini, manque
   --spec-test [modèle] [n] [prompt]
                            Mesure le décode réel via l'API (spéculation incluse) :
                            n passes du même prompt code, prompt/gen t/s, acceptance
@@ -206,8 +200,6 @@ Commandes :
   --help, -h               Cette aide
 
 Fichiers (à côté du script, locaux, non versionnés) :
-  bench-devices.conf       clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par
-                           --bench-devices, édition manuelle OK
   preload.conf             modèles préchargés, un par ligne
   fork.conf                épinglage du moteur (pin = commit, raison = texte),
                            écrit par --setup-fork <commit>

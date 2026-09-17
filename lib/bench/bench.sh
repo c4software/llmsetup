@@ -1,5 +1,5 @@
 # lib/bench/bench.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # bench — mesure de perfs via le serveur, tel qu'il tourne
@@ -38,9 +38,9 @@
 #   possible (et il le dit). Jamais de restart : si la place manque encore, il
 #   avertit et laisse le routeur faire. BENCH_NO_UNLOAD=1 rend au bench son
 #   ancien comportement strictement passif.
-# Le choix du device par modèle reste celui de bench-devices.conf
-# (--bench-devices pour le comparer automatiquement, édition manuelle sinon) ;
-# le réglage MTP passe par --spec-test/--spec-tune.
+# Le device n'est plus un choix : le moteur de l'image n'expose que ROCm0
+# (cf. l'en-tête de lib/models.sh) ; le réglage MTP passe par
+# --spec-test / --spec-tune / --spec-ab.
 # =============================================================================
 
 BENCH_PASSES=3
@@ -256,7 +256,7 @@ _bench_select_one() {
   BENCH_DEV_CHOICE=""
   [[ ${#BENCH_PRESETS[@]} -gt 0 ]] || error "Aucun GGUF présent sous $MODELS_BASE, lancer --setup."
   if [[ ! -t 0 ]]; then
-    error "Entrée non interactive : préciser le modèle (./setup-llm.sh --bench-devices <modèle>)"
+    error "Entrée non interactive : préciser le modèle (./setup-llm.sh --bench-sanity <modèle>)"
   fi
   if command -v gum >/dev/null 2>&1; then
     local line
@@ -279,4 +279,109 @@ _bench_select_one() {
       BENCH_DEV_CHOICE="${BENCH_PRESETS[$((n-1))]}"
     fi
   fi
+}
+
+# =============================================================================
+# bench-sanity — le modèle répond-il JUSTE ?
+#
+# Usage : ./setup-llm.sh --bench-sanity [modèle|all]
+#
+# Une tâche à réponse connue (prompts/bench-sanity.txt : recopier un code
+# exact). Volontairement triviale : la première version demandait un petit
+# calcul (93), que le 9b nothink a raté (33) sans que le backend y soit pour
+# rien — une question qui teste le modèle condamnerait un moteur sain. La
+# recopie, tout modèle la réussit ; un backend qui dérive (noyau faux, tokens
+# corrompus) la rate forcément. Le garde-fou « sortie dégénérée » de timings.py
+# attrape le charabia ; celui-ci attrape un texte propre et faux.
+#
+# C'était la porte d'entrée de --bench-devices, retiré le 18/09/2026 avec la
+# bascule sur un moteur à device unique. La commande reste, et c'est même la
+# PREMIÈRE étape, BLOQUANTE, de tools/qualif-modele.sh : mesurer les t/s d'un
+# moteur qui répond faux n'a aucun sens, et c'est exactement ce qui est arrivé
+# deux fois (DeepSeek V4 et Qwen3-Coder-Next sur le ROCm système).
+# =============================================================================
+BENCH_SANITY_ATTENDU="LAMPADAIRE-2719"
+
+_bench_sanity_one() {
+  # $1 modèle → 0 si juste, 1 sinon (ligne lisible affichée)
+  local preset="$1" body out
+  # Garde mémoire : cette requête charge le modèle si besoin (lib/common.sh)
+  _ensure_room_for "$preset"
+  # 400 tokens : un modèle qui pense d'abord doit pouvoir finir
+  body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$preset" 400 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
+  out="$(curl -s "$SPEC_TEST_URL/v1/chat/completions" -H 'Content-Type: application/json' -d "$body")" \
+    || { warn "  justesse : échec curl"; return 1; }
+  if python3 "$SCRIPT_DIR/py/check_answer.py" "$out" "$BENCH_SANITY_ATTENDU"; then
+    return 0
+  fi
+  return 1
+}
+
+cmd_bench_sanity() {
+  local target="${1:-}"
+  curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL - ./setup-llm.sh --start"
+  local -a cibles=()
+  if [[ "$target" == "all" ]]; then
+    _bench_presets; cibles=("${BENCH_PRESETS[@]}")
+  elif [[ -n "$target" ]]; then
+    [[ -n "${MODEL_INI[$target]:-}" ]] || error "Modèle inconnu : '$target' (voir --help)"
+    cibles=("$target")
+  else
+    _bench_select_one
+    [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné."; return; }
+    cibles=("$BENCH_DEV_CHOICE")
+  fi
+  local p rc=0
+  for p in "${cibles[@]}"; do
+    info "── $p ──"
+    _bench_sanity_one "$p" || rc=1
+  done
+  return $rc
+}
+
+# =============================================================================
+# list-devices — ce que le moteur expose réellement
+#
+# Depuis le 18/09/2026 le moteur du SERVICE est l'image (lib/runtime.sh), qui
+# n'expose qu'un device, ROCm0 : la liste n'est plus un choix à faire mais un
+# contrôle après un bump d'image (un ROCm0 absent = rien ne charge). Elle est
+# donc demandée à l'image elle-même, par _dk_run, et plus au llama-bench de
+# l'hôte. Le moteur de l'hôte (fork ou paquet Arch) reste affiché juste avant :
+# c'est lui qui sert les outils HORS service.
+# =============================================================================
+
+cmd_list_devices() {
+  # Moteur de l'HÔTE : paquet Arch ou fork strix-llama.cpp (lib/fork.sh). Il
+  # décide ce que valent les mesures hors service et si les clés propres au
+  # fork sont comprises par un éventuel retour arrière.
+  _fork_status
+  echo ""
+
+  info "Backends ggml installés sur l'hôte (outils hors service seulement) :"
+  local pkg
+  for pkg in ggml-cpu ggml-vulkan ggml-hip ggml-cuda ggml-blas ggml-openvino; do
+    if paru -Qi "$pkg" &>/dev/null; then
+      echo "  ✔ $pkg"
+    else
+      echo "  · $pkg (absent)"
+    fi
+  done
+
+  echo ""
+  if ! _image_ref >/dev/null 2>&1; then
+    warn "Aucune image du moteur ici — ./setup-llm.sh --image-build."
+    return 0
+  fi
+  info "Devices exposés par l'image du service (llama-bench --list-devices) :"
+  local devs
+  devs="$(_dk_run llama-bench --list-devices 2>&1 || true)"
+  printf '%s\n' "$devs" | sed 's/^/  /'
+  if ! grep -q "$DEFAULT_DEVICE" <<<"$devs"; then
+    echo ""
+    warn "$DEFAULT_DEVICE (le device de tout le ini) n'apparaît PAS dans cette liste :"
+    warn "  aucun modèle ne chargera. Reconstruire l'image (--image-build) et"
+    warn "  vérifier /dev/kfd, /dev/dri et les groupes render/video de l'hôte."
+  fi
+  return 0
 }

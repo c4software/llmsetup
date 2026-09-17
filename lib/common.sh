@@ -1,5 +1,5 @@
 # lib/common.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Helpers
@@ -86,43 +86,6 @@ _dl_shard() {
   HF_XET_HIGH_PERFORMANCE=1 hf download "$repo" --include "$glob" --local-dir "$dest_dir"
 }
 
-# _derive <cible absolue> <source absolue> <script du dépôt>
-#   Fichier PRODUIT localement : aucun repo HF ne le porte, il est calculé à
-#   partir d'un fichier déjà téléchargé (cas unique aujourd'hui : le sidecar MTP
-#   de Qwen3.8-Flash-Next renommé pour le fork, cf. tools/mtp-rename-hc-head.py).
-#   Mêmes règles que _dl pour --update (ONLY) et le skip, sauf que la fraîcheur
-#   se juge sur la source : une source retéléchargée (etag changé) redonne une
-#   cible plus vieille qu'elle, donc à refaire.
-#   Rien n'est fatal ici : le setup des autres modèles doit aller au bout. Une
-#   dérivation sautée se paie au chargement du modèle qui consomme le fichier,
-#   avec le message de llama-server, pas par un setup interrompu.
-_derive() {
-  local cible="$1" source="$2" script="$3"
-  _skip "$cible" && return 0
-  if [[ -f "$cible" && ! "$source" -nt "$cible" ]]; then
-    info "$(basename "$cible") déjà dérivé, skip."
-    return 0
-  fi
-  if [[ ! -f "$source" ]]; then
-    warn "$(basename "$cible") : source absente ($source), dérivation sautée."
-    return 0
-  fi
-  # Le script importe le gguf-py DU FORK (il connaît l'arch qwen4exp) : sans le
-  # dépôt du fork, rien à faire ici — et rien à faire tout court, puisque la
-  # sortie ne sert qu'au fork.
-  if [[ ! -d "$FORK_DIR/gguf-py" ]]; then
-    warn "$(basename "$cible") : $FORK_DIR/gguf-py absent (fork non installé,"
-    warn "  voir ./setup-llm.sh --setup-fork) — dérivation sautée."
-    return 0
-  fi
-  info "Dérivation $(basename "$cible") par $script..."
-  if ! PYTHONPATH="$FORK_DIR/gguf-py" python3 "$SCRIPT_DIR/$script" "$source" "$cible"; then
-    rm -f "$cible"          # sortie partielle : pire qu'absente
-    warn "Dérivation en échec ($script) — le modèle qui l'utilise ne chargera pas."
-  fi
-  return 0
-}
-
 # =============================================================================
 # CHEMINS
 # =============================================================================
@@ -148,11 +111,10 @@ CONFIG_DIR="$MODELS_BASE"
 # Port du routeur llama-server (service --start et mesures via l'API)
 SERVER_PORT=8009
 
-# Device retenu par GGUF — clé = dossier sous $MODELS_BASE.
-# Format : "clé = device", commentaires ";". Édition manuelle (guidée par
-# les mesures de --bench, qui n'écrit rien lui-même).
-# Vit À CÔTÉ DU SCRIPT (local, non versionné — .gitignore), pas dans $MODELS_BASE.
-BENCH_CONF="$SCRIPT_DIR/bench-devices.conf"
+# (BENCH_CONF / bench-devices.conf — device retenu par GGUF — a été retiré le
+#  18/09/2026 : le moteur du service est une image construite en HIP seul, elle
+#  n'expose qu'un device. Le fichier reste peut-être sur la machine, il n'est
+#  plus lu par personne et peut être supprimé.)
 
 # =============================================================================
 # PRÉCHARGEMENT (always-on)

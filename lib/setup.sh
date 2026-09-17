@@ -1,5 +1,5 @@
 # lib/setup.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # setup
@@ -14,7 +14,10 @@ ROCM_PKGS=(rocm-hip-runtime hipblas rocblas hipblaslt ggml-hip)
 cmd_setup() {
   info "Vérification des dépendances..."
   # ggml-cpu + ggml-vulkan : backends splittés d'extra/ggml (optdeps, donc
-  # à imposer — sans ggml-vulkan plus de Vulkan0, sans ggml-cpu plus d'ops CPU)
+  # à imposer — sans ggml-vulkan plus de Vulkan0, sans ggml-cpu plus d'ops CPU).
+  # ⚠ Ces paquets ne concernent PLUS le service, qui tourne dans l'image ROCm
+  # (runtime/) : ils servent les outils hors service (llama-bench des courbes
+  # de batch, llama-server jetable de tools/spec-isolate.sh).
   PACMAN_PKGS=(curl llama-cpp ggml-cpu ggml-vulkan python-huggingface-hub python-hf-xet)
   MISSING=()
   for pkg in "${PACMAN_PKGS[@]}"; do
@@ -25,7 +28,7 @@ cmd_setup() {
 
   # --- Runtime ROCm + ggml-hip : best-effort, jamais bloquant ---------------
   # (backend HIP splitté : ggml-hip requis EN PLUS du runtime pour voir ROCm0)
-  info "Vérification du runtime ROCm (optionnel)..."
+  info "Vérification du runtime ROCm de l'hôte (optionnel, outils hors service)..."
   local rocm_missing=() rocm_to_install=()
   local pkg
   for pkg in "${ROCM_PKGS[@]}"; do
@@ -38,7 +41,7 @@ cmd_setup() {
     fi
   done
   if [[ ${#rocm_to_install[@]} -gt 0 ]]; then
-    warn "Paquets ROCm à installer (backend ROCm0 pour --bench) : ${rocm_to_install[*]}"
+    warn "Paquets ROCm à installer (ROCm0 pour les outils HORS service) : ${rocm_to_install[*]}"
     local reply="n"
     if [[ -t 0 ]]; then
       read -r -p "Installer le runtime ROCm ? [o/N] " reply
@@ -47,16 +50,16 @@ cmd_setup() {
     fi
     if [[ "$reply" =~ ^[oOyY]$ ]]; then
       paru -S --noconfirm "${rocm_to_install[@]}" \
-        || warn "Installation ROCm en échec — Vulkan0 reste pleinement fonctionnel."
+        || warn "Installation ROCm en échec — sans effet sur le service, qui tourne dans l'image."
     else
-      info "Runtime ROCm non installé — le setup continue sur Vulkan0 seul."
-      info "  (relancer --setup plus tard pour l'ajouter et débloquer ROCm0 dans --bench)"
+      info "Runtime ROCm de l'hôte non installé — sans effet sur le service."
+      info "  (relancer --setup plus tard pour l'ajouter ; il ne sert qu'aux outils hors service)"
     fi
   fi
   if [[ ${#rocm_missing[@]} -gt 0 ]]; then
     warn "Paquets ROCm introuvables dans les dépôts : ${rocm_missing[*]}"
-    warn "  → le défaut Vulkan0 du models.ini reste pleinement fonctionnel sans ;"
-    warn "    ROCm0 n'apparaîtra simplement pas dans --bench."
+    warn "  → sans conséquence pour le service, qui embarque son propre ROCm"
+    warn "    dans l'image ; seuls les outils hors service s'en passent."
   fi
   if command -v rocminfo >/dev/null 2>&1; then
     if rocminfo 2>/dev/null | grep -q gfx1151; then
@@ -76,15 +79,15 @@ cmd_setup() {
 
   # Téléchargements pilotés par les déclarations de models.sh (DL_SPECS),
   # dans l'ordre de déclaration (= ordre du ini)
-  # p1/p2 : sens dépendant du mode — repo + fichier (plat), repo + glob
-  # (shard), source + script (derive, fichier calculé en local après coup).
+  # p1/p2 : sens dépendant du mode — repo + fichier (plat), repo + glob (shard).
+  # (le mode "derive", fichier calculé en local après coup, a disparu le
+  # 18/09/2026 avec son seul usage, cf. lib/models.sh)
   local spec mode cible p1 p2
   for spec in "${DL_SPECS[@]}"; do
     IFS=$'\t' read -r mode cible p1 p2 <<< "$spec"
     case "$mode" in
       plat)   _dl "$cible" "$p1" "$p2" ;;
       shard)  _dl_shard "$cible" "$p1" "$p2" ;;
-      derive) _derive "$cible" "$p1" "$p2" ;;
     esac
   done
 
@@ -108,7 +111,7 @@ cmd_setup() {
   info "Setup terminé → ./setup-llm.sh --start"
   info "Changer le préchargement → ./setup-llm.sh --preload"
   info "Mesurer les perfs → ./setup-llm.sh --bench [modèle|all]"
-  info "Devices exposés → ./setup-llm.sh --list-devices"
+  info "Devices exposés par l'image → ./setup-llm.sh --list-devices"
 
   _setup_propose_fork
 

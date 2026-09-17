@@ -107,7 +107,7 @@ _run_fork() {
 
 cat > "$TMP/fork.ini" <<'EOF'
 [*]
-device = Vulkan0
+device = ROCm0
 
 [modele-fork]
 model            = /x/y.gguf
@@ -115,7 +115,7 @@ ngram-on-disk    = true
 EOF
 cat > "$TMP/arch.ini" <<'EOF'
 [*]
-device = Vulkan0
+device = ROCm0
 
 [modele-arch]
 model            = /x/y.gguf
@@ -856,7 +856,7 @@ MODEL_INI[un]='model = $SVC/home/models/un/a.gguf'
 MODEL_INI[deux]='model = $SVC/home/models/deux/b.gguf'
 PRESET_ORDER=(un deux)
 declare -A GROUPE_AVANT
-DEFAULT_DEVICE=Vulkan0
+DEFAULT_DEVICE=ROCm0
 DEFAULT_PRELOAD=()
 KNOWN_FILES=($SVC/home/models/un/a.gguf)
 "
@@ -1067,6 +1067,107 @@ else
   echo "$out2" | sed 's/^/       2: /'; rc=1
 fi
 
+# =============================================================================
+# 4quater. models.ini généré (lib/ini.sh + lib/models.sh RÉELS)
+#
+# Ajouté le 18/09/2026 avec la bascule du moteur sur l'image ROCm : le ini est
+# la seule chose que le routeur lit, et chacune des assertions ci-dessous
+# correspond à une décision de cette bascule qu'une régression silencieuse
+# annulerait (un device Vulkan qui revient, un batch 16384 qui déborde sur une
+# autre section, un drafter qui atterrit ailleurs que sur sa cible).
+# =============================================================================
+INI_HOME="$TMP/inihome"
+mkdir -p "$INI_HOME"
+_run_ini() {  # $1 = appel bash, $2 = env supplémentaire
+  env -i HOME="$INI_HOME" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" ${2:-} \
+    bash -c "set -euo pipefail
+      source '$REPO_DIR/lib/common.sh'
+      source '$REPO_DIR/lib/svc.sh'
+      source '$REPO_DIR/lib/models.sh'
+      source '$REPO_DIR/lib/ini.sh'
+      $1" </dev/null 2>&1
+}
+
+INI="$(_run_ini 'generate_models_ini')"
+_ckini() {  # $1 = libellé, $2 = motif attendu
+  if grep -qF -- "$2" <<<"$INI"; then
+    echo "[OK]   ini : $1"
+  else
+    echo "[FAIL] ini : $1 - motif absent : $2"; rc=1
+  fi
+}
+_ckini_out() {  # $1 = libellé, $2 = motif INTERDIT (hors commentaires ";")
+  if grep -v '^[[:space:]]*;' <<<"$INI" | grep -qF -- "$2"; then
+    echo "[FAIL] ini : $1 - motif présent alors qu'il ne devrait pas : $2"; rc=1
+  else
+    echo "[OK]   ini : $1"
+  fi
+}
+
+_ckini     "en-tête : device ROCm0"        "device                 = ROCm0"
+_ckini     "en-tête : fit off"             "fit                    = off"
+_ckini     "en-tête : load-mode none"      "load-mode              = none"
+_ckini     "en-tête : cache K f16"         "cache-type-k           = f16"
+_ckini     "en-tête : cache V f16"         "cache-type-v           = f16"
+_ckini_out "aucun Vulkan0, nulle part"     "Vulkan0"
+_ckini_out "ngram-on-disk remplacé par lazy-mode" "ngram-on-disk"
+_ckini     "lazy-mode on-direct (Flash-Next)"     "lazy-mode        = on-direct"
+
+# Un device par section, et tous sur ROCm0 : autant de lignes « device = » que
+# de sections (les flags globaux [*] portent la leur), aucune autre valeur.
+nb_sections="$(grep -c '^\[' <<<"$INI")"          # [*] compris
+nb_device="$(grep -c '^device  *= ROCm0$' <<<"$INI")"
+if [[ "$nb_device" -eq "$nb_sections" ]]; then
+  echo "[OK]   ini : device ROCm0 sur les $nb_sections sections, [*] compris"
+else
+  echo "[FAIL] ini : $nb_device lignes device pour $nb_sections sections"; rc=1
+fi
+
+# spec-draft-ngl = all injecté exactement là où il y a un drafter séparé.
+nb_draft="$(grep -c '^spec-draft-model' <<<"$INI")"
+nb_ngl="$(grep -c '^spec-draft-ngl   = all$' <<<"$INI")"
+nb_devdraft="$(grep -c '^device-draft     = ROCm0$' <<<"$INI")"
+if [[ "$nb_draft" -gt 0 && "$nb_ngl" -eq "$nb_draft" && "$nb_devdraft" -eq "$nb_draft" ]]; then
+  echo "[OK]   ini : device-draft et spec-draft-ngl = all sur les $nb_draft drafters séparés"
+else
+  echo "[FAIL] ini : $nb_draft drafters, $nb_ngl spec-draft-ngl, $nb_devdraft device-draft"; rc=1
+fi
+
+# batch 16384 : la seule section autorisée (INI_BIG_BATCH_OK) et personne d'autre.
+nb_batch="$(grep -c '^u\?batch-size  *= 16384$' <<<"$INI")"
+sect_batch="$(awk '/^\[/ { s=$0 } /^u?batch-size[ ]*= 16384$/ { print s }' <<<"$INI" | sort -u | tr -d '[]' | tr '\n' ' ')"
+if [[ "$nb_batch" -eq 2 && "$sect_batch" == "qwen3.8-flash-next-mtp-nothink " ]]; then
+  echo "[OK]   ini : batch et ubatch 16384 sur la seule section Flash-Next"
+else
+  echo "[FAIL] ini : $nb_batch lignes à 16384, section(s) : '$sect_batch'"; rc=1
+fi
+
+# Garde-fou : une section non autorisée qui poserait 16384 fait échouer la
+# génération, avec la section, la valeur et la raison dans le message.
+out="$(_run_ini 'MODEL_INI[deepseek-v4-flash]+=$'"'"'\nubatch-size = 16384'"'"'; generate_models_ini')"; grc=$?
+if [[ "$grc" -ne 0 && "$out" == *"deepseek-v4-flash"* && "$out" == *"16384"* && "$out" == *"139"* ]]; then
+  echo "[OK]   ini : garde-fou ubatch, section non autorisée refusée en nommant la raison"
+else
+  echo "[FAIL] ini : garde-fou ubatch (code $grc) : $(tail -3 <<<"$out")"; rc=1
+fi
+
+# La même valeur sur la section autorisée passe (c'est la conf servie).
+out="$(_run_ini 'generate_models_ini >/dev/null && echo PASSE')"; grc=$?
+if [[ "$grc" -eq 0 && "$out" == *PASSE* ]]; then
+  echo "[OK]   ini : garde-fou ubatch, section autorisée laissée passer"
+else
+  echo "[FAIL] ini : la section autorisée est refusée (code $grc) : $(tail -3 <<<"$out")"; rc=1
+fi
+
+# Et une surcharge TEMPORAIRE de --spec-ab est refusée comme le reste : c'est
+# le même crash au bout, la mesure ne doit pas pouvoir le contourner.
+out="$(_run_ini 'generate_models_ini' 'SPEC_AB_PRESET=muse-glimmer-30b-dflash SPEC_AB_OVERRIDES=batch-size=16384')"; grc=$?
+if [[ "$grc" -ne 0 && "$out" == *"muse-glimmer-30b-dflash"* && "$out" == *"16384"* ]]; then
+  echo "[OK]   ini : garde-fou ubatch, surcharge SPEC_AB_OVERRIDES refusée aussi"
+else
+  echo "[FAIL] ini : surcharge spec-ab non refusée (code $grc) : $(tail -3 <<<"$out")"; rc=1
+fi
+
 # 5. Étiquette utilisable en colonne TSV : ni espace, ni tabulation. Le "+" de
 # la forme conteneurisée (strix-<engine>+r<rocm>) est admis, il ne casse ni un
 # TSV ni un sed.
@@ -1083,5 +1184,5 @@ else
   echo "[FAIL] étiquette d'image impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire, --update-fork (refus, changelog, confirmation), épinglage du moteur (fork.conf), proposition du fork en fin de --setup, moteur conteneurisé (image.conf, promotion après vérification, ménage ciblé, --image-update sans accord) et service en conteneur (compose généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : helpers de moteur, garde-fou moteur/ini, garde mémoire, --update-fork (refus, changelog, confirmation), épinglage du moteur (fork.conf), proposition du fork en fin de --setup, moteur conteneurisé (image.conf, promotion après vérification, ménage ciblé, --image-update sans accord) service en conteneur (compose généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
 exit "$rc"

@@ -16,9 +16,11 @@
 #   tools/bench-spec-batch.sh <gguf> [<gguf>...] # modèles précis
 #
 # Variables d'env :
-#   DEV=Vulkan0,ROCm0  device(s) ggml, liste comme --bench-devices (défaut :
-#                    Vulkan0, le DEFAULT_DEVICE du models.ini) ; "auto" = ggml
+#   DEV=Vulkan0,ROCm0  device(s) ggml séparés par des virgules (défaut :
+#                    Vulkan0, le seul que construit le fork) ; "auto" = ggml
 #                    choisit. Chaque modèle est mesuré sur chaque device.
+#                    ⚠ Ce sont les devices du moteur de l'HÔTE, pas ceux du
+#                    service : celui-ci tourne dans l'image, en ROCm0 seul.
 #   OUT=<fichier>    journal lisible, en APPEND (défaut : logs/spec-batch.log,
 #                    comme les autres journaux). La sortie reste affichée à
 #                    l'écran en même temps.
@@ -102,8 +104,11 @@ else
 fi
 
 # ROCm/HIP sur iGPU : sans ça les allocations visent la VRAM dédiée (petite)
-# au lieu de la mémoire unifiée/GTT — les gros modèles échouent, et surtout on
-# ne mesurerait pas ce que fait réellement le service (cf. lib/compose.sh).
+# au lieu de la mémoire unifiée/GTT — les gros modèles échouent.
+# ⚠ Variable du moteur de l'HÔTE UNIQUEMENT. Elle ne doit JAMAIS être passée à
+# _dk_run (lib/runtime.sh) ni au compose du service : sur le runtime
+# retained-PM4 de l'image elle fait passer chaque allocation par
+# hipMallocManaged et la sortie se corrompt (cf. runtime/AMONT.md).
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
 # En-tête TSV. Si un fichier existe avec un autre jeu de colonnes (ancienne

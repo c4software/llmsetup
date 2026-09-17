@@ -1,15 +1,15 @@
 ---
 name: ajout-modele
-description: Procédure complète d'ajout d'un modèle dans ce dépôt (lib/models.sh) jusqu'au récap de performance partageable. À charger dès qu'on ajoute, remplace ou re-qualifie un modèle (nouveau GGUF, nouvelle quant, variante MTP, changement de device).
+description: Procédure complète d'ajout d'un modèle dans ce dépôt (lib/models.sh) jusqu'au récap de performance partageable. À charger dès qu'on ajoute, remplace ou re-qualifie un modèle (nouveau GGUF, nouvelle quant, variante MTP, changement de moteur).
 ---
 
 # Ajouter un modèle, de la fiche HF au tableau de perfs
 
-Sept étapes, dans l'ordre (device avant spéculation : les seuils dépendent du
-backend). Chacune a un livrable et un critère de passage ;
+Sept étapes, dans l'ordre (justesse avant spéculation : mesurer un moteur qui
+répond faux n'a aucun sens). Chacune a un livrable et un critère de passage ;
 on ne passe pas à la suivante sans lui. Les commandes se lancent sur la
-machine qui héberge le service (`./setup-llm.sh`, service systemd user
-`llama-server`), jamais en parallèle les unes des autres : un seul GPU.
+machine qui héberge le service (`./setup-llm.sh`, conteneur `llama-server`),
+jamais en parallèle les unes des autres : un seul GPU.
 
 Lire `AGENTS.md` et `ARCHITECTURE.md` avant d'éditer. Le bloc de
 `lib/models.sh` est la seule source de vérité du modèle ; ses commentaires
@@ -39,8 +39,11 @@ Trois conséquences pour toute la procédure ci-dessous :
   comparées à la décimale : le dire dans chaque récap, et garder la valeur de
   l'autre série entre parenthèses plutôt que de la remplacer.
 - **Clés propres au fork** (`FORK_ONLY_KEYS`, `lib/fork.sh`) : `ngram-on-disk`,
+  `lazy-mode`, `fit`, `load-mode`,
   `reasoning-budget-enable` / `-soft-ratio` / `-soft2-ratio` /
-  `-grace-tokens`, `spec-draft-adaptive`, `spec-prefill*`. Le paquet Arch
+  `-grace-tokens`, `spec-draft-adaptive`, `spec-prefill*`. Les trois premières
+  sont posées par le dépôt lui-même : `fit` et `load-mode` en flags GLOBAUX
+  (`[*]`), `lazy-mode` sur la section Flash-Next. Le paquet Arch
   refuse toute clé inconnue et c'est le **routeur entier** qui ne démarre pas,
   pas seulement le modèle fautif. En poser une dans un bloc verrouille donc le
   parc sur un moteur qui les comprend - l'image du service les comprend, le
@@ -88,16 +91,13 @@ Trois façons de déclarer un fichier, toutes dans le bloc :
   z-lab dans `~/models/qwen3.8-27b/`, sidecar MTP d'unsloth dans `MTP/`) ;
 - `download_hf_shards <dossier> <repo> VAR=<shard 00001>` : le glob hf est
   dérivé du sous-dossier de quant, changer de quant = changer la seule entrée ;
-- `derive_gguf <dossier> VAR=<fichier produit> <source> <script>` : fichier
-  qu'aucun repo ne porte, calculé en local à partir d'un fichier **déjà
-  déclaré plus haut**. `--setup` joue la dérivation après les téléchargements,
-  et la refait si la source a bougé. Cas unique aujourd'hui : le sidecar MTP
-  de Qwen3.8-Flash-Next renommé par `tools/mtp-rename-hc-head.py` (le fork lit
-  `output_hc_*`, unsloth range sous `blk.<n>.nextn.hc_head_*` ; sans renommage
-  le modèle entier ne charge pas). Le script importe le `gguf-py` du fork,
-  donc rien à dériver sans fork installé.
+(un troisième mode, `derive_gguf`, déclarait un GGUF calculé en local par un
+script du dépôt. Il a été retiré le 18/09/2026 avec son seul usage, le sidecar
+MTP de Qwen3.8-Flash-Next renommé pour le commit 0007bc6 du fork : le moteur de
+l'image lit la tête « shared » d'unsloth telle quelle. Tout est dans
+l'historique git si le besoin revient.)
 
-Les trois alimentent `KNOWN_FILES` (donc `--cleanup`) : un fichier déclaré est
+Les deux alimentent `KNOWN_FILES` (donc `--cleanup`) : un fichier déclaré est
 protégé, un fichier qui cesse de l'être devient un orphelin supprimable.
 
 Critère de passage : le bloc `lib/models.sh` est écrit (commentaire métier
@@ -123,8 +123,10 @@ Deux questions indépendantes :
      inference », `nextn`/`mtp` dans les metadata) : `spec-type = draft-mtp`,
      rien d'autre à déclarer ;
    - tête MTP en **sidecar** (repo `-MTP` séparé ou sous-dossier `MTP/`) :
-     `download_hf` du sidecar + `spec-draft-model`, et sur le fork le
-     renommage par `derive_gguf` (cf. étape 1) ;
+     `download_hf` du sidecar + `spec-draft-model`. Préférer la variante
+     « shared » quand le repo en publie une : le moteur de l'image sait
+     emprunter les tenseurs de la cible (2,6 Go au lieu de 4,1 sur
+     Flash-Next) ;
    - **drafter externe** (DFlash 2 de z-lab pour Qwen3.8-27B, Eagle…) :
      `download_hf` dans le dossier du modèle, `spec-type = draft-dflash`,
      `spec-draft-model = $…_DFLASH_PATH`, `spec-draft-n-max` selon la carte du
@@ -178,7 +180,9 @@ PASSES=2 MAX_TOKENS=1200 tools/spec-isolate.sh <tag> -- \
 ```
 
 Tout ce qui suit `--` va tel quel à `llama-server` (le script ajoute seulement
-`--device Vulkan0 -ngl 99 -fa on --jinja` devant, surchargeables) : mettre le
+`--device Vulkan0 -ngl 99 -fa on --jinja` devant, surchargeables). ⚠ Cet outil
+tourne sur le moteur de l'HÔTE (fork Vulkan), pas sur l'image du service : il
+dégrossit, il ne mesure pas ce qui sera servi. Mettre le
 sampling réel du modèle, pas un sampling de confort, sinon les chiffres ne
 valent rien pour le bloc. L'outil arrête le service et le relance par son trap,
 et refuse de démarrer si un `--bench*`, un `--spec*` ou un conteneur
@@ -219,14 +223,16 @@ Le modèle est déclaré et servi (fin de l'étape 2) : sur la machine du servic
 tools/qualif-modele.sh <section>
 ```
 
-joue dans l'ordre l'étape 3 (`--bench-devices`), l'étape 5 (`--spec-ab` sur
-`spec-refactor.txt` puis sur `spec-test.txt`), l'étape 6 (`--bench`,
-`--bench-cache`, `--bench-load`) et l'étape 7 (`--bench-agentic 3`), une à la
+joue dans l'ordre l'étape 3 (`--bench-sanity`, **bloquante**), l'étape 5
+(`--spec-ab` sur `spec-refactor.txt` puis sur `spec-test.txt`), l'étape 6
+(`--bench`, `--bench-cache`, `--bench-load`) et l'étape 7
+(`--bench-agentic 3`), une à la
 fois (un seul GPU), lit le drafter et le `size-m` réellement servis dans
 `status.args` de `/v1/models`, et écrit `logs/qualif/<tag>/resume.md` : les
 sorties brutes par étape plus le tableau de l'étape 6 déjà rempli. Options :
-`--passes`, `--size-m`, `--devices`, `--sans-agentic`, `--sans-cache`,
-`--sans-load`, `--tag`. Une étape en échec n'arrête pas les suivantes.
+`--passes`, `--size-m`, `--sans-agentic`, `--sans-cache`,
+`--sans-load`, `--tag`. Une étape en échec n'arrête pas les suivantes, sauf la
+justesse : là, tout s'arrête.
 
 Ce qu'il ne fait pas : l'étape 4 (`--spec-tune`) reste manuelle, elle n'a de
 sens que pour `draft-mtp` et elle écrit dans `spec-nmax.conf` ; le test isolé
@@ -234,31 +240,30 @@ sens que pour `draft-mtp` et elle écrit dans `spec-nmax.conf` ; le test isolé
 dans `lib/models.sh`, le README ou `docs/HISTORIQUE.md` : les chiffres du
 récapitulatif restent à reporter à la main.
 
-## 3. Device : ROCm0 ou Vulkan0 (--bench-devices)
+## 3. Contrôle de justesse sur ROCm0 (--bench-sanity)
 
-Avant toute mesure de spéculation : les seuils de noyau ggml (marches de
-`t_forward(batch)`, optimum du n-max) dépendent du backend, régler la
-spéculation puis changer de device obligerait à tout refaire. (Le premier
-jet de cette procédure mettait le bench en dernier ; DeepSeek, le 21/08/2026,
-a montré que le device se décide d'abord.)
+Il n'y a plus de device à choisir : le moteur du service est l'image de
+`runtime/`, construite en HIP seul, qui n'expose que `ROCm0`
+(`--bench-devices` et `bench-devices.conf` ont été retirés le 18/09/2026).
+Ce qui reste de cette étape est ce qui la justifiait, et elle passe donc
+toujours en premier, AVANT toute mesure de spéculation :
 
 ```bash
-./setup-llm.sh --bench-devices <modèle>        # Vulkan0,ROCm0, 3 passes
+./setup-llm.sh --bench-sanity <modèle>
 ```
 
-`--bench-devices` régénère le ini et redémarre par device, mesure un tour
-d'usage simulé (prefill froid + génération) et écrit le vainqueur dans
-`bench-devices.conf`, clé = dossier du GGUF (donc partagée par toutes les
-sections qui utilisent ce fichier).
+Une tâche à réponse connue (`prompts/bench-sanity.txt` : recopier un code
+exact), volontairement triviale pour ne tester que le backend. Un moteur qui
+dérive la rate forcément ; `timings.py` attrape en plus les sorties dégénérées
+(mot dominant, mots distincts, répétition périodique de caractères).
 
-Regarder ce que le serveur GÉNÈRE, pas seulement ses t/s : DeepSeek V4 sur
-ROCm0 (b10433) répondait un charabia répétitif à ~550 t/s, réponse vide,
+Regarder ce que le serveur GÉNÈRE, pas seulement ses t/s : DeepSeek V4 sur le
+ROCm SYSTÈME (b10433) répondait un charabia répétitif à ~550 t/s, réponse vide,
 sans une erreur dans le journal, et a été couronné deux fois avant qu'un
-garde-fou n'existe. `timings.py` détecte maintenant les sorties dégénérées
-(mot dominant, mots distincts, répétition périodique de caractères) et
-`--bench-devices` exclut le device, et pose d'abord une question de
-contrôle (`--bench-sanity`, recopie exacte d'un code) ; si un device semble
-« trop beau », vérifier quand même à la main :
+garde-fou n'existe ; Qwen3-Coder-Next y répondait « LAMPAMPAMP ». Les deux sont
+GUÉRIS par le runtime retained-PM4 de l'image (comptages justes, 18/09/2026),
+ce qui ne rend pas le contrôle inutile : il est justement là pour le prochain
+bump d'image. Si un chiffre semble « trop beau », vérifier à la main :
 
 ```bash
 curl -s localhost:8009/v1/chat/completions -H 'Content-Type: application/json' \
@@ -269,24 +274,21 @@ curl -s localhost:8009/v1/chat/completions -H 'Content-Type: application/json' \
 
 Pour un modèle destiné à l'agentic long (gros dossiers en contexte), le
 bench à ~1500 tokens ne suffit pas : mesurer aussi en profondeur, hors
-service, et lire le verdict à 32k :
+service (⚠ `llama-bench` de l'HÔTE, donc le fork Vulkan, pas l'image : c'est
+un ordre de grandeur, pas la mesure du service) :
 
 ```bash
 ./setup-llm.sh --stop
-DEV=Vulkan0,ROCm0 tools/bench-depth.sh ~/models/<dossier>/<gguf>    # 0 / 16k / 32k
+tools/bench-depth.sh ~/models/<dossier>/<gguf>    # 0 / 16k / 32k
 ./setup-llm.sh --start
 ```
 
-Le device est mesuré avec le moteur en place : un `--setup-fork`,
-`--update-fork` ou `--unset-fork` change les noyaux et rouvre la question
-(comme un changement de quant). Le fork ne construit que Vulkan : sur lui,
-ROCm0 reste servi par les binaires du paquet Arch, à ne pas mélanger dans une
-même campagne.
+Un `--image-update` change les noyaux et rouvre la question, comme un
+changement de quant : refaire ce contrôle après chaque bump d'image.
 
-Critère de passage : une ligne dans `bench-devices.conf` (écrite par la
-commande, y compris quand un seul device est valide), un texte généré
-lisible sur ce device, et la raison notée dans le bloc si l'autre device
-est inutilisable (version du build, symptôme).
+Critère de passage : `--bench-sanity` répond juste (`tools/qualif-modele.sh`
+s'ARRÊTE sinon), le texte généré est lisible, et toute anomalie est notée dans
+le commentaire du bloc avec la révision d'image et le symptôme.
 
 ## 4. spec-tune (longueur de draft MTP)
 
@@ -444,8 +446,8 @@ compare pas à un tableau pris en `performance`. Ce n'est pas le profil de
 | draft-dflash seul, n-max 7 | Vulkan0 | n/c | 47,0 | 0,96 | --spec-ab, 4 passes (spec-refactor.txt) |
 | ngram 47 + draft-dflash, n-max 7 | Vulkan0 | 359 | 32,6 | 0,595 | --bench, 3 passes (bench-task) |
 
-Retenu : ngram-map-k 47 + draft-dflash 7 sur Vulkan0 (spec-ngram.conf, bench-devices.conf,
-spec-draft-n-max dans lib/models.sh). Paquet Arch b10433, même GGUF, ancien réglage MTP :
+Retenu : ngram-map-k 47 + draft-dflash 7 (spec-ngram.conf, spec-draft-n-max
+dans lib/models.sh). Paquet Arch b10433, même GGUF, ancien réglage MTP :
 261 / 29,5 / 0,65 (autre série, citée pour situer, pas pour comparer à la décimale).
 ```
 
@@ -475,8 +477,7 @@ Règles du tableau :
   avec le reste, ils ne sont pas produits à la volée.
 
 Sources des chiffres : `logs/spec-tests.log` (TSV, colonnes spec-type et
-prompt), `logs/spec-batch.log` / `.tsv` (courbes), sortie de `--bench` et
-`--bench-devices`.
+prompt), `logs/spec-batch.log` / `.tsv` (courbes) et la sortie de `--bench`.
 
 ## 7. bench-agentic : le modèle en vraie boucle de tool calls
 
@@ -551,8 +552,7 @@ sortie complète avant de conclure, pas seulement la dernière ligne.
   indexés par nom de section : renommer la clé dans `spec-nmax.conf`,
   `spec-ngram.conf` et `preload.conf` sur bigchuck, sans quoi le modèle repart
   silencieusement sur les valeurs par défaut du script (et sort du
-  préchargement). `bench-devices.conf` est indexé par dossier de GGUF : il
-  n'est pas concerné.
+  préchargement).
 - Si le modèle remplace un autre : le retirer de `lib/models.sh`, noter la
   date dans le commentaire `KNOWN_FILES`, et signaler que
   `./setup-llm.sh --cleanup` purgera l'ancien GGUF (ne pas le lancer

@@ -85,8 +85,10 @@ LOG="$OUT/serveur.log"
 # Arch en croyant mesurer le moteur servi (défaut réel du 12/09/2026).
 # LLAMA_BIN_DIR (optionnel) passe encore devant : un build à part du fork.
 export PATH="${LLAMA_BIN_DIR:+$LLAMA_BIN_DIR:}$HOME/.local/bin:$PATH"
-# ROCm/HIP sur iGPU : allocations en mémoire unifiée, comme le compose du
-# service (lib/compose.sh).
+# ROCm/HIP sur iGPU : allocations en mémoire unifiée. Moteur de l'HÔTE
+# UNIQUEMENT : cette variable ne doit JAMAIS être passée à _dk_run
+# (lib/runtime.sh) ni au compose du service — sur le runtime retained-PM4 de
+# l'image elle corrompt la sortie (cf. runtime/AMONT.md et lib/compose.sh).
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
 # Modules du dépôt : seuls les _svc_* sont nécessaires (arrêt et relance du

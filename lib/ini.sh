@@ -1,34 +1,17 @@
 # lib/ini.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Génération du models.ini
+#
+# Le device n'est plus une variable : l'image du service (runtime/) est
+# construite en HIP SEUL, elle n'expose que ROCm0. bench-devices.conf, sa
+# commande --bench-devices et le mécanisme BENCH_DEVICE ont donc été retirés le
+# 18/09/2026 — il n'y a plus rien à comparer. Les trois injections device,
+# device-draft et mmproj-device restent (elles empêchent le serveur de répartir
+# un modèle, son drafter ou son projecteur ailleurs que sur le device visé) et
+# une quatrième les rejoint, spec-draft-ngl.
 # =============================================================================
-
-# Charge bench-devices.conf → BENCH_DEVICE[clé modèle] = device vainqueur
-declare -A BENCH_DEVICE
-load_bench_conf() {
-  BENCH_DEVICE=()
-  [[ -f "$BENCH_CONF" ]] || return 0
-  local line key dev
-  while IFS= read -r line; do
-    [[ "$line" =~ ^[[:space:]]*($|\;|\#) ]] && continue
-    key="${line%%=*}"; key="${key// /}"
-    dev="${line#*=}";  dev="${dev// /}"
-    [[ -n "$key" && -n "$dev" ]] && BENCH_DEVICE[$key]="$dev"
-  done < "$BENCH_CONF"
-  # return 0 explicite : si la dernière ligne du fichier ne passe pas le test
-  # ci-dessus, la boucle (donc la fonction) retourne 1 et set -e tue le script
-  # en plein generate_models_ini, après que la redirection a tronqué models.ini
-  return 0
-}
-
-# Clé modèle d'un modèle = dossier du GGUF référencé par sa ligne "model ="
-_preset_model_key() {
-  local body="${MODEL_INI[$1]}" path
-  path="$(echo "$body" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
-  [[ -n "$path" ]] && _key "$path"
-}
 
 # Charge preload.conf → PRELOADED[modèle]=1. Sans fichier : DEFAULT_PRELOAD.
 declare -A PRELOADED
@@ -44,7 +27,7 @@ load_preload_conf() {
   else
     for p in "${DEFAULT_PRELOAD[@]}"; do PRELOADED[$p]=1; done
   fi
-  # même garde set -e que load_bench_conf (dernière ligne = modèle retiré)
+  # même garde set -e que load_spec_conf (dernière ligne = modèle retiré)
   return 0
 }
 
@@ -59,9 +42,11 @@ load_spec_conf() {
     v="${line#*=}";  v="${v// /}"
     [[ -n "${MODEL_INI[$k]:-}" && "$v" =~ ^[0-9]+$ ]] && SPEC_NMAX[$k]="$v"
   done < "$SPEC_CONF"
-  # même garde set -e que load_bench_conf : c'est ce cas précis (dernière
-  # ligne de spec-nmax.conf référençant un modèle retiré du script) qui a
-  # produit un models.ini vide
+  # return 0 explicite : si la dernière ligne du fichier ne passe pas le test
+  # ci-dessus, la boucle (donc la fonction) retourne 1 et set -e tue le script
+  # en plein generate_models_ini, après que la redirection a tronqué
+  # models.ini. C'est ce cas précis (dernière ligne de spec-nmax.conf
+  # référençant un modèle retiré du script) qui a produit un models.ini vide
   return 0
 }
 
@@ -76,7 +61,7 @@ load_spec_ngram_conf() {
     v="${line#*=}";  v="${v// /}"
     [[ -n "${MODEL_INI[$k]:-}" && "$v" =~ ^[0-9]+$ ]] && SPEC_NGRAM_M[$k]="$v"
   done < "$SPEC_NGRAM_CONF"
-  # même garde set -e que load_bench_conf (dernière ligne = modèle retiré)
+  # même garde set -e que load_spec_conf (dernière ligne = modèle retiré)
   return 0
 }
 
@@ -132,8 +117,48 @@ _preset_nmax() {
   echo "${SPEC_NMAX[$p]:-$v}"
 }
 
+# _ini_guard_batch <section> <corps ini> — refuse un batch-size ou un
+# ubatch-size au-delà de $INI_BATCH_MAX pour une section qui n'est pas dans
+# INI_BIG_BATCH_OK (lib/models.sh). Appelée sur le corps FINAL, donc après les
+# surcharges de --spec-ab : une valeur passée par SPEC_AB_OVERRIDES est refusée
+# comme une valeur écrite dans le script, c'est le même crash au bout.
+_ini_guard_batch() {
+  local name="$1" corps="$2" ligne cle val ok p
+  ok=0
+  for p in ${INI_BIG_BATCH_OK[@]+"${INI_BIG_BATCH_OK[@]}"}; do
+    [[ "$p" == "$name" ]] && { ok=1; break; }
+  done
+  [[ "$ok" -eq 1 ]] && return 0
+  while IFS= read -r ligne; do
+    [[ "$ligne" == *=* ]] || continue
+    cle="${ligne%%=*}"; cle="${cle// /}"
+    [[ "$cle" == "batch-size" || "$cle" == "ubatch-size" ]] || continue
+    val="${ligne#*=}"; val="${val// /}"
+    [[ "$val" =~ ^[0-9]+$ ]] || continue
+    if [[ "$val" -gt "$INI_BATCH_MAX" ]]; then
+      error "[$name] $cle = $val : au-delà de $INI_BATCH_MAX, le moteur de l'image part en erreur de segmentation (code 139) dès un prompt de 8k tokens, et le batch coûte environ 33 Gio de tampons. Mesuré le 18/09/2026 sur tous les modèles du parc sauf ceux de INI_BIG_BATCH_OK (lib/models.sh) : ${INI_BIG_BATCH_OK[*]}."
+    fi
+  done <<< "$corps"
+  return 0
+}
+
+# _ini_warn_conf_nmax <section> — avertit quand spec-nmax.conf impose au
+# modèle une valeur DIFFÉRENTE de celle du dépôt. Sans cet avertissement, un
+# changement de spec-type ou de n-max commité dans lib/models.sh est écrasé en
+# silence par une valeur locale calibrée sur un autre moteur (cas de la
+# section Flash-Next, passée de n-max 4 à 3 le 18/09/2026).
+_ini_warn_conf_nmax() {
+  local name="$1" local_v script_v
+  local_v="${SPEC_NMAX[$name]:-}"
+  [[ -n "$local_v" ]] || return 0
+  script_v="$(echo "${MODEL_INI[$name]}" | sed -n 's/^spec-draft-n-max[[:space:]]*=[[:space:]]*//p' | tr -d ' ')"
+  [[ -n "$script_v" && "$local_v" != "$script_v" ]] || return 0
+  warn "[$name] spec-nmax.conf impose spec-draft-n-max = $local_v, le dépôt dit $script_v."
+  warn "  Valeur locale calibrée sur un autre moteur ? La retirer de $SPEC_CONF pour reprendre le dépôt."
+  return 0
+}
+
 generate_models_ini() {
-  load_bench_conf
   load_preload_conf
   load_spec_conf
   load_spec_ngram_conf
@@ -144,19 +169,38 @@ version = 1
 ; =============================================================================
 ; Flags globaux — appliqués à tous les modèles sauf surcharge locale
 ;
-; device = Vulkan0 : backend par défaut. Les surcharges "device = ..." par
-;   modèle ci-dessous proviennent de bench-devices.conf (écrit par
-;   ./setup-llm.sh --bench-devices, édition manuelle OK) — chaque modèle
-;   hérite du device retenu pour son GGUF. Vérifier au
-;   chargement dans les logs : device retenu + flash-attn effectivement actif
-;   (certaines archs le coupent silencieusement sous HIP, ce qui annule le
-;   gain de prefill).
+; device = ROCm0 : le seul device du moteur. Depuis la bascule en conteneur
+;   (18/09/2026) le service tourne sur l'image de runtime/, construite en HIP
+;   SEUL : aucun backend Vulkan dedans, donc plus de comparaison de devices ni
+;   de bench-devices.conf. Vérifier au chargement dans les logs : device retenu
+;   + flash-attn effectivement actif (certaines archs le coupent silencieusement
+;   sous HIP, ce qui annule le gain de prefill).
+; n-gpu-layers = 99 : inchangé. C'est « tout sur le GPU » pour tout le parc
+;   (le plus profond fait 64 couches) ; le moteur accepterait aussi "all", la
+;   valeur numérique est gardée pour ne pas rouvrir une comparaison sur un
+;   simple renommage.
+; fit = off, load-mode = none : réglages de la campagne du 17 au 18/09/2026.
+;   Le moteur a -fit ON par défaut et ajusterait les arguments non posés ;
+;   toute la campagne a tourné en "-fit off --load-mode none" et c'est ce qui
+;   est servi. load-mode none plutôt que mmap : en mmap DeepSeek met plus de
+;   13 minutes à charger (disqualifié). Sur DeepSeek, -fit on et -fit off
+;   donnent le même résultat : le off est gardé parce que c'est lui qui a été
+;   mesuré partout.
+; cache-type-k / cache-type-v = f16 : toute la campagne du 17 au 18/09/2026 a
+;   tourné en f16 sur les deux, sur les huit modèles mesurés. Aucune mesure de
+;   ce moteur ne justifie une valeur quantifiée, et sur DeepSeek f16 et q8_0
+;   sont équivalents (mémoire et débits) : le global passe donc en f16, et une
+;   valeur quantifiée ne survit en surcharge locale que là où elle n'a pas
+;   encore été re-mesurée (ornith-1.5-35b-a3b-parallel, cf. lib/models.sh).
+;   C'était q8_0 / q4_0 jusqu'au 18/09/2026, du temps du moteur Vulkan.
 ; =============================================================================
 [*]
 device                 = $DEFAULT_DEVICE
 n-gpu-layers           = 99
-cache-type-k           = q8_0
-cache-type-v           = q4_0
+fit                    = off
+load-mode              = none
+cache-type-k           = f16
+cache-type-v           = f16
 flash-attn             = on
 prio                   = 2
 metrics                = true
@@ -172,7 +216,6 @@ presence-penalty       = 0.0
 HEADER
 
   local prev_group=""
-  local mkey mdev
   for name in "${PRESET_ORDER[@]}"; do
     # Séparateurs de groupe déclarés par `groupe` dans models.sh
     if [[ -n "${GROUPE_AVANT[$name]:-}" ]]; then
@@ -180,28 +223,30 @@ HEADER
     fi
 
     echo "[$name]"
-    # Surcharge device issue du bench (clé = dossier du GGUF du modèle)
-    mkey="$(_preset_model_key "$name" || true)"
-    mdev="${BENCH_DEVICE[$mkey]:-}"
-    # BENCH_DEVICE_FORCE (env) prime sur tout, pour le modèle visé seulement :
-    # utilisé par --bench-devices pour tester un device sans l'écrire
-    if [[ -n "${BENCH_DEVICE_FORCE:-}" && "${BENCH_DEVICE_FORCE_PRESET:-}" == "$name" ]]; then
-      mdev="$BENCH_DEVICE_FORCE"
-    fi
-    # device toujours écrit : sans lui le serveur répartit le modèle sur tous
-    # les devices exposés, et un drafter qui partage token_embd avec la cible
-    # avorte (tenseur Vulkan0, contexte du drafter sur ROCm0).
-    mdev="${mdev:-$DEFAULT_DEVICE}"
-    echo "device           = $mdev"
+    # device toujours écrit, même s'il n'y a plus qu'un device : sans lui le
+    # serveur répartit le modèle sur tous les devices exposés, et un drafter
+    # qui partage token_embd avec la cible avorte. La ligne reste aussi le
+    # point de lecture de status.args (/v1/models) pour les mesures.
+    echo "device           = $DEFAULT_DEVICE"
     if grep -q "^spec-draft-model" <<< "${MODEL_INI[$name]}"; then
-      echo "device-draft     = $mdev"
+      echo "device-draft     = $DEFAULT_DEVICE"
+      # spec-draft-ngl = all : même raisonnement que device-draft. Sans lui,
+      # le nombre de couches du drafter est décidé par le moteur (et par le
+      # -fit, qui peut en renvoyer au CPU), alors qu'un drafter tient toujours
+      # sur le GPU — il pèse de 0,36 à 10,9 Go dans ce parc. Le moteur de
+      # l'image accepte "all" sur --spec-draft-ngl (alias --gpu-layers-draft).
+      # Pas injecté si la section pose déjà la clé : on ne suppose rien sur la
+      # tolérance du routeur à une clé répétée dans une même section.
+      grep -q "^spec-draft-ngl[[:space:]]*=" <<< "${MODEL_INI[$name]}" \
+        || echo "spec-draft-ngl   = all"
     fi
     # Même raison pour le projecteur vision : sans mmproj-device, l'encodeur
-    # d'images atterrit où le serveur veut, pas sur le device mesuré du modèle
+    # d'images atterrit où le serveur veut, pas sur le device du modèle
     # (17/09/2026, Qwen3.8-Flash-Next).
     if grep -q "^mmproj[[:space:]]*=" <<< "${MODEL_INI[$name]}"; then
-      echo "mmproj-device    = $mdev"
+      echo "mmproj-device    = $DEFAULT_DEVICE"
     fi
+    _ini_warn_conf_nmax "$name"
     # Corps du modèle + préchargement piloté par preload.conf
     # (pas de stop-timeout : l'éviction est gérée par le LRU de --models-max)
     # spec-draft-n-max : surcharge spec-nmax.conf / --spec-tune si présente
@@ -239,6 +284,7 @@ HEADER
     if [[ -n "${SPEC_AB_OVERRIDES:-}" && "${SPEC_AB_PRESET:-}" == "$name" ]]; then
       corps="$(_apply_overrides "$corps" "$SPEC_AB_OVERRIDES")"
     fi
+    _ini_guard_batch "$name" "$corps"
     echo "$corps"
     [[ -n "${PRELOADED[$name]:-}" ]] && echo "load-on-startup  = true"
     echo ""

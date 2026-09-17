@@ -82,6 +82,9 @@ for d in "${want[@]}"; do
 done
 [[ ${#DEVS[@]} -gt 0 ]] || { echo "Aucun device demandé n'est exposé." >&2; exit 1; }
 
+# ⚠ Moteur de l'HÔTE UNIQUEMENT : ne JAMAIS passer cette variable à _dk_run
+# (lib/runtime.sh) ni au compose du service — sur le runtime retained-PM4 de
+# l'image elle corrompt la sortie (cf. runtime/AMONT.md).
 export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
 # Étiquette de moteur, même règle que _host_llama_build (lib/common.sh) : "bNNNNN"

@@ -4,18 +4,18 @@ set -euo pipefail
 # =============================================================================
 # setup-llm.sh — llama-server router mode natif
 #
-# Backends : Vulkan (défaut) + ROCm/HIP optionnel.
-#   - Depuis le split Arch de mi-août 2026, extra/ggml n'embarque PLUS les
-#     backends : ils sont en optdeps séparés (ggml-cpu, ggml-vulkan, ggml-hip,
-#     ggml-cuda, ggml-blas, ggml-openvino) chargés dynamiquement s'ils sont
-#     présents. Vulkan0 requiert ggml-vulkan, ROCm0 requiert ggml-hip + le
-#     runtime ROCm — le runtime seul ne fait plus apparaître ROCm0.
+# Backend : ROCm0, et lui seul.
+#   - Le service tourne dans un CONTENEUR construit en HIP seul (runtime/,
+#     cf. lib/runtime.sh) : l'image n'expose que ROCm0. Il n'y a plus de
+#     comparaison de devices, plus de bench-devices.conf et plus de
+#     --bench-devices depuis le 18/09/2026.
+#   - Les backends ggml en paquets Arch (ggml-cpu, ggml-vulkan, ggml-hip…) ne
+#     valent plus que pour les outils HORS service (llama-bench des courbes de
+#     batch, llama-server jetable de tools/spec-isolate.sh), qui tournent sur
+#     le fork Vulkan de lib/fork.sh.
 #   - ./setup-llm.sh --bench <modèle|all> : mesure le serveur tel qu'il
 #     tourne via son API (prefill, décode médian, acceptance MTP). N'écrit
-#     rien. Le device par GGUF vit dans bench-devices.conf (à côté du
-#     script) : rempli par --bench-devices (comparaison automatique
-#     Vulkan/ROCm avec restarts) ou à la main, appliqué au prochain
-#     --preload/--setup + restart. Sans conf, tout reste sur Vulkan0.
+#     rien. ./setup-llm.sh --bench-sanity : le moteur répond-il JUSTE.
 # =============================================================================
 
 # =============================================================================
@@ -42,7 +42,6 @@ source "$SCRIPT_DIR/lib/setup.sh"
 source "$SCRIPT_DIR/lib/fork.sh"
 source "$SCRIPT_DIR/lib/runtime.sh"
 source "$SCRIPT_DIR/lib/bench/bench.sh"
-source "$SCRIPT_DIR/lib/bench/bench-devices.sh"
 source "$SCRIPT_DIR/lib/bench/bench-parallel.sh"
 source "$SCRIPT_DIR/lib/bench/bench-cache.sh"
 source "$SCRIPT_DIR/lib/bench/bench-load.sh"
@@ -60,7 +59,6 @@ case "${1:-}" in
   --update)            cmd_update "${2:-}" ;;
   --cleanup)           cmd_cleanup "${2:-}" ;;
   --bench)             cmd_bench "${2:-}" "${3:-}" ;;
-  --bench-devices)     cmd_bench_devices "${2:-}" "${3:-}" "${4:-}" ;;
   --bench-parallel)    cmd_bench_parallel "${2:-}" "${3:-}" "${4:-}" ;;
   --bench-cache)       cmd_bench_cache "${2:-}" ;;
   --bench-agentic)     cmd_bench_agentic "${2:-}" "${3:-}" "${4:-}" ;;

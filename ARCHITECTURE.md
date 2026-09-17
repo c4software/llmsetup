@@ -6,8 +6,8 @@
 lib/models.sh (déclarations : download_hf/llama_model/groupe → MODEL_INI, défauts)
         │
         ▼                    surcharges
-generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
-   (lib/ini.sh)      ◄──  spec-nmax.conf       (spec-draft-n-max par modèle)
+generate_models_ini  ◄──  spec-nmax.conf       (spec-draft-n-max par modèle)
+   (lib/ini.sh)
         │            ◄──  spec-ngram.conf      (spec-ngram-map-k-size-m par modèle)
         │            ◄──  preload.conf         (load-on-startup)
         ▼
@@ -62,15 +62,14 @@ régresser.
 ordre imposé :
 
 ```
-common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
   `_dl`, `_dl_shard`, `_maybe_restart_service`, `_llama_build` : version
   courte de llama.cpp, journalisée partout ; `_ensure_room_for` : garde
   mémoire avant chargement d'un modèle, cf. plus bas) et **toutes les variables
-  globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `BENCH_CONF`,
-  `PRELOAD_CONF`, `SPEC_TEST_URL`, `LOG_DIR` (+ migration des journaux de la
+  globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `PRELOAD_CONF`, `SPEC_TEST_URL`, `LOG_DIR` (+ migration des journaux de la
   racine), `SPEC_LOG`, `BENCH_LOG`, `SPEC_CONF`, `SPEC_NGRAM_CONF`, `SERVICE_NAME`,
   `SERVICE_FILE`, `REFRESH`/`ONLY`. Elles vivent ici parce que plusieurs modules les
   consomment (`_maybe_restart_service` utilise `SERVICE_NAME`, `cmd_bench`
@@ -87,7 +86,9 @@ common → svc → models → ini → compose → preload → setup → fork →
   Sourcé juste après `common.sh` parce que `_maybe_restart_service` en dépend.
   Ne pas confondre avec le compose **jetable** de `bench-agentic/`, qui lance le
   client pi et ne sert aucun modèle.
-- `models.sh` : `DEFAULT_DEVICE` et la **déclaration des modèles**, un bloc
+- `models.sh` : `DEFAULT_DEVICE` (`ROCm0`, device unique de l'image),
+  `INI_BATCH_MAX` / `INI_BIG_BATCH_OK` (garde-fou `batch-size`) et la
+  **déclaration des modèles**, un bloc
   par modèle **avec ses commentaires métier** (sampling officiels, contraintes
   cache/MTP/SWA, historique des choix, repo/quant). Quatre helpers déclaratifs :
   `download_hf`/`download_hf_shards` (définissent les chemins `*_PATH`,
@@ -97,8 +98,8 @@ common → svc → models → ini → compose → preload → setup → fork →
   et `PRESET_ORDER` = ordre de déclaration = ordre d'émission — `declare -A`
   ne préserve pas l'ordre d'insertion). Un `download_hf` peut servir
   plusieurs sections (même GGUF) et porter plusieurs fichiers (drafter externe).
-- `ini.sh` : loaders des quatre confs (`load_bench_conf`, `load_preload_conf`,
-  `load_spec_conf`, `load_spec_ngram_conf`), `_preset_model_key`,
+- `ini.sh` : loaders des trois confs (`load_preload_conf`,
+  `load_spec_conf`, `load_spec_ngram_conf`),
   `_preset_nmax` et `_preset_ngram_m` (surcharge conf > défaut script ;
   `SPEC_NMAX_FORCE` / `SPEC_NGRAM_FORCE` + `*_PRESET` priment, posés par les
   tuners pour tester une valeur sans l'écrire), `generate_models_ini`
@@ -106,7 +107,13 @@ common → svc → models → ini → compose → preload → setup → fork →
   remplacé le temps d'une mesure, `draft-mtp` pour `--spec-tune` sur une
   liste, `none` pour la référence de `--spec-ngram-tune` sans MTP ; et
   `SPEC_AB_OVERRIDES` + `SPEC_AB_PRESET` : surcharges libres de `--spec-ab`,
-  via `_apply_overrides`).
+  via `_apply_overrides`). Émet aussi les **quatre injections** de device
+  (`device`, `device-draft`, `spec-draft-ngl = all`, `mmproj-device`, toutes
+  sur `DEFAULT_DEVICE`), le **garde-fou `batch-size`/`ubatch-size`**
+  (`_ini_guard_batch`, refus au-delà de `INI_BATCH_MAX` hors
+  `INI_BIG_BATCH_OK`, surcharges `--spec-ab` comprises) et l'avertissement
+  `_ini_warn_conf_nmax` (une valeur locale de `spec-nmax.conf` qui contredit
+  le dépôt).
 - `compose.sh` : **génération du `docker-compose.yml`** de `$CONFIG_DIR`
   (`~/models`, à côté de `models.ini`). `generate_compose` écrit le YAML sur
   **stdout** (aucun effet de bord, donc testable et diffable), `regen_compose`
@@ -181,14 +188,12 @@ common → svc → models → ini → compose → preload → setup → fork →
   et `cmd_bench` (mesure du serveur en l'état, journal `logs/bench.log` +
   comparaison au run précédent). Une mesure = un module `bench/bench-*.sh` qui
   réutilise ce noyau :
-- `bench/bench-devices.sh` : `cmd_bench_devices` (comparaison automatique des
-  devices d'un modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré +
-  restart par device, verdict = temps d'un tour d'usage simulé
-  `PP/prefill + GEN/décode` (profil `BENCH_PROFILE_PP`/`BENCH_PROFILE_GEN`,
-  défaut 2000/3000 ; à <2 % d'écart le device par défaut est préféré),
-  vainqueur écrit dans `bench-devices.conf` via `_bench_save_device`),
-  `cmd_bench_sanity` / `_bench_sanity_one` (justesse, `py/check_answer.py`,
-  appliquée par `cmd_bench_devices` avant chaque device), `cmd_list_devices`.
+  `bench.sh` porte aussi `cmd_bench_sanity` / `_bench_sanity_one` (justesse,
+  `py/check_answer.py` ; première étape **bloquante** de
+  `tools/qualif-modele.sh`) et `cmd_list_devices` (moteur de l'hôte, backends
+  ggml, puis les devices de l'**image** par `_dk_run llama-bench
+  --list-devices`). Le module `bench/bench-devices.sh` et `--bench-devices` ont
+  été retirés le 18/09/2026 : l'image n'expose qu'un device.
 - `bench/bench-parallel.sh` : `cmd_bench_parallel` (salves de 1 puis n requêtes
   simultanées, `parallel` réel lu sur `/v1/models`, agrégat par
   `py/parallel_agg.py`).
@@ -257,7 +262,7 @@ près — voir `tests/py-golden.sh`.
 | `batch_curve.py <modèle> <device> <depth> [tsv] [rec]` | jsonl de `llama-bench -o jsonl` sur stdin (plusieurs balayages concaténés, le plus récent fait foi) | tableau batch/size_m/coût/seuil/gain, marches, baisses au-delà du bruit, tailles dominées, verdict ; `SIZEM_SAFE=`/`SIZEM_LARGE=`/`STEP_LO=`/`STEP_HI=` si `rec` ; append TSV si fichier donné | `cmd_spec_ngram_tune`, `tools/bench-spec-batch.sh` |
 | `depth_curve.py <modèle> <device> <pp> <gen> [tsv] [rec]` | jsonl de `llama-bench -d` sur stdin | tableau prefill/décode/tour simulé par profondeur, dégradation de 0 à la profondeur max, `TOUR_<depth>=` si `rec` ; append TSV | `tools/bench-depth.sh` |
 | `spec_isolate_bench.py --port --tag --out --prompts --passes --max-tokens --np [--seed] [--temp]` | le serveur jetable de `tools/spec-isolate.sh` sur `--port` | tableau par passe (prefill, décode, acceptance, sanité, aperçu), salve simultanée si `--np > 1`, médianes hors 1re passe ; append `<out>/mesures.tsv` et `<out>/gen-*.txt` | `tools/spec-isolate.sh` |
-| `check_answer.py <json> <attendu>` | réponse `/v1/chat/completions` | ligne lisible ; code 0 si la valeur attendue est dans la réponse (ou le raisonnement), 1 sinon | `_bench_sanity_one` (bench.sh, aussi appelé par `cmd_bench_devices`) |
+| `check_answer.py <json> <attendu>` | réponse `/v1/chat/completions` | ligne lisible ; code 0 si la valeur attendue est dans la réponse (ou le raisonnement), 1 sinon | `_bench_sanity_one` (bench.sh) |
 | `cache_stats.py <json> <étiquette>` | réponse `/v1/chat/completions` | ligne lisible + `PN=` (tokens du prompt) `CN=` (servis du cache) `PMS=` (prefill ms) | `cmd_bench_cache` |
 | `parallel_agg.py <temps_mur_s> <réponse.json>...` | réponses d'une salve de requêtes simultanées | ligne lisible + `AGG=` (tokens / temps mur) `MED=` (décode médian par requête) `TOK=` `ERR=` | `_bench_parallel_salve` (bench.sh) |
 | `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device **et du même mode EC** (à défaut, le dernier run avec la mention « mode EC différent »), build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
@@ -274,7 +279,7 @@ fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
 | `spec-test.txt` | `cmd_spec_test` | prompt de référence (module `inventory.py` + tests pytest — code structuré = meilleur cas MTP) ; seul prompt qui alimente la calibration α |
 | `spec-refactor.txt` | `cmd_spec_ngram_tune` (via `cmd_spec_test`) | le même module fourni dans le contexte, avec des blocs à recopier exactement puis à remplacer (forme oldString/newString d'opencode) : le seul cas où un n-gram a des hits, donc le seul qui départage deux `size_m` |
 | `bench-context.txt` | `_bench_one` | contexte réaliste du bench : cahier des charges du système que la tâche demande d'implémenter (long prefill varié ; taille réelle = `n=` de la passe 1) |
-| `bench-sanity.txt` | `_bench_sanity_one` | recopie exacte d'un code (`LAMPADAIRE-2719`) : contrôle de justesse d'un device, volontairement trivial pour ne tester que le backend, pas le modèle |
+| `bench-sanity.txt` | `_bench_sanity_one` | recopie exacte d'un code (`LAMPADAIRE-2719`) : contrôle de justesse du moteur, volontairement trivial pour ne tester que le backend, pas le modèle |
 | `bench-task.txt` | `_bench_one` | tâche de génération posée après le contexte (référence les sections du cahier des charges) |
 
 **⚠ Comparabilité.** Modifier un de ces fichiers invalide les comparaisons
@@ -288,11 +293,9 @@ dans le message de commit.
 
 ## Cycle de vie d'un modèle
 
-1. Défaut : corps `MODEL_INI[modèle]` (models.sh), device hérité du `[*]`
-   (Vulkan0).
+1. Défaut : corps `MODEL_INI[modèle]` (models.sh), plus les flags globaux du
+   `[*]` (device `ROCm0`, `fit = off`, `load-mode = none`, cache K et V `f16`).
 2. Surcharges appliquées par `generate_models_ini` :
-   `bench-devices.conf` (ligne `device =` si le vainqueur du GGUF ≠ défaut ;
-   clé = **dossier du GGUF**, donc partagée entre modèles d'un même fichier),
    `spec-nmax.conf` (substitution de `spec-draft-n-max`),
    `spec-ngram.conf` (substitution de `spec-ngram-map-k-size-m`),
    `preload.conf` (ajout de `load-on-startup = true`).
@@ -354,48 +357,39 @@ référence en `spec-type none` (`SPEC_TYPE_FORCE`) et n'écrit rien si aucun
 n'est pas réglé (second ordre, restarts multipliés), il vit dans
 `lib/models.sh`.
 
-## Verdict de --bench-devices (temps de tour simulé)
+## Le device : plus de choix depuis le 18/09/2026
 
-Comparer deux devices sur deux métriques (prefill t/s, décode t/s) ne
-tranche pas quand chacun gagne la sienne : ROCm est souvent devant en
-prefill, Vulkan en décode. Le verdict ramène donc la comparaison à un seul
-scalaire : le temps d'un tour d'usage type,
+Le moteur du service est l'image de `runtime/`, construite en **HIP seul** :
+elle n'expose que `ROCm0`. `--bench-devices`, `bench-devices.conf`,
+`BENCH_DEVICE*`, `_bench_save_device` et `lib/bench/bench-devices.sh` ont donc
+été retirés, et `DEFAULT_DEVICE` (`lib/models.sh`) est la seule valeur écrite
+dans le ini — sur quatre lignes par section : `device`, `device-draft`,
+`spec-draft-ngl = all` et `mmproj-device`, pour qu'aucun morceau du modèle
+(drafter, projecteur vision) n'atterrisse ailleurs que sur sa cible.
 
-```
-t(device) = PP_froid / prefill_t/s  +  GEN / décode_t/s
-```
+Ce qui en reste :
 
-avec par défaut `PP_froid = 2000` tokens de prefill froid et `GEN = 3000`
-tokens générés (variables d'environnement `BENCH_PROFILE_PP` /
-`BENCH_PROFILE_GEN`, surchargables à l'appel sans toucher au script). Le
-profil représente un tour agentic : un morceau de contexte nouveau à
-calculer réellement, puis une réponse longue. Les tokens resservis par le
-prompt cache sont volontairement hors profil : leur coût réel est quasi
-nul (cf. les passes 2+ du bench, n=4 calculés sur ~1400), les compter
-n'ajouterait que du bruit sans changer l'ordre.
+- **`--bench-sanity`** (la question de contrôle, `prompts/bench-sanity.txt`) :
+  c'était la porte d'entrée de `--bench-devices`, c'est maintenant la première
+  étape, **bloquante**, de `tools/qualif-modele.sh`. Elle attrape un texte
+  propre mais faux, là où le garde-fou « sortie dégénérée » de `timings.py`
+  attrape le charabia. Les deux servent : un backend cassé produit des t/s
+  superbes (DeepSeek V4 sur le ROCm système, 550 t/s de « Nous dev dev dev »).
+- **`--list-devices`** : un contrôle, plus un choix. Il montre le moteur de
+  l'HÔTE (fork ou paquet Arch, qui sert les outils hors service), les backends
+  ggml installés, puis les devices de l'IMAGE (`_dk_run llama-bench
+  --list-devices`), et alerte si `ROCm0` manque — auquel cas rien ne charge.
+- **le verdict de tour simulé** (`t = PP_froid/prefill + GEN/décode`, profil
+  2000 / 3000) n'a plus de commande, mais il reste la bonne façon de trancher
+  un compromis prefill contre décode à la main : c'est ainsi que se lit le cas
+  `qwen3.8-27b-dflash-nothink` sur le nouveau moteur (+26 % de décode, -24 % de
+  prefill, cf. son bloc). Limites inchangées : modèle linéaire, acceptance déjà
+  incluse dans le décode mesuré.
 
-Le vainqueur est le temps minimal, affiché en colonne « tour simulé (s) »
-du tableau. Deux garde-fous :
-
-- à moins de 2 % d'écart, le device par défaut (`DEFAULT_DEVICE`) est
-  préféré : on ne change pas de backend sur du bruit de mesure ;
-- un prefill marqué `*` (passe 1 partiellement servie par le cache) entre
-  dans le calcul sans l'astérisque mais reste signalé au tableau. Le cas
-  est théorique ici : le restart entre devices garantit un cache froid.
-
-Les entrées du calcul sont les médianes de `_bench_one` (prefill de la
-passe 1, décode hors passe 1), donc les mêmes chiffres et les mêmes
-prompts que `--bench` : un tableau `--bench-devices` se compare à un
-tableau `--bench` de la même époque de prompts. Limites assumées : le
-modèle est linéaire (pas de dépendance du prefill à la taille du contexte
-ni du décode à la profondeur), et l'acceptance MTP n'entre pas dans la
-formule, elle est déjà incluse dans le décode mesuré.
-
-Exemple (qwen3.8-27b-mtp-nothink, 2026-08-16) : Vulkan0 307 pp / 29,9 tg
-donne 106,7 s ; ROCm0 356 pp / 21,8 tg donne 143,3 s. Le gain de prefill
-de ROCm (+16 %) ne compense pas son décode plus lent (-27 %) : sur ce
-profil, le décode domine dès que GEN/décode dépasse largement
-PP/prefill, ce qui est le cas de tous les modèles denses de ce parc.
+Historique, pour mémoire : le verdict comparait Vulkan0 et ROCm0 parce que
+chacun gagnait une métrique (exemple du 16/08/2026, qwen3.8-27b-mtp-nothink :
+Vulkan0 307 pp / 29,9 tg = 106,7 s ; ROCm0 356 / 21,8 = 143,3 s). Ce ROCm0-là
+est le ROCm SYSTÈME, sans rapport avec le runtime retained-PM4 de l'image.
 
 ## Garde mémoire avant chargement (`_ensure_room_for`)
 
@@ -407,8 +401,7 @@ coupé le temps du `Restart=on-failure`).
 
 `_ensure_room_for <modèle>` (lib/common.sh) est donc appelé avant la première
 requête de chaque mesure (`_bench_one`, `_bench_sanity_one`, `cmd_bench_cache`,
-`cmd_bench_parallel`, `cmd_spec_test` — donc aussi `--bench-devices` et
-`--spec-ab`). Dans l'ordre :
+`cmd_bench_parallel`, `cmd_spec_test` — donc aussi `--spec-ab`). Dans l'ordre :
 
 1. taille estimée du modèle = somme des GGUF de sa ligne `model =` (shards
    compris : le ini ne nomme que le premier, le routeur charge la série) plus
@@ -479,7 +472,7 @@ GPU. Variables : `PORT`, `NP` (ajoute `-np` et une salve simultanée),
 
 `qualif-modele.sh <section> [options]` : enchaîne, sur un modèle DÉJÀ déclaré
 dans `lib/models.sh` et servi par le routeur, les étapes 3, 5, 6 et 7 de la
-skill ajout-modele : `--bench-devices`, `--spec-ab` (sur `spec-refactor.txt`
+skill ajout-modele : `--bench-sanity` (bloquante), `--spec-ab` (sur `spec-refactor.txt`
 puis `spec-test.txt`), `--bench`, `--bench-cache`, `--bench-load` et
 `--bench-agentic`, toutes en séquence (un seul GPU) et toutes avec leur entrée
 sur `/dev/null`. Les variantes de `--spec-ab` sont dérivées du drafter et du
@@ -489,8 +482,8 @@ refus de démarrage que `spec-isolate.sh` (mesure du dépôt en cours,
 `logs/qualif/<tag>/` : un journal par étape et `resume.md`, le tableau de
 l'étape 6 rempli par parsing des bilans (codes ANSI filtrés, `n/c` quand un
 motif manque). Une étape en échec n'arrête pas les suivantes ; code de retour
-non nul si l'une a échoué. N'écrit ni `lib/models.sh` ni les `.conf` (sauf
-`bench-devices.conf`, écrit par `--bench-devices` lui-même) ; ne joue ni le
+non nul si l'une a échoué, sauf l'étape de justesse, qui ARRÊTE la
+qualification. N'écrit ni `lib/models.sh` ni les `.conf` ; ne joue ni le
 test isolé ni `--spec-tune`.
 
 `bench-depth.sh` : même principe avec `llama-bench -d` (profondeur de KV

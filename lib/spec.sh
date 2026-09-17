@@ -1,5 +1,5 @@
 # lib/spec.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # spec-test — mesure le décode réel d'un modèle via l'API (chemin spéculatif
@@ -189,10 +189,8 @@ cmd_spec_test() {
   fi
 
   # --- En-tête : contexte complet du run, à coller tel quel dans un échange ---
-  load_bench_conf
-  local mkey mdev gguf gsize llver ecmode
-  mkey="$(_preset_model_key "$preset" || true)"
-  mdev="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE}"
+  local mdev gguf gsize llver ecmode
+  mdev="$DEFAULT_DEVICE"
   gguf="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
   gsize="$(du -h "$gguf" 2>/dev/null | cut -f1 || echo '?')"
   # Moteur du SERVICE = l'image (lib/runtime.sh), plus un binaire de l'hôte :
@@ -398,11 +396,9 @@ cmd_spec_tune() {
   info "Le routeur ne lit le ini qu'au démarrage : chaque n-max impose un"
   info "  './setup-llm.sh --restart' (conteneur recréé, compose régénéré)."
 
-  local gguf mkey mdev
+  local gguf mdev
   gguf="$(basename "$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)")"
-  load_bench_conf
-  mkey="$(_preset_model_key "$preset" || true)"
-  mdev="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE}"
+  mdev="$DEFAULT_DEVICE"
 
   # spec-type en liste (n-gram + MTP) : le n-max ne concerne que la tête MTP,
   # et le modèle α ne tient que si k est constant — on mesure donc en
@@ -471,7 +467,7 @@ cmd_spec_tune() {
 #
 # 1. COURBE (llama-bench, service arrêté, ~2 min) : balayage grossier puis
 #    raffinement automatique autour de la marche détectée, sur le device
-#    EFFECTIF du modèle (bench-devices.conf) — la marche n'est pas au même
+#    EFFECTIF du modèle (ROCm0, device unique) — la marche n'est pas au même
 #    endroit d'un backend à l'autre. Sortie : deux candidats, le « sûr » (sous
 #    la marche, ne peut pas perdre) et le « large » (amortit le coût fixe).
 #    Détail du raisonnement dans py/batch_curve.py.
@@ -572,12 +568,10 @@ cmd_spec_ngram_tune() {
     warn "  donc des candidats indistinguables. Préférer spec-refactor.txt."
   fi
 
-  local gguf mkey mdev
+  local gguf mdev
   gguf="$(echo "${MODEL_INI[$preset]}" | sed -n 's/^model[[:space:]]*=[[:space:]]*//p' | head -1)"
   [[ -f "$gguf" ]] || error "GGUF absent : $gguf — lancer --setup."
-  load_bench_conf
-  mkey="$(_preset_model_key "$preset" || true)"
-  mdev="${BENCH_DEVICE[$mkey]:-$DEFAULT_DEVICE}"
+  mdev="$DEFAULT_DEVICE"
 
   load_spec_ngram_conf
   local avant
@@ -607,6 +601,9 @@ cmd_spec_ngram_tune() {
     info "Arrêt de $SERVICE_NAME le temps du balayage (contention GPU)."
     _svc_stop || warn "Arrêt en échec - mesures potentiellement faussées."
   fi
+  # Moteur de l'HÔTE uniquement (llama-bench du fork, service arrêté). ⚠ Ne
+  # JAMAIS passer cette variable à _dk_run (lib/runtime.sh) ni au compose : sur
+  # le runtime retained-PM4 de l'image elle corrompt la sortie.
   export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
 
   echo ""

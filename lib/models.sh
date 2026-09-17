@@ -1,30 +1,54 @@
 # lib/models.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
-# BACKENDS
+# BACKEND — UN SEUL, ROCm0
 #
-# Vulkan0 reste le défaut global ([*] device = Vulkan0). Backends ggml en
-# paquets séparés (split Arch mi-août 2026) : ggml-vulkan pour Vulkan0,
-# ggml-hip + runtime ROCm pour ROCm0 — le runtime seul ne suffit plus.
-# Depuis le passage au fork strix-llama.cpp (13/09/2026, cf. lib/fork.sh), le
-# binaire servi n'embarque que Vulkan : ROCm0 n'est atteignable qu'en repassant
-# au paquet Arch (llama-cpp b10809). Les paquets ggml ci-dessus ne valent que
-# pour ce secours.
+# Depuis la bascule en conteneur (18/09/2026) le moteur du service est l'image
+# de runtime/ : ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 + halo-box/
+# strix-llama.cpp construit en HIP SEUL. Il n'y a AUCUN backend Vulkan dans
+# l'image : ROCm0 est le seul device exposé, il n'y a plus rien à comparer.
+# Conséquences, toutes actées le 18/09/2026 :
+#   - DEFAULT_DEVICE = ROCm0, et plus aucune ligne `device =` par section ;
+#   - --bench-devices, bench-devices.conf et le mécanisme BENCH_DEVICE sont
+#     retirés (lib/ini.sh, lib/bench/) ; --bench-sanity reste, et devient la
+#     première étape BLOQUANTE de tools/qualif-modele.sh : c'est elle qui
+#     attrape un texte propre mais faux, quand timings.py attrape le charabia ;
+#   - les exclusions « ROCm0 donne du charabia » des blocs ci-dessous datent du
+#     ROCm SYSTÈME (paquet ggml-hip) et sont GUÉRIES par le runtime
+#     retained-PM4 de l'image : elles restent en commentaire, datées, comme
+#     historique. Le charabia « Nous dev dev dev » de DeepSeek V4 et le
+#     « LAMPAMPAMP » de Qwen3-Coder-Next ont été re-testés le 18/09/2026 sur
+#     l'image, comptages justes des deux côtés.
+# Les paquets ggml de l'hôte (ggml-vulkan, ggml-hip) ne valent plus que pour
+# les outils HORS service (llama-bench des courbes de batch, llama-server
+# jetable de tools/spec-isolate.sh), qui tournent encore sur le fork Vulkan de
+# lib/fork.sh.
 #
-# Sélection par GGUF : via bench-devices.conf, écrit par --bench-devices
-# (édition manuelle OK), clé = dossier du GGUF. Chaque modèle dont le GGUF a
-# une entrée reçoit `device = <retenu>` dans le ini. Pas d'entrée : héritage
-# du [*].
-#
-# ⚠ Garde-fou pour un retour au paquet Arch (le fork est Vulkan seul) : les
-#   modèles MTP/spéculatifs héritent du device benché sur leur GGUF, mais
-#   le bench ne mesure PAS le chemin spéculatif : après une bascule ROCm d'un
-#   modèle MTP, valider la spéculation dans les logs (acceptance, pas de
-#   fallback silencieux) avant de garder.
+# ⚠ GGML_CUDA_ENABLE_UNIFIED_MEMORY est INTERDIT sur ce runtime : il fait
+#   passer chaque allocation par hipMallocManaged et la sortie se corrompt
+#   (cf. runtime/AMONT.md et lib/compose.sh). Il reste exporté par lib/spec.sh
+#   et les tools/ pour le moteur de l'HÔTE ; ne jamais le propager à _dk_run ni
+#   au compose.
 # =============================================================================
 
-DEFAULT_DEVICE="Vulkan0"
+DEFAULT_DEVICE="ROCm0"
+
+# =============================================================================
+# GARDE-FOU batch-size / ubatch-size (18/09/2026)
+#
+# Sur le moteur de l'image, batch-size / ubatch-size 16384 provoque une ERREUR
+# DE SEGMENTATION (code de sortie 139) dès un prompt de 8k tokens, sur TOUS les
+# modèles essayés sauf Qwen3.8-Flash-Next, et coûte environ 33 Gio de tampons.
+# generate_models_ini (lib/ini.sh) refuse donc d'émettre plus de INI_BATCH_MAX
+# pour une section absente de INI_BIG_BATCH_OK, y compris quand la valeur vient
+# d'une surcharge --spec-ab. Partout ailleurs : rien n'est posé, le moteur
+# applique son défaut (2048).
+# Ajouter une section ici demande une mesure : un prompt de 8k tokens au moins,
+# et la sortie relue.
+# =============================================================================
+INI_BATCH_MAX=4096
+INI_BIG_BATCH_OK=(qwen3.8-flash-next-mtp-nothink)
 
 # =============================================================================
 # DÉFINITION DES MODÈLES
@@ -43,9 +67,11 @@ DEFAULT_DEVICE="Vulkan0"
 #     preload.conf (sélection interactive au --setup ou via --preload).
 #     Pas de stop-timeout : l'éviction des modèles à la demande est gérée
 #     par le LRU de --models-max, un timer n'apporte rien.
-#   - device : hérité du [*] (Vulkan0) sauf surcharge locale (ROCm0, seulement
-#     en secours sur le paquet Arch : aucune ligne device dans ce fichier au
-#     13/09/2026)
+#   - device : jamais écrit ici. generate_models_ini injecte `device`,
+#     `device-draft`, `mmproj-device` et `spec-draft-ngl = all` dans chaque
+#     section concernée, tous sur le device unique ROCm0 (cf. en-tête)
+#   - batch-size / ubatch-size : jamais posés, sauf la section Flash-Next
+#     (INI_BIG_BATCH_OK, cf. en-tête). Ailleurs, le défaut du moteur (2048)
 #   - cache-reuse = 0 : explicite sur toutes les sections à état récurrent (GDN)
 #     ou à attention hybride/MLA ; plus aucune section n'hérite du 4096 global
 #     depuis le retrait de gpt-oss le 16/09/2026 (MoE sans état récurrent,
@@ -69,9 +95,18 @@ DEFAULT_DEVICE="Vulkan0"
 #     retiré depuis),
 #     le cache ne sert que les continuations — ne
 #     jamais réécrire l'historique (compaction, tronquage) si on tient au cache.
-#   - cache-type-v = q8_0 en surcharge locale pour les modèles à usage
-#     agentic/tool calling (le KV V q4_0 dégrade le tool calling, cf. doc
-#     llama.cpp function-calling)
+#   - cache KV : f16 sur K et V pour tout le parc, posé une seule fois dans les
+#     flags globaux ([*], lib/ini.sh) depuis le 18/09/2026. Avant cette date le
+#     global était q8_0 / q4_0 et chaque section agentic surchargeait
+#     cache-type-v = q8_0 (le V q4_0 dégradait le tool calling, cf. doc
+#     llama.cpp function-calling). Ces surcharges ont disparu : la campagne du
+#     17 au 18/09/2026 a tourné en f16 / f16 sur les huit modèles mesurés,
+#     aucune mesure de ce moteur ne justifie une valeur quantifiée, et sur
+#     DeepSeek f16 et q8_0 sont équivalents en mémoire comme en débit. Sur le
+#     27B et Muse-Glimmer, mesuré plus tôt sur le fork Vulkan, le V f16 donnait
+#     déjà une meilleure acceptance du drafter que le q8_0. SEULE EXCEPTION,
+#     assumée : ornith-1.5-35b-a3b-parallel garde son q8_0, faute d'avoir été
+#     mesurée sur ce moteur (cf. son bloc)
 #   - swa-full + ctx-checkpoints : posé sur ornith-1.5-9b-mtp-nothink,
 #     ornith-1.5-35b-a3b-parallel et
 #     qwen3.8-27b-dflash-nothink. Jusqu'au 15/09/2026 ce bloc affirmait que
@@ -143,6 +178,15 @@ DEFAULT_DEVICE="Vulkan0"
 #     est réelle (2 à 3 slots au journal) et ne coûte rien.
 #     Règle générale qui s'en dégage : un modèle spéculatif ne gagne au
 #     multi-slot que si parallel x (n-max + 1) reste <= 8 colonnes.
+#     ⚠ HISTORIQUE DEPUIS LE 18/09/2026 : ce seuil de 8 colonnes est celui de
+#     ggml-vulkan (mul_mat_vec_max_cols, constante de compilation), et le
+#     découpage mat-vec 4/2/1 est celui de la PR #27 du fork, Vulkan lui aussi.
+#     Le moteur du service est maintenant l'image HIP, où NI l'un NI l'autre
+#     n'a été re-mesuré. Les n-max et size-m du parc restent ceux qui ont été
+#     choisis sous ces contraintes ; la campagne du 17 au 18/09/2026 les a
+#     mesurés TELS QUELS sur le nouveau moteur (bons chiffres, cf. chaque
+#     bloc), elle ne les a pas ré-arbitrés. Refaire les courbes t_forward(batch)
+#     sur ROCm0 avant de conclure quoi que ce soit de neuf sur ces seuils.
 #     Seul interdit qui demeure : le mmproj reste incompatible avec un drafter
 #     (vision => pas de spéculation). Les anciens parallel 2/3 sur modèles MTP
 #     (constatés avant le 15/08/2026, plus aucune section ne les porte) n'ont
@@ -156,9 +200,16 @@ DL_SPECS=()
 _GROUPE_EN_ATTENTE=""
 
 # Inventaire des fichiers attendus — source unique pour la création des dossiers
-# et pour --cleanup, alimenté par les appels download_hf / download_hf_shards /
-# derive_gguf ci-dessous. Tout
+# et pour --cleanup, alimenté par les appels download_hf / download_hf_shards
+# ci-dessous. Tout
 # fichier qui cesse d'être déclaré devient un orphelin supprimable.
+# (retiré le 18/09/2026 avec le passage à la tête MTP « shared » de
+#  Qwen3.8-Flash-Next : le sidecar AUTONOME
+#  ~/models/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf (4,1 Go) et
+#  sa copie renommée mtp-Qwen3.8-Flash-Next-strix-Q8_0.gguf (4,1 Go), tous deux
+#  nécessaires au seul commit 0007bc6 du fork. ORPHELINS, mais --cleanup NE LES
+#  PURGERA PAS : MTP/ est un sous-dossier protégé en bloc, et la tête « shared »
+#  y est déclarée. À retirer à la main si la place manque)
 # (retiré le 13/09/2026 car plus utilisé : qwopus3.6-27b-coder-mtp (ses mesures
 #  restent dans logs/)
 #  → ./setup-llm.sh --cleanup les purge)
@@ -230,20 +281,12 @@ download_hf_shards() {
   DL_SPECS+=("shard"$'\t'"$chemin"$'\t'"$repo"$'\t'"${entry%/*}/*")
 }
 
-# derive_gguf <dossier> VAR=<fichier produit> <chemin source> <script du dépôt>
-#   Comme download_hf, mais pour un fichier qu'AUCUN repo ne porte : il est
-#   calculé en local à partir d'un fichier déjà déclaré (donc déjà téléchargé —
-#   l'appel doit SUIVRE celui de la source). Définit VAR, ajoute le chemin à
-#   KNOWN_FILES et enregistre une étape de post-traitement, jouée par cmd_setup
-#   après les téléchargements, dans l'ordre de déclaration (_derive, lib/common.sh).
-derive_gguf() {
-  local dossier="$1" spec="$2" source="$3" script="$4" var fichier chemin
-  var="${spec%%=*}"; fichier="${spec#*=}"
-  chemin="$MODELS_BASE/$dossier/$fichier"
-  printf -v "$var" '%s' "$chemin"
-  KNOWN_FILES+=("$chemin")
-  DL_SPECS+=("derive"$'\t'"$chemin"$'\t'"$source"$'\t'"$script")
-}
+# (derive_gguf, qui déclarait un GGUF calculé en local par un script du dépôt,
+#  a été retiré le 18/09/2026 avec son seul usage : la copie renommée du
+#  sidecar MTP de Qwen3.8-Flash-Next, nécessaire au seul commit 0007bc6 du fork.
+#  Le moteur de l'image lit la tête « shared » telle quelle. _derive
+#  (lib/common.sh), le cas "derive" de cmd_setup et tools/mtp-rename-hc-head.py
+#  sont partis avec — tout est dans l'historique git si le besoin revient.)
 
 # groupe <ligne> [<ligne>...]
 #   En-tête de groupe du ini, émis (suivi d'une ligne vide) juste avant la
@@ -286,11 +329,10 @@ llama_model() {
 # famille que le Qwen3.5-9B remplacé), tenseurs blk.32.nextn.* : tête MTP
 # EMBARQUÉE dans le fichier principal, donc spec-type = draft-mtp sans sidecar
 # ni spec-draft-model. Contexte natif 262144.
-# bench-devices.conf est indexé par dossier de GGUF : ornith-1.5-9b n'y a pas de
-# ligne, la section hérite du défaut [*] Vulkan0. Étape --bench-devices NON
-# LANCÉE et ce n'est pas un oubli : le fork strix-llama.cpp ne construit que
-# Vulkan (cf. en-tête BACKENDS) et tout le parc y est, comme les autres sections
-# du 15/09/2026. À reprendre le jour d'un retour au paquet Arch.
+# Device : ROCm0, comme tout le parc depuis le 18/09/2026 (device unique de
+# l'image, cf. en-tête). Jusque-là la section héritait du défaut Vulkan0 sans
+# qu'aucun --bench-devices ait tourné sur elle, le fork ne construisant que
+# Vulkan.
 download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
   ORNITH15_9B_MTP_PATH="Ornith-1.5-9B-MTP-Q8_0.gguf"
 
@@ -320,8 +362,10 @@ download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
 #   ne servait QUE des tâches auxiliaires courtes ; ce modèle-ci fait aussi de
 #   l'édition de code (Terminal-Bench, SWE-bench), la borne dure de génération
 #   est donc retirée et le contexte aligné sur le parc.
-# jinja + cache-type-v q8_0 : conventions du parc pour un modèle à tool calling
-#   (template chat requis, le V q4_0 global dégrade le tool calling, cf. en-tête).
+# jinja : convention du parc pour un modèle à tool calling (template chat
+#   requis). Le cache-type-v q8_0 qui l'accompagnait jusqu'au 18/09/2026 est
+#   retiré : le global est passé en f16 sur K et V (cf. en-tête), et c'est en
+#   f16 que la campagne du 18/09 a mesuré cette section.
 # ⚠ SAMPLING IMPOSÉ par la fiche éditeur, la famille BOUCLE sinon : temp 1.0,
 #   top-k 20, top-p 0.95, min-p 0 et surtout presence-penalty 1.5 (le [*] global
 #   est à 0.0, d'où la surcharge locale). Ce sont les valeurs utilisées par les
@@ -383,6 +427,17 @@ download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
 # --bench-cache, --bench-load et --bench-agentic : non lancés sur cette section
 #   au 15/09/2026 (le 9b remplacé donnait 62 / 0 / 64 % de cache sur la même
 #   arch qwen35 et le même état récurrent GDN, rien n'indique un écart).
+# MOTEUR CONTENEURISÉ, campagne du 17 au 18/09/2026 (série
+#   strix-8c1c282+r7dda3ac : image ROCm de runtime/, moteur 8c1c282, runtime
+#   pwilkin/rocm-systems 7dda3ac ; ROCm0, fit off, load-mode none, cache K et V
+#   f16, llama-server lancé HORS DÉPÔT par un script de test, prompt court
+#   d'environ 1 400 tokens et 1 000 générés, médianes de 3 passes) :
+#   prefill 1468 t/s, décode 49,8 t/s, réglage spéculatif inchangé.
+#   Contre la même section sur le fork 0007bc6 Vulkan0 (828 / 39,5) : prefill
+#   +77 %, décode +26 %. Prefill en profondeur (2k / 8k / 25k / 51k) : 1355 /
+#   1460 / 1294 / 1080 t/s, justesse vérifiée par comptage de lignes.
+#   ⚠ Ces chiffres ne viennent PAS de --bench : ne pas les mélanger aux lignes
+#   de logs/bench.log, ils seront rejoués par le dépôt après la bascule.
 
 llama_model ornith-1.5-9b-mtp-nothink "
 model                = $ORNITH15_9B_MTP_PATH
@@ -394,7 +449,6 @@ top-p                = 0.95
 min-p                = 0.0
 presence-penalty     = 1.5
 reasoning            = off
-cache-type-v         = q8_0
 jinja                = true
 parallel             = 1
 cache-reuse          = 0
@@ -416,8 +470,7 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   SANS spéculation, réservée à la concurrence (x1,93 en salves, x2,33 à trois
 #   boucles agentic simultanées, mesurés le 15/09/2026) ; la variante solo est
 #   `ornith-1.5-35b-a3b-mtp`, déclarée juste en dessous. Aucun autre nom ne
-#   bouge : le DOSSIER de GGUF reste ~/models/ornith-1.5-35b-a3b/ (donc la
-#   ligne de bench-devices.conf, indexée par dossier, est intacte) et la
+#   bouge : le DOSSIER de GGUF reste ~/models/ornith-1.5-35b-a3b/ et la
 #   variable reste $ORNITH15_35B_A3B_PATH.
 #   (le bandeau disait « always-on » jusqu'au 15/09/2026 : sur bigchuck
 #   preload.conf ne contient que lfm2.5-2.6b, ce modèle monte à la demande en
@@ -479,15 +532,29 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   Confirmé le 15/09/2026 sur le fork (138 t/s agrégés à 4 requêtes), et
 #   c'est le meilleur réglage servi du parc en concurrence réelle : aucune
 #   variante spéculative n'en approche à np 4 (cf. ci-dessus).
-# Device : Vulkan0, --bench-devices 28/08/2026 (b10566, 3 passes) : 976 pp /
-#   70,9 tg contre ROCm0 931 / 57,6, justesse OK sur les deux, tour simulé
-#   44 s contre 54. --bench (bench-task) : 974 pp / 70,7 tg. --bench-cache :
+# ⚠ SECTION NON MESURÉE SUR LE MOTEUR CONTENEURISÉ, À QUALIFIER. La campagne
+#   du 17 au 18/09/2026 n'a pas joué le parallel 4 : tous ses réglages sont
+#   ceux du fork Vulkan, gardés tels quels faute de mesure. Ce qui change quand
+#   même, parce que c'est global : device ROCm0, fit off, load-mode none.
+#   Le cache-type-v = q8_0 du corps est GARDÉ pour la même raison (le reste du
+#   parc est passé au f16 global sur mesure, pas celui-ci) : c'est la seule
+#   valeur de cache quantifiée qui subsiste dans ce fichier. À trancher à la
+#   bascule, avec --bench-parallel.
+# Device : ROCm0 depuis le 18/09/2026 (device unique de l'image, cf. en-tête).
+#   HISTORIQUE, --bench-devices 28/08/2026 (b10566, ROCm SYSTÈME, 3 passes) :
+#   Vulkan0 976 pp / 70,9 tg contre ROCm0 931 / 57,6, justesse OK sur les deux,
+#   tour simulé 44 s contre 54 ; c'est ce qui avait retenu Vulkan0. Le ROCm de
+#   l'image n'a rien à voir avec celui-là (runtime retained-PM4), la question
+#   est rouverte et sans objet à la fois : il n'y a plus qu'un device.
+#   --bench (bench-task) : 974 pp / 70,7 tg. --bench-cache :
 #   62 % au tour suivant, 64 % à l'identique, 0 % après édition (GDN, cf.
 #   en-tête). Sortie contrôlée à la main : réponse lisible, pas de warning.
 #   --bench-agentic 28/08/2026 (pi 0.84.3, 3 passes) : 16/16, décode 71 t/s
 #   en boucle d'outils, cache 89 à 98 % en continuation (72 % sur un run à
 #   65 k tokens cumulés, trois tours de correction).
-# cache-type-v q8_0 : le V q4_0 global dégrade le tool calling
+# cache-type-v q8_0 : posé du temps du global q8_0 / q4_0 (le V q4_0 dégradait
+#   le tool calling). Gardé tel quel faute de mesure sur ce moteur, cf. l'avis
+#   « section non mesurée » ci-dessus.
 # cache-reuse 0 : ignoré sur GDN (état récurrent) — la restauration de
 #   préfixe passe par cache-ram + ctx-checkpoints, au dernier checkpoint
 #   seulement (cf. en-tête, 62 % au tour suivant sur cette arch).
@@ -521,8 +588,6 @@ groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot)
 #   deux sections partagent la ligne `model =`, le garde-fou avertit si elles
 #   sont préchargées ensemble (~22 Go chargés deux fois). Précédent du parc :
 #   qwen3.8-27b / qwen3.8-27b-dflash-nothink sur un GGUF unique.
-#   bench-devices.conf est indexé par dossier de GGUF : cette section hérite
-#   du Vulkan0 mesuré pour ornith-1.5-35b-a3b-parallel, rien à y ajouter.
 #   Bascule manuelle : /model ornith-1.5-35b-a3b-mtp
 # POURQUOI DEUX SECTIONS, et laquelle sert quoi (mesures du 15/09/2026, fork
 #   strix-0007bc6, Vulkan0) :
@@ -548,8 +613,10 @@ groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot)
 # cache-reuse 0 : ignoré sur GDN comme sur la section de base ; la valeur est
 #   posée explicitement, contrainte des sections spéculatives.
 # Toutes les autres clés sont celles de la section de base (sampling, ctx,
-#   cache-type-v q8_0, jinja, swa-full, ctx-checkpoints) : à ne changer qu'en
-#   même temps que là-bas.
+#   jinja, swa-full, ctx-checkpoints) : à ne changer qu'en même temps que
+#   là-bas. SAUF le cache KV : cette section-ci a été mesurée sur le moteur
+#   conteneurisé en f16 sur K et V (cf. plus bas) et n'a plus de
+#   cache-type-v = q8_0, quand la section de base le garde faute de mesure.
 # --bench du 15/09/2026 tel que servi (fork strix-0007bc6, Vulkan0, 3 passes,
 #   première mesure journalisée de cette section) : prefill 1073 t/s, décode
 #   76,2 t/s, acceptance 0,55, contre 1129 / 73,3 pour la section de base le
@@ -557,6 +624,21 @@ groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot)
 #   prefill -5 %. L'écart avec les +24 % du test isolé est normal, bench-task
 #   génère sans répétition et les hits n-gram y sont rares (acceptance 0,55
 #   contre 0,83 sur spec-refactor).
+# MOTEUR CONTENEURISÉ, campagne du 17 au 18/09/2026 (série
+#   strix-8c1c282+r7dda3ac, ROCm0, fit off, load-mode none, cache K et V f16,
+#   script de test HORS DÉPÔT, prompt court d'environ 1 400 tokens et 1 000
+#   générés, médianes de 3 passes ; réglage spéculatif inchangé, swa-full,
+#   ctx-checkpoints 128) : prefill 1673 t/s, décode 82,4 t/s. Contre la même
+#   section sur le fork 0007bc6 Vulkan0 (1073 / 76,2) : prefill +56 %, décode
+#   +8 %. Prefill en profondeur (2k / 8k / 25k / 51k) : 1703 / 1700 / 1429 /
+#   1145 t/s, justesse vérifiée par comptage de lignes.
+#   ⚠ Ces chiffres ne viennent PAS de --bench (script de test hors dépôt) : à
+#   rejouer par le dépôt après la bascule, ne pas les mélanger à bench.log.
+#   ⚠ CONTEXTE : la campagne a tourné à ctx-size 262144, pas aux 1048576 de
+#   production ci-dessous. Le contexte N'EST PAS changé (on ne le touche pas
+#   sans mesure), mais 1048576 en cache f16 n'a PAS été vérifié sur ce moteur :
+#   à contrôler à la bascule (chargement, mémoire résidente, décode), le f16
+#   pesant deux fois le q8_0 par token de KV.
 llama_model ornith-1.5-35b-a3b-mtp "
 model                = $ORNITH15_35B_A3B_PATH
 ctx-size             = 1048576
@@ -566,7 +648,6 @@ temp                 = 0.6
 top-k                = 20
 top-p                = 0.95
 min-p                = 0.0
-cache-type-v         = q8_0
 jinja                = true
 parallel             = 1
 cache-reuse          = 0
@@ -623,9 +704,10 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-DSpark-GGUF" \
 #   on suit la reco llama.cpp, plus déterministe, cohérente pour du tool calling.
 # ctx 131072 : fenêtre native 128K (mid-training LFM2.5) ; à parallel 1 le slot
 #   unique en dispose en entier (contre 32768 par slot du temps des 4 slots).
-# cache-type-k/v f16 : arch hybride conv récurrente + GQA (lfm2) — KV minuscule
-#   sur 2.6B, le q8_0/q4_0 global n'apporte rien ; f16 explicite par prudence
-#   (chemin quantifié non validé sur cette arch).
+# cache KV f16 : hérité du global depuis le 18/09/2026 (cf. en-tête). Les deux
+#   lignes cache-type-k/v = f16 du corps sont retirées, elles ne faisaient plus
+#   que répéter le global. Raison inchangée : arch hybride conv récurrente +
+#   GQA (lfm2), KV minuscule sur 2.6B, chemin quantifié jamais validé ici.
 # cache-reuse 0 : état récurrent (conv) : même logique que GDN, non supporté ;
 #   c'est aussi la contrainte des sections spéculatives.
 # Pas de swa-full ni ctx-checkpoints : pas une arch hybride SWA Qwen.
@@ -673,6 +755,18 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-DSpark-GGUF" \
 #   docs/perfs.tsv sur la ligne lfm2.5-2.6b, avec la mention « paquet sans
 #   drafter », pour garder la comparaison paquet contre fork sur ce modèle ;
 #   le reste est dans docs/HISTORIQUE.md.
+# MOTEUR CONTENEURISÉ, campagne du 17 au 18/09/2026 (série
+#   strix-8c1c282+r7dda3ac, ROCm0, fit off, load-mode none, cache K et V f16,
+#   script de test HORS DÉPÔT, prompt court d'environ 1 400 tokens et 1 000
+#   générés, médianes de 3 passes ; Q8_0, draft-dspark n-max 3, reasoning auto) :
+#   prefill 4187 t/s, décode 138,5 t/s. Contre la même section sur le fork
+#   0007bc6 Vulkan0 (2875 / 108,8) : prefill +46 %, décode +27 %. Prefill en
+#   profondeur (2k / 8k / 25k / 51k) : 4399 / 4181 / 3695 / 2954 t/s.
+#   Justesse : texte cohérent, mais 3 comptages de lignes justes sur 4 (251 au
+#   lieu de 260 sur un prompt). Probable limite du modèle plutôt que du moteur
+#   (c'est le plus petit du parc et le seul à se tromper), comparaison en cours
+#   au 18/09/2026 : à confirmer par --bench-sanity à la bascule.
+#   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
 llama_model lfm2.5-2.6b "
 model            = $LFM25_26B_PATH
 ctx-size         = 131072
@@ -681,8 +775,6 @@ temp             = 0.1
 top-k            = 50
 min-p            = 0.0
 repeat-penalty   = 1.1
-cache-type-k     = f16
-cache-type-v     = f16
 cache-reuse      = 0
 spec-type        = draft-dspark
 spec-draft-model = $LFM25_DSPARK_PATH
@@ -739,8 +831,10 @@ download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
 #   Sur le paquet Arch de secours, l'équivalent serait reasoning-budget 0 seul
 #   (mainline) : non mesuré.
 # ctx 131072 : fenêtre native 128K, un seul slot en dispose en entier.
-# cache-type-k/v f16 : arch hybride conv + GQA, KV minuscule, chemin quantifié
-#   non validé sur lfm2 (même prudence que le 2.6B).
+# cache KV f16 : hérité du global depuis le 18/09/2026 (cf. en-tête), les deux
+#   lignes du corps qui le répétaient sont retirées. Raison inchangée : arch
+#   hybride conv + GQA, KV minuscule, chemin quantifié non validé sur lfm2
+#   (même prudence que le 2.6B).
 # cache-reuse 0 : état récurrent (conv) et contrainte des sections spéculatives.
 # Pas de swa-full ni ctx-checkpoints : pas une arch hybride SWA Qwen.
 # Spéculation DSpark, test isolé du 16/09/2026 (fork strix-0007bc6, Vulkan0,
@@ -773,9 +867,16 @@ download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
 #   1,5B actifs font un forward court même à 48 colonnes.
 # parallel 1 : np 2 x (3 + 1) = 8 colonnes, pile au seuil, mais le 2.6B y a
 #   mesuré ~x1,1 agrégé pour une latence doublée : pas mesuré ici, 1 gardé.
-# Device : Vulkan0 hérité du défaut. --bench-devices n'a pas tourné (le fork
-#   n'expose que Vulkan0 et la commande refuse avec un seul device) : pas de
-#   ligne dans bench-devices.conf, la sanité de la sortie a été lue au test
+# ⚠ SECTION NON MESURÉE SUR LE MOTEUR CONTENEURISÉ, À QUALIFIER. Avec
+#   ornith-1.5-35b-a3b-parallel, c'est l'une des deux sections que la campagne
+#   du 17 au 18/09/2026 n'a pas jouées : tous les réglages ci-dessous sont ceux
+#   du fork Vulkan, gardés tels quels faute de mesure. Ne changent que les
+#   réglages globaux : device ROCm0, fit off, load-mode none, cache K et V f16
+#   (elle était déjà en f16, cf. ci-dessus : rien ne bouge en pratique).
+#   À la bascule : tools/qualif-modele.sh, en commençant par --bench-sanity.
+# Device : ROCm0 depuis le 18/09/2026 (device unique de l'image). Jusque-là
+#   Vulkan0 hérité du défaut, --bench-devices n'ayant jamais tourné ici (le
+#   fork n'exposait que Vulkan0) ; la sanité de la sortie avait été lue au test
 #   isolé (sanité ok sur toutes les passes).
 # Mesuré le 16/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
 #   passes, bench-task) : prefill 3079 t/s, décode 108,1 t/s, acceptance 0,55.
@@ -808,8 +909,6 @@ temp             = 0.2
 top-k            = 80
 min-p            = 0.0
 repeat-penalty   = 1.05
-cache-type-k     = f16
-cache-type-v     = f16
 cache-reuse      = 0
 spec-type        = ngram-map-k,draft-dspark
 spec-draft-model = $LFM25_8B_DSPARK_PATH
@@ -834,17 +933,25 @@ download_hf qwen3-coder-next "transmutator/Qwen3-Coder-Next-DFlash-GGUF" \
   QWEN3_CODER_NEXT_DFLASH_PATH="Qwen3-Coder-Next-DFlash-q8_0.gguf"
 
 # Qwen3-Coder-Next — MoE 80B hybrid-attention, agentic coding
-# cache-type-v q8_0 : précision V critique pour les diffs de code
+# cache KV f16 : hérité du global depuis le 18/09/2026 (cf. en-tête). La ligne
+#   cache-type-v = q8_0 du corps (précision V critique pour les diffs de code,
+#   du temps du global q4_0) est retirée : c'est en f16 sur K et V que la
+#   campagne du 18/09 a mesuré cette section, et le f16 est plus précis que le
+#   q8_0, pas moins.
 # cache-reuse 0 : ignoré sur l'état récurrent GDN (cf. en-tête) ; la
 #   restauration de préfixe passe par cache-ram + ctx-checkpoints, au dernier
 #   checkpoint seulement (65 % au tour suivant sur le fork, 64 au paquet).
-# Candidat ROCm sur le papier (gros prefill agentic) : invalidé par la mesure
-#   ci-dessous.
-# Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433) : prefill 470 t/s,
-#   décode 46,7 t/s. ⚠ ROCm0 INUTILISABLE sur cette arch avec ce build : répond
-#   « LAMPAMPAMPAMP… » à la recopie de contrôle (exclu par --bench-sanity avant
-#   toute mesure). Deuxième arch MoE à opérateurs fusionnés cassée sur ROCm0
-#   après DeepSeek V4 ; les denses et le 35B-A3B passent.
+# Device : ROCm0 depuis le 18/09/2026 (device unique de l'image, cf. en-tête).
+#   HISTORIQUE, --bench-devices 21/08/2026 (b10433, ROCm SYSTÈME) : Vulkan0
+#   prefill 470 t/s, décode 46,7 t/s, et ROCm0 INUTILISABLE sur cette arch avec
+#   ce build, qui répondait « LAMPAMPAMPAMP… » à la recopie de contrôle (exclu
+#   par --bench-sanity avant toute mesure) — deuxième arch MoE à opérateurs
+#   fusionnés cassée sur le ROCm système après DeepSeek V4, quand les denses et
+#   le 35B-A3B passaient.
+#   ⚠ GUÉRI par le runtime retained-PM4 de l'image, constaté le 18/09/2026 :
+#   quatre comptages de lignes justes, aucune trace de « LAMPAMPAMP ». Le
+#   charabia venait du ROCm système (opérateurs fusionnés renvoyés sur CPU),
+#   pas de l'architecture.
 # Spéculation n-gram, ngram-map-k size_m 47 : SERVI DU 21/08 AU 15/09/2026,
 #   RETIRÉ depuis au profit du seul drafter DFlash (cf. bas de bloc).
 #   Historique conservé parce qu'il explique l'arch. Pas de tête MTP dans le
@@ -913,6 +1020,15 @@ download_hf qwen3-coder-next "transmutator/Qwen3-Coder-Next-DFlash-GGUF" \
 #   acceptance presque doublée, prefill -4,6 % (le drafter décode aussi le
 #   prompt, comme sur DeepSeek). Le compromis de l'ancien réglage (-5,5 % en
 #   génération sans répétition) disparaît : le gain est net des deux côtés.
+# MOTEUR CONTENEURISÉ, campagne du 17 au 18/09/2026 (série
+#   strix-8c1c282+r7dda3ac, ROCm0, fit off, load-mode none, cache K et V f16,
+#   script de test HORS DÉPÔT, prompt court d'environ 1 400 tokens et 1 000
+#   générés, médianes de 3 passes ; UD-Q4_K_XL, draft-dflash n-max 7) :
+#   prefill 1352 t/s, décode 65,1 t/s. Contre la même section sur le fork
+#   0007bc6 Vulkan0 (727 / 52,2) : prefill +86 %, décode +25 % — le meilleur
+#   gain de prefill du parc avec le 9b. Prefill en profondeur (2k / 8k / 25k /
+#   51k) : 1417 / 1455 / 1245 / 1006 t/s, quatre comptages de lignes justes.
+#   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
 llama_model qwen3-coder-next "
 model            = $QWEN3_CODER_NEXT_PATH
 ctx-size         = 131072
@@ -921,7 +1037,6 @@ temp             = 1.0
 top-k            = 40
 top-p            = 0.95
 min-p            = 0.01
-cache-type-v     = q8_0
 cache-reuse      = 0
 spec-type        = draft-dflash
 spec-draft-model = $QWEN3_CODER_NEXT_DFLASH_PATH
@@ -992,8 +1107,11 @@ groupe "; --- Famille 27B (Qwen3.8 : GGUF cible + drafter DFlash 2) ---"
 #   11,97 → 10,73 → 9,54. ROCm0 prefill plus vite à vide mais décode moins bien
 #   et se dégrade deux fois plus vite en profondeur : Vulkan0 gagne à toutes
 #   les profondeurs (tour simulé 252 → 272 s contre 256 → 324 s), et l'écart
-#   se creuse en contexte long, le régime agentic. Chargement : 4,4 s (17 Go,
-#   cache de pages chaud), TTFT à chaud 165 ms.
+#   se creuse en contexte long, le régime agentic. ⚠ HISTORIQUE : ce ROCm0-là
+#   est le ROCm SYSTÈME (paquet ggml-hip), pas le runtime retained-PM4 de
+#   l'image ; sur ce dernier le prefill de la section tombe à 229 t/s et le
+#   décode monte à 40,7 (cf. bas de bloc). Chargement : 4,4 s (17 Go, cache de
+#   pages chaud), TTFT à chaud 165 ms.
 # Repo day-zero (mi-août 2026), template et quants mouvants à l'époque ; stable
 #   depuis, aucun --update nécessaire au 13/09/2026.
 download_hf qwen3.8-27b "unsloth/Qwen3.8-27B-GGUF" \
@@ -1192,6 +1310,23 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   chat-template-kwargs {"enable_thinking":false}, obsolète. Sortie non
 #   contrôlée individuellement ici : le contrôle a porté sur Flash-Next
 #   (reasoning_content vide, réponse directe, vitesse inchangée).
+# MOTEUR CONTENEURISÉ, campagne du 17 au 18/09/2026 (série
+#   strix-8c1c282+r7dda3ac, ROCm0, fit off, load-mode none, cache K et V f16,
+#   script de test HORS DÉPÔT, prompt court d'environ 1 400 tokens et 1 000
+#   générés, médianes de 3 passes ; UD-Q4_K_XL, ngram-map-k 47 + draft-dflash
+#   n-max 7) : prefill 229 t/s, décode 40,7 t/s. Contre la même section sur le
+#   fork 0007bc6 Vulkan0 (302 / 32,2) : décode +26 %, prefill -24 %.
+#   ⚠ C'EST UN COMPROMIS, et il n'est PAS tranché ici : cette section est la
+#   seule du parc à perdre du prefill à la bascule. Elle sert de l'agentic, où
+#   le prefill compte (relecture de fichiers) autant que le décode ; le tour
+#   simulé de l'ancien --bench-devices (2000/prefill + 3000/décode) donnerait
+#   81,4 s sur l'image contre 99,8 s sur le fork, donc l'image gagne sur ce
+#   profil — mais ce profil est une convention, pas une mesure de l'usage.
+#   Décision utilisateur à prendre à la bascule, avec --bench-agentic.
+#   Prefill en profondeur (2k / 8k / 25k / 51k) : 244 / 239 / 225 / 202 t/s,
+#   justesse vérifiée par comptage de lignes. À noter : Muse-Glimmer, son
+#   concurrent direct, ne perd pas de prefill (cf. son bloc).
+#   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
 # cache-type-v f16 (était q8_0, 17/09/2026) : les deux réglages mesurés le
 #   même soir, à froid après redémarrage, même moteur (strix-0007bc6,
 #   Vulkan0, mode EC performance, --bench 3 passes) : f16 302 / 32,2 / 0,625
@@ -1200,6 +1335,9 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   parc pour l'agentic. Ces 302 / 32,2 / 0,625 REMPLACENT les 359 / 32,6 /
 #   0,595 du 13/09 comme référence du README et de docs/perfs.tsv : autre
 #   jour, autre série, la comparaison propre est celle de ce soir-là.
+#   Depuis le 18/09/2026 la ligne n'est plus dans le corps : le f16 vient du
+#   global (cf. en-tête), et c'est en f16 sur K ET V que la campagne du
+#   moteur conteneurisé a mesuré la section.
 # swa-full : inopérant sur cette architecture (le journal du serveur dit
 #   « swa_full is not supported by this model »). La clé est gardée telle
 #   quelle : elle ne coûte rien et redeviendra utile si l'arch est supportée.
@@ -1213,7 +1351,6 @@ top-p                = 0.8
 min-p                = 0.0
 presence-penalty     = 1.5
 reasoning            = off
-cache-type-v         = f16
 cache-reuse          = 0
 spec-type            = ngram-map-k,draft-dflash
 spec-draft-model     = $QWEN38_27B_DFLASH_PATH
@@ -1285,8 +1422,10 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 # ctx 131072 : natif, un seul slot en dispose en entier.
 # cache-ram 12288 : même besoin que le 27B (orchestrateur de 60k gardé en RAM
 #   pendant qu'un agent occupe le slot, cf. son bloc).
-# cache-type-v q8_0 : convention agentic du parc (cf. en-tête) ; attention pure
-#   sans état récurrent, donc rien ne s'y oppose.
+# cache KV f16 : hérité du global depuis le 18/09/2026 (cf. en-tête), la ligne
+#   cache-type-v = f16 du corps est retirée. Attention pure sans état récurrent,
+#   rien ne s'y oppose, et le f16 sur V donnait déjà une meilleure acceptance
+#   que le q8_0 sur cette classe de modèles (mesuré sur le 27B le 17/09/2026).
 # cache-reuse 0 : contrainte des sections spéculatives (ici la seule raison :
 #   pas d'état récurrent, la valeur serait sinon utilisable).
 # swa-full + ctx-checkpoints : arch à SWA réelle (fenêtre 2048 sur 3 couches
@@ -1327,8 +1466,9 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 #   des deux mondes (batch 16 hors du noyau mat-vec, cf. n-max 15 ci-dessus).
 # parallel 1 : batch déjà à 8 colonnes avec n-max 7 (np 2 en ferait 16), et
 #   régime agentic sérialisé.
-# Device : Vulkan0 hérité du défaut, --bench-devices non lancé (un seul device
-#   sur le fork, la commande refuse) : pas de ligne dans bench-devices.conf.
+# Device : ROCm0 depuis le 18/09/2026 (device unique de l'image, cf. en-tête).
+#   Jusque-là Vulkan0 hérité du défaut, --bench-devices jamais lancé ici (le
+#   fork n'exposait qu'un device et la commande refusait).
 # Mesuré le 16/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
 #   passes, bench-task) : prefill 266 t/s, décode 38,0 t/s, acceptance 0,635.
 #   Contre qwen3.8-27b-dflash-nothink sur le même fork (359 / 32,6 / 0,595) :
@@ -1346,6 +1486,19 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 #   pure, cf. --bench-cache), décode en boucle 34 à 41 t/s = celui du --bench
 #   (38,0). Le raisonnement en strength low reste court et ne fait échouer
 #   aucun scénario : réglage confirmé.
+# MOTEUR CONTENEURISÉ, campagne du 17 au 18/09/2026 (série
+#   strix-8c1c282+r7dda3ac, ROCm0, fit off, load-mode none, cache K et V f16,
+#   script de test HORS DÉPÔT, prompt court d'environ 1 400 tokens et 1 000
+#   générés, médianes de 3 passes ; UD-Q4_K_XL, ngram-map-k 7 + draft-dflash
+#   n-max 7, reasoning_strength low, reasoning-budget-enable + budget 4096) :
+#   prefill 318 t/s, décode 36,4 t/s, justesse confirmée par comptage de
+#   lignes. Contre la même section sur le fork 0007bc6 Vulkan0 (266 / 38,0, et
+#   277 à 301 / 38,5 à 40,5 aux contrôles à froid du 17/09) : prefill +7 à
+#   +19 %, décode -4 à -10 %, donc à peu près l'inverse de son concurrent le
+#   27B, qui gagne 26 % de décode et perd 24 % de prefill sur le même moteur.
+#   Prefill en profondeur (2k / 8k / 25k / 51k) : 328 / 323 / 293 / 259 t/s.
+#   Le raisonnement en strength low reste court, la réponse suit.
+#   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
 llama_model muse-glimmer-30b-dflash "
 model                = $MUSE_30B_PATH
 ctx-size             = 131072
@@ -1357,7 +1510,6 @@ min-p                = 0.0
 chat-template-kwargs = {\"reasoning_strength\":\"low\"}
 reasoning-budget-enable = true
 reasoning-budget     = 4096
-cache-type-v         = f16
 cache-reuse          = 0
 spec-type            = ngram-map-k,draft-dflash
 spec-draft-model     = $MUSE_30B_DFLASH_PATH
@@ -1407,8 +1559,11 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #     chat-template-kwargs = {"enable_thinking":false}    (ou reasoning = off)
 #   On reste sur le défaut (high) — le 0731 pense déjà beaucoup plus que la
 #   preview, max à réserver aux gros ctx.
-# cache-type-k/v f16 : surcharge explicite — KV MLA compact (KV compressé,
-#   ~0,6 Go à 32K), le q8_0/q4_0 global n'apporte rien et les configs
+# cache KV f16 : hérité du global depuis le 18/09/2026 (cf. en-tête), les deux
+#   lignes du corps qui le répétaient sont retirées. C'est la conf de référence
+#   de cette section, et la campagne du 18/09 l'a confirmée directement : sur
+#   ce modèle f16 et q8_0 sont ÉQUIVALENTS, en mémoire comme en débit. Raison
+#   d'origine inchangée : KV MLA compact (~0,6 Go à 32K), et les configs
 #   communautaires validées tournent en f16/f16.
 # jinja : template unsloth amélioré (reasoning_effort + reasoning_content
 #   conservé dans les tool calls) — indispensable en agentic.
@@ -1444,13 +1599,17 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   0,65 en n-gram seul le 13/09 : décode +45 %, prefill inchangé (-3 %, le
 #   drafter décode aussi le prompt). La garde mémoire a dû décharger lfm2.5
 #   (préchargé) pour faire la place : ~118 Go demandés pour 117,6 disponibles.
-# Device : Vulkan0, mesuré --bench-devices 21/08/2026 (b10433) — prefill 120 t/s,
-#   décode 11,2 t/s. ⚠ ROCm0 INUTILISABLE sur cette arch avec ce build : le
-#   serveur répond à ~500 t/s un charabia répétitif (« Nous dev dev dev… »),
-#   réponse finale vide, sans erreur loggée — seulement des opérateurs fusionnés
-#   DeepSeek V4 (Lightning Indexer, HC pre/comb/post) renvoyés sur CPU. C'est
-#   ce cas qui a motivé le garde-fou « sortie dégénérée » de timings.py.
-#   À re-tester après un bump de llama-cpp/ggml-hip.
+# Device : ROCm0 depuis le 18/09/2026 (device unique de l'image, cf. en-tête).
+#   HISTORIQUE, --bench-devices 21/08/2026 (b10433, ROCm SYSTÈME) : Vulkan0
+#   prefill 120 t/s, décode 11,2 t/s, et ROCm0 INUTILISABLE sur cette arch avec
+#   ce build — le serveur répondait à ~500 t/s un charabia répétitif (« Nous dev
+#   dev dev… »), réponse finale vide, sans erreur loggée, seulement des
+#   opérateurs fusionnés DeepSeek V4 (Lightning Indexer, HC pre/comb/post)
+#   renvoyés sur CPU. C'est ce cas qui a motivé le garde-fou « sortie
+#   dégénérée » de timings.py, qui reste utile.
+#   ⚠ GUÉRI par le runtime retained-PM4 de l'image, constaté le 18/09/2026 :
+#   quatre comptages de lignes justes, acceptance 0,83, aucune trace de « Nous
+#   dev dev dev ». Le charabia venait du ROCm système, pas de l'architecture.
 # Spéculation n-gram : ngram-map-k size_m 7, RETENU sur mesure réelle
 #   (21/08/2026, Vulkan0, spec-refactor.txt, 4 passes) : sans spéculation
 #   11,29 t/s ; size_m 7 = 12,30 t/s (+9 %, acceptance 0,89 à 0,93 sur les
@@ -1522,6 +1681,22 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   contexte par slot (65536 au lieu de 131072). Retour à 1, 131072 pour la
 #   requête. La garde mémoire décharge les autres modèles pour charger
 #   celui-ci (117,9 Go demandés), c'est normal.
+# MOTEUR CONTENEURISÉ, campagne du 17 au 18/09/2026 (série
+#   strix-8c1c282+r7dda3ac, ROCm0, fit off, load-mode none, cache K et V f16,
+#   script de test HORS DÉPÔT, prompt court d'environ 1 400 tokens et 1 000
+#   générés, médianes de 3 passes ; UD-IQ3_XXS, ngram-map-k 7 + draft-dspark
+#   n-max 3, reasoning-budget 6144, contexte 131072 — la conf de référence
+#   ci-dessous, inchangée) : prefill 162 t/s, décode 29,3 t/s, acceptance 0,83.
+#   Contre la même section sur le fork 0007bc6 Vulkan0 (196 / 28,8 / 0,69) :
+#   décode +2 %, acceptance de 0,69 à 0,83, prefill -17 %. Prefill en
+#   profondeur (2k / 8k / 25k / 51k) : 173 / 161 / 136 / 111 t/s, quatre
+#   comptages de lignes justes.
+#   ⚠ MÉMOIRE : chargé, ce modèle ne laisse plus que 9 Gio disponibles, QUEL
+#   QUE SOIT le cache KV (f16 ou q8_0), le fit ou le contexte — ces trois
+#   leviers ont été essayés le 18/09 et n'y changent rien. Il se sert donc
+#   SEUL : la garde mémoire _ensure_room_for (lib/common.sh) décharge les
+#   autres modèles avant de le charger, c'est le comportement attendu.
+#   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072
@@ -1530,8 +1705,6 @@ temp             = 1.0
 top-k            = 40
 top-p            = 0.95
 min-p            = 0.0
-cache-type-k     = f16
-cache-type-v     = f16
 cache-reuse      = 0
 spec-type        = ngram-map-k,draft-dspark
 spec-draft-model = $DSV4_FLASH_DSPARK_PATH
@@ -1631,22 +1804,24 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 # MTP : la tête n'est PAS dans le GGUF principal (retirée par unsloth le
 #   01/09), elle est publiée en sidecar dans MTP/ du repo HF. Deux familles de
 #   fichiers : les « shared- » (2,60 Go) empruntent embeddings et projection de
-#   sortie au modèle hôte, les AUTONOMES portent les leurs. Le fork
-#   strix-llama.cpp ne sait PAS emprunter les tenseurs partagés du modèle
-#   principal : c'est donc la version autonome Q8_0 (4,1 Go) qui est déclarée
-#   ci-dessous, et elle seule.
-#   RE-VÉRIFIÉ le 17/09/2026 sur le commit épinglé 0007bc6, la tête « shared »
-#   ayant été retéléchargée pour la migration : elle reste INUTILISABLE, et le
-#   renommage des hc_head n'y change rien. Le chargeur qwen4exp crée
+#   sortie au modèle hôte, les AUTONOMES portent les leurs.
+#   ⚠ RENVERSEMENT DU 18/09/2026 : c'est la tête « SHARED » Q8_0 qui est servie,
+#   et elle seule. Le moteur de l'image (8c1c282) sait emprunter les tenseurs de
+#   la cible ; la campagne l'a chargée telle quelle, sans renommage, avec une
+#   acceptance de 0,87. Conséquences : la tête AUTONOME Q8_0 (4,1 Go) n'est plus
+#   déclarée, la copie renommée « strix » n'existe plus du tout, et avec elle
+#   partent derive_gguf, _derive et tools/mtp-rename-hc-head.py — plus aucune
+#   section du parc ne dérivait de fichier (cf. le commentaire de KNOWN_FILES).
+#   HISTORIQUE, vérifié le 17/09/2026 sur le commit épinglé 0007bc6 (fork
+#   Vulkan) : la tête « shared » y était INUTILISABLE, et le renommage des
+#   hc_head n'y changeait rien. Le chargeur qwen4exp de ce commit crée
 #   token_embd.weight en tenseur REQUIS (flag 0, src/models/qwen4exp.cpp) avant
 #   même le mixeur des hyper-connexions ; le fichier « shared » ne porte ni
 #   token_embd ni output (32 tenseurs contre 34). Essai de chargement CPU seul
-#   (llama-cli --device none), tel quel PUIS renommé par
-#   tools/mtp-rename-hc-head.py : les deux échouent sur
-#   « check_tensor_dims: tensor 'token_embd.weight' not found », alors que le
-#   sidecar autonome renommé charge sans une erreur. Le fichier « shared »
-#   (2 786 568 256 octets) est rangé dans MTP/ sans être déclaré : il servira le
-#   jour où le moteur saura emprunter les tenseurs de la cible.
+#   (llama-cli --device none), tel quel PUIS renommé : les deux échouaient sur
+#   « check_tensor_dims: tensor 'token_embd.weight' not found », quand le
+#   sidecar autonome renommé chargeait sans une erreur. Le renommage et le
+#   sidecar autonome n'étaient donc nécessaires QUE pour 0007bc6.
 #   Le paquet Arch, lui, ne sait charger ni l'une ni l'autre : ni graphe MTP
 #   pour qwen4exp, ni emprunt de tenseurs entre modèles, ni --spec-type
 #   draft-mtp pour cette arch — c'est la PR #28243, toujours non mergée au
@@ -1664,20 +1839,22 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   NON ÉPROUVÉ à np > 1, pas interdit. La raison qui tient, elle, est la
 #   mémoire, et elle suffit : 101 Go de poids sur 124 Go depuis l'AP-Q4_K_XL
 #   (93,7 Go en UD-IQ4_XS), dont 28,8 Go de table n-gram restés sur disque
-#   (ngram-on-disk), plus le mmproj ; un deuxième slot de
+#   (lazy-mode on-direct, ngram-on-disk avant le 18/09/2026), plus le mmproj,
+#   et les 33 Gio de tampons du batch 16384 ; un deuxième slot de
 #   KV à 128k mangerait la marge ; et ctx-size étant un pool partagé, passer à
 #   2 slots couperait aussi en deux le contexte par requête. Valeur inchangée
 #   après la campagne multi-slot du 15/09/2026 (cf. en-tête) : cette section
 #   n'y a pas été mesurée, la mémoire tranchant avant le rendement.
-# Device : Vulkan0 (--bench-devices 05/09/2026, b10809 : prefill 181 t/s,
-#   décode 24 t/s brut). ROCm0 EXCLU par la question de contrôle : réponse
-#   « LAMPAMPAMPAMP... » dégénérée, le même symptôme que DeepSeek V4 et
-#   Qwen3-Coder-Next (MoE à opérateurs fusionnés). Re-tester à chaque bump
-#   de ggml-hip, en lisant le texte généré.
+# Device : ROCm0 depuis le 18/09/2026 (device unique de l'image, cf. en-tête).
+#   HISTORIQUE, --bench-devices 05/09/2026 (b10809, ROCm SYSTÈME) : Vulkan0
+#   prefill 181 t/s, décode 24 t/s brut, et ROCm0 EXCLU par la question de
+#   contrôle, réponse « LAMPAMPAMPAMP... » dégénérée, le même symptôme que
+#   DeepSeek V4 et Qwen3-Coder-Next (MoE à opérateurs fusionnés).
+#   ⚠ Sans objet sur le runtime retained-PM4 de l'image : la campagne du 17 au
+#   18/09/2026 y mesure 877 / 52,2 avec une justesse vérifiée jusqu'à 51k
+#   tokens (cf. bas de bloc), comme pour les deux autres MoE guéris.
 # Fichier UNIQUE (pas de shards) : download_hf suffit, le sous-dossier de quant
-# est recréé tel quel sous le dossier modèle. La clé de bench-devices.conf reste
-# le dossier de premier niveau (_key, lib/common.sh) : « qwen3.8-flash-next =
-# Vulkan0 » continue donc de s'appliquer sans rien ajouter. --cleanup protège en
+# est recréé tel quel sous le dossier modèle. --cleanup protège en
 # bloc le dossier de quant AP-Q4_K_XL/, comme il le faisait pour les shards.
 # Téléchargé et vérifié (sha256) sur bigchuck le 17/09/2026.
 download_hf qwen3.8-flash-next "agentionai/Signal-3.8-Flash-Next-GGUF" \
@@ -1687,29 +1864,19 @@ download_hf qwen3.8-flash-next "agentionai/Signal-3.8-Flash-Next-GGUF" \
 download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
   QWEN38_FLASH_NEXT_MMPROJ_PATH="mmproj-BF16.gguf"
 # Tête MTP en sidecar, même repo, sous-dossier MTP/ (recréé tel quel sous le
-# dossier modèle par _dl). Téléchargée sur bigchuck le 12/09/2026. Version
-# AUTONOME Q8_0 (4,1 Go, 34 tenseurs) : le fork ne sait pas emprunter les
-# tenseurs partagés du modèle hôte, la « shared- » (2,60 Go, 32 tenseurs) ne lui
-# sert donc à rien et n'est plus déclarée depuis le 12/09/2026 — l'exemplaire
-# déjà téléchargé reste sur disque et --cleanup ne le purgera pas (il est dans
-# MTP/, sous-dossier protégé en bloc comme un dossier de quant) ; le supprimer à
-# la main ne coûte rien.
-# Ce sidecar n'est PAS chargeable tel quel par le fork : il nomme le mixeur final
-# des hyper-connexions blk.48.nextn.hc_head_* (convention de la PR mainline
-# #28243) quand le graphe qwen4exp du fork lit output_hc_* (« check_tensor_dims:
-# tensor 'output_hc_norm.weight' not found », et c'est le modèle entier qui ne
-# charge plus). D'où la copie renommée ci-dessous ; le fichier d'origine reste la
-# SOURCE, et redevient utilisable tel quel le jour où #28243 est mergée
-# (toujours non mergée au 13/09/2026).
+# dossier modèle par _dl). Version « SHARED » Q8_0 (2 786 568 256 octets, 32
+# tenseurs) depuis le 18/09/2026 : elle emprunte embeddings et projection de
+# sortie au modèle hôte, et le moteur de l'image sait le faire (chargée telle
+# quelle, sans renommage, acceptance 0,87). Déjà téléchargée sur bigchuck.
+# Les deux fichiers qu'elle remplace ne sont plus déclarés et deviennent
+# ORPHELINS dans ~/models/qwen3.8-flash-next/MTP/ : le sidecar AUTONOME
+# mtp-Qwen3.8-Flash-Next-Q8_0.gguf (4,1 Go, 34 tenseurs) et sa copie renommée
+# mtp-Qwen3.8-Flash-Next-strix-Q8_0.gguf (4,1 Go), tous deux nécessaires au
+# seul commit 0007bc6. ⚠ --cleanup NE LES PURGERA PAS : MTP/ reste un
+# sous-dossier protégé en bloc dès qu'un de ses fichiers est déclaré. Les
+# supprimer à la main, ou les garder pour un retour au fork.
 download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
-  QWEN38_FLASH_NEXT_MTP_PATH="MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf"
-# Copie renommée pour le fork, produite en local (aucun repo ne la porte) par
-# tools/mtp-rename-hc-head.py : trois tenseurs renommés, données recopiées
-# telles quelles, mêmes formes et mêmes types. Faite sur bigchuck le 12/09/2026,
-# et refaite automatiquement par --setup si elle manque ou si la source a bougé.
-derive_gguf qwen3.8-flash-next \
-  QWEN38_FLASH_NEXT_MTP_STRIX_PATH="MTP/mtp-Qwen3.8-Flash-Next-strix-Q8_0.gguf" \
-  "$QWEN38_FLASH_NEXT_MTP_PATH" tools/mtp-rename-hc-head.py
+  QWEN38_FLASH_NEXT_MTP_PATH="MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"
 
 # Qwen3.8-Flash-Next nothink : spéculation mixte n-gram + MTP, sampling instruct,
 # et vision depuis le 17/09/2026.
@@ -1736,10 +1903,9 @@ derive_gguf qwen3.8-flash-next \
 #   pendant le bench. Contrôle vision du jour : un carré rouge de 64x64 en PNG
 #   (data URI, /v1/chat/completions) est décrit « Le carré que vous avez fourni
 #   est de couleur rouge. » Contrôle nothink : reasoning_content vide.
-#   Reste à faire sur cette quant (la migration ne les a pas rejoués) : le
-#   --bench-devices, le --spec-tune, le --spec-ngram-tune, le --bench-cache,
-#   le --bench-load et le --bench-agentic ; leurs réglages sont ceux mesurés
-#   sur l'UD-IQ4_XS et n'ont pas été revalidés ici.
+#   Reste à faire sur cette quant (ni la migration ni la campagne du 18/09 ne
+#   les ont rejoués) : le --spec-tune, le --bench-cache, le --bench-load et le
+#   --bench-agentic. Le --bench-devices n'existe plus (un seul device).
 # Renommée -nothink le 04/09, quand draft-mtp avait été retiré faute de moteur
 #   capable de charger le sidecar ; revenue à -mtp-nothink le 12/09/2026 avec le
 #   retour de draft-mtp sur le fork, comme l'était alors
@@ -1747,9 +1913,11 @@ derive_gguf qwen3.8-flash-next \
 #   13/09/2026, la tête MTP y étant remplacée par le drafter DFlash 2).
 # Jalon 2 (MTP de Flash-Next, cf. docs/HISTORIQUE.md, « Passage au fork »)
 #   DÉBLOQUÉ le
-#   12/09/2026 par le renommage du sidecar (tools/mtp-rename-hc-head.py, cf. la
-#   déclaration ci-dessus) : le fork apporte le graphe MTP qwen4exp et le
-#   drafter externe, il ne manquait que la convention de nom.
+#   12/09/2026 par le renommage du sidecar (outil tools/mtp-rename-hc-head.py,
+#   retiré du dépôt le 18/09/2026, récupérable dans l'historique git) : le fork
+#   apportait le graphe MTP qwen4exp et le drafter externe, il ne manquait que
+#   la convention de nom. Le moteur de l'image lit la tête « shared » sans rien
+#   renommer (cf. plus haut).
 #   Historique du même jour : le premier essai, avec les sidecars unsloth tels
 #   quels, refusait de charger (« tensor 'output_hc_norm.weight' not found »,
 #   Flash-Next ne démarrait plus du tout) et le bloc avait été remis en n-gram
@@ -1791,39 +1959,75 @@ derive_gguf qwen3.8-flash-next \
 #   --bench-load : 60,8 s depuis le disque (88 Go, sidecar MTP compris,
 #     13/09/2026) ; 14,1 s avec le fichier encore en cache de pages (05/09),
 #     TTFT à chaud 86 ms.
-# ngram-on-disk : option du fork strix-llama.cpp (cf. lib/fork.sh). La table
-#   n-gram per_layer_token_embd (28,8 Go, propre à qwen4exp) n'est ni mappée ni
-#   chargée, chaque batch relit du GGUF les seules lignes qu'il rassemble.
-#   Mesuré le 12/09/2026 sur le fork (A/B de l'option, run antérieur au --bench
-#   de référence 414 / 30,9) : même prefill et même décode (391 / 27,3
-#   t/s contre 380 / 27,3 sans), sortie identique, mémoire utilisée 72 Go au
-#   lieu d'environ 100.
-#   ⚠ Le paquet Arch (b10809) NE connaît PAS cette clé et refuse alors de
-#   démarrer le routeur ENTIER (« option 'ngram-on-disk' not recognized in
-#   preset », vérifié le 12/09/2026 — l'ini n'est pas tolérant aux clés
-#   inconnues). Revenir au paquet Arch (--unset-fork) impose donc de retirer
-#   cette ligne à la main puis de relancer --preload ; le dépôt ne filtre rien,
-#   il refuse seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
+# lazy-mode on-direct (remplace ngram-on-disk le 18/09/2026) : même effet, la
+#   table n-gram per_layer_token_embd (28,8 Go, propre à qwen4exp) n'est ni
+#   mappée ni chargée, chaque batch relit du GGUF les seules lignes qu'il
+#   rassemble. Sur le moteur de l'image, --ngram-on-disk n'est plus qu'un ALIAS
+#   DÉPRÉCIÉ de --lazy-mode on ; la clé native est -lzm / --lazy-mode MODE (on,
+#   on-direct, auto, off ; défaut auto), et c'est on-direct qui a été mesuré.
+#   HISTORIQUE, A/B de ngram-on-disk sur le fork le 12/09/2026 (run antérieur
+#   au --bench de référence 414 / 30,9) : même prefill et même décode (391 /
+#   27,3 t/s contre 380 / 27,3 sans), sortie identique, mémoire utilisée 72 Go
+#   au lieu d'environ 100.
+#   ⚠ Le paquet Arch (b10809) ne connaît NI ngram-on-disk NI lazy-mode, et
+#   refuse alors de démarrer le routeur ENTIER (« option 'ngram-on-disk' not
+#   recognized in preset », vérifié le 12/09/2026 — l'ini n'est pas tolérant
+#   aux clés inconnues). Revenir au paquet impose de retirer cette ligne à la
+#   main puis de relancer --preload ; le dépôt ne filtre rien, il refuse
+#   seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
+# CONF DU MOTEUR CONTENEURISÉ, retenue le 18/09/2026 et servie telle quelle.
+#   Ce qui change par rapport au fork, clé par clé :
+#     ctx-size 262144 (était 131072) : le contexte natif entier, à un slot ;
+#     batch-size et ubatch-size 16384 : SEULE section du parc autorisée à
+#       dépasser 4096 (INI_BIG_BATCH_OK, cf. en-tête). Partout ailleurs cette
+#       valeur part en erreur de segmentation (code 139) dès 8k tokens ; ici
+#       elle tient, et c'est elle qui donne le prefill ci-dessous. Coût :
+#       environ 33 Gio de tampons, à compter dans la marge mémoire ;
+#     lazy-mode on-direct à la place de ngram-on-disk (cf. ci-dessus) ;
+#     spec-type draft-mtp,ngram-mod (était ngram-map-k,draft-mtp) et
+#       spec-draft-n-max 3 (était 4) : +10 % de décode contre l'ancien
+#       spéculatif du dépôt sur ce moteur, 877 / 52,2 contre 881 / 47,4, à
+#       prefill égal. Les clés spec-ngram-map-k-size-m et -min-hits disparaissent
+#       avec ngram-map-k ; ngram-mod n'a pas de taille à régler ici.
+#       ⚠ spec-nmax.conf (local, non versionné) porte encore « 4 » pour cette
+#       section sur bigchuck : il écraserait le 3. generate_models_ini
+#       avertit maintenant quand une valeur locale contredit le dépôt
+#       (_ini_warn_conf_nmax, lib/ini.sh) — la retirer à la bascule. Idem pour
+#       la ligne de spec-ngram.conf, devenue inerte (plus de ngram-map-k) ;
+#     tête MTP « shared » d'unsloth en drafter, sans renommage, avec
+#       spec-draft-ngl = all injecté par generate_models_ini ;
+#     cache K et V f16 (le cache-type-v q8_0 est retiré, cf. en-tête) ;
+#     mmproj et image-min-tokens 1024 CONSERVÉS, vision et spéculation
+#       cohabitant toujours.
+#   MESURÉ, campagne du 17 au 18/09/2026 (série strix-8c1c282+r7dda3ac, ROCm0,
+#   fit off, load-mode none, script de test HORS DÉPÔT, prompt court d'environ
+#   1 400 tokens et 1 000 générés, médianes de 3 passes) : prefill 877 t/s,
+#   décode 52,2 t/s. Contre la même quant AP-Q4_K_XL sur le fork 0007bc6
+#   Vulkan0 (364 / 52,4) : prefill x2,4, décode égal. Prefill en profondeur
+#   (2k / 8k / 25k / 51k) : 938 / 1108 / 1111 / 1079 t/s — le seul modèle du
+#   parc dont le prefill MONTE avec la profondeur, effet du batch 16384.
+#   Justesse vérifiée par comptage de lignes jusqu'à 51k tokens. Mémoire :
+#   28 Gio restants une fois chargé.
+#   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
 llama_model qwen3.8-flash-next-mtp-nothink "
 model            = $QWEN38_FLASH_NEXT_PATH
-ctx-size         = 131072
+ctx-size         = 262144
 cache-ram        = 8192
+batch-size       = 16384
+ubatch-size      = 16384
 temp             = 0.7
 top-k            = 20
 top-p            = 0.80
 min-p            = 0.0
 presence-penalty = 1.5
 reasoning            = off
-cache-type-v     = q8_0
 cache-reuse      = 0
 mmproj           = $QWEN38_FLASH_NEXT_MMPROJ_PATH
 image-min-tokens = 1024
-spec-type        = ngram-map-k,draft-mtp
-spec-ngram-map-k-size-m   = 7
-spec-ngram-map-k-min-hits = 2
-spec-draft-model = $QWEN38_FLASH_NEXT_MTP_STRIX_PATH
-spec-draft-n-max = 4
-ngram-on-disk    = true
+spec-type        = draft-mtp,ngram-mod
+spec-draft-model = $QWEN38_FLASH_NEXT_MTP_PATH
+spec-draft-n-max = 3
+lazy-mode        = on-direct
 jinja            = true
 parallel         = 1"
 

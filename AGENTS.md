@@ -53,7 +53,8 @@ résumer ou la supprimer, non.
 - Toute modif de `_llama_bin` / `_llama_build` / `_host_llama_build`
   (lib/common.sh), de `FORK_ONLY_KEYS` / `_fork_keys_guard` (lib/fork.sh), de
   `lib/runtime.sh` (image), de `lib/compose.sh` (compose généré) ou de
-  `lib/svc.sh` (pilotage du service) ⇒ `./tests/sh-unit.sh` : résolution du
+  `lib/svc.sh` (pilotage du service) ou de `lib/ini.sh` / `lib/models.sh`
+  (ini généré) ⇒ `./tests/sh-unit.sh` : résolution du
   binaire de l'hôte, forme des deux étiquettes de moteur (`bNNNNN` upstream et
   `strix-<commit>` pour le fork côté hôte, `strix-<engine7>+r<rocm7>` pour
   l'image servie), garde-fou moteur/ini, promotion en `:latest` seulement après
@@ -63,7 +64,11 @@ résumer ou la supprimer, non.
   `preload.conf`), régénération qui ne réécrit pas un fichier identique,
   `_svc_restart` qui n'émet jamais `compose restart`, `_svc_wait_ready` qui
   échoue vite sur un conteneur sorti, `--cleanup` qui épargne les deux
-  artefacts générés et `--migrate-off-systemd` idempotente.
+  artefacts générés et `--migrate-off-systemd` idempotente ; et pour le ini :
+  device `ROCm0` partout et aucun `Vulkan0`, `fit = off` / `load-mode = none` /
+  cache K et V `f16` dans l'en-tête, `spec-draft-ngl = all` injecté sur chaque
+  drafter séparé, `batch-size` 16384 sur la seule section autorisée, et le
+  garde-fou qui refuse les autres, surcharges `--spec-ab` comprises.
 - `bash -n` sur chaque fichier touché ; `shellcheck` si dispo (signaler
   plutôt que refactorer ; le style SC2155-like existant est assumé).
 
@@ -81,8 +86,8 @@ résumer ou la supprimer, non.
   deux sont **générés**, non versionnés, et réécrits (`regen_models_ini`,
   `regen_compose`). Le compose est régénéré à chaque `--start` ; les tuners qui
   surchargent le ini le temps d'une mesure n'y touchent pas.
-- Les fichiers `.conf` (`bench-devices.conf`, `preload.conf`,
-  `spec-nmax.conf`, `spec-ngram.conf`, `fork.conf`) sont des **choix utilisateur** : ne pas les régénérer ni
+- Les fichiers `.conf` (`preload.conf`, `spec-nmax.conf`, `spec-ngram.conf`,
+  `fork.conf`) sont des **choix utilisateur** : ne pas les régénérer ni
   les « corriger » sans demande. Les .conf et les journaux de `logs/` sont
   locaux, non versionnés (.gitignore) ; tout nouveau journal va dans `logs/`
   avec la version de llama.cpp en colonne.
@@ -105,19 +110,19 @@ là-bas, lancer, ne rien commiter sur place.
    sur ce modèle (parallel 1, cache-reuse 0, pas de mmproj, réserve sur le
    rollback GDN en agentic) ? Livrable : `spec-type` choisi, acceptance
    visible dans un premier `--spec-test`.
-3. **Device d'abord** (`--bench-devices`) : ROCm0 ou Vulkan0, écrit dans
-   `bench-devices.conf` ; les seuils de noyau qui règlent la spéculation
-   dépendent du backend, donc avant les étapes 4 et 5. Regarder le texte
-   généré, pas seulement les t/s (DeepSeek V4 / ROCm0 : charabia à 550 t/s,
-   maintenant détecté par `timings.py`, à vérifier à la main si « trop beau »).
-   Un modèle absent de `bench-devices.conf` tourne sur le défaut (Vulkan0)
-   sans avoir été mesuré : ce n'est pas un choix.
+3. **Justesse d'abord** (`--bench-sanity`, BLOQUANTE) : le moteur du service
+   n'a plus qu'un device (`ROCm0`, image HIP seule), il n'y a plus de
+   `--bench-devices`. Ce qui reste de cette étape est ce qui la justifiait :
+   regarder le texte GÉNÉRÉ, pas seulement les t/s. DeepSeek V4 sur le ROCm
+   système répondait un charabia à 550 t/s et a été couronné deux fois avant
+   qu'un garde-fou existe. `tools/qualif-modele.sh` s'arrête si elle échoue.
 4. **`--spec-tune`** : longueur de draft MTP mesurée (en `draft-mtp` seul
    si le `spec-type` est une liste), écrite dans `spec-nmax.conf`.
 5. **`--spec-ngram-tune`** (si `ngram-map-k` dans le `spec-type`) : courbe
    `t_forward(batch)` puis arbitrage réel, écrit dans `spec-ngram.conf`.
    Modèle sans MTP : la courbe seule d'abord, service arrêté,
-   `DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh <gguf>`, pour
+   `REPS=5 tools/bench-spec-batch.sh <gguf>` (llama-bench de l'HÔTE, donc
+   Vulkan : les seuils du moteur de l'image n'ont pas été re-tracés), pour
    connaître les deux tailles à mesurer ; puis `ngram-map-k` dans le
    `spec-type` et le tune, qui mesure une référence sans spéculation et
    n'écrit rien si aucun `size_m` ne la bat. La courbe ne décide jamais
@@ -127,7 +132,7 @@ là-bas, lancer, ne rien commiter sur place.
 6. **`--bench` final et récap de performance** (plus, selon le rôle :
    `--bench-parallel` si `parallel > 1`, `--bench-cache` si agentic,
    `--bench-load` si chargé à la demande) : un tableau partageable (configuration,
-   device, prompt t/s, gen t/s, acceptance, source et prompt de mesure),
+   prompt t/s, gen t/s, acceptance, source et prompt de mesure),
    avec machine, build llama.cpp, quant et date ; les chiffres résumés vont
    aussi dans le commentaire du bloc, seul endroit versionné.
 7. **`--bench-agentic <modèle> 3`** : le modèle en vraie boucle de tool
