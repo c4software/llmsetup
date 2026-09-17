@@ -1711,6 +1711,7 @@ top-p            = 0.80
 min-p            = 0.0
 presence-penalty = 1.5
 reasoning            = off
+cache-type-v     = q8_0
 cache-reuse      = 0
 spec-type        = ngram-map-k,draft-mtp
 spec-ngram-map-k-size-m   = 7
@@ -1718,9 +1719,6 @@ spec-ngram-map-k-min-hits = 2
 spec-draft-model = $QWEN38_FLASH_NEXT_MTP_STRIX_PATH
 spec-draft-n-max = 4
 ngram-on-disk    = true
-lazy-mode        = on-direct
-batch-size       = 16384
-ubatch-size      = 16384
 jinja            = true
 parallel         = 1"
 
