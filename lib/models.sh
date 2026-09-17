@@ -1711,7 +1711,6 @@ top-p            = 0.80
 min-p            = 0.0
 presence-penalty = 1.5
 reasoning            = off
-cache-type-v     = q8_0
 cache-reuse      = 0
 spec-type        = ngram-map-k,draft-mtp
 spec-ngram-map-k-size-m   = 7
