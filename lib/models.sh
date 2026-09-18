@@ -466,7 +466,7 @@ download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
 #   ⚠ Ces chiffres ne viennent PAS de --bench : ne pas les mélanger aux lignes
 #   de logs/bench.log, ils seront rejoués par le dépôt après la bascule.
 
-# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (série tools/validation-parc-rocm.sh sur
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (série de validation jouée hors dépôt sur
 #   l'image llm-rocm-strix, ROCm0, cache K et V f16, micro-lot par défaut) :
 #   prefill 1 134 t/s, décode 41,7 t/s, acceptance 0,565, cache long à 20k 97 à
 #   98 %, chargement 1,5 s (9,2 Go), justesse exacte (70 / 260 / 800 ; 799 à un
@@ -1311,7 +1311,7 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   Depuis le 18/09/2026 la ligne n'est plus dans le corps : le f16 vient du
 #   global (cf. en-tête), et c'est en f16 sur K ET V que la campagne du
 #   moteur conteneurisé a mesuré la section.
-# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (série tools/validation-parc-rocm.sh,
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (série de validation jouée hors dépôt,
 #   logs/validation-rocm-2026-09-18.log, image llm-rocm-strix strix-8c1c282 +
 #   runtime r7dda3ac, ROCm0, --bench 3 passes, cache K et V f16, micro-lot par
 #   défaut 2048) : prefill 270 t/s, décode 37,1 t/s, acceptance 0,675, cache
