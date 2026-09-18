@@ -1,5 +1,5 @@
 # lib/svc.sh - sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Pilotage du service - couche unique au-dessus de docker compose
@@ -135,11 +135,10 @@ _svc_logs() {
 
 # cmd_start - démarre la stack (commande par défaut, comme avant la bascule).
 # L'ancien --start exécutait llama-server au premier plan, pour l'unité
-# systemd ; il n'y a plus d'unité, et le moteur de l'hôte n'est plus celui qui
-# sert. Son garde-fou moteur/ini (_fork_keys_guard) n'a donc plus d'objet ici :
-# le moteur du conteneur est celui de l'image, un seul et connu. lib/fork.sh
-# reste en place (filet de retour arrière tant que la migration n'est pas
-# terminée) et ses commandes --setup-fork / --update-fork sont inchangées.
+# systemd ; il n'y a plus d'unité, et plus de moteur sur l'hôte. Le garde-fou
+# moteur/ini qui vivait ici (clés ini que seul le fork comprenait) est tombé
+# avec le fork le 18/09/2026 : le moteur du conteneur est celui de l'image, un
+# seul et connu, et c'est ce qui rend la garde sans objet.
 cmd_start() {
   [[ -f "$CONFIG_DIR/models.ini" ]] || error "Config introuvable - lance d'abord --setup"
   _compose_check || error "Le service ne peut pas démarrer ici (voir ci-dessus)."

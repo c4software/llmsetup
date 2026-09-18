@@ -1,20 +1,21 @@
 # lib/runtime.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Moteur conteneurisé : image ROCm Strix Halo (runtime/)
 #
-# Deuxième moteur du dépôt, à côté du fork Vulkan de lib/fork.sh. Il vient de la
-# PR 133 de kyuz0/amd-strix-halo-toolboxes : ROCm 10.0 gfx1151 + un ROCr/HIP
-# retained-PM4 compilé depuis pwilkin/rocm-systems, et halo-box/strix-llama.cpp
-# construit en HIP seul. Provenance et écarts : runtime/AMONT.md.
+# SEUL moteur du dépôt depuis le 18/09/2026 (le fork Vulkan de lib/fork.sh a été
+# retiré ce jour-là). Il vient de la PR 133 de kyuz0/amd-strix-halo-toolboxes :
+# ROCm 10.0 gfx1151 + un ROCr/HIP retained-PM4 compilé depuis
+# pwilkin/rocm-systems, et halo-box/strix-llama.cpp construit en HIP seul.
+# Provenance et écarts : runtime/AMONT.md.
 #
-# ⚠ Depuis la bascule, cette image EST le moteur du service : le compose généré
-# (lib/compose.sh) la nomme par _image_ref, et _svc_restart la reprend. Une
-# image neuve n'est donc servie qu'au prochain redémarrage - --image-build,
-# --image-update et --image-status ne redémarrent rien d'eux-mêmes. Le fork de
-# lib/fork.sh reste le moteur des outils HORS service (llama-bench) et le filet
-# de retour arrière de la migration.
+# ⚠ Cette image EST le moteur du service : le compose généré (lib/compose.sh) la
+# nomme par _image_ref, et _svc_restart la reprend. Une image neuve n'est donc
+# servie qu'au prochain redémarrage - --image-build, --image-update et
+# --image-status ne redémarrent rien d'eux-mêmes. Les outils HORS service
+# (llama-bench des courbes de batch, llama-server jetable de
+# tools/spec-isolate.sh) tournent dans la MÊME image, par _dk_run.
 #
 # Modèle de gestion des images, décidé le 17/09/2026 :
 #   - l'image ne contient QUE le moteur et son runtime — pas de modèle, pas de
@@ -31,7 +32,7 @@
 #     (llm-setup.engine_rev / rocm_rev / build_date), /opt/strix/versions.txt
 #     dedans, et logs/images.tsv sur la machine.
 #
-# ⚠ Comparabilité, comme pour le fork : une image = une série de mesures. Un
+# ⚠ Comparabilité : une image = une série de mesures. Un
 # chiffre ne se compare qu'à un autre pris sous les mêmes révisions ; d'où le
 # refus de --image-update d'avancer sans accord explicite.
 # =============================================================================
@@ -51,10 +52,11 @@ IMAGE_LOG="$LOG_DIR/images.tsv"
 IMAGE_TAG="latest"
 IMAGE_BUILD_TAG="build"
 
-# Les quatre cibles attendues dans /usr/local/bin de l'image — mêmes que
-# FORK_BINS, pour que les mesures se fassent de la même façon sur les deux
-# moteurs. Le Dockerfile le garantit déjà côté build ; on le revérifie sur
-# l'image finie, qui est ce qu'on va vraiment lancer.
+# Les quatre cibles attendues dans /usr/local/bin de l'image : le serveur du
+# service, llama-bench (courbes de batch, --list-devices), llama-cli et
+# llama-quantize, tous appelés par _dk_run. Le Dockerfile le garantit déjà côté
+# build ; on le revérifie sur l'image finie, qui est ce qu'on va vraiment
+# lancer.
 IMAGE_BINS=(llama-server llama-bench llama-cli llama-quantize)
 
 # Étiquette qui identifie NOS images. Elle sert aussi de filtre de ménage : rien
@@ -341,9 +343,9 @@ cmd_image_build() {
 # --image-update
 # =============================================================================
 
-# _image_confirm <texte> — même convention que _fork_confirm (lib/fork.sh) :
-# question seulement sur un terminal interactif, défaut NON, entrée non
-# interactive = rien, et IMAGE_UPDATE_YES=1 vaut accord explicite.
+# _image_confirm <texte> : question seulement sur un terminal interactif, défaut
+# NON, entrée non interactive = rien, et IMAGE_UPDATE_YES=1 vaut accord
+# explicite.
 _image_confirm() {
   local quoi="$1" reply=""
   if [[ "${IMAGE_UPDATE_YES:-0}" == "1" ]]; then
@@ -552,9 +554,18 @@ cmd_image_status() {
 #     models.ini sont absolus et doivent rester valides des deux côtés, et rien
 #     ici n'a de raison d'écrire dans les poids. C'est aussi ce qui permet à
 #     l'image de ne contenir AUCUN modèle et de rester jetable.
-#   --network none par défaut : une mesure n'a pas à sortir. DK_RUN_NET=host
-#     pour les cas qui exposent un port (le service, lui, passe par le compose
-#     et une publication de port, jamais par network_mode: host).
+#   --network none par défaut : une mesure n'a pas à sortir. Deux surcharges,
+#     pour les outils qui doivent exposer un port (tools/spec-isolate.sh monte
+#     un llama-server jetable sur 127.0.0.1:8099) :
+#       DK_RUN_PUBLISH=127.0.0.1:8099:8099  publication de port ; elle impose
+#         un réseau, le défaut passe donc à "bridge" dès qu'elle est posée.
+#         TOUJOURS la borner à 127.0.0.1 : rien de ce dépôt n'a à écouter sur
+#         le réseau.
+#       DK_RUN_NAME=<nom>                   --name du conteneur, pour qu'un trap
+#         puisse faire `docker rm -f <nom>` : un conteneur lancé en arrière-plan
+#         survit au shell qui l'a lancé, et tuer le `docker run` ne suffit pas.
+#     DK_RUN_NET reste pour forcer le réseau à la main (host, none, bridge).
+#     Le service, lui, passe par le compose, jamais par ces variables.
 _dk_run() {
   local bin="${1:-}"
   [[ -n "$bin" ]] || error "_dk_run : binaire manquant."
@@ -575,6 +586,16 @@ _dk_run() {
     fi
   done
 
+  # Port publié et nom de conteneur : options optionnelles, jamais posées vides
+  # (docker refuse un --name vide, et un -p vide n'a pas de sens).
+  local -a extra=()
+  local net_defaut="none"
+  if [[ -n "${DK_RUN_PUBLISH:-}" ]]; then
+    extra+=(-p "$DK_RUN_PUBLISH")
+    net_defaut="bridge"
+  fi
+  [[ -n "${DK_RUN_NAME:-}" ]] && extra+=(--name "$DK_RUN_NAME")
+
   docker run --rm \
     --device /dev/kfd --device /dev/dri \
     ${gids[@]+"${gids[@]}"} \
@@ -584,7 +605,8 @@ _dk_run() {
     --shm-size 8g \
     --ulimit memlock=-1:-1 \
     -v "$MODELS_BASE:$MODELS_BASE:ro" \
-    --network "${DK_RUN_NET:-none}" \
+    --network "${DK_RUN_NET:-$net_defaut}" \
+    ${extra[@]+"${extra[@]}"} \
     --entrypoint "$bin" \
     "$ref" "$@"
 }

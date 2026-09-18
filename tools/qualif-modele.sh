@@ -135,9 +135,7 @@ done
 
 # lib/common.sh apporte SPEC_TEST_URL, SERVICE_NAME, _llama_build (étiquette de
 # moteur, lue sur les LABEL de l'image qui sert) et les helpers info/warn/error.
-# Il attend SCRIPT_DIR : c'est la racine du dépôt, comme pour setup-llm.sh. Le
-# PATH ($HOME/.local/bin en tête, liens du fork) y est posé aussi, comme dans
-# tools/spec-isolate.sh : c'est le moteur des outils HORS service.
+# Il attend SCRIPT_DIR : c'est la racine du dépôt, comme pour setup-llm.sh.
 # runtime.sh donne _image_ref/_image_label (étiquette de moteur), compose.sh les
 # chemins du compose généré, svc.sh les _svc_* (état du service).
 SCRIPT_DIR="$ROOT_DIR"

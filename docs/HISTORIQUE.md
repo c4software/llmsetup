@@ -1407,6 +1407,64 @@ pi 0.84.3 en conteneur, appel froid puis 3 passes de 5 scénarios, bigchuck, for
 
 Lecture : Muse-Glimmer tient la boucle complète, le cache sert 97 à 99 % à chaque tour (attention pure) et le décode en boucle (34 à 41 t/s) rejoint le `--bench` (38,0) ; le raisonnement en `reasoning_strength` low ne fait échouer aucun scénario. LFM2.5-8B-A1B (thinking coupé) réussit les tool calls simples mais rate la réponse simple et la création de module (fichiers écrits, test jamais relancé jusqu'au vert), et part en boucle de tool calls sur la correction de bug : `--bench-agentic` n'a pas de limite de tours, le conteneur a été tué à la main. C'est le résultat, pas un défaut du serveur (le 2.6B, lui, reste le modèle de tool calling). La section est gardée avec ce verdict, à retirer si elle ne sert pas dans l'usage réel. Suite : elle a été retirée le 18/09/2026 après un second échec, 0/16 sur le moteur conteneurisé (cf. « lfm2.5-8b-a1b-nothink retiré (18/09/2026) »).
 
+## Le fork Vulkan n'est plus un moteur du dépôt (18/09/2026)
+
+`lib/fork.sh` et tout son mécanisme sont retirés : les commandes
+`--setup-fork`, `--update-fork` et `--unset-fork`, l'épinglage `fork.conf`, le
+garde-fou moteur/ini (`FORK_ONLY_KEYS` / `_fork_keys_guard`), la proposition
+d'installation en fin de `--setup`, la résolution d'un binaire llama-* sur
+l'hôte (`_llama_bin`, `_host_llama_build`, le `~/.local/bin` mis en tête du
+PATH) et les tests unitaires correspondants.
+
+Raison : depuis la bascule du service en conteneur (17 au 18/09/2026) le fork
+ne servait plus aucun modèle. Il ne restait que le moteur des outils hors
+service, ce qui faisait coexister DEUX moteurs, donc deux séries de mesures et
+deux jeux de réglages, pour un rôle que l'image tient aussi bien. Les outils
+passent donc dans l'image, par `_dk_run` :
+
+| Outil | Avant | Après |
+|---|---|---|
+| `--spec-ngram-tune` (courbe `t_forward(batch)`) | `llama-bench` de l'hôte | `_dk_run llama-bench` |
+| `tools/bench-spec-batch.sh` | `llama-bench` de l'hôte | `_dk_run llama-bench` |
+| `tools/bench-depth.sh` | `llama-bench` de l'hôte | `_dk_run llama-bench` |
+| `tools/spec-isolate.sh` | `llama-server` de l'hôte | `_dk_run llama-server`, port publié sur `127.0.0.1:8099`, conteneur nommé |
+| `--list-devices` | moteur de l'hôte + paquets ggml, puis l'image | l'image seule |
+
+`_dk_run` gagne pour cela deux variables : `DK_RUN_PUBLISH` (publication de
+port, qui bascule le réseau par défaut sur `bridge`, toujours bornée à la
+loopback) et `DK_RUN_NAME` (nom du conteneur, pour que le trap de
+`spec-isolate.sh` fasse `docker rm -f` : tuer le `docker run` ne tue pas
+forcément le conteneur, qui garderait le GPU et le port). `LLAMA_BIN_DIR`,
+qui pointait un build à part du fork, est remplacé par `IMAGE=` dans les trois
+outils : c'est ainsi qu'on mesure un moteur autre que celui du service.
+
+`GGML_CUDA_ENABLE_UNIFIED_MEMORY` disparaît de tout le dépôt. Elle était
+nécessaire au moteur Vulkan/HIP de l'hôte et est INTERDITE sur le runtime
+retained-PM4 de l'image, où elle fait passer chaque allocation par
+`hipMallocManaged` et corrompt la sortie (cf. `runtime/AMONT.md`). Le test de
+`tests/sh-unit.sh` qui interdit sa présence dans le compose généré reste.
+
+Les valeurs par défaut des deux outils de courbe suivent le moteur : `DEV`
+passe de `Vulkan0` à `ROCm0`, et le cache KV de `bench-depth.sh` de `q8_0` à
+`f16`, qui est ce que sert le routeur depuis le 18/09/2026.
+
+**Retour arrière.** Il ne passe plus par un fork installé sur l'hôte mais par
+`runtime/image.conf` : y remettre d'anciennes révisions (`git revert` sur ce
+fichier, ou `--image-update <engine-rev> <rocm-rev>`) puis `--image-build`.
+L'historique git de ce fichier est le journal des révisions. Le code de
+`lib/fork.sh` reste récupérable dans l'historique git du dépôt, au commit qui
+précède ce retrait.
+
+**Ce qui reste vrai et n'a pas bougé.** Les commentaires datés de
+`lib/models.sh` et de ce document qui citent le fork comme moteur d'une
+campagne : ce sont des mesures réellement faites sous `strix-<commit>`, et
+elles gardent leur étiquette. Les clés que seul ce moteur comprend
+(`ngram-on-disk`, `lazy-mode`, `fit`, `load-mode`, `reasoning-budget-*`,
+`spec-draft-adaptive`, `spec-prefill*`) restent posées dans le ini : la dorsale
+`halo-box/strix-llama.cpp` est la même dans l'image. Ce qui disparaît, c'est la
+garde qui les signalait quand un moteur d'amont était résolu sur l'hôte, sans
+objet depuis qu'il n'y a plus de moteur sur l'hôte.
+
 ## lfm2.5-8b-a1b-nothink retiré (18/09/2026)
 
 Section `lfm2.5-8b-a1b-nothink` (LFM2.5-8B-A1B de Liquid AI, Q8_0 de 9,0 Go et

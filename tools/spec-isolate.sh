@@ -24,8 +24,10 @@
 # Les arguments après « -- » sont passés TELS QUELS à llama-server (-m, -md,
 # --spec-type, --spec-draft-n-max, sampling, -c, -ctk/-ctv, -np…) : aucun
 # chemin de modèle n'est en dur ici. Le script pose d'abord les flags globaux
-# du parc (--device Vulkan0 -ngl 99 -fa on --jinja --host/--port), qui restent
+# du parc (--device ROCm0 -ngl 99 -fa on --jinja --host/--port), qui restent
 # surchargeables puisque llama-server garde la DERNIÈRE occurrence d'un flag.
+# Les chemins de GGUF sont ceux de ~/models, monté au MÊME chemin absolu en
+# lecture seule dans le conteneur : ils s'écrivent donc comme sur l'hôte.
 #
 # Exemple réel — test DSpark sur DeepSeek-V4-Flash du 15/09/2026 :
 #   tools/spec-isolate.sh dsv4-dspark3 -- \
@@ -46,11 +48,11 @@
 #   PROMPTS=spec-test.txt,spec-refactor.txt   résolus dans prompts/
 #   MAX_TOKENS=1200 max_tokens de chaque requête
 #   OUT=logs/spec-isolate/<tag>/              log serveur, générations, TSV
-#   LLAMA_BIN_DIR=  dossier de binaires mis en tête du PATH, devant ~/.local/bin :
-#                   pour mesurer un build du fork non installé (patch en cours,
-#                   build/ à part) sans toucher au moteur servi. Vide = moteur
-#                   du service. La ligne « llama-cpp: » de l'en-tête dit lequel
-#                   a répondu.
+#   IMAGE=          image docker à mesurer, pour essayer un moteur AUTRE que
+#                   celui du service (build d'un patch en cours, image d'amont)
+#                   sans toucher à llm-rocm-strix:latest. Vide = image du
+#                   service. La ligne « moteur : » de l'en-tête dit laquelle a
+#                   répondu.
 #
 # Sorties : OUT/serveur.log (le llama-server jetable), OUT/mesures.tsv (une
 # ligne par mesure) et OUT/gen-*.txt (texte généré, à relire quand un chiffre
@@ -59,8 +61,10 @@
 # Le service llama-server (conteneur) est ARRÊTÉ par le script (un seul GPU) et
 # RELANCÉ par son trap, y compris sur Ctrl-C ou sur échec du serveur jetable :
 # tout passe par les _svc_* (lib/svc.sh), jamais par docker compose en direct.
-# Le serveur jetable, lui, reste un llama-server de L'HÔTE (liens du fork) :
-# porter ce test dans l'image est une étape à part.
+# Le serveur jetable tourne DANS L'IMAGE depuis le 18/09/2026 (retrait du fork),
+# par _dk_run avec un port publié sur 127.0.0.1 et un nom de conteneur fixe : le
+# trap fait `docker rm -f` dessus, un conteneur ne survivant pas au shell qui
+# l'a lancé mais pouvant survivre au `docker run` tué.
 # =============================================================================
 set -euo pipefail
 
@@ -80,23 +84,16 @@ MAX_TOKENS="${MAX_TOKENS:-1200}"
 OUT="${OUT:-$ROOT_DIR/logs/spec-isolate/$TAG}"
 LOG="$OUT/serveur.log"
 
-# $HOME/.local/bin en tête, comme le service et lib/common.sh : c'est là que
-# vivent les liens du fork strix-llama.cpp. Sans ça on mesurerait le paquet
-# Arch en croyant mesurer le moteur servi (défaut réel du 12/09/2026).
-# LLAMA_BIN_DIR (optionnel) passe encore devant : un build à part du fork.
-export PATH="${LLAMA_BIN_DIR:+$LLAMA_BIN_DIR:}$HOME/.local/bin:$PATH"
-# ROCm/HIP sur iGPU : allocations en mémoire unifiée. Moteur de l'HÔTE
-# UNIQUEMENT : cette variable ne doit JAMAIS être passée à _dk_run
-# (lib/runtime.sh) ni au compose du service : sur le runtime retained-PM4 de
-# l'image elle corrompt la sortie (cf. runtime/AMONT.md et lib/compose.sh).
-export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+# (GGML_CUDA_ENABLE_UNIFIED_MEMORY était exporté ici du temps du moteur de
+#  l'hôte. INTERDIT sur ce runtime : sur le retained-PM4 de l'image, chaque
+#  allocation passe par hipMallocManaged et la sortie se corrompt, cf.
+#  runtime/AMONT.md et le test de lib/compose.sh.)
 
-# Modules du dépôt : seuls les _svc_* sont nécessaires (arrêt et relance du
-# service le temps de la mesure), mais ils s'appuient sur common (helpers,
-# SERVICE_NAME, CONFIG_DIR), runtime (image) et compose (chemin du compose).
-# lib/common.sh attend SCRIPT_DIR = racine du dépôt, comme pour setup-llm.sh ;
-# il repose $HOME/.local/bin en tête du PATH, ce que ce script fait déjà
-# ci-dessus (LLAMA_BIN_DIR passe toujours devant).
+# Modules du dépôt : les _svc_* (arrêt et relance du service le temps de la
+# mesure) et _dk_run (le serveur jetable tourne dans l'image). Ils s'appuient
+# sur common (helpers, SERVICE_NAME, CONFIG_DIR, MODELS_BASE), runtime (image,
+# _dk_run) et compose (chemin du compose).
+# lib/common.sh attend SCRIPT_DIR = racine du dépôt, comme pour setup-llm.sh.
 SCRIPT_DIR="$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/common.sh"
@@ -120,8 +117,19 @@ EC_MODE="$(tr -d '[:space:]' < "$EC_POWER_MODE_FILE" 2>/dev/null || true)"
   echo "mode d'alimentation EC illisible ($EC_POWER_MODE_FILE) : journalisé \"inconnu\"" >&2
 }
 
-command -v llama-server >/dev/null || { echo "llama-server introuvable" >&2; exit 1; }
-command -v python3      >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
+command -v docker  >/dev/null || { echo "docker introuvable" >&2; exit 1; }
+command -v python3 >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
+
+# IMAGE= surcharge l'image mesurée (essai d'un autre moteur). _dk_run lit
+# IMAGE_NAME/_image_tag : on ne détourne donc que le NOM, le tag restant celui
+# du dépôt ; une référence "dépôt:tag" complète est acceptée telle quelle.
+if [[ -n "${IMAGE:-}" ]]; then
+  _image_read_conf
+  IMAGE_NAME="${IMAGE%%:*}"
+  [[ "$IMAGE" == *:* ]] && IMAGE_TAG="${IMAGE##*:}"
+fi
+_image_ref >/dev/null 2>&1 \
+  || { echo "Aucune image ${IMAGE_NAME:-llm-rocm-strix}:$(_image_tag) ici - ./setup-llm.sh --image-build" >&2; exit 1; }
 
 # --- Garde-fou : une seule mesure à la fois sur la machine (un seul GPU) -----
 # Une mesure du dépôt qui tourne en parallèle fausserait les deux : celle-ci
@@ -148,12 +156,18 @@ fi
 
 mkdir -p "$OUT"
 SRV_PID=""
+# Nom du conteneur jetable, pour que le trap puisse le tuer : tuer le processus
+# `docker run` ne tue pas forcément le conteneur, qui survivrait au script et
+# garderait le GPU et le port. Le tag rend deux mesures simultanées impossibles
+# par construction, ce qui est voulu (un seul GPU).
+SRV_NAME="spec-isolate-$TAG"
 
 # Le service est arrêté pour libérer le GPU, et remis en marche quoi qu'il
 # arrive : sortie normale, erreur (set -e), Ctrl-C ou TERM.
 _fin() {
   local rc=$?
   trap - EXIT INT TERM
+  docker rm -f "$SRV_NAME" >/dev/null 2>&1 || true
   if [[ -n "$SRV_PID" ]] && kill -0 "$SRV_PID" 2>/dev/null; then
     kill "$SRV_PID" 2>/dev/null || true
     wait "$SRV_PID" 2>/dev/null || true
@@ -167,23 +181,30 @@ trap _fin EXIT INT TERM
 
 echo "# spec-isolate — $(date '+%F %T')  tag=$TAG"
 echo "# host=$(hostname)  port=$PORT  np=$NP  passes=$PASSES  max_tokens=$MAX_TOKENS"
-echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)  ($(command -v llama-server))"
+echo "# moteur   : $(_llama_build)  (image ${IMAGE_NAME}:$(_image_tag), conteneur $SRV_NAME)"
 echo "# mode EC  : $EC_MODE (alimentation de l'APU ; ne comparer qu'à même mode)"
 echo "# args     : ${SRV_ARGS[*]}"
 echo ""
 echo "→ arrêt du service llama-server (un seul GPU)…"
 _svc_stop || true
 sleep 3
+# Reste d'un run précédent tué sans son trap : le nom est unique, un conteneur
+# homonyme ferait échouer le docker run sur un message peu parlant.
+docker rm -f "$SRV_NAME" >/dev/null 2>&1 || true
 
 # Flags globaux du parc D'ABORD, args de l'appelant ENSUITE : llama-server
 # retient la dernière occurrence, donc tout est surchargeable depuis la ligne
 # de commande sans toucher au script.
 # (pas de « [[ … ]] && … » en fin de portée : sous set -e un test faux tuerait
 #  le script — piège documenté dans AGENTS.md.)
+# --host 0.0.0.0 DANS le conteneur : la publication de port ne voit pas un
+# serveur lié à la seule loopback du conteneur. L'exposition reste bornée à
+# 127.0.0.1 de l'hôte par DK_RUN_PUBLISH.
 declare -a NPARG=(-np "$NP")
-llama-server --device Vulkan0 -ngl 99 -fa on --jinja \
+DK_RUN_NAME="$SRV_NAME" DK_RUN_PUBLISH="127.0.0.1:$PORT:$PORT" \
+  _dk_run llama-server --device ROCm0 -ngl 99 -fa on --jinja \
              "${SRV_ARGS[@]}" "${NPARG[@]}" \
-             --host 127.0.0.1 --port "$PORT" > "$LOG" 2>&1 &
+             --host 0.0.0.0 --port "$PORT" > "$LOG" 2>&1 &
 SRV_PID=$!
 
 # Attente du /health : 600 s (un gros MoE en IQ3 met plusieurs minutes à

@@ -1,5 +1,5 @@
 # lib/models.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # BACKEND : UN SEUL, ROCm0
@@ -20,16 +20,17 @@
 #     historique. Le charabia « Nous dev dev dev » de DeepSeek V4 et le
 #     « LAMPAMPAMP » de Qwen3-Coder-Next ont été re-testés le 18/09/2026 sur
 #     l'image, comptages justes des deux côtés.
-# Les paquets ggml de l'hôte (ggml-vulkan, ggml-hip) ne valent plus que pour
-# les outils HORS service (llama-bench des courbes de batch, llama-server
-# jetable de tools/spec-isolate.sh), qui tournent encore sur le fork Vulkan de
-# lib/fork.sh.
+# Les outils HORS service (llama-bench des courbes de batch, llama-server
+# jetable de tools/spec-isolate.sh) tournent dans la MÊME image, par _dk_run
+# (lib/runtime.sh), depuis le retrait du fork Vulkan le 18/09/2026 : il n'y a
+# plus qu'un moteur, et une seule série de mesures.
 #
 # ⚠ GGML_CUDA_ENABLE_UNIFIED_MEMORY est INTERDIT sur ce runtime : il fait
 #   passer chaque allocation par hipMallocManaged et la sortie se corrompt
-#   (cf. runtime/AMONT.md et lib/compose.sh). Il reste exporté par lib/spec.sh
-#   et les tools/ pour le moteur de l'HÔTE ; ne jamais le propager à _dk_run ni
-#   au compose.
+#   (cf. runtime/AMONT.md et lib/compose.sh). Depuis le 18/09/2026 il n'est
+#   plus exporté nulle part dans le dépôt : lib/spec.sh et les tools/ le
+#   posaient pour le moteur de l'HÔTE, qui n'existe plus. Un test de
+#   tests/sh-unit.sh interdit sa présence dans le compose généré.
 # =============================================================================
 
 DEFAULT_DEVICE="ROCm0"
@@ -1621,18 +1622,19 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 # --bench-cache 21/08 : 99 % au tour suivant, 100 % à l'identique — attention
 #   pure (MLA), pas d'état récurrent : le témoin qui montre que le plafond de
 #   62-66 % des Qwen/LFM2 vient de la restauration par checkpoint.
-# reasoning-budget-* : options du fork strix-llama.cpp (cf. lib/fork.sh) —
+# reasoning-budget-* : options du fork strix-llama.cpp, reprises par le moteur
+#   de l'image (même dorsale halo-box/strix-llama.cpp) :
 #   budget de réflexion plus large que les 4096 de l'ancienne section thinking
 #   qwen3.8-27b (retirée le 13/09/2026, cf. docs/HISTORIQUE.md), le modèle
 #   pensant longuement avant de produire, avec deux paliers d'avertissement doux (60 % puis 85 %) et 192
 #   tokens de grâce. À 12 t/s, c'est le garde-fou contre un raisonnement qui
 #   s'emballe. Budget à affiner à l'usage.
-#   ⚠ Ces quatre clés sont propres au fork (FORK_ONLY_KEYS, lib/fork.sh) : le
-#   paquet Arch de secours connaît reasoning-budget mais pas
-#   reasoning-budget-enable, -soft-ratio, -soft2-ratio ni -grace-tokens, et une
-#   clé inconnue ferait échouer le routeur entier ; --start refuse donc de
-#   démarrer sur le paquet tant qu'elles sont là, y revenir impose de les
-#   retirer à la main puis --preload.
+#   ⚠ Ces quatre clés sont propres à cette dorsale : un llama.cpp d'amont
+#   connaît reasoning-budget mais pas reasoning-budget-enable, -soft-ratio,
+#   -soft2-ratio ni -grace-tokens, et une clé inconnue ferait échouer le routeur
+#   ENTIER (l'ini n'est pas tolérant). Le dépôt ne sert plus qu'un moteur, celui
+#   de l'image, et ne filtre rien : servir ce ini ailleurs impose de les retirer
+#   à la main puis de relancer --preload.
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes, n-gram
 #   seul, avant DSpark) : prefill 205 t/s, décode 19,9 t/s, acceptance 0,65 :
 #   prefill +86 % et décode +62 % contre le paquet (110 / 12,3, b10433), le
@@ -1810,8 +1812,8 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   image-min-tokens 1024, Qwen-VL ayant besoin d'au moins 1024 tokens d'image
 #   pour le grounding (le fork le dit lui-même : tools/mtmd/clip.cpp avertit
 #   « try adding --image-min-tokens 1024 »).
-#   Les trois clés sont comprises AUSSI par le paquet Arch (vérifié le
-#   17/09/2026 sur b10964, --help) : rien à ajouter à FORK_ONLY_KEYS.
+#   Les trois clés sont comprises AUSSI par un llama.cpp d'amont (vérifié le
+#   17/09/2026 sur b10964, --help) : rien de propre à cette dorsale ici.
 #   Le dépôt affirmait jusqu'ici « mmproj incompatible avec un drafter » (cf.
 #   en-tête) : cette phrase vient de la même doc unsloth que le « np > 1 non
 #   supporté », et le fork servi ne porte aucune garde de ce genre (lecture de
@@ -1990,8 +1992,8 @@ download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 #   refuse alors de démarrer le routeur ENTIER (« option 'ngram-on-disk' not
 #   recognized in preset », vérifié le 12/09/2026 : l'ini n'est pas tolérant
 #   aux clés inconnues). Revenir au paquet impose de retirer cette ligne à la
-#   main puis de relancer --preload ; le dépôt ne filtre rien, il refuse
-#   seulement de démarrer (FORK_ONLY_KEYS, lib/fork.sh).
+#   main puis de relancer --preload ; le dépôt ne filtre rien et ne sert plus
+#   qu'un moteur, celui de l'image.
 # CONF DU MOTEUR CONTENEURISÉ, retenue le 18/09/2026 et servie telle quelle.
 #   Ce qui change par rapport au fork, clé par clé :
 #     ctx-size 262144 (était 131072) : le contexte natif entier, à un slot ;

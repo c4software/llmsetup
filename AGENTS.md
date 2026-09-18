@@ -50,14 +50,12 @@ résumer ou la supprimer, non.
 - Toute modif de `spec_analyze.py` ⇒ aussi `python3 tests/py-unit.py`
   (tests unitaires de `fit_alpha`/`fit_timing`/`predict`/`recommend` sur
   données synthétiques exactes).
-- Toute modif de `_llama_bin` / `_llama_build` / `_host_llama_build`
-  (lib/common.sh), de `FORK_ONLY_KEYS` / `_fork_keys_guard` (lib/fork.sh), de
-  `lib/runtime.sh` (image), de `lib/compose.sh` (compose généré) ou de
+- Toute modif de `_llama_build` (lib/common.sh), de `lib/runtime.sh` (image),
+  de `lib/compose.sh` (compose généré) ou de
   `lib/svc.sh` (pilotage du service) ou de `lib/ini.sh` / `lib/models.sh`
-  (ini généré) ⇒ `./tests/sh-unit.sh` : résolution du
-  binaire de l'hôte, forme des deux étiquettes de moteur (`bNNNNN` upstream et
-  `strix-<commit>` pour le fork côté hôte, `strix-<engine7>+r<rocm7>` pour
-  l'image servie), garde-fou moteur/ini, promotion en `:latest` seulement après
+  (ini généré) ⇒ `./tests/sh-unit.sh` : forme de l'étiquette de moteur
+  (`strix-<engine7>+r<rocm7>`, lue sur les LABEL de l'image),
+  promotion en `:latest` seulement après
   vérification de `versions.txt`, ménage limité à nos images sans tag, et pour
   le service : contenu du compose généré (montage au même chemin en `:ro`, gid
   numériques, `cap_drop ALL`, pas de `mem_limit`, `--models-max` suivant
@@ -86,8 +84,8 @@ résumer ou la supprimer, non.
   deux sont **générés**, non versionnés, et réécrits (`regen_models_ini`,
   `regen_compose`). Le compose est régénéré à chaque `--start` ; les tuners qui
   surchargent le ini le temps d'une mesure n'y touchent pas.
-- Les fichiers `.conf` (`preload.conf`, `spec-nmax.conf`, `spec-ngram.conf`,
-  `fork.conf`) sont des **choix utilisateur** : ne pas les régénérer ni
+- Les fichiers `.conf` (`preload.conf`, `spec-nmax.conf`, `spec-ngram.conf`)
+  sont des **choix utilisateur** : ne pas les régénérer ni
   les « corriger » sans demande. Les .conf et les journaux de `logs/` sont
   locaux, non versionnés (.gitignore) ; tout nouveau journal va dans `logs/`
   avec la version de llama.cpp en colonne.
@@ -121,8 +119,8 @@ là-bas, lancer, ne rien commiter sur place.
 5. **`--spec-ngram-tune`** (si `ngram-map-k` dans le `spec-type`) : courbe
    `t_forward(batch)` puis arbitrage réel, écrit dans `spec-ngram.conf`.
    Modèle sans MTP : la courbe seule d'abord, service arrêté,
-   `REPS=5 tools/bench-spec-batch.sh <gguf>` (llama-bench de l'HÔTE, donc
-   Vulkan : les seuils du moteur de l'image n'ont pas été re-tracés), pour
+   `REPS=5 tools/bench-spec-batch.sh <gguf>` (llama-bench de l'IMAGE depuis le
+   18/09/2026, donc le moteur qui sert), pour
    connaître les deux tailles à mesurer ; puis `ngram-map-k` dans le
    `spec-type` et le tune, qui mesure une référence sans spéculation et
    n'écrit rien si aucun `size_m` ne la bat. La courbe ne décide jamais

@@ -16,11 +16,10 @@
 #   tools/bench-spec-batch.sh <gguf> [<gguf>...] # modèles précis
 #
 # Variables d'env :
-#   DEV=Vulkan0,ROCm0  device(s) ggml séparés par des virgules (défaut :
-#                    Vulkan0, le seul que construit le fork) ; "auto" = ggml
-#                    choisit. Chaque modèle est mesuré sur chaque device.
-#                    ⚠ Ce sont les devices du moteur de l'HÔTE, pas ceux du
-#                    service : celui-ci tourne dans l'image, en ROCm0 seul.
+#   DEV=ROCm0        device(s) ggml séparés par des virgules (défaut : ROCm0,
+#                    le seul que l'image expose) ; "auto" = ggml choisit.
+#                    Chaque modèle est mesuré sur chaque device.
+#   IMAGE=           image docker à mesurer (défaut : celle du service)
 #   OUT=<fichier>    journal lisible, en APPEND (défaut : logs/spec-batch.log,
 #                    comme les autres journaux). La sortie reste affichée à
 #                    l'écran en même temps.
@@ -42,8 +41,9 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 # repositionne la variable sur ~/models sans condition, et la surcharge par
 # l'environnement (documentée ci-dessus) serait perdue.
 _MODELS_BASE_ENV="${MODELS_BASE:-}"
-# Modules du dépôt : uniquement pour _svc_is_active (état du service, journalisé
-# avec la mesure). lib/common.sh attend SCRIPT_DIR = racine du dépôt.
+# Modules du dépôt : _svc_is_active (état du service, journalisé avec la mesure)
+# et _dk_run (llama-bench tourne dans l'image depuis le 18/09/2026, retrait du
+# fork). lib/common.sh attend SCRIPT_DIR = racine du dépôt.
 SCRIPT_DIR="$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/common.sh"
@@ -58,18 +58,24 @@ OUT="${OUT:-$ROOT_DIR/logs/spec-batch.log}"
 TSV="${TSV:-$ROOT_DIR/logs/spec-batch.tsv}"
 
 MODELS_BASE="${_MODELS_BASE_ENV:-$MODELS_BASE}"
-DEV="${DEV:-Vulkan0}"
+DEV="${DEV:-ROCm0}"
 DEPTH="${DEPTH:-0}"
 BATCHES="${BATCHES:-1,8,16,32,48}"
 REPS="${REPS:-5}"
 FA="${FA:-auto}"
 
-# $HOME/.local/bin en tête, comme le service et lib/common.sh : les liens du
-# fork strix-llama.cpp y vivent, sinon c'est le paquet Arch de /usr/bin.
-export PATH="$HOME/.local/bin:$PATH"
+command -v docker  >/dev/null || { echo "docker introuvable" >&2; exit 1; }
+command -v python3 >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
 
-command -v llama-bench >/dev/null || { echo "llama-bench introuvable (paquet llama-cpp)" >&2; exit 1; }
-command -v python3     >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
+# IMAGE= surcharge l'image mesurée (essai d'un autre moteur), comme dans
+# tools/spec-isolate.sh.
+if [[ -n "${IMAGE:-}" ]]; then
+  _image_read_conf
+  IMAGE_NAME="${IMAGE%%:*}"
+  [[ "$IMAGE" == *:* ]] && IMAGE_TAG="${IMAGE##*:}"
+fi
+_image_ref >/dev/null 2>&1 \
+  || { echo "Aucune image ${IMAGE_NAME:-llm-rocm-strix}:$(_image_tag) ici - ./setup-llm.sh --image-build" >&2; exit 1; }
 
 # Modèles : argv, sinon tous les .gguf sous $MODELS_BASE (1er shard seulement)
 declare -a GGUFS=()
@@ -85,13 +91,13 @@ fi
 
 [[ ${#GGUFS[@]} -gt 0 ]] || { echo "Aucun GGUF trouvé sous $MODELS_BASE" >&2; exit 1; }
 
-# Devices demandés, croisés avec ceux réellement exposés par ggml (même
-# garde-fou que --bench-devices : sans ggml-hip, ROCm0 n'existe pas).
+# Devices demandés, croisés avec ceux réellement exposés par l'image : un
+# device absent donnerait un llama-bench en échec sans dire pourquoi.
 declare -a DEVS=()
 if [[ "$DEV" == "auto" ]]; then
   DEVS=("auto")
 else
-  exposed="$(llama-bench --list-devices 2>/dev/null || true)"
+  exposed="$(_dk_run llama-bench --list-devices 2>/dev/null || true)"
   IFS=',' read -r -a want <<< "$DEV"
   for d in "${want[@]}"; do
     if [[ -z "$exposed" ]] || grep -q "$d" <<<"$exposed"; then
@@ -103,13 +109,10 @@ else
   [[ ${#DEVS[@]} -gt 0 ]] || { echo "Aucun device demandé n'est exposé." >&2; exit 1; }
 fi
 
-# ROCm/HIP sur iGPU : sans ça les allocations visent la VRAM dédiée (petite)
-# au lieu de la mémoire unifiée/GTT : les gros modèles échouent.
-# ⚠ Variable du moteur de l'HÔTE UNIQUEMENT. Elle ne doit JAMAIS être passée à
-# _dk_run (lib/runtime.sh) ni au compose du service : sur le runtime
-# retained-PM4 de l'image elle fait passer chaque allocation par
-# hipMallocManaged et la sortie se corrompt (cf. runtime/AMONT.md).
-export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+# (GGML_CUDA_ENABLE_UNIFIED_MEMORY était exporté ici du temps du moteur de
+#  l'hôte. INTERDIT sur ce runtime : sur le retained-PM4 de l'image elle fait
+#  passer chaque allocation par hipMallocManaged et la sortie se corrompt,
+#  cf. runtime/AMONT.md.)
 
 # En-tête TSV. Si un fichier existe avec un autre jeu de colonnes (ancienne
 # version du script), on ré-écrit une ligne d'en-tête avant les nouvelles
@@ -129,7 +132,7 @@ _svc_is_active && SERVICE_STATE="EN MARCHE"
 {
 echo "# bench-spec-batch — $(date '+%F %T')"
 echo "# host=$(hostname)  devices=${DEVS[*]}  depth=$DEPTH  batches=$BATCHES  reps=$REPS  fa=$FA"
-echo "# llama-cpp: $(llama-server --version 2>&1 | head -1 || true)"
+echo "# moteur   : $(_llama_build)  (image ${IMAGE_NAME}:$(_image_tag))"
 echo "# service llama-server : $SERVICE_STATE"
 if [[ "$SERVICE_STATE" == "EN MARCHE" ]]; then
   echo "#   ⚠ contention GPU/mémoire — pour un run propre :"
@@ -147,7 +150,7 @@ for gguf in "${GGUFS[@]}"; do
   declare -a DEVARG=()
   [[ "$dev" != "auto" ]] && DEVARG=(-dev "$dev")
   echo "═══ $(basename "$gguf")  [$dev] ═══"
-  if ! out="$(llama-bench -m "$gguf" -p "$BATCHES" -n 0 -d "$DEPTH" \
+  if ! out="$(_dk_run llama-bench -m "$gguf" -p "$BATCHES" -n 0 -d "$DEPTH" \
                           -r "$REPS" -fa "$FA" "${DEVARG[@]}" -o jsonl 2>/dev/null)"; then
     echo "  échec llama-bench (RAM insuffisante ? arch non supportée par ce backend ?)"
     echo

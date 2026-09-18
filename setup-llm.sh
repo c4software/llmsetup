@@ -9,10 +9,10 @@ set -euo pipefail
 #     cf. lib/runtime.sh) : l'image n'expose que ROCm0. Il n'y a plus de
 #     comparaison de devices, plus de bench-devices.conf et plus de
 #     --bench-devices depuis le 18/09/2026.
-#   - Les backends ggml en paquets Arch (ggml-cpu, ggml-vulkan, ggml-hip…) ne
-#     valent plus que pour les outils HORS service (llama-bench des courbes de
-#     batch, llama-server jetable de tools/spec-isolate.sh), qui tournent sur
-#     le fork Vulkan de lib/fork.sh.
+#   - Les outils HORS service (llama-bench des courbes de batch, llama-server
+#     jetable de tools/spec-isolate.sh) tournent dans la MÊME image, par
+#     _dk_run. Le fork Vulkan et les backends ggml en paquets Arch ont été
+#     retirés le 18/09/2026 : plus aucun binaire llama-* de l'hôte.
 #   - ./setup-llm.sh --bench <modèle|all> : mesure le serveur tel qu'il
 #     tourne via son API (prefill, décode médian, acceptance MTP). N'écrit
 #     rien. ./setup-llm.sh --bench-sanity : le moteur répond-il JUSTE.
@@ -39,7 +39,6 @@ source "$SCRIPT_DIR/lib/ini.sh"
 source "$SCRIPT_DIR/lib/compose.sh"
 source "$SCRIPT_DIR/lib/preload.sh"
 source "$SCRIPT_DIR/lib/setup.sh"
-source "$SCRIPT_DIR/lib/fork.sh"
 source "$SCRIPT_DIR/lib/runtime.sh"
 source "$SCRIPT_DIR/lib/bench/bench.sh"
 source "$SCRIPT_DIR/lib/bench/bench-parallel.sh"
@@ -65,9 +64,6 @@ case "${1:-}" in
   --bench-sanity)      cmd_bench_sanity "${2:-}" ;;
   --bench-load)        cmd_bench_load "${2:-}" ;;
   --preload)           cmd_preload ;;
-  --setup-fork)        cmd_setup_fork "${2:-}" "${3:-}" ;;
-  --update-fork)       cmd_update_fork ;;
-  --unset-fork)        cmd_unset_fork ;;
   --image-build)       cmd_image_build "${2:-}" ;;
   --image-update)      cmd_image_update "${2:-}" "${3:-}" ;;
   --image-status)      cmd_image_status ;;

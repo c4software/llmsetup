@@ -16,39 +16,40 @@ Lire `AGENTS.md` et `ARCHITECTURE.md` avant d'éditer. Le bloc de
 sont la connaissance métier et doivent citer les mesures (date, device,
 quant) qui justifient chaque réglage.
 
-## Le moteur d'abord : fork ou paquet Arch
+## Le moteur d'abord : l'image ROCm
 
-Depuis le 12/09/2026 le service tourne sur le fork
-[halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp)
-(`~/llm/strix-llama.cpp`, quatre liens dans `~/.local/bin` que l'unité
-systemd met en tête du PATH), pas sur le paquet Arch `llama-cpp`.
-`./setup-llm.sh --setup-fork` installe ET met à jour (clone ou
-`git pull --ff-only`, build, liens) ; `--update-fork` ne fait que le suivi
-d'amont d'un fork déjà en place (à lancer après un `--update`, il s'arrête
-sans rebuild si rien n'a bougé) ; `--unset-fork` retire les liens et rend la
-main au paquet ; `--list-devices` dit quel binaire répond réellement. Aucune
-des trois ne redémarre le service ni ne lance de mesure. `--setup` propose
-lui-même l'installation du fork (défaut oui) quand il n'est pas le moteur
-résolu, et rappelle `--update-fork` sinon.
+Depuis le 18/09/2026 le dépôt n'a plus qu'UN moteur : l'image docker construite
+par `runtime/` (ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
+[halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp) en HIP
+seul). Elle sert le service ET les outils hors service (`llama-bench` des
+courbes de batch, `llama-server` jetable de `tools/spec-isolate.sh`), par
+`_dk_run` (`lib/runtime.sh`). Le fork Vulkan installé sur l'hôte, ses liens dans
+`~/.local/bin` et ses commandes `--setup-fork` / `--update-fork` /
+`--unset-fork` ont été retirés ce jour-là ; le retour arrière du moteur passe
+par les anciennes révisions de `runtime/image.conf` (`--image-update <engine>
+<rocm>` puis `--image-build`).
+`./setup-llm.sh --image-build` construit, `--image-update` suit l'amont,
+`--image-status` inventorie, `--list-devices` dit ce que l'image expose. Aucune
+ne redémarre le service ni ne lance de mesure.
 
 Trois conséquences pour toute la procédure ci-dessous :
 
-- **Comparabilité** : les mesures faites sous le fork portent l'étiquette
-  `strix-<commit>` dans la colonne build des journaux (`_llama_build`), les
-  campagnes du paquet portent `bNNNNN`. Deux séries distinctes, jamais
-  comparées à la décimale : le dire dans chaque récap, et garder la valeur de
-  l'autre série entre parenthèses plutôt que de la remplacer.
-- **Clés propres au fork** (`FORK_ONLY_KEYS`, `lib/fork.sh`) : `ngram-on-disk`,
-  `lazy-mode`, `fit`, `load-mode`,
-  `reasoning-budget-enable` / `-soft-ratio` / `-soft2-ratio` /
+- **Comparabilité** : les mesures portent l'étiquette
+  `strix-<engine7>+r<rocm7>` dans la colonne build des journaux
+  (`_llama_build`), lue sur les LABEL de l'image. Une image = une série. Les
+  campagnes antérieures portent `strix-<commit>` (fork Vulkan) ou `bNNNNN`
+  (paquet Arch) : séries distinctes, jamais comparées à la décimale. Le dire
+  dans chaque récap, et garder la valeur de l'autre série entre parenthèses
+  plutôt que de la remplacer.
+- **Clés propres à cette dorsale** : `ngram-on-disk`, `lazy-mode`, `fit`,
+  `load-mode`, `reasoning-budget-enable` / `-soft-ratio` / `-soft2-ratio` /
   `-grace-tokens`, `spec-draft-adaptive`, `spec-prefill*`. Les trois premières
   sont posées par le dépôt lui-même : `fit` et `load-mode` en flags GLOBAUX
-  (`[*]`), `lazy-mode` sur la section Flash-Next. Le paquet Arch
-  refuse toute clé inconnue et c'est le **routeur entier** qui ne démarre pas,
-  pas seulement le modèle fautif. En poser une dans un bloc verrouille donc le
-  parc sur un moteur qui les comprend - l'image du service les comprend, le
-  paquet Arch non (`_fork_keys_guard` le signale côté hôte). Pour revenir au
-  paquet : retirer ces lignes de `lib/models.sh`, puis `--preload`.
+  (`[*]`), `lazy-mode` sur la section Flash-Next. Un llama.cpp d'amont refuse
+  toute clé inconnue et c'est le **routeur entier** qui ne démarre pas, pas
+  seulement le modèle fautif. En poser une dans un bloc verrouille donc le parc
+  sur un moteur qui les comprend ; le dépôt ne filtre rien et ne sert plus
+  qu'un moteur.
 - **Ne pas proposer `spec-prefill*`** : mesuré le 12-13/09/2026 sur
   qwen3.8-27b, il triple le prefill mais met le cache de prompt à 0 %, même
   sur une requête identique : perdant en boucle agentic, retiré.
@@ -180,9 +181,10 @@ PASSES=2 MAX_TOKENS=1200 tools/spec-isolate.sh <tag> -- \
 ```
 
 Tout ce qui suit `--` va tel quel à `llama-server` (le script ajoute seulement
-`--device Vulkan0 -ngl 99 -fa on --jinja` devant, surchargeables). ⚠ Cet outil
-tourne sur le moteur de l'HÔTE (fork Vulkan), pas sur l'image du service : il
-dégrossit, il ne mesure pas ce qui sera servi. Mettre le
+`--device ROCm0 -ngl 99 -fa on --jinja` devant, surchargeables). Depuis le
+18/09/2026 le serveur jetable tourne DANS l'image du service, donc sur le moteur
+qui sert ; il dégrossit quand même, il ne mesure pas la section telle que le
+routeur l'émettra. Mettre le
 sampling réel du modèle, pas un sampling de confort, sinon les chiffres ne
 valent rien pour le bloc. L'outil arrête le service et le relance par son trap,
 et refuse de démarrer si un `--bench*`, un `--spec*` ou un conteneur
@@ -274,8 +276,8 @@ curl -s localhost:8009/v1/chat/completions -H 'Content-Type: application/json' \
 
 Pour un modèle destiné à l'agentic long (gros dossiers en contexte), le
 bench à ~1500 tokens ne suffit pas : mesurer aussi en profondeur, hors
-service (⚠ `llama-bench` de l'HÔTE, donc le fork Vulkan, pas l'image : c'est
-un ordre de grandeur, pas la mesure du service) :
+service (`llama-bench` de l'IMAGE depuis le 18/09/2026, donc le moteur qui
+sert) :
 
 ```bash
 ./setup-llm.sh --stop
@@ -411,7 +413,7 @@ service dans son état normal, puis selon le rôle du modèle :
 
 `--bench` écrit dans `logs/bench.log` et signale tout écart de plus de 5 %
 avec le run précédent du même GGUF/device **et du même mode EC** : à relancer
-après chaque changement de moteur (paquet ou commit du fork). Faute de run de
+après chaque changement de moteur (bump de l'image). Faute de run de
 même mode, le comparateur garde le dernier run et le dit (« mode EC différent :
 X contre Y, écart non comparable »). Le comparateur ne sait pas qu'un réglage
 a changé entre deux runs : une « régression » annoncée après un retrait
@@ -540,8 +542,8 @@ sortie complète avant de conclure, pas seulement la dernière ligne.
 ## Clôture
 
 - `./tests/py-golden.sh` si un `py/*.py` a bougé, `./tests/sh-unit.sh` si
-  `_llama_bin` / `_llama_build` (lib/common.sh) ou `FORK_ONLY_KEYS` /
-  `_fork_keys_guard` (lib/fork.sh) ont bougé, `bash -n` sur les fichiers
+  `_llama_build` (lib/common.sh) ou `lib/runtime.sh` ont bougé,
+  `bash -n` sur les fichiers
   touchés (`sh -n` sur `bench-agentic/*.sh`).
 - Commit par étape (bloc, puis réglages mesurés), message avec les
   chiffres et l'étiquette de moteur. Les `.conf` et logs restent locaux

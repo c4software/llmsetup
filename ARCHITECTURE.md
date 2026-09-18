@@ -45,10 +45,6 @@ lib/compose.sh     ──┴─► regen_compose ──► ~/models/docker-compo
 porte des chemins absolus de l'hôte et n'a donc jamais à être réécrit pour le
 conteneur. En lecture seule : le moteur n'a rien à écrire dans les poids.
 
-À part, hors de ce flux : `fork.conf` (épinglage du moteur — `pin = <commit>`,
-`raison = <texte>`), lu par `lib/fork.sh` seul. Il ne touche pas au ini, il
-décide quel commit du fork est construit et bloque le suivi d'amont.
-
 Le script ne parle jamais directement aux GGUF pour mesurer : `--bench` et
 `--spec-test` passent par l'API du serveur **tel qu'il tourne**
 (`/v1/chat/completions`, `/v1/models`). Toute mesure dépendant d'un paramètre
@@ -62,7 +58,7 @@ régresser.
 ordre imposé :
 
 ```
-common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
@@ -127,40 +123,13 @@ common → svc → models → ini → compose → preload → setup → fork →
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
   dossiers `<clé>`/`<clé>-mtp`), `cmd_preload`.
-- `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements,
-  puis `_setup_propose_fork` : proposition d'installer le fork quand il n'est
-  pas le moteur résolu — défaut oui, rien en entrée non interactive, isolée de
-  `cmd_setup` pour être testable sans réseau),
+- `setup.sh` : `cmd_setup` (dépendances, téléchargements, puis
+  `_setup_check_docker` : docker et l'image du moteur, jamais bloquant, isolée
+  de `cmd_setup` pour être testable sans réseau),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
-- `fork.sh` : moteur. Briques communes `_fork_pull` (refus sur arbre sale,
-  `git pull --ff-only`), `_fork_build` (cmake Vulkan, quatre cibles),
-  `_fork_links` (liens dans `~/.local/bin`), `_fork_arbre_propre` (refus commun
-  au pull et au checkout d'épinglage). `cmd_setup_fork [commit] [raison]` (clone
-  ou pull de `halo-box/strix-llama.cpp` dans `~/llm/strix-llama.cpp`, build,
-  liens : la même commande installe et remet à niveau ; avec une référence, elle
-  ÉPINGLE le moteur dessus — `_fork_fetch_ref` puis `_fork_checkout`, détaché
-  sur un commit ou un tag, suivi de branche sur une branche — et l'écrit dans
-  `fork.conf` ; sans argument, elle retire l'épinglage et revient sur la
-  branche), `cmd_update_fork` (suivi d'amont
-  seul : refuse sans clone ou sans liens, pull, rebuild seulement s'il y a du
-  nouveau, rappelle le restart ; ne lance jamais de bench, `--update` renvoie
-  vers elle en fin de run ; sur un moteur épinglé, ne tire ni ne demande rien,
-  affiche le commit épinglé, sa raison et le changelog en attente),
-  `FORK_CONF` + `_fork_pin_read` / `_fork_pin_write` / `_fork_pin_clear`
-  (épinglage : `pin = <commit>`, `raison = <texte>` facultative, aussi prise
-  dans `$FORK_PIN_REASON` ; relu par `_fork_status` et `_setup_propose_fork`),
-  `cmd_unset_fork` (retrait des liens, retour au paquet Arch), `_fork_status`
-  (binaire résolu + version, affiché aussi par `--list-devices`), `FORK_ONLY_KEYS`
-  + `_fork_keys_guard` (clés ini que seul le fork comprend ; appelé par
-  `cmd_start` : un moteur upstream sur un ini qui en porte une ne démarre pas
-  du tout, le routeur entier refuse la clé inconnue — la garde le dit en
-  nommant modèle et clé, elle ne filtre ni ne réécrit rien). Les binaires
-  portent un RUNPATH absolu : déplacer le dépôt impose un rebuild. Les mesures
-  faites sous le fork forment une série à part (`_llama_build` les étiquette
-  `strix-<commit>` au lieu de `bNNNNN`).
-- `runtime.sh` : **second moteur**, conteneurisé (dossier `runtime/`, voir plus
-  bas). `_image_read_conf` (lecture stricte de `runtime/image.conf` : une clé
+- `runtime.sh` : **le moteur**, conteneurisé (dossier `runtime/`, voir plus
+  bas), pour le service comme pour les outils hors service. `_image_read_conf` (lecture stricte de `runtime/image.conf` : une clé
   inconnue est une erreur, pas un silence), `_image_tag` / `_image_ref` (tag
   unique `latest`), `_image_ls_remote` (résolution d'une branche en sha avant le
   build : un `LABEL` ne peut pas lire `versions.txt`, produit pendant le build),
@@ -171,14 +140,17 @@ common → svc → models → ini → compose → preload → setup → fork →
   des images **sans tag portant `llm-setup.engine_rev`** : jamais de
   `docker system prune`, jamais `docker image prune -a`, la machine héberge
   d'autres images), `cmd_image_update [engine-rev] [rocm-rev]` (compare aux
-  sommets des deux branches et s'arrête ; `IMAGE_UPDATE_YES=1` vaut accord, même
-  convention que `FORK_UPDATE_YES` ; c'est aussi le retour arrière du moteur),
+  sommets des deux branches et s'arrête ; `IMAGE_UPDATE_YES=1` vaut accord ;
+  c'est aussi le retour arrière du moteur),
   `cmd_image_status`, et `_dk_run <binaire> [args]` (exécution dans l'image :
   `/dev/kfd` + `/dev/dri`, gid NUMÉRIQUES de `render` et `video` via `getent`,
   `seccomp=unconfined` compensé par `no-new-privileges` et `cap-drop=ALL`,
   `--shm-size 8g`, memlock illimité, `~/models` monté au MÊME chemin absolu en
   lecture seule, `--network none` par défaut — jamais `--privileged`, jamais
-  `docker.sock`).
+  `docker.sock`. `DK_RUN_PUBLISH=127.0.0.1:<port>:<port>` publie un port, borné
+  à la loopback, et bascule le réseau par défaut sur `bridge` ; `DK_RUN_NAME`
+  nomme le conteneur pour qu'un trap puisse faire `docker rm -f` : les deux
+  servent au `llama-server` jetable de `tools/spec-isolate.sh`).
   ⚠ Cette image EST le moteur du service (le compose la nomme par `_image_ref`),
   mais aucune de ces commandes ne redémarre quoi que ce soit : une image neuve
   n'est servie qu'au prochain `--restart`. Une image = une série de mesures.
@@ -190,10 +162,10 @@ common → svc → models → ini → compose → preload → setup → fork →
   réutilise ce noyau :
   `bench.sh` porte aussi `cmd_bench_sanity` / `_bench_sanity_one` (justesse,
   `py/check_answer.py` ; première étape **bloquante** de
-  `tools/qualif-modele.sh`) et `cmd_list_devices` (moteur de l'hôte, backends
-  ggml, puis les devices de l'**image** par `_dk_run llama-bench
-  --list-devices`). Le module `bench/bench-devices.sh` et `--bench-devices` ont
-  été retirés le 18/09/2026 : l'image n'expose qu'un device.
+  `tools/qualif-modele.sh`) et `cmd_list_devices` (étiquette du moteur, puis
+  les devices de l'**image** par `_dk_run llama-bench --list-devices`). Le
+  module `bench/bench-devices.sh` et `--bench-devices` ont été retirés le
+  18/09/2026 : l'image n'expose qu'un device.
 - `bench/bench-parallel.sh` : `cmd_bench_parallel` (salves de 1 puis n requêtes
   simultanées, `parallel` réel lu sur `/v1/models`, agrégat par
   `py/parallel_agg.py`).
@@ -236,10 +208,9 @@ common → svc → models → ini → compose → preload → setup → fork →
   l'analyse est déléguée à `py/spec_analyze.py` et `py/batch_curve.py`.
 - `service.sh` : ne contient plus que `cmd_migrate_off_systemd`, commande
   **temporaire** de bascule (stop, disable, suppression de l'unité,
-  `daemon-reload`, contrôle que le port 8009 est libre, signalement des liens
-  `~/.local/bin/llama-*` restants). Idempotente, à retirer quand le parc sera
-  passé. L'unité systemd, `--install-service`, le linger et le PATH de l'unité
-  ont disparu avec la conteneurisation.
+  `daemon-reload`, contrôle que le port 8009 est libre). Idempotente, à retirer
+  quand le parc sera passé. L'unité systemd, `--install-service`, le linger et
+  le PATH de l'unité ont disparu avec la conteneurisation.
 - `help.sh` : `cmd_help`.
 
 Les fichiers de conf restent à côté du **point d'entrée** (`SCRIPT_DIR`),
@@ -375,10 +346,9 @@ Ce qui en reste :
   propre mais faux, là où le garde-fou « sortie dégénérée » de `timings.py`
   attrape le charabia. Les deux servent : un backend cassé produit des t/s
   superbes (DeepSeek V4 sur le ROCm système, 550 t/s de « Nous dev dev dev »).
-- **`--list-devices`** : un contrôle, plus un choix. Il montre le moteur de
-  l'HÔTE (fork ou paquet Arch, qui sert les outils hors service), les backends
-  ggml installés, puis les devices de l'IMAGE (`_dk_run llama-bench
-  --list-devices`), et alerte si `ROCm0` manque : sans lui, rien ne charge.
+- **`--list-devices`** : un contrôle, plus un choix. Il montre l'étiquette du
+  moteur, puis les devices de l'IMAGE (`_dk_run llama-bench --list-devices`),
+  et alerte si `ROCm0` manque : sans lui, rien ne charge.
 - **le verdict de tour simulé** (`t = PP_froid/prefill + GEN/décode`, profil
   2000 / 3000) n'a plus de commande, mais il reste la bonne façon de trancher
   un compromis prefill contre décode à la main : c'est ainsi que se lit le cas
@@ -453,8 +423,7 @@ sur un ou plusieurs devices, sans passer par le service (à arrêter soi-même
 pour une mesure propre, l'état est journalisé). Journal lisible
 `logs/spec-batch.log` et TSV `logs/spec-batch.tsv`. Sert à
 explorer ; pour régler, `--spec-ngram-tune`. Les autres fichiers de `tools/`
-(sync opencode, extension pi, renommage du sidecar MTP pour le fork) sont
-décrits dans le README.
+(sync opencode, extension pi) sont décrits dans le README.
 
 `spec-isolate.sh <tag> -- <args llama-server...>` : monte un `llama-server`
 JETABLE (port 8099 par défaut, jamais 8009) avec les arguments bruts passés
@@ -522,8 +491,8 @@ Trois choix structurent le reste :
    `tests/sh-unit.sh` le couvre (faux `docker`, faux `git ls-remote`).
 
 L'épinglage de `image.conf` est le seul écart de fond avec l'amont, qui assume
-de ne rien épingler. Le motif est celui de `fork.conf` : un moteur qui change
-tout seul rend les séries de mesures incomparables.
+de ne rien épingler. Le motif : un moteur qui change tout seul rend les séries
+de mesures incomparables.
 
 ## Invariants (à ne pas casser)
 
@@ -579,10 +548,9 @@ tout seul rend les séries de mesures incomparables.
 - Tout journal de mesure porte l'étiquette du moteur SERVI (`_llama_build`) :
   un chiffre sans son build ne se compare pas. L'étiquette est une CHAÎNE, pas
   un nombre - `strix-<engine7>+r<rocm7>`, lue sur les `LABEL` de l'image
-  (repli : dernière ligne de `logs/images.tsv`, puis `?`). L'étiquette du
-  moteur de l'HÔTE (`_host_llama_build` : `bNNNNN` pour le paquet,
-  `strix-<commit>` pour le fork) ne sert plus qu'aux outils hors service et au
-  garde-fou `_fork_keys_guard`. Chaque révision d'image ouvre une série
-  distincte, jamais comparable à une autre.
+  (repli : dernière ligne de `logs/images.tsv`, puis `?`). C'est la SEULE
+  étiquette du dépôt depuis le retrait du fork (18/09/2026) : le service et les
+  outils hors service tournent sur la même image. Chaque révision d'image ouvre
+  une série distincte, jamais comparable à une autre.
 - Entrée non interactive (`! -t 0`) gérée partout : jamais de question, jamais
   de restart automatique.

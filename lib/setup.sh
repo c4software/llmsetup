@@ -1,5 +1,5 @@
 # lib/setup.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # setup
@@ -113,14 +113,13 @@ cmd_setup() {
   info "Mesurer les perfs → ./setup-llm.sh --bench [modèle|all]"
   info "Devices exposés par l'image → ./setup-llm.sh --list-devices"
 
-  _setup_propose_fork
-
   _maybe_restart_service
 }
 
 # Moteur du SERVICE : docker et l'image du dépôt. Jamais bloquant - un --setup
 # sert aussi à télécharger des poids sur une machine qui ne servira rien.
-# Isolée de cmd_setup pour être testable seule, comme _setup_propose_fork.
+# Isolée de cmd_setup pour être testable seule : cmd_setup fait paru, hf et
+# réseau, cette fonction ne lit que l'état de docker.
 _setup_check_docker() {
   info "Vérification du moteur du service (docker + image)..."
   if ! command -v docker >/dev/null 2>&1; then
@@ -140,67 +139,6 @@ _setup_check_docker() {
     warn "  Aucune image du moteur ici - ./setup-llm.sh --image-build (40 à 60 min à froid)."
   fi
   return 0
-}
-
-# Proposition du moteur HORS SERVICE, en fin de --setup (et donc de --update).
-# Le fork n'est plus le moteur du service (c'est l'image), mais il reste celui
-# des outils hors service (llama-bench de --spec-ngram-tune,
-# tools/bench-depth.sh, tools/spec-isolate.sh) et le filet de retour arrière de
-# la migration.
-# Isolée de cmd_setup pour être testable seule (tests/sh-unit.sh) : cmd_setup
-# fait paru, hf et réseau, cette fonction ne lit que l'état du disque.
-#
-# Le fork strix-llama.cpp n'est pas un agrément : le parc est réglé pour lui
-# (FORK_ONLY_KEYS dans le ini, sidecar MTP de Flash-Next) et le retour arrière
-# de la migration passe par lui. D'où la question, défaut OUI, contrairement à
-# la proposition ROCm (défaut non, simple option de mesure).
-#
-# Le paquet Arch reste installé dans tous les cas : c'est le repli (--unset-fork)
-# et le seul chemin vers ROCm0.
-#
-# Note d'ordre de source : lib/setup.sh est sourcé AVANT lib/fork.sh, mais
-# l'appel n'a lieu qu'à l'exécution, quand cmd_setup_fork et _fork_links_ok
-# existent. Aucune variable de fork.sh n'est lue avant cet appel.
-_setup_propose_fork() {
-  local etiquette reply
-  etiquette="$(_host_llama_build)"
-
-  # Fork en place = étiquette non numérique (cf. _host_llama_build) ET les quatre
-  # liens de ~/.local/bin pointant dans son build (_fork_links_ok) : un moteur
-  # étiqueté "?" ou "bNNNNN" est le paquet, des liens partiels ne sont pas un
-  # fork installé.
-  if [[ ! "$etiquette" =~ ^b[0-9]+(-[0-9]+)?$ && "$etiquette" != "?" ]] \
-     && _fork_links_ok; then
-    if _fork_pin_read; then
-      info "Moteur : fork strix-llama.cpp $etiquette, épinglé sur $FORK_PIN${FORK_PIN_RAISON:+ ($FORK_PIN_RAISON)} ; --update-fork ne tire rien tant que l'épinglage tient"
-    else
-      info "Moteur : fork strix-llama.cpp $etiquette ; suivi d'amont par ./setup-llm.sh --update-fork"
-    fi
-    return 0
-  fi
-
-  echo ""
-  warn "Moteur hors service : le fork strix-llama.cpp n'est pas en place (résolu : $etiquette)."
-  warn "  Les réglages du parc en dépendent : clés ini que seul le fork comprend"
-  warn "  (${#FORK_ONLY_KEYS[@]} au total, dont ${FORK_ONLY_KEYS[0]} et reasoning-budget-*) et sidecar MTP de"
-  warn "  Flash-Next ; il reste aussi le moteur de llama-bench (--spec-ngram-tune,"
-  warn "  tools/bench-depth.sh) et le retour arrière de la migration en conteneur."
-
-  if [[ ! -t 0 ]]; then
-    warn "Entrée non interactive — rien n'est installé. À lancer :"
-    warn "  ./setup-llm.sh --setup-fork"
-    return 0
-  fi
-
-  reply=""
-  read -r -p "Installer le fork strix-llama.cpp comme moteur maintenant ? [O/n] " reply
-  reply="${reply:-o}"
-  if [[ "$reply" =~ ^[oOyY]$ ]]; then
-    cmd_setup_fork
-  else
-    info "Fork non installé — le paquet Arch reste le moteur."
-    info "  (l'installer plus tard : ./setup-llm.sh --setup-fork)"
-  fi
 }
 
 # =============================================================================
@@ -236,10 +174,9 @@ cmd_update() {
   warn "Prévoir 2× la taille du plus gros fichier remplacé (écriture en .incomplete puis move)."
   warn "Un restart du service sera proposé en fin de run (poids mmap'és sur l'ancien inode sinon)."
 
-  # Suivi du moteur : les modèles viennent d'être mis à jour, le fork qui les
-  # sert ne l'est pas par cette commande. Le rappel (--update-fork si le fork
-  # est en place, proposition d'installation sinon) est émis par
-  # _setup_propose_fork, appelé en fin de cmd_setup — rien n'est lancé
+  # Suivi du moteur : les modèles viennent d'être mis à jour, le MOTEUR qui les
+  # sert ne l'est pas par cette commande. Il vit dans l'image et se suit par
+  # ./setup-llm.sh --image-update, à lancer à la main : rien n'est lancé
   # automatiquement ici, ni mise à jour du moteur, ni restart, ni mesure.
   cmd_setup
 }

@@ -1,5 +1,5 @@
 # lib/help.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # help
@@ -12,13 +12,10 @@ setup-llm.sh : llama-server en router mode natif (Strix Halo, image ROCm)
 Usage : ./setup-llm.sh [commande] [options]
 
 Commandes :
-  --setup                  Installe les dépendances (paru), propose le runtime ROCm
-                           + ggml-hip, télécharge les GGUF manquants, sélection
-                           interactive du préchargement, génère $CONFIG_DIR/models.ini
-                           et, si le fork strix-llama.cpp n'est pas le moteur résolu,
-                           propose de l'installer (défaut oui : les réglages du parc
-                           en dépendent ; en entrée non interactive, rien n'est fait
-                           et --setup-fork est rappelé)
+  --setup                  Installe les dépendances (paru), vérifie docker et
+                           l'image du moteur, télécharge les GGUF manquants,
+                           sélection interactive du préchargement, génère
+                           $CONFIG_DIR/models.ini
   --update [modèle]        Comme --setup mais laisse hf comparer les etags et ne
                            retélécharge que ce qui a bougé en amont
                            (modèle = dossier sous $MODELS_BASE, ex. qwen3.8-27b)
@@ -63,50 +60,6 @@ Commandes :
                            Temps de chargement + 1er token après restart, puis TTFT
                            à chaud — ce que coûte un modèle à la demande (preload,
                            bascule LRU). Journal logs/bench-load.log
-  --setup-fork [commit] [raison]
-                           Moteur : installe OU met à jour le fork
-                           https://github.com/halo-box/strix-llama.cpp dans
-                           ~/llm/strix-llama.cpp (clone, sinon git pull --ff-only),
-                           construit (cmake Vulkan/Release/CURL : llama-server,
-                           llama-bench, llama-cli, llama-quantize) et pose les liens
-                           dans ~/.local/bin, que le service met en tête du PATH.
-                           Affiche l'ancien et le nouveau commit puis la version
-                           résolue ; ne redémarre pas le service. ⚠ Les mesures
-                           faites sous le fork forment une série à part
-                           (étiquette strix-<commit>), non comparable aux campagnes
-                           du paquet Arch.
-                           Avec un argument (commit, tag ou branche) : ÉPINGLE le
-                           moteur dessus (fetch, checkout détaché sur un commit ou
-                           un tag, suivi de branche sur une branche) et l'écrit
-                           dans fork.conf, avec une raison facultative en 2e
-                           argument (ou \$FORK_PIN_REASON). Tant que l'épinglage
-                           tient, --update-fork ne tire plus rien. Sans argument :
-                           l'épinglage est retiré et la branche reprise
-  --update-fork            Moteur : suivi d'amont du fork, à lancer juste après
-                           un --update. Ne fait QUE la mise à jour du fork déjà
-                           installé : git fetch, changelog des commits reçus
-                           (ancien → nouveau, titres des commits PROPRES au
-                           fork, le reste compté comme « amont llama.cpp
-                           intégré » avec ses bornes bNNNNN) puis CONFIRMATION
-                           avant le git pull --ff-only, le rebuild des quatre
-                           cibles et la repose des liens ; sans « o », rien n'est
-                           tiré. Entrée non interactive : rien n'est fait, sauf
-                           FORK_UPDATE_YES=1 qui vaut confirmation. S'arrête sans
-                           rebuild si rien n'a bougé, et refuse si le fork n'est
-                           pas le moteur en place (--setup-fork d'abord). Ne redémarre pas le service et
-                           ne lance aucune mesure : enchaînement recommandé
-                           --update → --update-fork → ./setup-llm.sh --restart
-                           → --bench à la main. ⚠ Chaque bump du
-                           fork ouvre une nouvelle série de mesures, étiquetée au
-                           commit (strix-<commit>). Si fork.conf porte un
-                           épinglage : rien n'est tiré ni demandé, la commande
-                           annonce le commit épinglé et sa raison, montre quand
-                           même le changelog en attente et rappelle --setup-fork
-                           sans argument pour reprendre le suivi
-  --unset-fork             Retire les quatre liens de ~/.local/bin : retour au
-                           paquet Arch pour les outils HORS service (llama-bench
-                           de --spec-ngram-tune, tools/bench-depth.sh). Sans
-                           effet sur le service, qui tourne sur l'image
   --image-build [--no-cache]
                            Image : construit le moteur CONTENEURISÉ (runtime/,
                            ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
@@ -128,8 +81,8 @@ Commandes :
                            révisions de runtime/image.conf aux sommets des deux
                            branches, affiche l'écart et S'ARRÊTE — rien n'est
                            modifié sans confirmation (entrée non interactive :
-                           rien ; IMAGE_UPDATE_YES=1 vaut accord, comme
-                           FORK_UPDATE_YES). Avec accord ou avec des révisions
+                           rien ; IMAGE_UPDATE_YES=1 vaut accord). Avec
+                           accord ou avec des révisions
                            données : réécrit image.conf puis enchaîne
                            --image-build. C'est aussi le RETOUR ARRIÈRE du
                            moteur conteneurisé (y remettre les anciennes
@@ -140,9 +93,8 @@ Commandes :
                            conformité entre les deux, taille, images sans tag
                            restantes et place du cache de build. Ne construit ni
                            ne purge rien
-  --list-devices           Moteur de l'HÔTE (paquet Arch ou fork) + backends ggml
-                           installés, puis les devices exposés par l'IMAGE du
-                           service (llama-bench --list-devices dans le conteneur).
+  --list-devices           Devices exposés par l'IMAGE du moteur
+                           (llama-bench --list-devices dans le conteneur).
                            Alerte si ROCm0, le device de tout le ini, manque
   --spec-test [modèle] [n] [prompt]
                            Mesure le décode réel via l'API (spéculation incluse) :
@@ -193,16 +145,13 @@ Commandes :
   --logs [-f] [--tail N]   Journaux du conteneur (docker compose logs)
   --migrate-off-systemd    TEMPORAIRE (migration) : arrête, désactive et supprime
                            l'ancienne unité systemd user $SERVICE_NAME, recharge
-                           systemd, vérifie que le port $SERVER_PORT est libre et
-                           signale les liens ~/.local/bin/llama-* restants (sans
-                           les supprimer). Idempotente ; à lancer une fois avant
+                           systemd et vérifie que le port $SERVER_PORT est
+                           libre. Idempotente ; à lancer une fois avant
                            le premier --start, puis à oublier
   --help, -h               Cette aide
 
 Fichiers (à côté du script, locaux, non versionnés) :
   preload.conf             modèles préchargés, un par ligne
-  fork.conf                épinglage du moteur (pin = commit, raison = texte),
-                           écrit par --setup-fork <commit>
   logs/spec-tests.log      journal des --spec-test (TSV), base de l'analyse n-max
   logs/bench.log           journal des --bench (TSV, avec le build llama.cpp),
                            comparé automatiquement au run précédent
@@ -232,7 +181,7 @@ Workflow typique :
   ./setup-llm.sh --status ; ./setup-llm.sh --logs -f
   ./setup-llm.sh --bench all          # perfs de tous les modèles présents
   ./setup-llm.sh --update qwen3.8-27b # après un re-upload unsloth
-  ./setup-llm.sh --update-fork        # puis le moteur : fork à jour, rebuild, liens
+  ./setup-llm.sh --image-update       # puis le moteur : suivi d'amont de l'image
                                       # (restart du service et --bench restent à la main)
   ./setup-llm.sh --spec-test          # décode réel d'un modèle MTP (choix interactif)
   ./setup-llm.sh --spec-tune          # règle spec-draft-n-max tout seul (2,4,6)
@@ -243,7 +192,7 @@ Workflow typique :
   ./setup-llm.sh --bench-agentic <m> 3  # vraie boucle de tool calls (pi), PASS/FAIL et t/s réels
   ./setup-llm.sh --bench-agentic <m> 2 3  # les mêmes, à 3 boucles simultanées : débit de tâches
   ./setup-llm.sh --bench-load <m>     # coût d'une bascule LRU
-  ./setup-llm.sh --bench all          # après chaque mise à jour de llama-cpp : régressions
+  ./setup-llm.sh --bench all          # après chaque bump de l'image : régressions
 
 Modèles (models.ini, ${#PRESET_ORDER[@]}) :
 $(printf '  %s\n' "${PRESET_ORDER[@]}")

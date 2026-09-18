@@ -1,5 +1,5 @@
 # lib/bench/bench.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # bench — mesure de perfs via le serveur, tel qu'il tourne
@@ -343,31 +343,16 @@ cmd_bench_sanity() {
 # =============================================================================
 # list-devices : ce que le moteur expose réellement
 #
-# Depuis le 18/09/2026 le moteur du SERVICE est l'image (lib/runtime.sh), qui
-# n'expose qu'un device, ROCm0 : la liste n'est plus un choix à faire mais un
-# contrôle après un bump d'image (un ROCm0 absent = rien ne charge). Elle est
-# donc demandée à l'image elle-même, par _dk_run, et plus au llama-bench de
-# l'hôte. Le moteur de l'hôte (fork ou paquet Arch) reste affiché juste avant :
-# c'est lui qui sert les outils HORS service.
+# Depuis le 18/09/2026 le moteur est l'image (lib/runtime.sh), qui n'expose
+# qu'un device, ROCm0 : la liste n'est plus un choix à faire mais un contrôle
+# après un bump d'image (un ROCm0 absent = rien ne charge). Elle est demandée à
+# l'image elle-même, par _dk_run. Il n'y a plus rien à afficher côté hôte : le
+# fork et les backends ggml en paquets Arch ont été retirés le même jour, aucun
+# binaire llama-* de l'hôte n'est plus appelé par ce dépôt.
 # =============================================================================
 
 cmd_list_devices() {
-  # Moteur de l'HÔTE : paquet Arch ou fork strix-llama.cpp (lib/fork.sh). Il
-  # décide ce que valent les mesures hors service et si les clés propres au
-  # fork sont comprises par un éventuel retour arrière.
-  _fork_status
-  echo ""
-
-  info "Backends ggml installés sur l'hôte (outils hors service seulement) :"
-  local pkg
-  for pkg in ggml-cpu ggml-vulkan ggml-hip ggml-cuda ggml-blas ggml-openvino; do
-    if paru -Qi "$pkg" &>/dev/null; then
-      echo "  ✔ $pkg"
-    else
-      echo "  · $pkg (absent)"
-    fi
-  done
-
+  info "Moteur : $(_llama_build) (image ${IMAGE_NAME:-llm-rocm-strix}:$(_image_tag))"
   echo ""
   if ! _image_ref >/dev/null 2>&1; then
     warn "Aucune image du moteur ici : ./setup-llm.sh --image-build."

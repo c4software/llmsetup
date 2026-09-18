@@ -1,5 +1,5 @@
 # lib/common.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Helpers
@@ -90,20 +90,10 @@ _dl_shard() {
 # CHEMINS
 # =============================================================================
 
-# PATH du service : $HOME/.local/bin en tête, comme l'unité systemd. Les
-# liens du fork strix-llama.cpp y vivent (./setup-llm.sh --setup-fork), donc
-# toute commande du script (llama-server, llama-bench, llama-cli,
-# llama-quantize) voit le MÊME moteur que le serveur mesuré. Sans fork, ces
-# liens n'existent pas et /usr/bin (paquet Arch) reprend la main.
-# Ajout conditionnel : le dossier est déjà en tête pour le service (unité
-# systemd) et dans la plupart des sessions ; le rajouter empilerait un doublon
-# à chaque source. Effet de bord assumé et voulu : ce dossier prime aussi pour
-# les autres outils appelés ici (hf, python3…), c'est déjà le cas d'une session
-# interactive normale, où pip/pipx installe justement `hf` là.
-case ":$PATH:" in
-  *":$HOME/.local/bin:"*) ;;
-  *) export PATH="$HOME/.local/bin:$PATH" ;;
-esac
+# (le dépôt ne posait plus qu'un PATH ici : $HOME/.local/bin en tête, où
+#  vivaient les liens du fork strix-llama.cpp. Retiré le 18/09/2026 avec le
+#  fork : plus AUCUN binaire llama-* de l'hôte n'est appelé par ce dépôt, tout
+#  passe par l'image (_dk_run, lib/runtime.sh) ou par le conteneur du service.)
 
 MODELS_BASE="$HOME/models"
 CONFIG_DIR="$MODELS_BASE"
@@ -153,29 +143,12 @@ SPEC_LOG="$LOG_DIR/spec-tests.log"
 # de la comparaison au run précédent (py/bench_compare.py).
 BENCH_LOG="$LOG_DIR/bench.log"
 
-# Binaire llama.cpp de l'HÔTE, résolu comme l'était le service avant sa
-# conteneurisation : $HOME/.local/bin d'abord (liens du fork strix-llama.cpp),
-# repli sur le PATH (paquet Arch). Une session ssh sans ce PATH lisait le
-# binaire Arch et journalisait son build pour des mesures faites par le fork
-# (arrivé le 12/09/2026, deux lignes de logs/bench.log).
-# Depuis la bascule du service en conteneur, ce binaire n'est PLUS celui qui
-# sert les modèles : il reste le moteur des outils hors service (llama-bench
-# de --spec-ngram-tune, tools/bench-depth.sh, tools/spec-isolate.sh).
-# $1 = nom du binaire (défaut llama-server).
-_llama_bin() {
-  local n="${1:-llama-server}"
-  if [[ -x "$HOME/.local/bin/$n" ]]; then
-    echo "$HOME/.local/bin/$n"
-  else
-    command -v "$n" 2>/dev/null
-  fi
-}
-
 # Étiquette de moteur, journalisée par toutes les mesures.
 #
-# Depuis la conteneurisation du service, ce qui sert les modèles est l'image
-# (runtime/, lib/runtime.sh) : l'étiquette vient de ses LABEL, pas d'un binaire
-# de l'hôte que plus personne n'appelle pour servir. Forme retenue :
+# Ce qui sert les modèles est l'image (runtime/, lib/runtime.sh) : l'étiquette
+# vient de ses LABEL. Depuis le retrait du fork (18/09/2026) c'est la SEULE
+# étiquette de moteur du dépôt, pour le service comme pour les outils, qui
+# tournent dans la même image. Forme retenue :
 # "strix-<engine7>+r<rocm7>" - les deux révisions comptent, un même moteur
 # compilé sur un autre ROCr/HIP ne donne pas les mêmes chiffres, et c'est
 # précisément le couple que runtime/image.conf épingle.
@@ -218,48 +191,6 @@ _llama_build() {
   return 0
 }
 
-# Étiquette du moteur de l'HÔTE (fork strix-llama.cpp ou paquet Arch). Ce
-# n'est plus l'étiquette des mesures du service - c'est celle du binaire que
-# lib/fork.sh installe et que les outils hors service appellent.
-# Deux formes, parce que deux moteurs coexistent sur l'hôte
-# (cf. README « Moteur : fork strix-llama.cpp ») :
-#   - upstream (paquet Arch) : "b10809", le numéro de build de
-#     `--version` ("version: 0.4.0-dev (build 10809, commit 5266f24da7)") ;
-#   - fork (binaire construit depuis les sources, realpath dans un build/bin) :
-#     "<dépôt>-<commit court>", ex. "strix-0007bc6", quel que soit le numéro
-#     de build affiché (1 en clone superficiel, 2224 une fois approfondi). Règle du préfixe :
-#     nom du dossier du dépôt (realpath du binaire remonté de build/bin),
-#     amputé du suffixe "-llama.cpp" ; "fork" si le chemin ne dit rien.
-# Repli final sur la version du paquet. C'est cette forme que lit
-# _fork_keys_guard pour distinguer le paquet upstream du fork.
-_host_llama_build() {
-  local bin ver b commit repo
-  bin="$(_llama_bin llama-server)"
-  if [[ -n "$bin" ]]; then
-    ver="$("$bin" --version 2>&1 | head -3)"
-    b="$(sed -n 's/.*build \([0-9][0-9]*\).*/\1/p' <<< "$ver" | head -1)"
-    commit="$(sed -n 's/.*commit \([0-9a-f][0-9a-f]*\).*/\1/p' <<< "$ver" | head -1)"
-    # Un binaire construit depuis les sources (realpath dans un build/bin) est
-    # TOUJOURS étiqueté par son commit, quel que soit le numéro de build : le
-    # fork affichait "build 1" en clone superficiel, puis "build 2224" dès que
-    # --update-fork a approfondi le clone (13/09/2026), et "b2224" aurait été
-    # pris pour un paquet upstream par _fork_keys_guard (refus de démarrer).
-    repo="$(realpath "$bin" 2>/dev/null)"
-    if [[ "$repo" == */build/bin/* && -n "$commit" ]]; then
-      repo="$(basename "${repo%/build/bin/*}")"
-      repo="${repo%-llama.cpp}"
-      echo "${repo:-fork}-${commit:0:7}"; return
-    fi
-    if [[ -n "$b" && "$b" -gt 1 ]]; then
-      echo "b$b"; return
-    fi
-    if [[ -n "$commit" ]]; then
-      echo "fork-${commit:0:7}"; return
-    fi
-  fi
-  b="$(paru -Q llama-cpp 2>/dev/null | awk '{print $2}')"
-  echo "${b:-?}"
-}
 # Mode d'alimentation de l'APU appliqué par le contrôleur embarqué de la
 # machine du service (bigchuck, Ryzen AI Max+ 395) : fichier sysfs
 # /sys/class/ec_su_axb35/apu/power_mode, valeurs vues "balanced" et

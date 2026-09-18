@@ -49,8 +49,7 @@ Fichiers vendorisés avec lui, inchangés byte pour byte :
    Motif : l'amont assume explicitement de ne rien épingler (« never commit
    pins », `--no-cache` comme seul mécanisme de rafraîchissement). Ici une image
    est le moteur d'un service dont on compare les mesures d'une semaine à
-   l'autre — un moteur qui change tout seul rend la série incomparable, comme
-   pour `fork.conf` du côté du fork Vulkan.
+   l'autre : un moteur qui change tout seul rend la série incomparable.
 2. **Étiquettes.** Trois `LABEL` sur l'étage final : `llm-setup.engine_rev`,
    `llm-setup.rocm_rev`, `llm-setup.build_date`, alimentées par les `ARG` du
    même nom (plus `BUILD_DATE`) redéclarés dans cet étage. Un `LABEL` ne sait
@@ -157,11 +156,9 @@ de modèle ou de configuration, il ne se reprend pas (c'est ce qui est arrivé �
   anciennes révisions dans `image.conf` (`git revert`, ou
   `--image-update <engine-rev> <rocm-rev>`) puis `--image-build`.
 
-## Ce qui n'est pas encore là (étape suivante)
+## Ce qui n'est pas ici
 
-- **Pas de `docker-compose.yml` ici.** Décision : le compose sera GÉNÉRÉ par le
-  dépôt et déposé dans `~/models`, à côté de `models.ini`, à l'étape de bascule
-  du service.
-- Le moteur du service reste le **fork Vulkan épinglé** (`lib/fork.sh`,
-  `fork.conf`). À cette étape, `--image-build` / `--image-update` /
-  `--image-status` ne touchent à aucun service.
+- **Pas de `docker-compose.yml` ici.** Le compose du service est GÉNÉRÉ par le
+  dépôt (`lib/compose.sh`) et déposé dans `~/models`, à côté de `models.ini`.
+- `--image-build`, `--image-update` et `--image-status` ne redémarrent aucun
+  service : une image neuve n'est servie qu'au prochain `--restart`.

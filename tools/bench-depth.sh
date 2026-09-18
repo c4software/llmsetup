@@ -6,7 +6,7 @@
 # presque vide. L'usage agentic, lui, vit entre 30k et 100k tokens de contexte
 # : l'attention y pèse sur chaque token, le décode chute, le prefill aussi, et
 # le classement ROCm0 / Vulkan0 peut s'inverser. Cet outil trace les deux
-# courbes par llama-bench -d, hors service, et recalcule à chaque profondeur
+# courbes par llama-bench -d (dans l'image, hors service) et recalcule à chaque profondeur
 # le « tour simulé » de --bench-devices (BENCH_PROFILE_PP/GEN, défaut
 # 2000/3000) pour comparer les devices dans le régime réel.
 #
@@ -14,15 +14,19 @@
 #   tools/bench-depth.sh <gguf> [<gguf>...]
 #
 # Variables d'env :
-#   DEV=Vulkan0,ROCm0   devices (défaut Vulkan0 ; chaque GGUF sur chaque device)
+#   DEV=ROCm0           devices (défaut ROCm0, le seul que l'image expose ;
+#                       plusieurs séparés par des virgules, chaque GGUF sur
+#                       chaque device)
 #   DEPTHS=0,16384,32768  profondeurs de KV déjà remplies avant la mesure.
 #                       65536 est réaliste pour de gros dossiers mais coûte un
 #                       prefill de 64k tokens PAR répétition.
 #   PP=2048  TG=128     tokens de prefill mesurés / générés à chaque profondeur
 #   REPS=2              répétitions (3 pour un chiffre propre, 1 pour dégrossir)
-#   CTK=q8_0 CTV=q8_0   types de KV : ceux du service pour les modèles agentic
-#                       (le défaut llama-bench est f16/f16, plus rapide et plus
-#                       gros, pas ce que sert le routeur)
+#   CTK=f16 CTV=f16     types de KV : ceux du service depuis le 18/09/2026
+#                       (cache K et V f16 globaux, cf. lib/ini.sh). Les mettre
+#                       ailleurs que sur ce que sert le routeur fausse la
+#                       comparaison.
+#   IMAGE=              image docker à mesurer (défaut : celle du service)
 #   FA=auto             -fa on|off|auto
 #   PROFILE_PP=2000 PROFILE_GEN=3000   profil du tour simulé
 #   OUT / TSV           journaux (défaut logs/bench-depth.log, logs/bench-depth.tsv)
@@ -33,10 +37,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-# Modules du dépôt : uniquement pour _svc_is_active (état du service, journalisé
-# avec la mesure). lib/common.sh attend SCRIPT_DIR = racine du dépôt.
-# L'étiquette de moteur reste calculée ci-dessous : cet outil mesure llama-bench
-# sur l'HÔTE, pas le conteneur, et ne porte donc pas l'étiquette du service.
+# Modules du dépôt : _svc_is_active (état du service, journalisé avec la mesure)
+# et _dk_run (llama-bench tourne dans l'image depuis le 18/09/2026, retrait du
+# fork). lib/common.sh attend SCRIPT_DIR = racine du dépôt. L'étiquette de
+# moteur est donc celle du service, _llama_build : c'est le même moteur.
 SCRIPT_DIR="$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/common.sh"
@@ -50,28 +54,34 @@ mkdir -p "$ROOT_DIR/logs"
 OUT="${OUT:-$ROOT_DIR/logs/bench-depth.log}"
 TSV="${TSV:-$ROOT_DIR/logs/bench-depth.tsv}"
 
-DEV="${DEV:-Vulkan0}"
+DEV="${DEV:-ROCm0}"
 DEPTHS="${DEPTHS:-0,16384,32768}"
 PP="${PP:-2048}"
 TG="${TG:-128}"
 REPS="${REPS:-2}"
-CTK="${CTK:-q8_0}"
-CTV="${CTV:-q8_0}"
+CTK="${CTK:-f16}"
+CTV="${CTV:-f16}"
 FA="${FA:-auto}"
 PROFILE_PP="${PROFILE_PP:-2000}"
 PROFILE_GEN="${PROFILE_GEN:-3000}"
 
-# $HOME/.local/bin en tête, comme le service et lib/common.sh : les liens du
-# fork strix-llama.cpp y vivent, sinon c'est le paquet Arch de /usr/bin.
-export PATH="$HOME/.local/bin:$PATH"
-
-command -v llama-bench >/dev/null || { echo "llama-bench introuvable (paquet llama-cpp)" >&2; exit 1; }
-command -v python3     >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
+command -v docker  >/dev/null || { echo "docker introuvable" >&2; exit 1; }
+command -v python3 >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
 [[ $# -gt 0 ]] || { echo "Usage : tools/bench-depth.sh <gguf> [<gguf>...]" >&2; exit 1; }
+
+# IMAGE= surcharge l'image mesurée (essai d'un autre moteur), comme dans
+# tools/spec-isolate.sh.
+if [[ -n "${IMAGE:-}" ]]; then
+  _image_read_conf
+  IMAGE_NAME="${IMAGE%%:*}"
+  [[ "$IMAGE" == *:* ]] && IMAGE_TAG="${IMAGE##*:}"
+fi
+_image_ref >/dev/null 2>&1 \
+  || { echo "Aucune image ${IMAGE_NAME:-llm-rocm-strix}:$(_image_tag) ici - ./setup-llm.sh --image-build" >&2; exit 1; }
 
 # Devices demandés, croisés avec ceux exposés (même garde-fou que bench-spec-batch)
 declare -a DEVS=()
-exposed="$(llama-bench --list-devices 2>/dev/null || true)"
+exposed="$(_dk_run llama-bench --list-devices 2>/dev/null || true)"
 IFS=',' read -r -a want <<< "$DEV"
 for d in "${want[@]}"; do
   if [[ -z "$exposed" ]] || grep -q "$d" <<<"$exposed"; then
@@ -82,28 +92,13 @@ for d in "${want[@]}"; do
 done
 [[ ${#DEVS[@]} -gt 0 ]] || { echo "Aucun device demandé n'est exposé." >&2; exit 1; }
 
-# ⚠ Moteur de l'HÔTE UNIQUEMENT : ne JAMAIS passer cette variable à _dk_run
-# (lib/runtime.sh) ni au compose du service : sur le runtime retained-PM4 de
-# l'image elle corrompt la sortie (cf. runtime/AMONT.md).
-export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+# (GGML_CUDA_ENABLE_UNIFIED_MEMORY était exporté ici du temps du moteur de
+#  l'hôte. INTERDIT sur ce runtime : sur le retained-PM4 de l'image elle
+#  corrompt la sortie, cf. runtime/AMONT.md.)
 
-# Étiquette de moteur, même règle que _host_llama_build (lib/common.sh) : "bNNNNN"
-# pour un build upstream, "<dépôt>-<commit>" pour le fork, qui ne numérote pas
-# ses builds ("build 1"). Deux séries de mesures, jamais comparables.
-_ver="$(llama-server --version 2>&1 | head -3)"
-BUILD="$(sed -n 's/.*build \([0-9][0-9]*\).*/\1/p' <<< "$_ver" | head -1)"
-if [[ -n "$BUILD" && "$BUILD" -gt 1 ]]; then
-  BUILD="b$BUILD"
-else
-  _commit="$(sed -n 's/.*commit \([0-9a-f][0-9a-f]*\).*/\1/p' <<< "$_ver" | head -1)"
-  _repo="$(realpath "$(command -v llama-server)" 2>/dev/null)"
-  if [[ "$_repo" == */build/bin/* ]]; then
-    _repo="$(basename "${_repo%/build/bin/*}")"; _repo="${_repo%-llama.cpp}"
-  else
-    _repo="fork"
-  fi
-  BUILD="${_commit:+${_repo}-${_commit:0:7}}"
-fi
+# Étiquette de moteur : celle de l'image (_llama_build), puisque c'est elle qui
+# mesure. Forme "strix-<engine7>+r<rocm7>", une série par couple de révisions.
+BUILD="$(_llama_build)"
 TSV_HDR=$'date\tmodele\tdevice\tdepth\tpp_ts\tpp_sd\ttg_ts\ttg_sd\ttour_s'
 if [[ ! -s "$TSV" ]]; then
   printf '%s\n' "$TSV_HDR" > "$TSV"
@@ -125,7 +120,7 @@ for gguf in "$@"; do
   declare -A TOURS=()
   for dev in "${DEVS[@]}"; do
     echo "═══ $(basename "$gguf")  [$dev] ═══"
-    if ! out="$(llama-bench -m "$gguf" -p "$PP" -n "$TG" -d "$DEPTHS" -r "$REPS" \
+    if ! out="$(_dk_run llama-bench -m "$gguf" -p "$PP" -n "$TG" -d "$DEPTHS" -r "$REPS" \
                             -ctk "$CTK" -ctv "$CTV" -fa "$FA" -dev "$dev" -o jsonl 2>/dev/null)"; then
       echo "  échec llama-bench (RAM insuffisante à cette profondeur ? arch non supportée ?)"
       echo

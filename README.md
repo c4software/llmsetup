@@ -2,10 +2,11 @@
 
 LLM Setup pilote un `llama-server` en router mode natif sur une machine Strix Halo
 (bigchuck : Ryzen AI Max+ 395, 124 Go unifiés, CachyOS/Arch), avec un seul point
-d'entrée, `./setup-llm.sh`, et un moteur : le fork
-[halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp),
-construit localement (depuis le 12/09/2026, le paquet Arch `llama-cpp` ne sert
-plus que de secours).
+d'entrée, `./setup-llm.sh`, et un moteur : une image ROCm construite
+localement (`runtime/`), qui embarque
+[halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp) en HIP
+seul. Depuis le 18/09/2026 c'est le SEUL moteur du dépôt, pour le service comme
+pour les outils : le fork Vulkan installé sur l'hôte a été retiré.
 
 Ce qu'il gère :
 
@@ -16,12 +17,13 @@ Ce qu'il gère :
 - mesure des perfs par l'API du serveur (`--bench`, `--bench-sanity`) et
   réglage de la spéculation par mesure : drafter (`spec-draft-n-max`,
   calibration α) et n-gram (`spec-ngram-map-k-size-m`) ;
-- installation et suivi du moteur, service en conteneur.
+- construction et suivi du moteur (image), service en conteneur.
 
 Le service tourne sur une image ROCm construite localement (`runtime/`), qui
 n'expose qu'un device, `ROCm0` : depuis le 18/09/2026 il n'y a plus de choix de
-backend, plus de `--bench-devices` et plus de `bench-devices.conf`. Les paquets
-ggml d'Arch (Vulkan, HIP) ne servent plus que les outils **hors service**. Tout
+backend, plus de `--bench-devices` et plus de `bench-devices.conf`. Les outils
+hors service (`llama-bench` des courbes de batch, `llama-server` jetable de
+`tools/spec-isolate.sh`) tournent dans la MÊME image, par `docker run`. Tout
 est piloté par des fichiers de conf locaux à côté du script (non versionnés,
 propres à la machine). Le `models.ini` est généré, jamais édité.
 
@@ -78,86 +80,22 @@ C'est le seul assouplissement, et il est compensé : `cap_drop: [ALL]`,
 monté en lecture seule et un seul volume inscriptible hors du parc
 (`~/.local/state/llm-setup/cache`).
 
-En fin de `--setup`, si le fork n'est pas le moteur résolu, son installation est
-**proposée** (défaut oui, `--setup-fork` derrière ; en entrée non interactive
-rien n'est fait et la commande est rappelée) : les réglages du parc en dépendent.
-
-## Moteur : fork strix-llama.cpp
-
-Le fork apporte les clés de réglage dont le parc dépend (n-gram sur disque,
-budget de réflexion, drafter externe, MTP de Qwen3.8-Flash-Next) et gagne le
-prefill sur tout le parc. Il est construit dans `~/llm/strix-llama.cpp` et
-exposé par quatre liens (`llama-server`, `llama-bench`, `llama-cli`,
-`llama-quantize`) dans `~/.local/bin`.
-
-> Depuis la conteneurisation du service, **le fork n'est plus le moteur servi** :
-> c'est l'image (section suivante). Il reste le moteur des outils **hors
-> service** - `llama-bench` des courbes de batch (`--spec-ngram-tune`,
-> `tools/bench-spec-batch.sh`, `tools/bench-depth.sh`) et le `llama-server`
-> jetable de `tools/spec-isolate.sh` - et le filet de retour arrière tant que la
-> migration n'est pas terminée.
-
-```bash
-./setup-llm.sh --setup-fork   # installe ou réinstalle (clone si besoin, build, liens)
-./setup-llm.sh --update-fork  # suivi d'amont du fork déjà en place
-./setup-llm.sh --list-devices # quel binaire répond, et sa version
-./setup-llm.sh --unset-fork   # retire les liens : retour au paquet Arch
-```
-
-**Épingler un commit.** Une resynchronisation d'amont peut faire régresser un
-modèle sans rien casser ailleurs (13/09/2026 : le passage à `6548035`, sync
-b10917, fait tomber le prefill batché de Qwen3.8-27B de 69 à 58 t/s en pp7 et
-de 79 à 52 en pp8, alors que `0007bc6` était bon). On revient alors à un commit
-connu et on y reste tant que l'amont n'est pas corrigé :
-
-```bash
-./setup-llm.sh --setup-fork 0007bc6 "sync b10917 : régression pp7/pp8 sur Qwen3.8-27B"
-./setup-llm.sh --setup-fork   # sans argument : dépingle et reprend la branche
-```
-
-L'argument est un commit, un tag ou une branche : `git fetch`, puis `checkout`
-détaché (commit, tag) ou suivi de branche (`checkout` + `pull --ff-only`),
-rebuild et liens comme d'habitude. L'épinglage est écrit dans `fork.conf`
-(local, non versionné, `pin = <commit>` et `raison = <texte>` facultative, aussi
-prise dans `$FORK_PIN_REASON`). Tant qu'il tient, `--update-fork` ne tire plus
-rien : il annonce le commit épinglé et sa raison, montre quand même le changelog
-en attente en amont (pour voir passer le correctif) et rappelle la commande de
-reprise. `--list-devices` et la fin de `--setup` affichent l'épinglage.
-
-`--update-fork` est la commande de suivi au quotidien, à lancer juste après un
-`--update` : elle refuse d'agir si le fork n'est pas cloné ou si les liens ne
-viennent pas de lui, refuse un arbre sale, `git fetch` seulement, affiche le
-**changelog** trié (les commits propres au fork ; les commits llama.cpp d'amont
-réduits à un compte) puis **demande confirmation** avant de tirer et
-reconstruire : sans « o », rien n'est tiré (`FORK_UPDATE_YES=1` vaut
-confirmation, entrée non interactive = rien). Ni `--setup-fork` ni
-`--update-fork` ne redémarre le service ni ne lance de mesure.
-
-Deux pièges. Les binaires portent un RUNPATH absolu vers leur dossier `build` :
-déplacer `~/llm/strix-llama.cpp` impose un rebuild (`--setup-fork`), jamais un
-`mv`. Et le routeur refuse toute clé ini inconnue sans démarrer du tout : les
-clés propres au fork (`ngram-on-disk`, `reasoning-budget-*`,
-`spec-draft-adaptive`, `spec-prefill*` — liste `FORK_ONLY_KEYS` dans
-`lib/fork.sh`) font échouer le paquet Arch, et `--start` refuse de lancer un
-moteur upstream sur un tel ini, en nommant le modèle et la clé. Pour revenir au
-paquet Arch : retirer ces clés de `lib/models.sh`, puis `--preload` (régénère le
-ini) avant le restart.
-
 Étiquette des mesures : elle vient des `LABEL` de l'image servie et vaut
 `strix-<engine7>+r<rocm7>` (colonne build des journaux). Chaque bump de l'image
 ouvre une **nouvelle série** ; les séries ne se comparent pas
 (cf. ARCHITECTURE.md, comparabilité des journaux).
 
-## Moteur conteneurisé (moteur du service)
+## Moteur conteneurisé
 
-Le dépôt sait aussi construire un **second moteur**, en image docker : ROCm 10.0
+Le moteur est une **image docker** construite par le dépôt : ROCm 10.0
 gfx1151, un runtime ROCr/HIP retained-PM4 recompilé, et
 `halo-box/strix-llama.cpp` construit en HIP seul. Le Dockerfile est vendorisé
 dans `runtime/` depuis la PR 133 de `kyuz0/amd-strix-halo-toolboxes` ;
 provenance, écarts exacts et procédure de resynchronisation dans
 [`runtime/AMONT.md`](runtime/AMONT.md).
 
-> ⚠ **C'est le moteur du service.** `--image-build`, `--image-update` et
+> ⚠ **C'est le moteur du service, et celui des outils hors service.**
+> `--image-build`, `--image-update` et
 > `--image-status` construisent et inventorient des images sans rien redémarrer :
 > une image neuve n'est servie qu'au prochain `./setup-llm.sh --restart`, qui
 > régénère le compose et recrée le conteneur.
@@ -186,7 +124,7 @@ Ce qui tient l'ensemble :
 - Le ménage d'après-build ne supprime que des images **sans tag portant notre
   étiquette** — jamais de `docker system prune`, jamais `docker image prune -a`.
 
-Comme pour le fork, **une image = une série de mesures** : un changement de
+**Une image = une série de mesures** : un changement de
 révision n'est pas comparable à ce qui précède, d'où le refus d'`--image-update`
 d'avancer sans accord explicite.
 
@@ -194,7 +132,7 @@ d'avancer sans accord explicite.
 
 | Commande | Rôle |
 |---|---|
-| `--setup` | Installe les dépendances, propose ROCm, télécharge les GGUF manquants, sélectionne le préchargement, génère le ini, propose le fork s'il n'est pas le moteur |
+| `--setup` | Installe les dépendances, vérifie docker et l'image du moteur, télécharge les GGUF manquants, sélectionne le préchargement, génère le ini |
 | `--update [modèle]` | Comme `--setup`, mais laisse `hf` comparer les etags : seul ce qui a bougé est retéléchargé |
 | `--cleanup [--yes]` | Supprime les dossiers et GGUF orphelins (dry-run par défaut) |
 | `--preload` | Re-sélectionne les modèles always-on et régénère le ini |
@@ -204,13 +142,10 @@ d'avancer sans accord explicite.
 | `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : complète le garde-fou anti-charabia, qui n'attrape pas un texte propre et faux. Première étape, **bloquante**, de `tools/qualif-modele.sh` |
 | `--bench-agentic [modèle] [passes] [N]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels). 3e argument `N` > 1 : chaque passe joue la suite seule puis à `N` boucles pi **simultanées** (orchestrateur + sous-agents), avec le facteur de débit de tâches et le décode agrégé |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
-| `--setup-fork [commit] [raison]` | Installe ou met à jour le moteur : fork [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp), build cmake Vulkan et liens dans `~/.local/bin`. Avec un commit (ou tag, ou branche) : épingle le moteur dessus et l'écrit dans `fork.conf` ; sans argument, dépingle et reprend la branche (voir « Moteur ») |
-| `--update-fork` | Suivi d'amont du moteur, juste après un `--update` : `git fetch`, changelog des commits reçus et confirmation, puis mise à jour du fork **déjà installé** (`git pull --ff-only`, rebuild et liens), s'arrête si rien n'a bougé, ne redémarre rien et ne mesure rien. Si le moteur est épinglé (`fork.conf`), ne tire rien et se contente du changelog en attente (voir « Moteur ») |
-| `--unset-fork` | Retire les liens du fork : retour au paquet Arch pour les outils **hors service** (le service tourne sur l'image) |
 | `--image-build [--no-cache]` | Construit l'image du moteur **conteneurisé** (`runtime/`) sur les révisions de `runtime/image.conf`, sous un tag temporaire ; vérifie `/opt/strix/versions.txt` et les quatre binaires, puis seulement promeut en `llm-rocm-strix:latest` et supprime les images sans tag issues de nos builds. Un build raté laisse l'image en place intacte. **C'est le moteur du service** : une image neuve n'est servie qu'au prochain `--restart` |
-| `--image-update [engine-rev] [rocm-rev]` | Suivi d'amont de l'image : sans argument, montre l'écart avec les sommets des deux branches et s'arrête (`IMAGE_UPDATE_YES=1` vaut accord, comme `FORK_UPDATE_YES`) ; avec accord ou révisions données, réécrit `image.conf` puis construit. C'est aussi le retour arrière du moteur conteneurisé |
+| `--image-update [engine-rev] [rocm-rev]` | Suivi d'amont de l'image : sans argument, montre l'écart avec les sommets des deux branches et s'arrête (`IMAGE_UPDATE_YES=1` vaut accord) ; avec accord ou révisions données, réécrit `image.conf` puis construit. C'est aussi le retour arrière du moteur conteneurisé |
 | `--image-status` | Révisions demandées, image `:latest` en place avec ses étiquettes, verdict de conformité, taille, images sans tag restantes et place du cache de build. Ne construit ni ne purge rien |
-| `--list-devices` | Moteur de l'**hôte** (paquet Arch ou fork) avec sa version et les backends ggml installés, puis les devices exposés par l'**image** du service ; alerte si `ROCm0` manque |
+| `--list-devices` | Étiquette du moteur, puis les devices exposés par l'**image** ; alerte si `ROCm0` manque |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | A/B de réglages spéculatifs sur mesure réelle : chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
@@ -220,7 +155,7 @@ d'avancer sans accord explicite.
 | `--restart` | `--stop` puis `--start`. Jamais `docker compose restart`, qui garderait l'ancienne image, l'ancienne ligne de commande et l'ancien `--models-max` |
 | `--status` | `docker compose ps` et réponse de `/health` |
 | `--logs [-f] [--tail N]` | Journaux du conteneur |
-| `--migrate-off-systemd` | **Temporaire** : débranche l'ancienne unité systemd user (stop, disable, suppression, `daemon-reload`), vérifie que le port 8009 est libre et signale les liens `~/.local/bin/llama-*` restants. Idempotente ; à jouer une fois avant le premier `--start` |
+| `--migrate-off-systemd` | **Temporaire** : débranche l'ancienne unité systemd user (stop, disable, suppression, `daemon-reload`) et vérifie que le port 8009 est libre. Idempotente ; à jouer une fois avant le premier `--start` |
 | `--help` | Aide, liste des modèles et des clés de téléchargement |
 
 ## Workflow typique
@@ -304,9 +239,10 @@ laquelle lancer selon le rôle du modèle.
 `--spec-ngram-tune` règle en mesurant : il cherche la longueur de draft n-gram
 (courbe `t_forward(batch)` par `llama-bench` service arrêté, pour localiser la
 marche de noyau ggml, puis arbitrage réel des candidats sur
-`prompts/spec-refactor.txt`, écrit dans `spec-ngram.conf`). ⚠ Cette courbe est
-tracée par le `llama-bench` de l'HÔTE, donc sur le fork Vulkan : les seuils du
-moteur de l'image n'ont pas été re-tracés. Formules, garde-fous et limites :
+`prompts/spec-refactor.txt`, écrit dans `spec-ngram.conf`). Depuis le
+18/09/2026 cette courbe est tracée par le `llama-bench` de l'IMAGE, donc par le
+moteur qui sert : les `size-m` retenus avant cette date l'ont été sur le fork
+Vulkan et n'ont pas été re-tracés. Formules, garde-fous et limites :
 ARCHITECTURE.md.
 Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 
@@ -465,7 +401,6 @@ contournée par modèle et signalée en amont :
 | Fichier | Rôle |
 |---|---|
 | `preload.conf` | modèles préchargés, un par ligne |
-| `fork.conf` | épinglage du moteur : `pin = <commit>` et `raison = <texte>`, écrit par `--setup-fork <commit>`, retiré par `--setup-fork` sans argument |
 | `spec-nmax.conf` | modèle = spec-draft-n-max retenu par les mesures |
 | `spec-ngram.conf` | modèle = spec-ngram-map-k-size-m retenu par les mesures |
 | `logs/spec-tests.log` | journal TSV des runs `--spec-test` |
@@ -533,10 +468,10 @@ dans `AGENTS.md`.
 | Fichier | Rôle |
 |---|---|
 | `opencode-sync-model.sh` | Synchronise la liste des modèles du serveur (`/v1/models`) dans la config opencode (`~/.config/opencode/opencode.json`, provider `llamaswap`). Variables : `ENDPOINT`, `CONFIG`, `PROVIDER` |
-| `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices (`DEV=Vulkan0,ROCm0`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
-| `spec-isolate.sh` | Test isolé d'un réglage spéculatif AVANT sa déclaration dans `lib/models.sh` : `tools/spec-isolate.sh <tag> -- <args llama-server...>` monte un serveur jetable sur `PORT` (8099) avec les arguments bruts, mesure acceptance, prefill, décode et sanité de la sortie (`py/spec_isolate_bench.py`), puis relance le service. Variables : `PORT`, `NP` (salve simultanée en plus), `PASSES`, `PROMPTS`, `MAX_TOKENS`, `OUT`, `LLAMA_BIN_DIR` (binaires d'un build à part du fork, pour mesurer un patch sans toucher au moteur servi). Refuse de démarrer si un `--bench*` / `--spec*` ou un conteneur `bench-agentic-*` tourne. Sorties dans `logs/spec-isolate/<tag>/`. À confirmer ensuite sur le service par `--spec-ab` |
+| `bench-spec-batch.sh` | Courbe brute `t_forward(batch)` d'un ou plusieurs GGUF par `llama-bench`, hors service, sur un ou plusieurs devices de l'image (`DEV=ROCm0`, `IMAGE`, `BATCHES`, `REPS`, `DEPTH`, `FA`). Analyse par `py/batch_curve.py`, journal `spec-batch.log` + `spec-batch.tsv`. Pour régler un modèle, préférer `--spec-ngram-tune` |
+| `spec-isolate.sh` | Test isolé d'un réglage spéculatif AVANT sa déclaration dans `lib/models.sh` : `tools/spec-isolate.sh <tag> -- <args llama-server...>` monte un serveur jetable sur `PORT` (8099) avec les arguments bruts, mesure acceptance, prefill, décode et sanité de la sortie (`py/spec_isolate_bench.py`), puis relance le service. Variables : `PORT`, `NP` (salve simultanée en plus), `PASSES`, `PROMPTS`, `MAX_TOKENS`, `OUT`, `IMAGE` (autre image docker, pour mesurer un patch sans toucher au moteur servi). Le serveur jetable tourne DANS l'image, port publié sur `127.0.0.1` et conteneur nommé, que le trap supprime (`docker rm -f`). Refuse de démarrer si un `--bench*` / `--spec*` ou un conteneur `bench-agentic-*` tourne. Sorties dans `logs/spec-isolate/<tag>/`. À confirmer ensuite sur le service par `--spec-ab` |
 | `qualif-modele.sh` | Qualification d'un modèle DÉJÀ déclaré et servi : `tools/qualif-modele.sh <section>` enchaîne les étapes 3, 5, 6 et 7 de la skill ajout-modele (`--bench-sanity`, `--spec-ab` sur `spec-refactor.txt` puis `spec-test.txt`, `--bench`, `--bench-cache`, `--bench-load`, `--bench-agentic`), une à la fois (un seul GPU), lit le drafter et le `size-m` réellement servis dans `status.args` de `/v1/models`, et écrit `logs/qualif/<tag>/resume.md` (tableau de perfs prêt à coller) plus un journal par étape. Options : `--passes`, `--size-m`, `--sans-agentic`, `--sans-cache`, `--sans-load`, `--tag`. Une étape en échec n'arrête pas les suivantes (code de retour non nul), **sauf la justesse** : un moteur qui répond faux arrête la qualification. Refuse de démarrer si un `--bench*` / `--spec*`, un `spec-isolate.sh` ou un conteneur `bench-agentic-*` tourne. N'écrit ni `lib/models.sh` ni les `.conf` ; ne joue ni le test isolé ni `--spec-tune` |
-| `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k), avec un tour simulé recalculé à chaque profondeur : c'est le régime agentic réel. ⚠ Tourne sur le `llama-bench` de l'**hôte** (fork Vulkan), pas sur l'image du service : ordre de grandeur, pas mesure de production. Journal `logs/bench-depth.log` + `.tsv` |
+| `bench-depth.sh` | Prefill et décode selon la profondeur de contexte (`llama-bench -d`, défaut 0 / 16k / 32k), avec un tour simulé recalculé à chaque profondeur : c'est le régime agentic réel. Tourne sur le `llama-bench` de l'**image**, donc sur le moteur qui sert (`DEV`, `CTK`/`CTV` f16, `IMAGE`). Journal `logs/bench-depth.log` + `.tsv` |
 | `py/perf_graphs.py` | Régénère les trois SVG de `docs/graphs/` (prefill, décode, écarts en %) à partir de `docs/perfs.tsv`, en rendu sobre (barres pleines, fond blanc). Aucune dépendance, aucun service : `python3 py/perf_graphs.py [<tsv> [<dossier>]]`. À relancer après toute modification du TSV |
 | `llm-proxy.ts` | Extension pi / omp : découvre les modèles `text-generation` du proxy Albert (`/v1/models`, ctx, coûts, reasoning déduit de l'id) et enregistre le provider `albert`. A copier dans `~/.pi/agent/extensions/` et `~/.omp/agent/extensions/` (une seule extension provider par agent). Endpoint `http://llmproxy` et clé en dur pour l'instant (à passer sur `process.env` avant diffusion) |
 

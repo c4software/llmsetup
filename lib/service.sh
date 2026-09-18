@@ -1,5 +1,5 @@
 # lib/service.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # Sortie de systemd - commande de bascule, TEMPORAIRE
@@ -12,13 +12,16 @@
 #
 # Ce qui a disparu avec l'unité : cmd_install_service / cmd_uninstall_service,
 # le linger (le démon docker démarre au boot, c'est lui qui relance le
-# conteneur grâce à restart: unless-stopped) et le PATH de l'unité (le moteur
-# vit dans l'image, plus dans ~/.local/bin).
+# conteneur grâce à restart: unless-stopped) et le PATH de l'unité, qui mettait
+# en tête les liens du fork strix-llama.cpp : le moteur vit dans l'image, et le
+# fork a été retiré du dépôt le 18/09/2026.
 # =============================================================================
 
 # cmd_migrate_off_systemd - débranche l'unité systemd user, dans l'ordre :
 # arrêt, désactivation, suppression du fichier d'unité, daemon-reload, puis
 # contrôle que le port du routeur est bien libre avant de rendre la main.
+# Le signalement des liens llama-* de l'hôte est tombé le 18/09/2026 avec le
+# fork : le dépôt n'en pose plus et n'en lit plus.
 # Idempotente : une machine sans unité la traverse sans rien casser.
 cmd_migrate_off_systemd() {
   info "Sortie de systemd pour $SERVICE_NAME..."
@@ -61,24 +64,6 @@ cmd_migrate_off_systemd() {
     fi
   else
     warn "  ss introuvable - port $SERVER_PORT non vérifié."
-  fi
-
-  # Les liens du fork ne gênent pas le conteneur (le moteur vit dans l'image),
-  # mais ils restent le moteur des outils hors service (llama-bench de
-  # --spec-ngram-tune, tools/bench-depth.sh) : ils ne sont PAS supprimés ici,
-  # seulement signalés, pour que leur présence reste un choix conscient tant
-  # que lib/fork.sh est le filet de retour arrière.
-  local -a liens=()
-  local b
-  for b in llama-server llama-bench llama-cli llama-quantize; do
-    if [[ -e "$HOME/.local/bin/$b" || -L "$HOME/.local/bin/$b" ]]; then
-      liens+=("$b")
-    fi
-  done
-  if [[ ${#liens[@]} -gt 0 ]]; then
-    warn "  liens du fork encore en place dans ~/.local/bin : ${liens[*]}"
-    warn "    Sans effet sur le service (le moteur vit dans l'image), conservés"
-    warn "    comme moteur des outils hors service et comme retour arrière."
   fi
 
   echo ""

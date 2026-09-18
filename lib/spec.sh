@@ -1,5 +1,5 @@
 # lib/spec.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → fork → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # spec-test — mesure le décode réel d'un modèle via l'API (chemin spéculatif
@@ -465,7 +465,8 @@ cmd_spec_tune() {
 #
 # Usage : ./setup-llm.sh --spec-ngram-tune [modèle] [passes] [prompt]
 #
-# 1. COURBE (llama-bench, service arrêté, ~2 min) : balayage grossier puis
+# 1. COURBE (llama-bench de l'image, par _dk_run, service arrêté, ~2 min) :
+#    balayage grossier puis
 #    raffinement automatique autour de la marche détectée, sur le device
 #    EFFECTIF du modèle (ROCm0, device unique) : la marche n'est pas au même
 #    endroit d'un backend à l'autre. Sortie : deux candidats, le « sûr » (sous
@@ -516,8 +517,12 @@ _spec_ngram_presets() {
 
 # Un balayage llama-bench → jsonl brut sur stdout. $1 gguf, $2 device, $3 liste
 # de batches, $4 répétitions.
+# llama-bench vit dans l'IMAGE depuis le 18/09/2026 (retrait du fork) : il est
+# appelé par _dk_run, qui monte ~/models au même chemin absolu en lecture seule
+# et coupe le réseau. Le GGUF passé ici est donc lisible tel quel dans le
+# conteneur, et la courbe est tracée par le moteur qui sert réellement.
 _spec_ngram_sweep() {
-  llama-bench -m "$1" -p "$3" -n 0 -d 0 -r "$4" -fa auto -dev "$2" -o jsonl 2>/dev/null
+  _dk_run llama-bench -m "$1" -p "$3" -n 0 -d 0 -r "$4" -fa auto -dev "$2" -o jsonl 2>/dev/null
 }
 
 cmd_spec_ngram_tune() {
@@ -548,7 +553,8 @@ cmd_spec_ngram_tune() {
   _preset_has_spec_type "$preset" ngram-map-k \
     || error "'$preset' n'a pas de spéculation n-gram (ngram-map-k attendu dans spec-type)."
   [[ "$passes" =~ ^[0-9]+$ && "$passes" -ge 2 ]] || error "Passes invalide : '$passes' (>= 2)"
-  command -v llama-bench >/dev/null || error "llama-bench introuvable (paquet llama-cpp)"
+  command -v docker >/dev/null || error "docker introuvable - la courbe tourne dans l'image (./setup-llm.sh --image-build)."
+  _image_ref >/dev/null 2>&1 || error "Aucune image du moteur ici - ./setup-llm.sh --image-build d'abord."
   _svc_installed \
     || error "Service $SERVICE_NAME non montable ici - l'arbitrage a besoin de le redémarrer (docker + ./setup-llm.sh --image-build)."
 
@@ -601,10 +607,10 @@ cmd_spec_ngram_tune() {
     info "Arrêt de $SERVICE_NAME le temps du balayage (contention GPU)."
     _svc_stop || warn "Arrêt en échec - mesures potentiellement faussées."
   fi
-  # Moteur de l'HÔTE uniquement (llama-bench du fork, service arrêté). ⚠ Ne
-  # JAMAIS passer cette variable à _dk_run (lib/runtime.sh) ni au compose : sur
-  # le runtime retained-PM4 de l'image elle corrompt la sortie.
-  export GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+  # (GGML_CUDA_ENABLE_UNIFIED_MEMORY était exporté ici du temps du llama-bench
+  #  de l'hôte. Retiré le 18/09/2026 avec le fork : sur le runtime retained-PM4
+  #  de l'image cette variable CORROMPT la sortie, elle est interdite partout
+  #  dans le dépôt - cf. runtime/AMONT.md et le test de lib/compose.sh.)
 
   echo ""
   info "════════ 1/2 — courbe t_forward(batch) ════════"
