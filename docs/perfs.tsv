@@ -12,7 +12,6 @@
 # quand le depot aura rejoue ses --bench sur ce moteur.
 modele	prefill_paquet	prefill_fork	decode_paquet	decode_fork	acceptance_paquet	acceptance_fork	reglage	source
 lfm2.5-2.6b	2279	2875	67.7	108.8		0.50	draft-dspark 3, drafter DSpark officiel Liquid AI Q8_0, parallel 1 (KV f16) ; paquet sans drafter, parallel 4	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
-lfm2.5-8b-a1b-nothink		3079		108.1		0.55	ngram-map-k 47 + draft-dspark 3, min-hits 2, drafter DSpark officiel Liquid AI Q8_0, reasoning-budget 0 (thinking coupe), parallel 1 (KV f16)	jamais mesure au paquet ; strix-0007bc6 16/09/2026
 ornith-1.5-9b-mtp-nothink		827.9		39.5		0.56	ngram-map-k 7 + draft-mtp 3, min-hits 2, tete MTP tierce embarquee (GGUF fusionne protoLabsAI), parallel 1 (remplace qwen3.5-9b : 745 / 33.0 / 0.58 le meme jour sur le meme fork)	jamais mesure au paquet ; strix-0007bc6 15/09/2026
 ornith-1.5-35b-a3b-parallel	974	1129	70.7	73.3			aucun, parallel 4 (cache-type-v q8_0)	b10566 28/08/2026 contre strix-0007bc6 13/09/2026
 ornith-1.5-35b-a3b-mtp		1073		76.2		0.55	ngram-map-k 7 + draft-mtp 4, parallel 1 (meme GGUF que la ligne ci-dessus)	jamais mesure au paquet ; strix-0007bc6 15/09/2026

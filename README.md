@@ -336,7 +336,9 @@ thinking du 27B a été retirée le 13/09/2026, `laguna-s-2.1` le 15/09 et
 (cf. `docs/HISTORIQUE.md`). Deux sections sont ajoutées le 16/09/2026, toutes
 deux avec drafter externe à un slot : `lfm2.5-8b-a1b-nothink` (grand frère du
 2.6B, DSpark officiel) et `muse-glimmer-30b-dflash` (DFlash 2 z-lab, concurrent
-direct du 27B), cf. `docs/HISTORIQUE.md`. Le 17/09/2026,
+direct du 27B), cf. `docs/HISTORIQUE.md`. La première est retirée le 18/09/2026,
+en échec au `--bench-agentic` sur les deux moteurs (`lfm2.5-2.6b` couvre le
+créneau et passe 16/16), cf. `docs/HISTORIQUE.md`. Le 17/09/2026,
 `qwen3.8-27b-dflash-nothink` passe en `cache-type-v f16` (302 / 32,2 / 0,625
 contre 305 / 30,3 / 0,595 en q8_0, les deux mesurés le même soir, à froid, sur
 le même moteur : +6 % de décode, prefill égal) et ses chiffres de référence
@@ -361,7 +363,6 @@ sont dans la table suivante ; les réglages servis ont aussi changé (cache K et
 | Modèle (section) | Quant et taille | Device | Réglage spéculatif | Prefill t/s | Décode t/s | Acceptance | Écart décode contre paquet |
 |---|---|---|---|---|---|---|---|
 | lfm2.5-2.6b | Q8_0, 2,7 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 (KV f16) | 2875 | 108,8 | 0,50 | +61 % (paquet sans drafter, 67,7 t/s à 4 slots) |
-| lfm2.5-8b-a1b-nothink | Q8_0, 9,0 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 47, min-hits 2, drafter DSpark officiel Liquid AI Q8_0, n-max 3, reasoning-budget 0 (thinking coupé, clé du fork), parallel 1 (KV f16) | 3079 | 108,1 | 0,55 | jamais mesuré au paquet |
 | ornith-1.5-9b-mtp-nothink | Q8_0, 9,79 Go (GGUF fusionné tiers protoLabsAI, tête MTP nextn distillée) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 3, parallel 1 | 828 | 39,5 | 0,56 | jamais mesuré au paquet (+20 % de décode contre `qwen3.5-9b`, remplacée le même jour) |
 | ornith-1.5-35b-a3b-parallel | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
 | ornith-1.5-35b-a3b-mtp | Q4_K_M, 22 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 1073 | 76,2 | 0,55 | non mesuré au paquet |
@@ -405,7 +406,9 @@ justesse vérifiée par comptage de lignes jusqu'à 40 à 51k tokens.
 76 Gio libres, comptages justes jusqu'à 51k. Elle garde son cache `V q8_0` ; un
 A/B en `f16` donne 1379,2 / 72,4 et 145,9 t/s agrégés, soit environ 1 % de
 mieux sans coût mémoire : le retrait de la surcharge est proposé, pas appliqué.
-Reste non mesurée, donc non qualifiée : `lfm2.5-8b-a1b-nothink`.
+`lfm2.5-8b-a1b-nothink`, l'autre section que la campagne n'avait pas jouée,
+n'a pas été qualifiée : elle est retirée du parc le 18/09/2026 (0/16 au
+`--bench-agentic`, cf. `docs/HISTORIQUE.md`).
 
 Trois faits de la campagne, à ne pas perdre :
 

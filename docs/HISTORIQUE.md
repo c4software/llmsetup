@@ -40,7 +40,10 @@ comptage de lignes sur des prompts de 40 à 51k tokens.
 | deepseek-v4-flash | 162 | 29,3 (acceptance 0,83) | 196 / 28,8 (0,69) | 173 / 161 / 136 / 111 | décode +2 %, acceptance de 0,69 à 0,83, prefill -17 %, quatre comptages justes |
 
 Non mesurés : `lfm2.5-8b-a1b-nothink` et `ornith-1.5-35b-a3b-parallel`. Leurs
-réglages sont restés ceux du fork, et leurs blocs le disent.
+réglages sont restés ceux du fork, et leurs blocs le disent. Depuis :
+`ornith-1.5-35b-a3b-parallel` a été qualifiée le 18/09/2026, et
+`lfm2.5-8b-a1b-nothink` retirée le même jour (cf. « lfm2.5-8b-a1b-nothink
+retiré (18/09/2026) »).
 
 **Bogue du batch 16384.** `batch-size` / `ubatch-size` 16384 provoque une erreur
 de segmentation (code de sortie 139) dès un prompt de 8k tokens sur TOUS les
@@ -1402,7 +1405,203 @@ pi 0.84.3 en conteneur, appel froid puis 3 passes de 5 scénarios, bigchuck, for
 | | 0/1 | création module + tests | 5,2 s | 3 094 tok (44 %) | 423 | 3080 t/s | 98,6 t/s |
 | | boucle sans fin | bug sans toucher au test | tué après 36 min | contexte à 47k | 18 700 requêtes de 20 à 50 tok | | |
 
-Lecture : Muse-Glimmer tient la boucle complète, le cache sert 97 à 99 % à chaque tour (attention pure) et le décode en boucle (34 à 41 t/s) rejoint le `--bench` (38,0) ; le raisonnement en `reasoning_strength` low ne fait échouer aucun scénario. LFM2.5-8B-A1B (thinking coupé) réussit les tool calls simples mais rate la réponse simple et la création de module (fichiers écrits, test jamais relancé jusqu'au vert), et part en boucle de tool calls sur la correction de bug : `--bench-agentic` n'a pas de limite de tours, le conteneur a été tué à la main. C'est le résultat, pas un défaut du serveur (le 2.6B, lui, reste le modèle de tool calling). La section est gardée avec ce verdict, à retirer si elle ne sert pas dans l'usage réel.
+Lecture : Muse-Glimmer tient la boucle complète, le cache sert 97 à 99 % à chaque tour (attention pure) et le décode en boucle (34 à 41 t/s) rejoint le `--bench` (38,0) ; le raisonnement en `reasoning_strength` low ne fait échouer aucun scénario. LFM2.5-8B-A1B (thinking coupé) réussit les tool calls simples mais rate la réponse simple et la création de module (fichiers écrits, test jamais relancé jusqu'au vert), et part en boucle de tool calls sur la correction de bug : `--bench-agentic` n'a pas de limite de tours, le conteneur a été tué à la main. C'est le résultat, pas un défaut du serveur (le 2.6B, lui, reste le modèle de tool calling). La section est gardée avec ce verdict, à retirer si elle ne sert pas dans l'usage réel. Suite : elle a été retirée le 18/09/2026 après un second échec, 0/16 sur le moteur conteneurisé (cf. « lfm2.5-8b-a1b-nothink retiré (18/09/2026) »).
+
+## lfm2.5-8b-a1b-nothink retiré (18/09/2026)
+
+Section `lfm2.5-8b-a1b-nothink` (LFM2.5-8B-A1B de Liquid AI, Q8_0 de 9,0 Go et
+drafter DSpark officiel de 0,36 Go) retirée du parc le 18/09/2026. Raison,
+décidée par l'utilisateur : le modèle échoue à la boucle agentic réelle, sur
+les DEUX moteurs, et `lfm2.5-2.6b` couvre déjà le créneau en passant 16/16.
+
+Le verdict, daté :
+
+- 16/09/2026, fork strix-0007bc6, Vulkan0 : 3/5 scénarios puis boucle sans fin
+  sur la correction de bug (36 min, 18 700 requêtes de 20 à 50 tokens, contexte
+  à 47k, conteneur tué à la main), cf. « Muse-Glimmer-30B et LFM2.5-8B-A1B
+  ajoutés (16/09/2026) » ;
+- 18/09/2026, moteur conteneurisé strix-8c1c282+r7dda3ac, ROCm0 : 0/16. La
+  boucle part dès l'appel froid, aucun scénario n'aboutit, arrêt manuel après
+  15 min 30. La section n'avait jamais été qualifiée sur ce moteur.
+
+Ce n'était pas le seul signal : le contrôle de justesse du 18/09/2026 donnait
+des comptages de lignes faux (69 / 259 / 399 pour 70 / 260 / 800), l'erreur
+grossière à 20k tenant au `reasoning-budget 0` qui définit la section. Les
+débits, eux, restaient bons (prefill 4 076 t/s, décode 118,5 t/s, acceptance
+0,535, cache long 97 %, chargement 1,4 s) : ce retrait n'est pas une régression
+de performance.
+
+Les deux GGUF de `~/models/lfm2.5-8b-a1b/` (8,8 Gio au `du -sh`) ne sont plus
+déclarés : ils deviennent orphelins de `KNOWN_FILES`, rien n'a été supprimé sur
+la machine, `./setup-llm.sh --cleanup` les purgera. Pour ravoir la section :
+remettre les deux `download_hf`, le commentaire et le corps ci-dessous dans
+`lib/models.sh`, sous la bannière du groupe, entre `lfm2.5-2.6b` et
+`qwen3-coder-next`.
+
+Le bloc retiré, tel quel (connaissance à conserver : quant officielle, drafter
+DSpark sidecar, thinking coupé par `reasoning-budget-enable` + budget 0, réglage
+n-gram 47 arbitré par `--spec-ab`, et les mesures des deux moteurs). Les tirets
+longs de l'original sont rendus en tirets simples.
+
+```
+groupe "; --- LFM2.5 8B-A1B (Liquid AI - MoE 8,3B / 1,5B actifs, agentic edge) ---"
+
+# LFM2.5-8B-A1B (Liquid AI, sorti le 24/08/2026) - MoE hybride conv récurrente
+# + GQA (arch lfm2moe, 24 couches : 18 conv double-gate + 6 GQA), 8,3B total /
+# 1,5B actifs, ctx natif 128K, vocab 128 000. Grand frère du 2.6B ci-dessus :
+# Liquid annonce +11,5 points de MMLU-Pro et un net progrès en code, mais le
+# 2.6B reste devant sur le tool use pur (BFCLv4, IFEval) - les deux sections
+# cohabitent tant que la boucle agentic (étape 7) n'a pas tranché.
+# Q8_0 officiel LiquidAI (9 010 195 680 octets) : petit modèle, même logique
+# que le 2.6B, aucune raison de descendre ; pas de quant unsloth UD ni de
+# guide unsloth pour cette variante au 16/09/2026 (le guide LFM2.5 ne couvre
+# que les 1.2B). Support lfm2moe mainline depuis mai 2026, présent dans le
+# fork strix-0007bc6 (vérifié le 16/09/2026, src/llama-arch.cpp:128).
+download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-GGUF" \
+  LFM25_8B_PATH="LFM2.5-8B-A1B-Q8_0.gguf"
+
+# Drafter DSpark officiel Liquid AI (Q8_0, 356 491 104 octets ; F16 664 Mo
+# annoncé +2 % d'acceptance, à essayer par --spec-ab si le Q8_0 déçoit),
+# déclaré dans le MÊME dossier que la cible, comme pour le 2.6B. Sidecar pur
+# (5 couches d'attention, tête de Markov rang 256, tête de confiance, block
+# size 9) : embeddings et tête LM empruntés à la cible, donc même device
+# qu'elle, jamais de spec-draft-device. Le support DSpark pour LFM2 est une
+# PR distincte du DSpark générique (mainline #27383, commit 07822bdd, présent
+# dans le fork strix-0007bc6, vérifié le 16/09/2026). Le GGUF devient
+# nécessaire au démarrage de la section : ne pas le retirer du dossier.
+# n-max : le README du repo dit 10, le fork clampe à block_size = 9.
+download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
+  LFM25_8B_DSPARK_PATH="LFM2.5-8B-A1B-DSpark-Q8_0.gguf"
+
+# LFM2.5-8B-A1B nothink - ajouté le 16/09/2026, étapes 1 à 6 de la skill
+#   ajout-modele faites le jour même (chiffres ci-dessous), étape 7
+#   (--bench-agentic) en bas de bloc.
+# Sampling : reco officielle de la model card 8B-A1B (temp 0.2, top-k 80,
+#   repeat-penalty 1.05), différente de celle du 2.6B (0.1 / 50 / 1.1) : la
+#   fiche du 8B ne donne ni top-p ni min-p, min-p 0 explicite.
+# Thinking COUPÉ (suffixe -nothink) : modèle « reasoning-tuned », il ouvre
+#   <think> de lui-même et le template n'a aucun interrupteur (ni
+#   enable_thinking ni reasoning_effort ; seul preserve_thinking, qui ne
+#   concerne que la relecture de l'historique). Test isolé du 16/09/2026 : en
+#   1200 tokens il n'avait pas fini de raisonner, contenu VIDE sur les deux
+#   prompts. `reasoning-budget 0` seul est inerte sur le fork : le mécanisme
+#   n'y vit que derrière reasoning-budget-enable (common/sampling.cpp:313).
+#   Avec reasoning-budget-enable + budget 0 la balise se ferme d'office et la
+#   réponse part au premier token (contenu ligne 2 du gen). ⚠ Clé propre au
+#   fork (FORK_ONLY_KEYS, cf. deepseek-v4-flash) : le parc était déjà
+#   verrouillé sur le fork par deepseek-v4-flash et qwen3.8-flash-next.
+#   Sur le paquet Arch de secours, l'équivalent serait reasoning-budget 0 seul
+#   (mainline) : non mesuré.
+# ctx 131072 : fenêtre native 128K, un seul slot en dispose en entier.
+# cache KV f16 : hérité du global depuis le 18/09/2026 (cf. en-tête), les deux
+#   lignes du corps qui le répétaient sont retirées. Raison inchangée : arch
+#   hybride conv + GQA, KV minuscule, chemin quantifié non validé sur lfm2
+#   (même prudence que le 2.6B).
+# cache-reuse 0 : état récurrent (conv) et contrainte des sections spéculatives.
+# Pas de swa-full ni ctx-checkpoints : pas une arch hybride SWA Qwen.
+# Spéculation DSpark, test isolé du 16/09/2026 (fork strix-0007bc6, Vulkan0,
+#   hors service, np 1, 2 passes, 1200 tokens, médiane hors 1re passe,
+#   spec-test.txt / spec-refactor.txt, thinking coupé) :
+#     sans spéculation      102,2 / 102,9 t/s
+#     draft-dspark n-max 3  118,0 / 133,4  (acceptance 0,66 / 0,82)
+#     draft-dspark n-max 5  114,0 / 128,4  (0,60 / 0,72)
+#     draft-dspark n-max 9   82,0 / 117,3  (0,36 / 0,56)
+#   RETENU n-max 3 : x1,16 en générique, x1,30 en refactor, batch de
+#   vérification de 4 colonnes. Gain plus faible que sur le 2.6B (x1,76) :
+#   1,5B actifs sur 9 Go de poids, le décode est déjà limité par la lecture
+#   des experts routés, et le batch en lit davantage. Le même test AVEC
+#   raisonnement (avant le budget 0) donnait 100,9 / 109,6 en n-max 3 contre
+#   107,3 / 100,3 sans spéculation, acceptance 0,53 / 0,62 : le drafter
+#   devine bien mieux la réponse que la pensée.
+#   n-gram AJOUTÉ (contrairement au 2.6B) : le 8B vise aussi l'édition de code,
+#   où le prompt se ré-émet. --spec-ngram-tune n'a pas été utilisé : sur un
+#   modèle sans tête MTP il prend « sans spéculation » pour référence, ce qui
+#   n'a pas de sens avec un drafter externe ; réglé par --spec-ab tel que
+#   servi, le 16/09/2026 (strix-0007bc6, Vulkan0, 4 passes, décode médian) :
+#     spec-refactor.txt : none 106,0 ; draft-dspark seul 126,6 (acc. 0,78) ;
+#       ngram 7 + dspark 146,2 (0,78) ; ngram 15 = 144,2 (0,70) ;
+#       ngram 47 = 169,6 (0,61)
+#     spec-test.txt : draft-dspark seul 120,3 (0,71) ; ngram 7 = 118,3 (0,68)
+#   RETENU size-m 47, min-hits 2 : +34 % contre le drafter seul et +60 % contre
+#   rien sur le refactor, neutre en générique (les hits y sont rares, un miss
+#   ne coûte qu'une sonde de hash). Même régime large que le 27B dense : la
+#   pente MoE sous la marche n'a pas empêché le 47 de gagner ici, parce que
+#   1,5B actifs font un forward court même à 48 colonnes.
+# parallel 1 : np 2 x (3 + 1) = 8 colonnes, pile au seuil, mais le 2.6B y a
+#   mesuré ~x1,1 agrégé pour une latence doublée : pas mesuré ici, 1 gardé.
+# ⚠ SECTION NON MESURÉE SUR LE MOTEUR CONTENEURISÉ, À QUALIFIER. Avec
+#   ornith-1.5-35b-a3b-parallel, c'est l'une des deux sections que la campagne
+#   du 17 au 18/09/2026 n'a pas jouées : tous les réglages ci-dessous sont ceux
+#   du fork Vulkan, gardés tels quels faute de mesure. Ne changent que les
+#   réglages globaux : device ROCm0, fit off, load-mode none, cache K et V f16
+#   (elle était déjà en f16, cf. ci-dessus : rien ne bouge en pratique).
+#   À la bascule : tools/qualif-modele.sh, en commençant par --bench-sanity.
+# Device : ROCm0 depuis le 18/09/2026 (device unique de l'image). Jusque-là
+#   Vulkan0 hérité du défaut, --bench-devices n'ayant jamais tourné ici (le
+#   fork n'exposait que Vulkan0) ; la sanité de la sortie avait été lue au test
+#   isolé (sanité ok sur toutes les passes).
+# Mesuré le 16/09/2026 TEL QUE SERVI (fork strix-0007bc6, Vulkan0, --bench 3
+#   passes, bench-task) : prefill 3079 t/s, décode 108,1 t/s, acceptance 0,55.
+#   Même débit que le 2.6B (2875 / 108,8) pour un modèle trois fois plus gros
+#   et bien meilleur en code selon Liquid : c'est l'argument de cette section.
+#   Jamais mesuré au paquet Arch.
+# --bench-cache du 16/09/2026 : suite 63 % servi du cache (220 ms), identique
+#   64 %, édition 0 % : arch à état récurrent (conv), restauration au dernier
+#   checkpoint comme le 2.6B et les GDN.
+# --bench-load du 16/09/2026 : 1,7 s chargement + 1er token (8,4 Go lus),
+#   TTFT à chaud 31 ms.
+# Mémoire : ~16 Go chargé (poids 9 + drafter 0,36 + KV du ctx 131072).
+# --bench-agentic du 16/09/2026 (pi 0.84.3, strix-0007bc6) : ÉCHEC. Passe 1 :
+#   simple 0/1 (23 tokens, réponse hors sujet), outils 1/1 (1,9 s, 89 t/s),
+#   edit 1/1 (4,0 s, 103 t/s), création 0/1 (les fichiers sont écrits mais le
+#   test n'est pas relancé jusqu'au vert), bug sans toucher au test : BOUCLE
+#   sans fin (36 min, 18 700 requêtes de 20 à 50 tokens, contexte à 47k,
+#   conteneur tué à la main ; le bench n'a pas de limite de tours). Verdict :
+#   le modèle tient les tool calls simples mais pas une boucle de correction,
+#   comme Liquid l'annonce (« moins adapté au code lourd »). Section GARDÉE
+#   pour l'instant avec ce verdict : à retirer si elle ne sert pas dans l'usage
+#   réel (même critère que laguna et gpt-oss), ou à re-mesurer avec le
+#   raisonnement rétabli (reasoning-budget N > 0) si on veut lui donner sa
+#   chance en agentic, au prix du débit.
+# JUSTESSE MESURÉE LE 18/09/2026, PREMIÈRE FOIS SUR CE MOTEUR - réserve à
+#   lever avant tout usage réel. --bench-sanity passe (la chaîne de contrôle est
+#   bien recopiée) mais la réponse est bavarde et méta (« Je suis en train de
+#   copier exactement le code fourni sans aj… ») : ce n'est pas du charabia,
+#   c'est du commentaire de soi. Aux comptages de lignes, à max_tokens 2048 et
+#   finish_reason « stop » (donc sans troncature) : 69 / 259 / 399 pour
+#   70 / 260 / 800. Les deux premiers sont un décalage d'une unité (le modèle
+#   rend le dernier NUMÉRO de ligne), le troisième est une erreur grossière.
+#   Cause identifiée : reasoning-budget 0. Avec le budget porté à 2048 par
+#   surcharge SPEC_AB_OVERRIDES, même moteur, même prompt : 69 / 259 / 800 -
+#   l'erreur grossière à 20k DISPARAÎT, le décalage d'une unité reste (limite
+#   du modèle, 1,5B actifs). Les deux autres modèles du parc qui comptent juste
+#   (lfm2.5-2.6b, Muse-Glimmer) le font DANS leur raisonnement.
+#   RIEN N'EST CHANGÉ ICI : porter le budget à 2048 contredirait le « nothink »
+#   de la section, qui est un choix d'usage, et le débit n'a pas été remesuré
+#   sous ce budget. Proposition à trancher avec le --bench-agentic, en même
+#   temps que le retrait déjà en suspens (boucle agentic échouée le 16/09).
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 pour les débits (même série) : prefill
+#   4 076 t/s, décode 118,5 t/s, acceptance 0,535, cache long à 20k 97 %,
+#   chargement 1,4 s (8,4 Go).
+llama_model lfm2.5-8b-a1b-nothink "
+model            = $LFM25_8B_PATH
+ctx-size         = 131072
+cache-ram        = 2048
+temp             = 0.2
+top-k            = 80
+min-p            = 0.0
+repeat-penalty   = 1.05
+cache-reuse      = 0
+spec-type        = ngram-map-k,draft-dspark
+spec-draft-model = $LFM25_8B_DSPARK_PATH
+spec-draft-n-max = 3
+spec-ngram-map-k-size-m   = 47
+spec-ngram-map-k-min-hits = 2
+reasoning-budget-enable = true
+reasoning-budget = 0
+jinja            = true
+parallel         = 1"
+```
 
 ## Campagne du 17/09/2026 : cache V f16 sur le 27B, `reasoning = off`, essais retirés sur Flash-Next
 
