@@ -5,71 +5,28 @@
 # setup
 # =============================================================================
 
-# Runtime ROCm + backend ggml-hip — installés en best-effort par --setup
-# (jamais bloquant). ggml-hip est le backend HIP splitté d'extra/ggml : sans
-# lui, ROCm0 n'est pas exposé même runtime installé.
-# gfx1151 requis côté rocblas/hipblaslt : contrôler avec `rocminfo | grep gfx`.
-ROCM_PKGS=(rocm-hip-runtime hipblas rocblas hipblaslt ggml-hip)
-
+# Dépendances de l'hôte, réduites au strict nécessaire depuis le 18/09/2026.
+#
+# Ce qui est parti ce jour-là, avec le fork : llama-cpp et les backends ggml
+# splittés (ggml-cpu, ggml-vulkan, ggml-hip), et le runtime ROCm de l'hôte
+# (rocm-hip-runtime, hipblas, rocblas, hipblaslt) qu'installait ROCM_PKGS en
+# best-effort. Plus aucun binaire llama-* ni aucun backend ggml n'est appelé
+# sur l'hôte : le service ET les outils hors service tournent dans l'image, qui
+# embarque son propre ROCm. Les paquets déjà installés sur une machine ne sont
+# PAS désinstallés par le dépôt (--setup n'a jamais rien désinstallé) : les
+# retirer à la main si la place manque.
+#
+# Reste donc : curl, hf (python-huggingface-hub + python-hf-xet) pour les
+# téléchargements, docker et son démon pour le moteur.
 cmd_setup() {
   info "Vérification des dépendances..."
-  # ggml-cpu + ggml-vulkan : backends splittés d'extra/ggml (optdeps, donc
-  # à imposer : sans ggml-vulkan plus de Vulkan0, sans ggml-cpu plus d'ops CPU).
-  # ⚠ Ces paquets ne concernent PLUS le service, qui tourne dans l'image ROCm
-  # (runtime/) : ils servent les outils hors service (llama-bench des courbes
-  # de batch, llama-server jetable de tools/spec-isolate.sh).
-  PACMAN_PKGS=(curl llama-cpp ggml-cpu ggml-vulkan python-huggingface-hub python-hf-xet)
+  PACMAN_PKGS=(curl python-huggingface-hub python-hf-xet)
   MISSING=()
   for pkg in "${PACMAN_PKGS[@]}"; do
     paru -Qi "$pkg" &>/dev/null || MISSING+=("$pkg")
   done
   [[ ${#MISSING[@]} -gt 0 ]] && paru -S --noconfirm "${MISSING[@]}"
   command -v hf >/dev/null || error "hf introuvable"
-
-  # --- Runtime ROCm + ggml-hip : best-effort, jamais bloquant ---------------
-  # (backend HIP splitté : ggml-hip requis EN PLUS du runtime pour voir ROCm0)
-  info "Vérification du runtime ROCm de l'hôte (optionnel, outils hors service)..."
-  local rocm_missing=() rocm_to_install=()
-  local pkg
-  for pkg in "${ROCM_PKGS[@]}"; do
-    if paru -Qi "$pkg" &>/dev/null; then
-      continue
-    elif paru -Si "$pkg" &>/dev/null; then
-      rocm_to_install+=("$pkg")
-    else
-      rocm_missing+=("$pkg")
-    fi
-  done
-  if [[ ${#rocm_to_install[@]} -gt 0 ]]; then
-    warn "Paquets ROCm à installer (ROCm0 pour les outils HORS service) : ${rocm_to_install[*]}"
-    local reply="n"
-    if [[ -t 0 ]]; then
-      read -r -p "Installer le runtime ROCm ? [o/N] " reply
-    else
-      warn "Entrée non interactive — installation ROCm sautée par défaut."
-    fi
-    if [[ "$reply" =~ ^[oOyY]$ ]]; then
-      paru -S --noconfirm "${rocm_to_install[@]}" \
-        || warn "Installation ROCm en échec, sans effet sur le service, qui tourne dans l'image."
-    else
-      info "Runtime ROCm de l'hôte non installé, sans effet sur le service."
-      info "  (relancer --setup plus tard pour l'ajouter ; il ne sert qu'aux outils hors service)"
-    fi
-  fi
-  if [[ ${#rocm_missing[@]} -gt 0 ]]; then
-    warn "Paquets ROCm introuvables dans les dépôts : ${rocm_missing[*]}"
-    warn "  → sans conséquence pour le service, qui embarque son propre ROCm"
-    warn "    dans l'image ; seuls les outils hors service s'en passent."
-  fi
-  if command -v rocminfo >/dev/null 2>&1; then
-    if rocminfo 2>/dev/null | grep -q gfx1151; then
-      info "ROCm OK : gfx1151 (Strix Halo) détecté."
-    else
-      warn "rocminfo présent mais gfx1151 non détecté — rocblas/hipblaslt sans"
-      warn "  support gfx1151 ? (alternative AUR : rocm-nightly-gfx1151-bin)"
-    fi
-  fi
-  # -------------------------------------------------------------------------
 
   info "Création des dossiers..."
   local f
@@ -91,10 +48,11 @@ cmd_setup() {
     esac
   done
 
-  # --- Moteur du service : docker + image ----------------------------------
-  # Le service ne lance plus un binaire de l'hôte : il monte un conteneur
-  # décrit par le compose généré. Sans docker ou sans image, --setup va
-  # jusqu'au bout (les poids et le ini sont utiles quand même) mais le dit.
+  # --- Moteur : docker + image ---------------------------------------------
+  # Le dépôt ne lance plus aucun binaire de l'hôte : le service monte un
+  # conteneur décrit par le compose généré, et les outils passent par _dk_run.
+  # Sans docker ou sans image, --setup va jusqu'au bout (les poids et le ini
+  # sont utiles quand même) mais le dit.
   _setup_check_docker
 
   info "Sélection des modèles préchargés au démarrage..."
@@ -116,12 +74,12 @@ cmd_setup() {
   _maybe_restart_service
 }
 
-# Moteur du SERVICE : docker et l'image du dépôt. Jamais bloquant - un --setup
-# sert aussi à télécharger des poids sur une machine qui ne servira rien.
+# Moteur : docker et l'image du dépôt. Jamais bloquant - un --setup sert aussi
+# à télécharger des poids sur une machine qui ne servira rien.
 # Isolée de cmd_setup pour être testable seule : cmd_setup fait paru, hf et
 # réseau, cette fonction ne lit que l'état de docker.
 _setup_check_docker() {
-  info "Vérification du moteur du service (docker + image)..."
+  info "Vérification du moteur (docker + image)..."
   if ! command -v docker >/dev/null 2>&1; then
     warn "docker introuvable : le service tourne en CONTENEUR, il ne démarrera pas ici."
     warn "  Installer docker, activer le démon au boot, puis ./setup-llm.sh --image-build."
@@ -130,7 +88,25 @@ _setup_check_docker() {
   if ! docker info >/dev/null 2>&1; then
     warn "Le démon docker ne répond pas (non démarré, ou utilisateur hors du groupe docker)."
     warn "  Sans lui, ni --image-build ni --start ne fonctionnent."
+    warn "  Démon      : sudo systemctl enable --now docker"
+    warn "  Groupe     : sudo usermod -aG docker \$USER (puis rouvrir la session)"
     return 0
+  fi
+  # Activé AU BOOT, et pas seulement démarré : c'est docker qui relance le
+  # conteneur au redémarrage de la machine (restart: unless-stopped), il a
+  # remplacé le loginctl enable-linger de l'unité systemd. Un démon actif mais
+  # non activé donne un service qui ne revient pas après un reboot.
+  if command -v systemctl >/dev/null 2>&1; then
+    if ! systemctl is-enabled docker >/dev/null 2>&1; then
+      warn "  Le démon docker n'est pas activé au boot : le service ne reviendra pas"
+      warn "  après un redémarrage de la machine. sudo systemctl enable --now docker"
+    fi
+  fi
+  # Appartenance au groupe docker : docker info a répondu, donc l'accès marche
+  # dans CE shell ; le contrôle sert aux sessions où il passerait par sudo.
+  if ! id -nG 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+    warn "  \$USER n'est pas dans le groupe docker (l'accès actuel passe par autre chose)."
+    warn "  sudo usermod -aG docker \$USER, puis rouvrir la session."
   fi
   local ref
   if ref="$(_image_ref 2>/dev/null)"; then

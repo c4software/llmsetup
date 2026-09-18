@@ -123,9 +123,11 @@ common → svc → models → ini → compose → preload → setup → runtime 
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
   dossiers `<clé>`/`<clé>-mtp`), `cmd_preload`.
-- `setup.sh` : `cmd_setup` (dépendances, téléchargements, puis
-  `_setup_check_docker` : docker et l'image du moteur, jamais bloquant, isolée
-  de `cmd_setup` pour être testable sans réseau),
+- `setup.sh` : `cmd_setup` (dépendances - curl et `hf` seulement depuis le
+  18/09/2026, plus aucun paquet llama.cpp ni ggml -, téléchargements, puis
+  `_setup_check_docker` : docker présent, démon qui répond ET activé au boot,
+  utilisateur dans le groupe `docker`, image du moteur présente ; jamais
+  bloquant, isolée de `cmd_setup` pour être testable sans réseau),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
 - `runtime.sh` : **le moteur**, conteneurisé (dossier `runtime/`, voir plus

@@ -12,10 +12,11 @@ setup-llm.sh : llama-server en router mode natif (Strix Halo, image ROCm)
 Usage : ./setup-llm.sh [commande] [options]
 
 Commandes :
-  --setup                  Installe les dépendances (paru), vérifie docker et
-                           l'image du moteur, télécharge les GGUF manquants,
-                           sélection interactive du préchargement, génère
-                           $CONFIG_DIR/models.ini
+  --setup                  Installe les dépendances (curl, hf), vérifie docker
+                           (démon actif ET activé au boot, utilisateur dans le
+                           groupe docker) et l'image du moteur, télécharge les
+                           GGUF manquants, sélection interactive du
+                           préchargement, génère $CONFIG_DIR/models.ini
   --update [modèle]        Comme --setup mais laisse hf comparer les etags et ne
                            retélécharge que ce qui a bougé en amont
                            (modèle = dossier sous $MODELS_BASE, ex. qwen3.8-27b)

@@ -38,13 +38,14 @@ Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTO
   service ne revient pas après un redémarrage de la machine - c'est `docker`
   qui remplace le `loginctl enable-linger` d'avant.
 - `hf` (python-huggingface-hub, python-hf-xet). `gum` optionnel (menus).
-- Paquets llama.cpp : `llama-cpp`, plus les backends ggml splittés :
-  `ggml-cpu` et `ggml-vulkan` (obligatoires, installés par `--setup`).
-- Pour un `ROCm0` **hors service** (outils sur l'hôte) : `ggml-hip` et le
-  runtime ROCm (`rocm-hip-runtime`, `hipblas`, `rocblas`, `hipblaslt`). Le
-  runtime seul ne suffit pas. Contrôle : `rocminfo | grep gfx` doit donner
-  `gfx1151`. Le service, lui, embarque son propre ROCm dans l'image et ne
-  dépend d'aucun de ces paquets.
+- **Aucun paquet llama.cpp ni ggml sur l'hôte.** Depuis le 18/09/2026 le dépôt
+  n'appelle plus aucun binaire `llama-*` de l'hôte : le service et les outils
+  hors service tournent dans l'image, qui embarque son propre ROCm. `llama-cpp`,
+  `ggml-cpu`, `ggml-vulkan`, `ggml-hip` et le runtime ROCm de l'hôte
+  (`rocm-hip-runtime`, `hipblas`, `rocblas`, `hipblaslt`) ne sont plus ni
+  requis ni installés par `--setup`. Le dépôt ne désinstalle rien : sur une
+  machine qui les a déjà, les retirer à la main si la place manque
+  (`paru -Rns llama-cpp ggml-cpu ggml-vulkan ggml-hip rocm-hip-runtime hipblas rocblas hipblaslt`).
 
 ## Installation
 
@@ -132,7 +133,7 @@ d'avancer sans accord explicite.
 
 | Commande | Rôle |
 |---|---|
-| `--setup` | Installe les dépendances, vérifie docker et l'image du moteur, télécharge les GGUF manquants, sélectionne le préchargement, génère le ini |
+| `--setup` | Installe les dépendances (curl, `hf`), vérifie docker (démon actif et activé au boot, utilisateur dans le groupe `docker`) et l'image du moteur, télécharge les GGUF manquants, sélectionne le préchargement, génère le ini |
 | `--update [modèle]` | Comme `--setup`, mais laisse `hf` comparer les etags : seul ce qui a bougé est retéléchargé |
 | `--cleanup [--yes]` | Supprime les dossiers et GGUF orphelins (dry-run par défaut) |
 | `--preload` | Re-sélectionne les modèles always-on et régénère le ini |

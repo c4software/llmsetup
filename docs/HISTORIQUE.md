@@ -1407,6 +1407,37 @@ pi 0.84.3 en conteneur, appel froid puis 3 passes de 5 scénarios, bigchuck, for
 
 Lecture : Muse-Glimmer tient la boucle complète, le cache sert 97 à 99 % à chaque tour (attention pure) et le décode en boucle (34 à 41 t/s) rejoint le `--bench` (38,0) ; le raisonnement en `reasoning_strength` low ne fait échouer aucun scénario. LFM2.5-8B-A1B (thinking coupé) réussit les tool calls simples mais rate la réponse simple et la création de module (fichiers écrits, test jamais relancé jusqu'au vert), et part en boucle de tool calls sur la correction de bug : `--bench-agentic` n'a pas de limite de tours, le conteneur a été tué à la main. C'est le résultat, pas un défaut du serveur (le 2.6B, lui, reste le modèle de tool calling). La section est gardée avec ce verdict, à retirer si elle ne sert pas dans l'usage réel. Suite : elle a été retirée le 18/09/2026 après un second échec, 0/16 sur le moteur conteneurisé (cf. « lfm2.5-8b-a1b-nothink retiré (18/09/2026) »).
 
+## `--setup` allégé : plus de paquets llama.cpp ni ggml sur l'hôte (18/09/2026)
+
+Suite du retrait du fork. `--setup` installait `llama-cpp`, `ggml-cpu` et
+`ggml-vulkan` (obligatoires), et proposait en best-effort le runtime ROCm de
+l'hôte plus `ggml-hip` (`ROCM_PKGS` : `rocm-hip-runtime`, `hipblas`, `rocblas`,
+`hipblaslt`, `ggml-hip`), avec son contrôle `rocminfo | grep gfx1151`. Tout cela
+ne servait qu'un moteur sur l'hôte, qui n'existe plus : le service et les outils
+tournent dans l'image, qui embarque son propre ROCm.
+
+Ce que `--setup` vérifie désormais :
+
+- `curl` et `hf` (`python-huggingface-hub`, `python-hf-xet`), installés par
+  `paru` s'ils manquent, pour les téléchargements ;
+- docker : la commande, le démon qui répond, le démon **activé au boot**
+  (`systemctl is-enabled docker` : c'est docker qui relance le conteneur après
+  un redémarrage de la machine, il a remplacé le `loginctl enable-linger` de
+  l'unité systemd) et l'appartenance au groupe `docker` ;
+- l'image du moteur : présente, avec son étiquette ; absente, `--image-build`
+  est indiqué.
+
+Aucun de ces contrôles n'est bloquant : un `--setup` sert aussi à télécharger
+des poids sur une machine qui ne servira rien.
+
+**Le dépôt ne désinstalle rien** et n'a jamais rien désinstallé. Sur une machine
+qui porte encore ces paquets, les retirer à la main si la place manque :
+
+```
+paru -Rns llama-cpp ggml-cpu ggml-vulkan ggml-hip \
+          rocm-hip-runtime hipblas rocblas hipblaslt
+```
+
 ## Le fork Vulkan n'est plus un moteur du dépôt (18/09/2026)
 
 `lib/fork.sh` et tout son mécanisme sont retirés : les commandes
