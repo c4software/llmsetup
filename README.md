@@ -247,159 +247,128 @@ Vulkan et n'ont pas été re-tracés. Formules, garde-fous et limites :
 ARCHITECTURE.md.
 Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 
-## Parc au 17/09/2026
+## Parc au 18/09/2026, moteur conteneurisé ROCm0
 
-Une ligne par section servie du `models.ini`. Campagne du 15/09/2026 : tout
-modèle qui dispose d'un drafter le sert à un slot (DSpark sur DeepSeek et
-LFM2.5, DFlash z-lab sur Coder-Next, tête MTP embarquée sur Ornith et sur le 9b
-via la tête MTP tierce du GGUF fusionné protoLabsAI). Des trois modèles qui
-avaient 4 slots, seul Ornith 35B garde ce réglage : sa section de concurrence,
-renommée `ornith-1.5-35b-a3b-parallel` le 15/09/2026 pour que le nom dise ce
-qu'elle sert (concurrence réelle observée, 2 à 3 slots au journal du service),
-reste le défaut agentic, avec `ornith-1.5-35b-a3b-mtp` en variante solo. Le
-dossier de GGUF, lui, reste `ornith-1.5-35b-a3b/`. `lfm2.5-2.6b` et le 9b passent
-au drafter à un slot ; leurs variantes `-parallel`, créées le même jour, ont été
-retirées le soir du 15/09/2026 : aucune concurrence n'a jamais été observée sur
-ces deux modèles, et pas de parallel si perte de perf. Le drafter rend +59 % de
-décode au LFM2.5 et +29 % au 9b contre l'ancien réglage re-mesuré le même jour, contre 20 %
-et 5,8 % de prefill (le drafter décode aussi le prompt) ; sur les prompts de
-code des tests isolés les gains sont bien plus forts (x1,8 et x2,1). Le créneau
-du 9b a changé de modèle le soir du 15/09/2026 : `qwen3.5-9b` est remplacée par
-`ornith-1.5-9b-mtp-nothink` (Ornith-1.5-9B Q8_0 avec tête MTP tierce, +11 % de
-prefill et +20 % de décode contre elle, et très au-dessus sur les benchmarks
-agentic de l'éditeur), cf. `docs/HISTORIQUE.md`. La section
-thinking du 27B a été retirée le 13/09/2026, `laguna-s-2.1` le 15/09 et
-`gpt-oss` le 16/09/2026, ces deux géants n'étant pas utiles dans l'usage réel
-(cf. `docs/HISTORIQUE.md`). Deux sections sont ajoutées le 16/09/2026, toutes
-deux avec drafter externe à un slot : `lfm2.5-8b-a1b-nothink` (grand frère du
-2.6B, DSpark officiel) et `muse-glimmer-30b-dflash` (DFlash 2 z-lab, concurrent
-direct du 27B), cf. `docs/HISTORIQUE.md`. La première est retirée le 18/09/2026,
-en échec au `--bench-agentic` sur les deux moteurs (`lfm2.5-2.6b` couvre le
-créneau et passe 16/16), cf. `docs/HISTORIQUE.md`. Le 17/09/2026,
-`qwen3.8-27b-dflash-nothink` passe en `cache-type-v f16` (302 / 32,2 / 0,625
-contre 305 / 30,3 / 0,595 en q8_0, les deux mesurés le même soir, à froid, sur
-le même moteur : +6 % de décode, prefill égal) et ses chiffres de référence
-sont ceux de cette mesure ; le même jour, les cinq sections nothink du parc
-déclarent `reasoning = off`, option native de llama-server, à la place de
-`chat-template-kwargs` `enable_thinking`, obsolète, cf. `docs/HISTORIQUE.md`.
-Réglages exacts dans `lib/models.sh` ; toutes les mesures sont celles du fork
-strix-0007bc6 (Vulkan0, `--bench` 3 passes, les 12, 13, 15, 16 et 17/09/2026, prompt
-générique à long contexte). Acceptance vide = pas de spéculation. La dernière
-colonne situe le décode contre la dernière mesure du paquet Arch (série
-`bNNNNN`, 21/08 au 05/09/2026) : deux séries distinctes, un ordre de grandeur,
-pas une comparaison à la décimale.
+Une ligne par section servie du `models.ini`, dans l'ordre d'émission. Toutes
+les mesures viennent du `--bench` du dépôt, 3 passes, le 18/09/2026, sur la
+série `strix-8c1c282+r7dda3ac` (moteur halo-box/strix-llama.cpp `8c1c282`,
+runtime ROCr retained-PM4 `7dda3ac`), device `ROCm0`, mode EC `performance`.
+Réglages communs à tout le parc, posés une fois dans les flags globaux :
+`fit off`, `load-mode none`, cache K et V `f16`. Il n'y a plus de colonne
+Device : l'image n'expose qu'un device, et plus aucune section ne déclare le
+sien.
 
-⚠ La colonne **Device** de cette table dit `Vulkan0` partout : c'est le device
-du moteur de l'époque (fork Vulkan). Elle est gardée pour que la série reste
-lisible, mais elle n'a plus de sens pour le service, qui tourne depuis le
-18/09/2026 sur une image ROCm à device unique. Les chiffres du nouveau moteur
-sont dans la table suivante ; les réglages servis ont aussi changé (cache K et V
-`f16` globaux, `fit off`, `load-mode none`, et pour Flash-Next `batch` 16384,
-`lazy-mode on-direct`, `draft-mtp,ngram-mod` n-max 3), cf. `lib/models.sh`.
+Lecture des colonnes : *micro-lot* = `ubatch-size` servi (le défaut du moteur
+est 2048, une seule section en sort) ; *acceptance* vide = pas de spéculation ;
+*cache long* = part du prompt restaurée au tour suivant sur un prompt de 20 000
+tokens, la seule mesure de cache qui ait un sens ici (`--bench-cache` travaille
+sur 1 400 tokens, cf. les règles apprises plus bas) ; *agentic* = score du
+`--bench-agentic` du 18/09/2026, `n/j` = non joué ; la dernière colonne compare
+au dernier `--bench` du même modèle sur l'ancien moteur (fork strix-0007bc6,
+Vulkan0), deux séries distinctes, un ordre de grandeur, pas une comparaison à
+la décimale.
 
-| Modèle (section) | Quant et taille | Device | Réglage spéculatif | Prefill t/s | Décode t/s | Acceptance | Écart décode contre paquet |
-|---|---|---|---|---|---|---|---|
-| lfm2.5-2.6b | Q8_0, 2,7 Go (+ drafter DSpark 0,36 Go) | Vulkan0 | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 (KV f16) | 2875 | 108,8 | 0,50 | +61 % (paquet sans drafter, 67,7 t/s à 4 slots) |
-| ornith-1.5-9b-mtp-nothink | Q8_0, 9,79 Go (GGUF fusionné tiers protoLabsAI, tête MTP nextn distillée) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 3, parallel 1 | 828 | 39,5 | 0,56 | jamais mesuré au paquet (+20 % de décode contre `qwen3.5-9b`, remplacée le même jour) |
-| ornith-1.5-35b-a3b-parallel | Q4_K_M, 22 Go | Vulkan0 | aucun, parallel 4 (cache-type-v q8_0) | 1129 | 73,3 | — | +3,7 % |
-| ornith-1.5-35b-a3b-mtp | Q4_K_M, 22 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 1073 | 76,2 | 0,55 | non mesuré au paquet |
-| qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (même GGUF) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, parallel 1 (cache-type-v f16 depuis le 17/09/2026) | 302 | 32,2 | 0,625 | +9,2 % (paquet en MTP n-max 6) |
-| muse-glimmer-30b-dflash | UD-Q4_K_XL, 15,9 Go (+ drafter DFlash 2 3,0 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dflash`, size-m 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, n-max 7, `reasoning_strength` low et reasoning-budget 4096, parallel 1 (cache-type-v q8_0, swa-full) | 266 | 38,0 | 0,635 | jamais mesuré au paquet (+20 % de décode et prefill équivalent contre `qwen3.8-27b-dflash-nothink`, contrôle à froid des deux le 17/09/2026 sur le même fork : 301 / 38,5 contre 302 / 32,2) |
-| qwen3.8-flash-next-mtp-nothink | UD-IQ4_XS, 94 Go | Vulkan0 | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, sidecar MTP Q8_0 renommé, n-max 4, `ngram-on-disk`, parallel 1 | 383 | 50,0 | 0,87 | +93 % (paquet en n-gram seul, le MTP n'y existe pas) |
-| qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | Vulkan0 | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 727 | 52,2 | 0,515 | +19 % (paquet en n-gram seul) |
-| deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | Vulkan0 | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), KV f16, parallel 1 (parallel 2 essayé et retiré le 15/09 : x1,16 de tâches au bench agentic à 2 boucles, latence doublée) | 196 | 28,8 | 0,69 | +134 % (paquet en n-gram seul, 19,9 sur le fork en n-gram seul) |
+| Modèle (section) | Quant et taille | Réglage spéculatif | Micro-lot | Prefill t/s | Décode t/s | Acceptance | Cache long | Agentic | Contre le fork Vulkan0 (prefill / décode) |
+|---|---|---|---|---|---|---|---|---|---|
+| ornith-1.5-9b-mtp-nothink | Q8_0, 9,79 Go (GGUF fusionné tiers protoLabsAI, tête MTP nextn distillée) | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 3, parallel 1 | 2048 | 1134 | 41,7 | 0,565 | 97 à 98 % | 14/16 | 828 / 39,5, soit +37 % et +5,6 % |
+| ornith-1.5-35b-a3b-parallel | Q4_K_M, 21,7 Go | aucun, parallel 4 | 2048 | 1378 | 72,4 | | 97 % | n/j | 1129 / 73,3, soit +22 % et -1,2 % |
+| ornith-1.5-35b-a3b-mtp | Q4_K_M, 21,7 Go (même GGUF) | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 2048 | 1306 | 75,9 | 0,615 | 97 % | 16/16 | 1073 / 76,2, soit +22 % et -0,4 % |
+| lfm2.5-2.6b | Q8_0, 2,87 Go (+ drafter DSpark 0,36 Go) | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 | 2048 | 3749 | 120,3 | 0,505 | 97 % | 16/16 | 2875 / 108,8, soit +30 % et +10,6 % |
+| qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 2048 | 1022 | 56,0 | 0,515 | 97 % | 16/16 | 727 / 52,2, soit +41 % et +7,3 % |
+| qwen3.8-27b-dflash-nothink | UD-Q4_K_XL, 17 Go (+ drafter DFlash 2 z-lab 2,0 Go) | spec-type `ngram-map-k,draft-dflash`, size-m 47, min-hits 2, n-max 7, parallel 1 | 2048 | 270 | 37,1 | 0,675 | 97 à 98 % | 16/16 | 302 / 32,2, soit -11 % et +15 % |
+| muse-glimmer-30b-dflash | UD-Q4_K_XL, 15,9 Go (+ drafter DFlash 2 3,0 Go) | spec-type `ngram-map-k,draft-dflash`, size-m 7, min-hits 2, n-max 7, `reasoning_strength` low et reasoning-budget 4096, parallel 1 | 2048 | 346 | 31,6 | 0,625 | 100 % | n/j | 277 / 40,5, soit +25 % et -22 % (décode très bruité, cf. `lib/models.sh`) |
+| deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), parallel 1 | 2048 | 131 | 26,3 | 0,685 | 100 % | n/j | 196 / 28,8, soit -33 % et -8,7 % |
+| qwen3.8-flash-next-mtp-nothink | AP-Q4_K_XL, 94,2 Gio (+ tête MTP shared Q8_0 2,8 Go et mmproj BF16) | spec-type `draft-mtp,ngram-mod`, tête MTP shared sans renommage, n-max 3, `lazy-mode on-direct`, ctx 262144, batch 16384, parallel 1 | 4096 | 835 | 46,7 | 0,455 | 79 % | 16/16 | 364 / 52,4, soit +129 % et -11 % (même quant des deux côtés) |
 
-### Moteur conteneurisé ROCm0 (campagne du 17 au 18/09/2026)
+Ce que la bascule a changé au bilan : le prefill monte sur sept sections sur
+neuf (+22 à +129 %, Flash-Next en tête avec son batch de 16384) et recule sur
+deux, `deepseek-v4-flash` (-33 %) et `qwen3.8-27b-dflash-nothink` (-11 %) ; le
+décode, lui, bouge peu (-1 à +11 %), sauf `muse-glimmer-30b-dflash` (-22 %,
+série bien trop bruitée pour conclure, cf. `lib/models.sh`) et Flash-Next
+(-11 %, mais son réglage spéculatif a changé en même temps que le moteur). Le
+27B échange 11 % de prefill contre 15 % de décode : ce compromis n'est pas
+tranché, il demande un `--bench-agentic` comparé, pas un `--bench`.
 
-La table ci-dessus est celle du **fork Vulkan**, moteur du service jusqu'au
-18/09/2026 : elle est conservée telle quelle tant que le dépôt n'a pas rejoué
-ses `--bench` sur le nouveau moteur. Les chiffres ci-dessous sont une **autre
-série** : ils viennent d'un `llama-server` lancé **hors dépôt** par un script de
-test, sur l'image ROCm de `runtime/` (série `strix-8c1c282+r7dda3ac` : moteur
-halo-box/strix-llama.cpp `8c1c282`, runtime pwilkin/rocm-systems `7dda3ac`,
-image construite à la main depuis la PR kyuz0/amd-strix-halo-toolboxes#133).
-Ils NE viennent PAS de `--bench` et ne sont pas dans `logs/bench.log` ni dans
-`docs/perfs.tsv`, dont le format n'a que deux séries (paquet et fork) : à
-rejouer par le dépôt après la bascule.
+Composition du parc, pour mémoire : tout modèle qui dispose d'un drafter le
+sert à un slot, et `parallel 4` ne subsiste qu'à l'endroit où la concurrence
+est réelle (`ornith-1.5-35b-a3b-parallel`, 2 à 3 slots au journal du service,
+144 à 146 t/s agrégés à 4 requêtes au `--bench-parallel` du 18/09/2026). Ont
+quitté le parc : la section thinking du 27B (13/09/2026), `laguna-s-2.1` et
+`qwen3.5-9b`, remplacée par `ornith-1.5-9b-mtp-nothink` (15/09/2026),
+`gpt-oss` (16/09/2026) et `lfm2.5-8b-a1b-nothink` (18/09/2026, échec de la
+boucle agentic sur les deux moteurs). Est arrivée le 16/09/2026
+`muse-glimmer-30b-dflash`, concurrent direct du 27B. Les cinq sections nothink
+déclarent `reasoning = off`, option native de llama-server, depuis le
+17/09/2026. Justifications et mesures complètes : commentaires de
+`lib/models.sh` et `docs/HISTORIQUE.md`.
 
-Conditions communes : device `ROCm0`, `fit off`, `load-mode none`, cache K et V
-`f16`, prompt court (environ 1 400 tokens, 1 000 générés), médianes de 3 passes,
-justesse vérifiée par comptage de lignes jusqu'à 40 à 51k tokens.
+### Avant : les deux moteurs précédents
 
-| Modèle (section) | Prefill t/s | Décode t/s | Contre le fork Vulkan (prefill / décode) | Prefill à 2k / 8k / 25k / 51k | Justesse |
-|---|---|---|---|---|---|
-| lfm2.5-2.6b | 4187 | 138,5 | 2875 / 108,8 | 4399 / 4181 / 3695 / 2954 | texte cohérent, 3 comptages justes sur 4 (251 au lieu de 260 : probable limite du modèle, à confirmer) |
-| ornith-1.5-9b-mtp-nothink | 1468 | 49,8 | 828 / 39,5 | 1355 / 1460 / 1294 / 1080 | juste |
-| ornith-1.5-35b-a3b-mtp | 1312 | 76,9 | 1073 / 76,2 | 1227 / 1201 / 1041 / 862 | juste jusqu'à 51k. Chiffres du dépôt (`--bench`, 18/09) ; le script hors dépôt de la nuit donnait 1673 / 82,4, écart non expliqué. ctx 1048576 plafonné par le moteur à 262144 |
-| qwen3.8-27b-dflash-nothink | 229 | 40,7 | 302 / 32,2 | 244 / 239 / 225 / 202 | juste (décode +26 %, prefill -24 % : compromis à trancher) |
-| muse-glimmer-30b-dflash | 318 | 36,4 | 266 / 38,0 | 328 / 323 / 293 / 259 | juste |
-| qwen3.8-flash-next-mtp-nothink | 866 | 48,1 | 364 / 52,4 | 938 / 990 / 984 / 966 | juste jusqu'à 51k. Micro-lot 4096 depuis le 18/09 (cache de prompt, cf. `lib/models.sh`) : environ 8 % de prefill en moins, 79 % du contexte restauré au tour suivant à 20k au lieu de 18 % |
-| qwen3-coder-next | 1352 | 65,1 | 727 / 52,2 | 1417 / 1455 / 1245 / 1006 | 4 comptages justes, le charabia « LAMPAMPAMP » est guéri |
-| deepseek-v4-flash | 162 | 29,3 | 196 / 28,8 | 173 / 161 / 136 / 111 | 4 comptages justes, acceptance 0,83 (0,69 sur le fork), le charabia « Nous dev dev dev » est guéri ; ne laisse que 9 Gio, à servir seul |
+Le parc a connu trois moteurs, donc trois séries de mesures, qui ne se
+comparent pas à la décimale : le paquet Arch `llama-cpp` (`bNNNNN`, 21/08 au
+05/09/2026), le fork Vulkan `strix-llama.cpp` installé sur l'hôte
+(`strix-0007bc6`, Vulkan0, 12 au 17/09/2026) et l'image ROCm du 18/09/2026. La
+table du fork, ligne par ligne, avec les écarts contre le paquet, n'est plus
+reprise ici : elle survit dans la colonne « contre le fork Vulkan0 » ci-dessus
+et, complète, dans `docs/HISTORIQUE.md` (« Résultats mesurés », « Paquet Arch
+contre fork : mesures » et « Passage au fork »). Le fork apportait le prefill
+sur tout le parc contre le paquet, les drafters externes (DFlash, DSpark), le
+graphe MTP `qwen4exp` et `ngram-on-disk` ; l'image garde cette dorsale, ces
+clés restent servies, et `ngram-on-disk` y est devenu l'alias déprécié de
+`lazy-mode on`. Les essais écartés après mesure (speculative prefill, lossy et
+cache de prompt à 0 % ; draft adaptatif, 2 % sous le draft fixe ; drafter
+DFlash de gpt-oss, refusé au chargement, d'où la
+[PR #62](https://github.com/halo-box/strix-llama.cpp/pull/62), qui vaut pour
+les futurs drafters à biais) et la contrepartie du fork sur le découpage des
+mat-vec batchés ([issue #50](https://github.com/halo-box/strix-llama.cpp/issues/50))
+sont racontés au même endroit.
 
-`ornith-1.5-35b-a3b-parallel` a été qualifiée le 18/09/2026 : `--bench`
-1375,7 / 71,7 (contre 1129 / 73,3 sur le fork), `--bench-parallel` à 4 requêtes
-144,1 t/s agrégés (x2,03), `--bench-cache` 62 / 0 / 64 %, chargement 2,5 s,
-76 Gio libres, comptages justes jusqu'à 51k. L'A/B de cache du même jour a
-tranché : en `f16` elle donne 1379,2 / 72,4 et 145,9 t/s agrégés contre
-1375,7 / 71,7 et 144,1 en `q8_0`, pour 72 Gio libres contre 71. La surcharge
-`cache-type-v = q8_0` est donc **retirée** le 18/09/2026 : c'était la dernière
-valeur de cache quantifiée du parc. Le même jour, `swa-full` est retiré des
-**deux** sections Ornith 35B A3B, le journal du moteur le refusant et le
-désactivant à chaque chargement (« swa_full is not supported by this model, it
-will be disabled ») : la clé était inerte. `ctx-checkpoints = 128` reste des
-deux côtés, c'est lui qui rend les 62 % du tour suivant sur cette arch GDN.
-`lfm2.5-8b-a1b-nothink`, l'autre section que la campagne n'avait pas jouée,
-n'a pas été qualifiée : elle est retirée du parc le 18/09/2026 (0/16 au
-`--bench-agentic`, cf. `docs/HISTORIQUE.md`).
-
-Trois faits de la campagne, à ne pas perdre :
+### Règles apprises sur ce moteur
 
 - **Les points de reprise du cache de prompt sont pris aux frontières de
-  micro-lot.** Un `ubatch-size` géant annule donc le cache : sur Flash-Next à
-  `ubatch` 16384, un tour suivant à 20k tokens ne restaurait que 18 % du
-  contexte, et `--bench-cache` (prompt de 1 399 tokens, un seul micro-lot)
-  affichait 0 %. À `ubatch` 4096 : 79 % restaurés, pour 8 % de prefill en moins.
-  `--bench-cache` reste aveugle sur cette section, son prompt étant trop court.
-- **`batch-size` / `ubatch-size` 16384 est une erreur de segmentation** (code
-  139) dès un prompt de 8k tokens sur tous les modèles SAUF Flash-Next, et coûte
-  environ 33 Gio de tampons. `generate_models_ini` refuse désormais toute valeur
-  au-delà de 4096 hors liste blanche.
+  micro-lot.** Un `ubatch-size` géant annule donc le cache de prompt : sur
+  Flash-Next à `ubatch` 16384, un tour suivant à 20k tokens ne restaurait que
+  18 % du contexte, contre 79 % à 4096, pour 8 % de prefill en moins. C'est
+  aussi pourquoi `--bench-cache` est **aveugle sur cette section** : son prompt
+  de 1 399 tokens tient dans un seul micro-lot, aucun point de reprise n'est
+  pris, l'outil affiche 0 % et ne mesure rien. Sur cette section, la seule
+  mesure valable est un prompt long.
+- **`batch-size` / `ubatch-size` 16384 est une erreur de segmentation**
+  (code 139) dès un prompt de 8k tokens sur tous les modèles SAUF Flash-Next,
+  et coûte environ 33 Gio de tampons. `generate_models_ini` refuse toute valeur
+  au-delà de 4096 hors liste blanche (`INI_BIG_BATCH_OK`), y compris quand elle
+  vient d'une surcharge `--spec-ab`. Monter le micro-lot ailleurs a été mesuré
+  et écarté : sur le 27B, `ubatch` 4096 perd sur les trois axes à la fois
+  (cache long 90 % contre 97, prefill -15 %, décode -20 %).
+- **`lazy-mode on-direct` est obligatoire avec `load-mode none`** sur
+  Flash-Next : c'est lui qui laisse sur disque la table n-gram
+  `per_layer_token_embd` de 28,8 Go, que `load-mode none` chargerait sinon
+  entièrement en mémoire.
 - **`--load-mode mmap` est disqualifié** : DeepSeek met plus de 13 minutes à
   charger. `none` partout.
-- **`GGML_CUDA_ENABLE_UNIFIED_MEMORY` est interdit** sur ce runtime (sortie
-  corrompue) : il reste exporté par les outils de l'hôte, jamais par le compose
-  ni par `_dk_run`.
+- **DeepSeek est servi seul** : 9 Gio libres une fois chargé, 206 s de
+  chargement. Aucun autre modèle ne tient à côté, la garde mémoire des `--bench`
+  évince le reste avant de le charger.
+- **`GGML_CUDA_ENABLE_UNIFIED_MEMORY` est interdit** sur ce runtime : chaque
+  allocation passerait par `hipMallocManaged` et la sortie se corrompt. La
+  variable n'est plus exportée nulle part dans le dépôt, et un test de
+  `tests/sh-unit.sh` interdit sa présence dans le compose généré.
+- **`seccomp=unconfined` est exigé par ROCr**, dont les ioctl du KFD sortent du
+  profil seccomp par défaut de docker. C'est le seul assouplissement du
+  conteneur, et il est compensé : `cap_drop: [ALL]`, `no-new-privileges`, aucun
+  `privileged`, aucun accès à `docker.sock`, `~/models` monté en lecture seule
+  et un seul volume inscriptible hors du parc.
 
-![Prefill paquet contre fork](docs/graphs/prefill.svg)
+![Prefill : fork Vulkan0 contre moteur conteneurisé ROCm0](docs/graphs/prefill.svg)
 
-![Décode paquet contre fork](docs/graphs/decode.svg)
+![Décode : fork Vulkan0 contre moteur conteneurisé ROCm0](docs/graphs/decode.svg)
 
-![Écart du fork en % du paquet](docs/graphs/ecarts.svg)
+![Écart du moteur conteneurisé, en % du fork Vulkan0](docs/graphs/ecarts.svg)
 
 Ces trois figures sont générées par `python3 py/perf_graphs.py` depuis
-`docs/perfs.tsv` (une ligne par section servie) : à régénérer, avec le TSV mis
-à jour, dès que la table ci-dessus change.
-
-Ce que le fork apporte : le prefill sur tout le parc (+16 à +110 %), le décode
-partout où la spéculation change de régime (DeepSeek V4 +135 % avec le drafter DSpark, Flash-Next dont
-le MTP n'existe pas sur le paquet +93 %, le 27B via DFlash 2), et
-`ngram-on-disk` (Flash-Next chargé en 72 Go au lieu d'environ 100, à perfs
-égales). Écartés après mesure : le speculative prefill (lossy, cache de prompt à
-0 %), le draft adaptatif (2 % sous le draft fixe), le DFlash de Laguna S 2.1
-(drafter refusé ; le modèle lui-même a quitté le parc le 15/09/2026, non utile
-dans l'usage réel, cf. `docs/HISTORIQUE.md`) et celui de gpt-oss (drafter
-z-lab converti sans erreur mais refusé au chargement, ses biais d'attention
-n'étant pas lus par le loader DFlash :
-[issue #61](https://github.com/halo-box/strix-llama.cpp/issues/61) ; le patch
-de 25 lignes, mesuré le 15/09/2026 sur un build à part, rend +6 % et +17 % en
-ngram 7 + DFlash 3 sans régression sur les drafters sans biais, et reste en
-[PR #62](https://github.com/halo-box/strix-llama.cpp/pull/62) ; le modèle
-lui-même a quitté le parc le 16/09/2026, non utile dans l'usage réel, la PR
-vaut pour les autres drafters à biais).
-Contrepartie, le découpage des mat-vec batchés (-7,4 % au batch de 7),
-contournée par modèle et signalée en amont :
-[issue #50](https://github.com/halo-box/strix-llama.cpp/issues/50).
+`docs/perfs.tsv` (une ligne par section servie, deux séries : fork Vulkan0 et
+moteur conteneurisé ROCm0) : à régénérer, avec le TSV mis à jour, dès que la
+table ci-dessus change.
 
 ## Fichiers de configuration
 
@@ -500,8 +469,9 @@ Non, il est régénéré à chaque `--setup`, `--preload` ou `--spec-*`.
 Par choix mesuré, pas par interdit. Cette FAQ a répondu jusqu'au 15/09/2026
 « contrainte llama.cpp : `-np` supérieur à 1 et `--mmproj` ne sont pas
 supportés avec MTP » ; cette phrase vient d'une doc unsloth de juin/juillet
-2026 et n'existe pas dans le moteur servi (fork strix-llama.cpp, commit
-`0007bc6`, vérifié le 15/09/2026) : le serveur y drafte tous les slots en un
+2026 et n'existe pas dans la dorsale `strix-llama.cpp` que sert l'image
+(vérifié le 15/09/2026 sur le commit `0007bc6`, moteur du service à cette
+date) : le serveur y drafte tous les slots en un
 appel, `draft-dflash` et `draft-dspark` sont explicitement multi-séquences,
 `draft-mtp` est vectorisé par séquence. Seul interdit qui demeure : `--mmproj`
 avec un drafter.
@@ -513,7 +483,8 @@ Ce que la mesure du 15/09/2026 a établi (`--bench-parallel`,
   à `parallel` 1, 2 ou 4 ; seul le contexte par slot baisse (`ctx-size` est un
   pool partagé) ;
 - sous charge, l'agrégé suit le batch de vérification `parallel x (n-max + 1)`
-  contre le seuil de 8 colonnes de ggml-vulkan : à 8 ou moins, gain (DeepSeek
+  contre le seuil de 8 colonnes du noyau mat-vec (mesuré le 15/09/2026 sur
+  ggml-vulkan, non rejoué sur le moteur conteneurisé) : à 8 ou moins, gain (DeepSeek
   DSpark np 2 x1,22 en salves ; Ornith sans spéculation np 4 x1,93) ; au-delà,
   tout retombe sous x1 (27B DFlash np 2 x0,89, Coder-Next np 2 et 4 x0,86 et
   x0,92) ;
