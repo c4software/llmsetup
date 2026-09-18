@@ -46,6 +46,9 @@ DEFAULT_DEVICE="ROCm0"
 # applique son défaut (2048).
 # Ajouter une section ici demande une mesure : un prompt de 8k tokens au moins,
 # et la sortie relue.
+# Flash-Next reste dans INI_BIG_BATCH_OK bien que son ubatch-size soit redescendu
+# à 4096 le 18/09/2026 (arbitrage du cache de prompt, cf. son bloc) : c'est son
+# batch-size, resté à 16384, qui a besoin de l'exemption.
 # =============================================================================
 INI_BATCH_MAX=4096
 INI_BIG_BATCH_OK=(qwen3.8-flash-next-mtp-nothink)
@@ -1978,11 +1981,12 @@ download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 # CONF DU MOTEUR CONTENEURISÉ, retenue le 18/09/2026 et servie telle quelle.
 #   Ce qui change par rapport au fork, clé par clé :
 #     ctx-size 262144 (était 131072) : le contexte natif entier, à un slot ;
-#     batch-size et ubatch-size 16384 : SEULE section du parc autorisée à
-#       dépasser 4096 (INI_BIG_BATCH_OK, cf. en-tête). Partout ailleurs cette
-#       valeur part en erreur de segmentation (code 139) dès 8k tokens ; ici
-#       elle tient, et c'est elle qui donne le prefill ci-dessous. Coût :
-#       environ 33 Gio de tampons, à compter dans la marge mémoire ;
+#     batch-size 16384 : SEULE section du parc autorisée à dépasser 4096
+#       (INI_BIG_BATCH_OK, cf. en-tête). Partout ailleurs cette valeur part en
+#       erreur de segmentation (code 139) dès 8k tokens ; ici elle tient, et
+#       c'est elle qui donne le prefill ci-dessous ;
+#     ubatch-size 4096 depuis le 18/09/2026 (était 16384), cf. l'arbitrage
+#       « micro-lot et cache de prompt » ci-dessous ;
 #     lazy-mode on-direct à la place de ngram-on-disk (cf. ci-dessus) ;
 #     spec-type draft-mtp,ngram-mod (était ngram-map-k,draft-mtp) et
 #       spec-draft-n-max 3 (était 4) : +10 % de décode contre l'ancien
@@ -2009,12 +2013,37 @@ download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 #   Justesse vérifiée par comptage de lignes jusqu'à 51k tokens. Mémoire :
 #   28 Gio restants une fois chargé.
 #   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
+# ARBITRAGE MICRO-LOT ET CACHE DE PROMPT, mesuré le 18/09/2026 (image
+#   llm-rocm-strix, strix-8c1c282 + runtime r7dda3ac, ROCm0, batch-size 16384
+#   inchangé, surcharges par SPEC_AB_OVERRIDES).
+#   Le moteur ne prend ses points de reprise (ctx-checkpoints) qu'aux
+#   FRONTIÈRES DE MICRO-LOT : sur une architecture à état récurrent, la
+#   restauration repart du dernier point, donc le tour suivant repaie au plus
+#   un micro-lot. Avec ub 16384, le prompt de --bench-cache (1 399 tokens) tient
+#   dans un seul micro-lot : aucun point de reprise, 0 % de cache, ce qui
+#   expliquait la régression contre les 62 / 0 / 64 du fork Vulkan.
+#   Mesures, tour suivant sur un prompt de 20 030 tokens (cache_prompt true,
+#   restaurés / total) et prefill à froid 2k / 8k / 25k :
+#     ub  1024 : cache 95 %, prefill 748 / 789 / 778 t/s, 19 Gio libres
+#     ub  2048 : cache 90 %, prefill 840 / 927 / 916 t/s, 19 Gio libres
+#     ub  4096 : cache 79 %, prefill 932 / 994 / 986 t/s, 18 Gio libres
+#     ub  8192 : cache 59 %, prefill 900 / 1084 / 1064 t/s, 14 Gio libres
+#     ub 16384 : cache 18 %, prefill 926 / 1074 / 1082 t/s, 12 Gio libres
+#   RETENU : ub 4096, le plus grand micro-lot qui restaure au moins 80 % d'un
+#   tour suivant à 20k tokens. Coût : environ 8 % de prefill à 8k et 25k
+#   (994 et 986 contre 1 074 et 1 082 t/s), contre 4 fois moins de tokens
+#   repayés à chaque tour d'une boucle agentic et 6 Gio de tampons rendus
+#   (18 contre 12 Gio libres). ub 8192 a été écarté : 59 % seulement.
+#   ⚠ --bench-cache reste à 0 % sur cette section avec ub 4096 : son prompt de
+#   1 399 tokens tient toujours dans un seul micro-lot. L'outil ne mesure donc
+#   PAS le cache de ce modèle ; il faut un prompt long (voir les chiffres
+#   ci-dessus). Sous ub 1024, --bench-cache remonte à 26 / 28 / 28 %.
 llama_model qwen3.8-flash-next-mtp-nothink "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 262144
 cache-ram        = 8192
 batch-size       = 16384
-ubatch-size      = 16384
+ubatch-size      = 4096
 temp             = 0.7
 top-k            = 20
 top-p            = 0.80

@@ -1134,12 +1134,22 @@ else
 fi
 
 # batch 16384 : la seule section autorisée (INI_BIG_BATCH_OK) et personne d'autre.
+# Depuis le 18/09/2026 seul batch-size vaut 16384 sur Flash-Next ; son
+# ubatch-size est redescendu à 4096 pour rendre le cache de prompt en long
+# contexte (cf. lib/models.sh).
 nb_batch="$(grep -c '^u\?batch-size  *= 16384$' <<<"$INI")"
 sect_batch="$(awk '/^\[/ { s=$0 } /^u?batch-size[ ]*= 16384$/ { print s }' <<<"$INI" | sort -u | tr -d '[]' | tr '\n' ' ')"
-if [[ "$nb_batch" -eq 2 && "$sect_batch" == "qwen3.8-flash-next-mtp-nothink " ]]; then
-  echo "[OK]   ini : batch et ubatch 16384 sur la seule section Flash-Next"
+if [[ "$nb_batch" -eq 1 && "$sect_batch" == "qwen3.8-flash-next-mtp-nothink " ]]; then
+  echo "[OK]   ini : batch 16384 sur la seule section Flash-Next"
 else
   echo "[FAIL] ini : $nb_batch lignes à 16384, section(s) : '$sect_batch'"; rc=1
+fi
+
+# ubatch 4096 sur Flash-Next (arbitrage cache de prompt du 18/09/2026).
+if [[ "$(awk '/^\[/ { s=$0 } /^ubatch-size[ ]*= 4096$/ { print s }' <<<"$INI" | tr -d '[]')" == "qwen3.8-flash-next-mtp-nothink" ]]; then
+  echo "[OK]   ini : ubatch 4096 sur Flash-Next"
+else
+  echo "[FAIL] ini : ubatch 4096 attendu sur la seule section Flash-Next"; rc=1
 fi
 
 # Garde-fou : une section non autorisée qui poserait 16384 fait échouer la
