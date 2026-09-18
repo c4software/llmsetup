@@ -1,5 +1,5 @@
 # lib/bench/bench-cache.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 # Sorti de bench.sh (trop gros). Réutilise _bench_select_one de bench.sh.
 
 # =============================================================================
@@ -30,7 +30,7 @@ cmd_bench_cache() {
   local preset="${1:-}"
   command -v curl >/dev/null || error "curl introuvable"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL - ./setup-llm.sh --start"
   if [[ -z "$preset" ]]; then
     _bench_select_one
     [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné — bench-cache annulé."; return; }

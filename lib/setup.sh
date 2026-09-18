@@ -1,72 +1,32 @@
 # lib/setup.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # setup
 # =============================================================================
 
-# Runtime ROCm + backend ggml-hip — installés en best-effort par --setup
-# (jamais bloquant). ggml-hip est le backend HIP splitté d'extra/ggml : sans
-# lui, ROCm0 n'est pas exposé même runtime installé.
-# gfx1151 requis côté rocblas/hipblaslt : contrôler avec `rocminfo | grep gfx`.
-ROCM_PKGS=(rocm-hip-runtime hipblas rocblas hipblaslt ggml-hip)
-
+# Dépendances de l'hôte, réduites au strict nécessaire depuis le 18/09/2026.
+#
+# Ce qui est parti ce jour-là, avec le fork : llama-cpp et les backends ggml
+# splittés (ggml-cpu, ggml-vulkan, ggml-hip), et le runtime ROCm de l'hôte
+# (rocm-hip-runtime, hipblas, rocblas, hipblaslt) qu'installait ROCM_PKGS en
+# best-effort. Plus aucun binaire llama-* ni aucun backend ggml n'est appelé
+# sur l'hôte : le service ET les outils hors service tournent dans l'image, qui
+# embarque son propre ROCm. Les paquets déjà installés sur une machine ne sont
+# PAS désinstallés par le dépôt (--setup n'a jamais rien désinstallé) : les
+# retirer à la main si la place manque.
+#
+# Reste donc : curl, hf (python-huggingface-hub + python-hf-xet) pour les
+# téléchargements, docker et son démon pour le moteur.
 cmd_setup() {
   info "Vérification des dépendances..."
-  # ggml-cpu + ggml-vulkan : backends splittés d'extra/ggml (optdeps, donc
-  # à imposer — sans ggml-vulkan plus de Vulkan0, sans ggml-cpu plus d'ops CPU)
-  PACMAN_PKGS=(curl llama-cpp ggml-cpu ggml-vulkan python-huggingface-hub python-hf-xet)
+  PACMAN_PKGS=(curl python-huggingface-hub python-hf-xet)
   MISSING=()
   for pkg in "${PACMAN_PKGS[@]}"; do
     paru -Qi "$pkg" &>/dev/null || MISSING+=("$pkg")
   done
   [[ ${#MISSING[@]} -gt 0 ]] && paru -S --noconfirm "${MISSING[@]}"
   command -v hf >/dev/null || error "hf introuvable"
-
-  # --- Runtime ROCm + ggml-hip : best-effort, jamais bloquant ---------------
-  # (backend HIP splitté : ggml-hip requis EN PLUS du runtime pour voir ROCm0)
-  info "Vérification du runtime ROCm (optionnel)..."
-  local rocm_missing=() rocm_to_install=()
-  local pkg
-  for pkg in "${ROCM_PKGS[@]}"; do
-    if paru -Qi "$pkg" &>/dev/null; then
-      continue
-    elif paru -Si "$pkg" &>/dev/null; then
-      rocm_to_install+=("$pkg")
-    else
-      rocm_missing+=("$pkg")
-    fi
-  done
-  if [[ ${#rocm_to_install[@]} -gt 0 ]]; then
-    warn "Paquets ROCm à installer (backend ROCm0 pour --bench) : ${rocm_to_install[*]}"
-    local reply="n"
-    if [[ -t 0 ]]; then
-      read -r -p "Installer le runtime ROCm ? [o/N] " reply
-    else
-      warn "Entrée non interactive — installation ROCm sautée par défaut."
-    fi
-    if [[ "$reply" =~ ^[oOyY]$ ]]; then
-      paru -S --noconfirm "${rocm_to_install[@]}" \
-        || warn "Installation ROCm en échec — Vulkan0 reste pleinement fonctionnel."
-    else
-      info "Runtime ROCm non installé — le setup continue sur Vulkan0 seul."
-      info "  (relancer --setup plus tard pour l'ajouter et débloquer ROCm0 dans --bench)"
-    fi
-  fi
-  if [[ ${#rocm_missing[@]} -gt 0 ]]; then
-    warn "Paquets ROCm introuvables dans les dépôts : ${rocm_missing[*]}"
-    warn "  → le défaut Vulkan0 du models.ini reste pleinement fonctionnel sans ;"
-    warn "    ROCm0 n'apparaîtra simplement pas dans --bench."
-  fi
-  if command -v rocminfo >/dev/null 2>&1; then
-    if rocminfo 2>/dev/null | grep -q gfx1151; then
-      info "ROCm OK : gfx1151 (Strix Halo) détecté."
-    else
-      warn "rocminfo présent mais gfx1151 non détecté — rocblas/hipblaslt sans"
-      warn "  support gfx1151 ? (alternative AUR : rocm-nightly-gfx1151-bin)"
-    fi
-  fi
-  # -------------------------------------------------------------------------
 
   info "Création des dossiers..."
   local f
@@ -76,92 +36,85 @@ cmd_setup() {
 
   # Téléchargements pilotés par les déclarations de models.sh (DL_SPECS),
   # dans l'ordre de déclaration (= ordre du ini)
-  # p1/p2 : sens dépendant du mode — repo + fichier (plat), repo + glob
-  # (shard), source + script (derive, fichier calculé en local après coup).
+  # p1/p2 : sens dépendant du mode : repo + fichier (plat), repo + glob (shard).
+  # (le mode "derive", fichier calculé en local après coup, a disparu le
+  # 18/09/2026 avec son seul usage, cf. lib/models.sh)
   local spec mode cible p1 p2
   for spec in "${DL_SPECS[@]}"; do
     IFS=$'\t' read -r mode cible p1 p2 <<< "$spec"
     case "$mode" in
       plat)   _dl "$cible" "$p1" "$p2" ;;
       shard)  _dl_shard "$cible" "$p1" "$p2" ;;
-      derive) _derive "$cible" "$p1" "$p2" ;;
     esac
   done
+
+  # --- Moteur : docker + image ---------------------------------------------
+  # Le dépôt ne lance plus aucun binaire de l'hôte : le service monte un
+  # conteneur décrit par le compose généré, et les outils passent par _dk_run.
+  # Sans docker ou sans image, --setup va jusqu'au bout (les poids et le ini
+  # sont utiles quand même) mais le dit.
+  _setup_check_docker
 
   info "Sélection des modèles préchargés au démarrage..."
   select_preload_models
 
-  info "Génération de models.ini..."
+  info "Génération de models.ini et du docker-compose.yml..."
   regen_models_ini
+  # Le compose n'est pas indispensable au reste du setup : _svc_start le
+  # régénère de toute façon. Le générer ici sert à échouer TÔT et clairement
+  # (image absente, groupe render manquant) plutôt qu'au premier --start.
+  regen_compose || warn "docker-compose.yml non généré (voir ci-dessus) - --start le retentera."
 
   info "✅ Config générée : $CONFIG_DIR/models.ini"
   info "Setup terminé → ./setup-llm.sh --start"
   info "Changer le préchargement → ./setup-llm.sh --preload"
   info "Mesurer les perfs → ./setup-llm.sh --bench [modèle|all]"
-  info "Devices exposés → ./setup-llm.sh --list-devices"
-
-  _setup_propose_fork
+  info "Devices exposés par l'image → ./setup-llm.sh --list-devices"
 
   _maybe_restart_service
 }
 
-# Proposition du moteur, en fin de --setup (et donc de --update). Isolée de
-# cmd_setup pour être testable seule (tests/sh-unit.sh) : cmd_setup fait paru,
-# hf et réseau, cette fonction ne lit que l'état du disque.
-#
-# Le fork strix-llama.cpp n'est pas un agrément : le parc est réglé pour lui
-# (FORK_ONLY_KEYS dans le ini, sidecar MTP de Flash-Next), et --start REFUSE de
-# démarrer le paquet Arch sur un ini qui porte ces clés (_fork_keys_guard). Un
-# --setup qui s'arrête au paquet laisse donc une machine qui ne démarre pas :
-# d'où la question, défaut OUI, contrairement à la proposition ROCm (défaut
-# non, simple option de mesure).
-#
-# Le paquet Arch reste installé dans tous les cas : c'est le repli (--unset-fork)
-# et le seul chemin vers ROCm0.
-#
-# Note d'ordre de source : lib/setup.sh est sourcé AVANT lib/fork.sh, mais
-# l'appel n'a lieu qu'à l'exécution, quand cmd_setup_fork et _fork_links_ok
-# existent. Aucune variable de fork.sh n'est lue avant cet appel.
-_setup_propose_fork() {
-  local etiquette reply
-  etiquette="$(_llama_build)"
-
-  # Fork en place = étiquette non numérique (cf. _llama_build) ET les quatre
-  # liens de ~/.local/bin pointant dans son build (_fork_links_ok) : un moteur
-  # étiqueté "?" ou "bNNNNN" est le paquet, des liens partiels ne sont pas un
-  # fork installé.
-  if [[ ! "$etiquette" =~ ^b[0-9]+(-[0-9]+)?$ && "$etiquette" != "?" ]] \
-     && _fork_links_ok; then
-    if _fork_pin_read; then
-      info "Moteur : fork strix-llama.cpp $etiquette, épinglé sur $FORK_PIN${FORK_PIN_RAISON:+ ($FORK_PIN_RAISON)} ; --update-fork ne tire rien tant que l'épinglage tient"
-    else
-      info "Moteur : fork strix-llama.cpp $etiquette ; suivi d'amont par ./setup-llm.sh --update-fork"
+# Moteur : docker et l'image du dépôt. Jamais bloquant - un --setup sert aussi
+# à télécharger des poids sur une machine qui ne servira rien.
+# Isolée de cmd_setup pour être testable seule : cmd_setup fait paru, hf et
+# réseau, cette fonction ne lit que l'état de docker.
+_setup_check_docker() {
+  info "Vérification du moteur (docker + image)..."
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "docker introuvable : le service tourne en CONTENEUR, il ne démarrera pas ici."
+    warn "  Installer docker, activer le démon au boot, puis ./setup-llm.sh --image-build."
+    return 0
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    warn "Le démon docker ne répond pas (non démarré, ou utilisateur hors du groupe docker)."
+    warn "  Sans lui, ni --image-build ni --start ne fonctionnent."
+    warn "  Démon      : sudo systemctl enable --now docker"
+    warn "  Groupe     : sudo usermod -aG docker \$USER (puis rouvrir la session)"
+    return 0
+  fi
+  # Activé AU BOOT, et pas seulement démarré : c'est docker qui relance le
+  # conteneur au redémarrage de la machine (restart: unless-stopped), il a
+  # remplacé le loginctl enable-linger de l'unité systemd. Un démon actif mais
+  # non activé donne un service qui ne revient pas après un reboot.
+  if command -v systemctl >/dev/null 2>&1; then
+    if ! systemctl is-enabled docker >/dev/null 2>&1; then
+      warn "  Le démon docker n'est pas activé au boot : le service ne reviendra pas"
+      warn "  après un redémarrage de la machine. sudo systemctl enable --now docker"
     fi
-    return 0
   fi
-
-  echo ""
-  warn "Moteur : le fork strix-llama.cpp n'est pas en place (résolu : $etiquette)."
-  warn "  Les réglages du parc en dépendent : clés ini que seul le fork comprend"
-  warn "  (${#FORK_ONLY_KEYS[@]} au total, dont ${FORK_ONLY_KEYS[0]} et reasoning-budget-*) et sidecar MTP de"
-  warn "  Flash-Next ; --start refuse de démarrer le paquet Arch sur un ini qui en"
-  warn "  porte une, car c'est le routeur ENTIER qui échouerait."
-
-  if [[ ! -t 0 ]]; then
-    warn "Entrée non interactive — rien n'est installé. À lancer :"
-    warn "  ./setup-llm.sh --setup-fork"
-    return 0
+  # Appartenance au groupe docker : docker info a répondu, donc l'accès marche
+  # dans CE shell ; le contrôle sert aux sessions où il passerait par sudo.
+  if ! id -nG 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+    warn "  \$USER n'est pas dans le groupe docker (l'accès actuel passe par autre chose)."
+    warn "  sudo usermod -aG docker \$USER, puis rouvrir la session."
   fi
-
-  reply=""
-  read -r -p "Installer le fork strix-llama.cpp comme moteur maintenant ? [O/n] " reply
-  reply="${reply:-o}"
-  if [[ "$reply" =~ ^[oOyY]$ ]]; then
-    cmd_setup_fork
+  local ref
+  if ref="$(_image_ref 2>/dev/null)"; then
+    info "  Image du moteur : $ref (étiquette des mesures : $(_llama_build))"
   else
-    info "Fork non installé — le paquet Arch reste le moteur."
-    info "  (l'installer plus tard : ./setup-llm.sh --setup-fork)"
+    warn "  Aucune image du moteur ici - ./setup-llm.sh --image-build (40 à 60 min à froid)."
   fi
+  return 0
 }
 
 # =============================================================================
@@ -197,10 +150,9 @@ cmd_update() {
   warn "Prévoir 2× la taille du plus gros fichier remplacé (écriture en .incomplete puis move)."
   warn "Un restart du service sera proposé en fin de run (poids mmap'és sur l'ancien inode sinon)."
 
-  # Suivi du moteur : les modèles viennent d'être mis à jour, le fork qui les
-  # sert ne l'est pas par cette commande. Le rappel (--update-fork si le fork
-  # est en place, proposition d'installation sinon) est émis par
-  # _setup_propose_fork, appelé en fin de cmd_setup — rien n'est lancé
+  # Suivi du moteur : les modèles viennent d'être mis à jour, le MOTEUR qui les
+  # sert ne l'est pas par cette commande. Il vit dans l'image et se suit par
+  # ./setup-llm.sh --image-update, à lancer à la main : rien n'est lancé
   # automatiquement ici, ni mise à jour du moteur, ni restart, ni mesure.
   cmd_setup
 }
@@ -217,6 +169,17 @@ cmd_update() {
 #
 # Les modèles en shards sont protégés au niveau du dossier de quant : KNOWN_FILES
 # ne cite que le shard 00001, les suivants ne doivent évidemment pas sauter.
+#
+# ⚠ Les deux artefacts GÉNÉRÉS de $MODELS_BASE - `models.ini` (lib/ini.sh) et
+# `docker-compose.yml` (lib/compose.sh) - sont hors d'atteinte PAR
+# CONSTRUCTION, et les deux `find` ci-dessous ne doivent donc jamais être
+# « corrigés » en ce sens : le premier ne liste que des DOSSIERS de premier
+# niveau (`-maxdepth 1 -type d`), le second que des fichiers `*.gguf` à partir
+# de la profondeur 2 (`-mindepth 2 -name '*.gguf'`). Ces deux fichiers sont des
+# fichiers de premier niveau qui ne sont pas des .gguf : aucune des deux
+# recherches ne peut les voir. Les élargir (retirer `-maxdepth`, viser `-type f`
+# à la racine) supprimerait la configuration du service à chaque --cleanup,
+# alors qu'elle se régénère certes, mais pas au milieu d'un run.
 #
 # Dry-run par défaut ; --yes pour exécuter réellement.
 # =============================================================================

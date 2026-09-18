@@ -1,5 +1,5 @@
 # lib/help.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 
 # =============================================================================
 # help
@@ -7,18 +7,16 @@
 
 cmd_help() {
   cat <<HELP
-setup-llm.sh — llama-server en router mode natif (Strix Halo, Vulkan/ROCm)
+setup-llm.sh : llama-server en router mode natif (Strix Halo, image ROCm)
 
 Usage : ./setup-llm.sh [commande] [options]
 
 Commandes :
-  --setup                  Installe les dépendances (paru), propose le runtime ROCm
-                           + ggml-hip, télécharge les GGUF manquants, sélection
-                           interactive du préchargement, génère $CONFIG_DIR/models.ini
-                           et, si le fork strix-llama.cpp n'est pas le moteur résolu,
-                           propose de l'installer (défaut oui : les réglages du parc
-                           en dépendent ; en entrée non interactive, rien n'est fait
-                           et --setup-fork est rappelé)
+  --setup                  Installe les dépendances (curl, hf), vérifie docker
+                           (démon actif ET activé au boot, utilisateur dans le
+                           groupe docker) et l'image du moteur, télécharge les
+                           GGUF manquants, sélection interactive du
+                           préchargement, génère $CONFIG_DIR/models.ini
   --update [modèle]        Comme --setup mais laisse hf comparer les etags et ne
                            retélécharge que ce qui a bougé en amont
                            (modèle = dossier sous $MODELS_BASE, ex. qwen3.8-27b)
@@ -31,14 +29,6 @@ Commandes :
                            décode et acceptance MTP médians, tableau récapitulatif.
                            Pas de restart, rien d'écrit. Sans argument : sélection
                            interactive
-  --bench-devices [modèle] [devices] [n]
-                           Comparaison automatique des devices pour un modèle :
-                           pour chaque device (défaut Vulkan0,ROCm0), ini régénéré
-                           + restart + bench (n passes, défaut 3), tableau comparatif.
-                           Verdict = temps d'un tour d'usage simulé (2000 tokens de
-                           prefill froid + 3000 générés, BENCH_PROFILE_PP/GEN pour
-                           changer) ; vainqueur écrit dans bench-devices.conf,
-                           ini régénéré, restart final. Restarts via systemctl --user
   --bench-parallel [modèle] [n] [passes]
                            Débit sous n requêtes simultanées (défaut : le parallel
                            du modèle) : agrégé et décode par requête, comparés à
@@ -64,62 +54,49 @@ Commandes :
                            Journal logs/bench-agentic.log
   --bench-sanity [modèle|all]
                            Le modèle répond-il juste (question à réponse connue) ?
-                           Complète le garde-fou anti-charabia ; --bench-devices
-                           l'applique avant chaque device
+                           Complète le garde-fou anti-charabia de timings.py, qui
+                           n'attrape que le charabia, pas un texte propre et faux.
+                           Première étape, BLOQUANTE, de tools/qualif-modele.sh
   --bench-load [modèle|all]
                            Temps de chargement + 1er token après restart, puis TTFT
                            à chaud — ce que coûte un modèle à la demande (preload,
                            bascule LRU). Journal logs/bench-load.log
-  --setup-fork [commit] [raison]
-                           Moteur : installe OU met à jour le fork
-                           https://github.com/halo-box/strix-llama.cpp dans
-                           ~/llm/strix-llama.cpp (clone, sinon git pull --ff-only),
-                           construit (cmake Vulkan/Release/CURL : llama-server,
-                           llama-bench, llama-cli, llama-quantize) et pose les liens
-                           dans ~/.local/bin, que le service met en tête du PATH.
-                           Affiche l'ancien et le nouveau commit puis la version
-                           résolue ; ne redémarre pas le service. ⚠ Les mesures
-                           faites sous le fork forment une série à part
-                           (étiquette strix-<commit>), non comparable aux campagnes
-                           du paquet Arch.
-                           Avec un argument (commit, tag ou branche) : ÉPINGLE le
-                           moteur dessus (fetch, checkout détaché sur un commit ou
-                           un tag, suivi de branche sur une branche) et l'écrit
-                           dans fork.conf, avec une raison facultative en 2e
-                           argument (ou \$FORK_PIN_REASON). Tant que l'épinglage
-                           tient, --update-fork ne tire plus rien. Sans argument :
-                           l'épinglage est retiré et la branche reprise
-  --update-fork            Moteur : suivi d'amont du fork, à lancer juste après
-                           un --update. Ne fait QUE la mise à jour du fork déjà
-                           installé : git fetch, changelog des commits reçus
-                           (ancien → nouveau, titres des commits PROPRES au
-                           fork, le reste compté comme « amont llama.cpp
-                           intégré » avec ses bornes bNNNNN) puis CONFIRMATION
-                           avant le git pull --ff-only, le rebuild des quatre
-                           cibles et la repose des liens ; sans « o », rien n'est
-                           tiré. Entrée non interactive : rien n'est fait, sauf
-                           FORK_UPDATE_YES=1 qui vaut confirmation. S'arrête sans
-                           rebuild si rien n'a bougé, et refuse si le fork n'est
-                           pas le moteur en place (--setup-fork d'abord). Ne redémarre pas le service et
-                           ne lance aucune mesure : enchaînement recommandé
-                           --update → --update-fork → systemctl --user restart
-                           $SERVICE_NAME → --bench à la main. ⚠ Chaque bump du
-                           fork ouvre une nouvelle série de mesures, étiquetée au
-                           commit (strix-<commit>). Si fork.conf porte un
-                           épinglage : rien n'est tiré ni demandé, la commande
-                           annonce le commit épinglé et sa raison, montre quand
-                           même le changelog en attente et rappelle --setup-fork
-                           sans argument pour reprendre le suivi
-  --unset-fork             Retire les quatre liens : retour au paquet Arch au
-                           prochain restart. ⚠ Retirer d'abord de lib/models.sh
-                           les clés ini propres au fork (ngram-on-disk,
-                           reasoning-budget-*, spec-draft-adaptive) puis
-                           --preload : le routeur Arch refuse de démarrer sur
-                           une clé inconnue, et --start le signale au lieu de
-                           le laisser échouer
-  --list-devices           Moteur résolu (paquet Arch ou fork) + backends ggml
-                           installés + devices exposés par llama-bench,
-                           croisés avec bench-devices.conf (alerte si device disparu)
+  --image-build [--no-cache]
+                           Image : construit le moteur CONTENEURISÉ (runtime/,
+                           ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
+                           halo-box/strix-llama.cpp en HIP seul) sur les
+                           révisions de runtime/image.conf, sous un tag
+                           temporaire ; vérifie que /opt/strix/versions.txt et
+                           les quatre binaires correspondent à ce qui a été
+                           demandé, puis seulement promeut en
+                           llm-rocm-strix:latest et supprime les images sans tag
+                           issues de nos builds (label llm-setup.engine_rev).
+                           Un build raté laisse l'image en place intacte.
+                           Journalise dans logs/images.tsv. ⚠ C'est le MOTEUR DU
+                           SERVICE : une image neuve n'est servie qu'au prochain
+                           --restart, et elle ouvre sa propre série de mesures
+                           (étiquette strix-<engine>+r<rocm>). Compter 40 à 60
+                           minutes à froid
+  --image-update [engine-rev] [rocm-rev]
+                           Image : suivi d'amont. Sans argument, compare les
+                           révisions de runtime/image.conf aux sommets des deux
+                           branches, affiche l'écart et S'ARRÊTE — rien n'est
+                           modifié sans confirmation (entrée non interactive :
+                           rien ; IMAGE_UPDATE_YES=1 vaut accord). Avec
+                           accord ou avec des révisions
+                           données : réécrit image.conf puis enchaîne
+                           --image-build. C'est aussi le RETOUR ARRIÈRE du
+                           moteur conteneurisé (y remettre les anciennes
+                           révisions ; il n'y a pas de rollback par tag)
+  --image-status           Image : révisions demandées (runtime/image.conf),
+                           image llm-rocm-strix:latest en place avec ses
+                           étiquettes (moteur, rocm-systems, date), verdict de
+                           conformité entre les deux, taille, images sans tag
+                           restantes et place du cache de build. Ne construit ni
+                           ne purge rien
+  --list-devices           Devices exposés par l'IMAGE du moteur
+                           (llama-bench --list-devices dans le conteneur).
+                           Alerte si ROCm0, le device de tout le ini, manque
   --spec-test [modèle] [n] [prompt]
                            Mesure le décode réel via l'API (spéculation incluse) :
                            n passes du même prompt code, prompt/gen t/s, acceptance
@@ -133,7 +110,7 @@ Commandes :
                            ini régénéré + restart + spec-test ; retient le meilleur
                            mesuré (à <2 %, le plus petit), l'écrit dans
                            spec-nmax.conf (surcharge du défaut script), restart final.
-                           Restarts via systemctl --user
+                           Restarts par --restart
                            Sans modèle : choix interactif parmi les MTP présents.
                            4 passes par défaut. Sert à régler
                            spec-draft-n-max (éditer le script, --preload, re-tester)
@@ -154,18 +131,28 @@ Commandes :
                            mesuré ; bilan comparé, rien d'écrit. Ex. :
                            --spec-ab qwen3.8-27b-dflash-nothink 4 - base \
                              "spec-ngram-map-k-min-hits=1" "spec-type=ngram-map-k4v,draft-mtp"
-  --start                  Lance llama-server sur :$SERVER_PORT (défaut sans argument)
-  --install-service        Installe/active le service systemd USER $SERVICE_NAME
-                           (systemctl --user) + linger (démarrage au boot)
-  --uninstall-service      Arrête, désactive et supprime le service user
+  --start                  Démarre le service $SERVICE_NAME (défaut sans argument) :
+                           docker-compose.yml régénéré dans $CONFIG_DIR, conteneur
+                           recréé (docker compose up -d --force-recreate), puis
+                           ATTENTE de /health - la commande ne rend la main que
+                           quand le routeur répond sur :$SERVER_PORT
+  --stop                   Arrête le conteneur (SIGINT, jusqu'à 180 s : le
+                           déchargement des modèles préchargés prend du temps)
+  --restart                --stop puis --start. Jamais « docker compose restart »,
+                           qui garderait l'ancienne image, l'ancienne ligne de
+                           commande et l'ancien --models-max
+  --status                 État du conteneur (docker compose ps) et réponse de
+                           /health
+  --logs [-f] [--tail N]   Journaux du conteneur (docker compose logs)
+  --migrate-off-systemd    TEMPORAIRE (migration) : arrête, désactive et supprime
+                           l'ancienne unité systemd user $SERVICE_NAME, recharge
+                           systemd et vérifie que le port $SERVER_PORT est
+                           libre. Idempotente ; à lancer une fois avant
+                           le premier --start, puis à oublier
   --help, -h               Cette aide
 
 Fichiers (à côté du script, locaux, non versionnés) :
-  bench-devices.conf       clé (dossier GGUF) = device (Vulkan0/ROCm0), écrit par
-                           --bench-devices, édition manuelle OK
   preload.conf             modèles préchargés, un par ligne
-  fork.conf                épinglage du moteur (pin = commit, raison = texte),
-                           écrit par --setup-fork <commit>
   logs/spec-tests.log      journal des --spec-test (TSV), base de l'analyse n-max
   logs/bench.log           journal des --bench (TSV, avec le build llama.cpp),
                            comparé automatiquement au run précédent
@@ -174,17 +161,28 @@ Fichiers (à côté du script, locaux, non versionnés) :
   logs/bench-agentic.log   journal des --bench-agentic
   logs/bench-load.log      journal des --bench-load
   logs/spec-batch.log/.tsv journal des balayages tools/bench-spec-batch.sh
+  logs/images.tsv          journal des --image-build (date, tag, révisions, taille)
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
   spec-ngram.conf          modèle = spec-ngram-map-k-size-m retenu par --spec-ngram-tune
-Fichiers ($CONFIG_DIR) :
-  models.ini               généré — ne pas éditer à la main, relancer --preload/--setup
+Fichiers versionnés (runtime/, moteur conteneurisé) :
+  runtime/image.conf       dépôts, branches et RÉVISIONS épinglées de l'image,
+                           plus son nom ; son historique git est le journal des
+                           révisions (le retour arrière passe par lui)
+  runtime/Dockerfile.rocm-strix
+                           copie vendorisée du Dockerfile amont (PR 133) ;
+                           écarts et resynchronisation dans runtime/AMONT.md
+Fichiers ($CONFIG_DIR, générés - ne pas éditer à la main) :
+  models.ini               configuration des modèles, relancer --preload/--setup
+  docker-compose.yml       description du service, régénérée à chaque --start
+                           (lib/compose.sh) ; usage manuel :
+                           cd $CONFIG_DIR && docker compose ps | logs -f
 
 Workflow typique :
-  ./setup-llm.sh --setup && ./setup-llm.sh --install-service
-  systemctl --user start $SERVICE_NAME ; journalctl --user -u $SERVICE_NAME -f
+  ./setup-llm.sh --setup && ./setup-llm.sh --image-build && ./setup-llm.sh --start
+  ./setup-llm.sh --status ; ./setup-llm.sh --logs -f
   ./setup-llm.sh --bench all          # perfs de tous les modèles présents
   ./setup-llm.sh --update qwen3.8-27b # après un re-upload unsloth
-  ./setup-llm.sh --update-fork        # puis le moteur : fork à jour, rebuild, liens
+  ./setup-llm.sh --image-update       # puis le moteur : suivi d'amont de l'image
                                       # (restart du service et --bench restent à la main)
   ./setup-llm.sh --spec-test          # décode réel d'un modèle MTP (choix interactif)
   ./setup-llm.sh --spec-tune          # règle spec-draft-n-max tout seul (2,4,6)
@@ -195,7 +193,7 @@ Workflow typique :
   ./setup-llm.sh --bench-agentic <m> 3  # vraie boucle de tool calls (pi), PASS/FAIL et t/s réels
   ./setup-llm.sh --bench-agentic <m> 2 3  # les mêmes, à 3 boucles simultanées : débit de tâches
   ./setup-llm.sh --bench-load <m>     # coût d'une bascule LRU
-  ./setup-llm.sh --bench all          # après chaque mise à jour de llama-cpp : régressions
+  ./setup-llm.sh --bench all          # après chaque bump de l'image : régressions
 
 Modèles (models.ini, ${#PRESET_ORDER[@]}) :
 $(printf '  %s\n' "${PRESET_ORDER[@]}")

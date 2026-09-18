@@ -4,7 +4,7 @@
 # modèle DÉJÀ déclaré dans lib/models.sh et servi par le routeur.
 #
 # Pourquoi : les étapes 3, 5, 6 et 7 de la skill ajout-modele sont une suite de
-# commandes longues, toujours les mêmes, toujours dans le même ordre (device,
+# commandes longues, toujours les mêmes, toujours dans le même ordre (justesse,
 # n-gram, bench, cache, chargement, agentic), dont il faut ensuite recopier les
 # chiffres à la main dans un tableau. Chacune dure de quelques minutes à une
 # heure et la machine n'a qu'un GPU : les lancer une par une demande d'attendre
@@ -28,9 +28,8 @@
 #     réellement servies ;
 #   - toute écriture dans les .conf ou dans lib/models.sh : --spec-ab ne
 #     journalise rien, le choix retenu reste à reporter à la main avec ses
-#     chiffres. Les seules commandes de la suite qui écrivent une conf sont
-#     --bench-devices (bench-devices.conf, c'est son rôle) et les journaux de
-#     logs/ des --bench*.
+#     chiffres. Aucune commande de la suite n'écrit de .conf ; seuls les
+#     journaux de logs/ des --bench* sont alimentés.
 #
 # Usage :
 #   tools/qualif-modele.sh <section> [options]
@@ -41,8 +40,6 @@
 #     --sans-agentic     ne pas lancer --bench-agentic (lancé par défaut, 3 passes)
 #     --sans-cache       ne pas lancer --bench-cache
 #     --sans-load        ne pas lancer --bench-load
-#     --devices LISTE    devices de --bench-devices (défaut : ceux qu'expose
-#                        ./setup-llm.sh --list-devices ; un seul = étape sautée)
 #     --tag TAG          nom du dossier de sortie (défaut <section>-<date-heure>)
 #     --help             cet écran
 #
@@ -52,22 +49,23 @@
 # n-gram.
 #
 # Sorties, toutes dans logs/qualif/<tag>/ (donc non versionné) :
-#   01-devices.log  02-ngram-refactor.log  03-ngram-generic.log  04-bench.log
+#   01-sanity.log   02-ngram-refactor.log  03-ngram-generic.log  04-bench.log
 #   05-cache.log    06-load.log            07-agentic.log
 #   resume.md       en-tête (section, machine, moteur, mode EC, device, date), tableau
 #                   « Configuration | Device | Prompt t/s | Gen t/s |
 #                   Acceptance | Source », meilleur size-m, verdict agentic.
 # resume.md est affiché à la fin.
 #
-# Plusieurs sous-commandes (--spec-ab, --bench-devices, --bench-load)
+# Plusieurs sous-commandes (--spec-ab, --bench-load)
 # redémarrent le service et rendent la main SANS attendre son retour : chaque
 # étape commence donc par attendre /health ET une liste /v1/models exploitable
 # (_attendre_service), sinon la suivante sort aussitôt sur « ne répond pas ».
 #
 # Une étape en échec n'arrête pas les suivantes : elle est marquée ÉCHEC dans
-# resume.md et le code de retour final est non nul. Seules les vérifications
-# initiales (section servie, service actif, aucune autre mesure en cours)
-# arrêtent le script.
+# resume.md et le code de retour final est non nul. Deux exceptions qui
+# arrêtent le script : les vérifications initiales (section servie, service
+# actif, aucune autre mesure en cours) et l'étape 1 de justesse, dont l'échec
+# rend toutes les mesures suivantes sans objet.
 #
 # Toutes les invocations de ./setup-llm.sh reçoivent leur entrée de /dev/null :
 # entrée non interactive, donc pas de question ni de restart automatique.
@@ -90,14 +88,12 @@ déclaré et servi, et écrit logs/qualif/<tag>/resume.md (tableau de perfs).
   --sans-agentic     ne pas lancer --bench-agentic (sinon 3 passes)
   --sans-cache       ne pas lancer --bench-cache
   --sans-load        ne pas lancer --bench-load
-  --devices LISTE    devices de --bench-devices (défaut : ceux qu'expose
-                     ./setup-llm.sh --list-devices ; un seul = étape sautée)
   --tag TAG          dossier de sortie (défaut <section>-<date-heure>)
   --help             cet écran
 
-N'écrit ni les .conf (sauf bench-devices.conf, par --bench-devices) ni
-lib/models.sh : les chiffres restent à reporter à la main. Ne joue ni le test
-isolé (tools/spec-isolate.sh) ni --spec-tune.
+N'écrit ni les .conf ni lib/models.sh : les chiffres restent à reporter à la
+main. Ne joue ni le test isolé (tools/spec-isolate.sh) ni --spec-tune.
+S'arrête si la question de contrôle (--bench-sanity) échoue.
 EOF
 }
 
@@ -109,7 +105,6 @@ SIZE_M="7,15,47"
 AVEC_AGENTIC=1
 AVEC_CACHE=1
 AVEC_LOAD=1
-DEVICES=""
 TAG=""
 
 # Option à valeur appelée sans sa valeur : sans ce garde-fou, c'est le « shift 2 »
@@ -123,7 +118,6 @@ while [[ $# -gt 0 ]]; do
     --help | -h)    _usage; exit 0 ;;
     --passes)       _valeur "$@"; PASSES_SPEC="$2"; PASSES_BENCH="$2"; shift 2 ;;
     --size-m)       _valeur "$@"; SIZE_M="$2"; shift 2 ;;
-    --devices)      _valeur "$@"; DEVICES="$2"; shift 2 ;;
     --tag)          _valeur "$@"; TAG="$2"; shift 2 ;;
     --sans-agentic) AVEC_AGENTIC=0; shift ;;
     --sans-cache)   AVEC_CACHE=0; shift ;;
@@ -140,13 +134,19 @@ done
 [[ -n "$TAG" ]] || TAG="$SECTION-$(date '+%Y%m%d-%H%M')"
 
 # lib/common.sh apporte SPEC_TEST_URL, SERVICE_NAME, _llama_build (étiquette de
-# moteur résolue comme le service) et les helpers info/warn/error. Il attend
-# SCRIPT_DIR : c'est la racine du dépôt, comme pour setup-llm.sh. Le PATH
-# ($HOME/.local/bin en tête, liens du fork) y est posé aussi, comme dans
-# tools/spec-isolate.sh : sans lui on étiquetterait le paquet Arch.
+# moteur, lue sur les LABEL de l'image qui sert) et les helpers info/warn/error.
+# Il attend SCRIPT_DIR : c'est la racine du dépôt, comme pour setup-llm.sh.
+# runtime.sh donne _image_ref/_image_label (étiquette de moteur), compose.sh les
+# chemins du compose généré, svc.sh les _svc_* (état du service).
 SCRIPT_DIR="$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/common.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/runtime.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/compose.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/svc.sh"
 
 OUT="$LOG_DIR/qualif/$TAG"
 RESUME="$OUT/resume.md"
@@ -202,8 +202,8 @@ else
   fi
 fi
 
-systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null \
-  || error "Service $SERVICE_NAME inactif : systemctl --user start $SERVICE_NAME"
+_svc_is_active \
+  || error "Service $SERVICE_NAME inactif : ./setup-llm.sh --start"
 curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
   || error "llama-server ne répond pas sur $SPEC_TEST_URL"
 
@@ -223,7 +223,7 @@ for m in d.get("data", []):
 if ! grep -Fxq "$SECTION" <<<"$SECTIONS_SERVIES"; then
   echo "Sections servies :" >&2
   sed 's/^/  /' <<<"$SECTIONS_SERVIES" >&2
-  error "Section '$SECTION' absente du ini servi : régénérer (--preload) puis redémarrer $SERVICE_NAME."
+  error "Section '$SECTION' absente du ini servi : régénérer (--preload) puis ./setup-llm.sh --restart."
 fi
 
 # --- Ce qui est réellement servi (status.args, pas le ini) ------------------
@@ -235,11 +235,11 @@ SPEC_TYPE="$(_arg_servi --spec-type)"
 NMAX="$(_arg_servi --spec-draft-n-max)"
 DEV="$(_arg_servi --device)"
 # Repli quand status.args ne porte pas --device (le modèle hérite du défaut du
-# parc). « Vulkan0 » DUPLIQUE ici la valeur de DEFAULT_DEVICE (lib/models.sh:27),
+# parc). « ROCm0 » DUPLIQUE ici la valeur de DEFAULT_DEVICE (lib/models.sh),
 # qui n'est pas sourcé : ce script ne source que lib/common.sh, exprès, pour ne
 # jamais confondre le ini du script avec ce que le serveur sert réellement
 # (AGENTS.md, règle 5). Si le défaut du parc change, changer aussi cette ligne.
-[[ -n "$DEV" ]] || DEV="${DEFAULT_DEVICE:-Vulkan0}"
+[[ -n "$DEV" ]] || DEV="${DEFAULT_DEVICE:-ROCm0}"
 
 # Drafter et type de n-gram servis, lus jeton par jeton : « ngram-map-k » et
 # « ngram-map-k4v » sont deux clés ini distinctes (spec-<jeton>-size-m), et un
@@ -283,20 +283,20 @@ RC_GLOBAL=0
 
 # Attente du service entre deux étapes.
 #
-# Constaté sur bigchuck : --spec-ab se termine par _spec_ab_restore
-# (lib/spec.sh) qui régénère le ini et relance $SERVICE_NAME SANS attendre le
-# retour de /health ; l'étape suivante démarrait donc sur un serveur encore
-# éteint. Or toutes les sous-commandes appelées ici commencent par un
+# Constaté sur bigchuck avant la bascule en conteneur : --spec-ab se terminait
+# par _spec_ab_restore (lib/spec.sh) qui régénérait le ini et relançait
+# $SERVICE_NAME SANS attendre le retour de /health ; l'étape suivante démarrait
+# donc sur un serveur encore éteint. C'est maintenant _svc_restart qui attend
+# (lib/svc.sh), mais la garde reste ici : toutes les sous-commandes appelées
+# commencent par un
 # « curl -sf /health || error » à froid, sans réessai (lib/bench/bench.sh:190,
 # lib/bench/bench-cache.sh:32, lib/bench/bench-agentic.sh:170,
 # lib/spec.sh:145) : elles échouaient immédiatement. --bench-load passait par
 # hasard, parce qu'il redémarre et attend lui-même (lib/bench/bench-load.sh:45).
-# Même chose après --bench-devices, qui relance aussi à la fin sans attendre.
 #
-# lib/common.sh n'expose AUCUN helper d'attente : la boucle est recopiée à
-# l'identique dans lib/spec.sh:432,678,698,819, lib/bench/bench-devices.sh:184
-# et lib/bench/bench-load.sh:45. On reprend donc la même (poll toutes les 2 s),
-# avec une condition de plus : /health répond dès que le routeur écoute, AVANT
+# Depuis la bascule en conteneur, _svc_restart attend /health lui-même
+# (_svc_wait_ready, lib/svc.sh) et les boucles recopiées dans lib/ ont disparu.
+# Cette attente-ci reste néanmoins utile, avec une condition de plus : /health répond dès que le routeur écoute, AVANT
 # d'avoir fini de précharger et de publier sa liste de modèles, et c'est cette
 # liste que lisent toutes les mesures. On attend donc aussi un /v1/models
 # exploitable. Plafond 180 s (contre 120 s dans lib/) : les préchargés d'un
@@ -323,7 +323,7 @@ _attendre_service() {
     fi
     if [[ "$t" -ge 180 ]]; then
       warn "  $SERVICE_NAME ne répond toujours pas après 180 s : l'étape est lancée quand même."
-      warn "  Diagnostic : journalctl --user -u $SERVICE_NAME -e"
+      warn "  Diagnostic : ./setup-llm.sh --logs --tail 50"
       return 0
     fi
     sleep 2
@@ -376,46 +376,23 @@ _etape() {
 
 _llm() { "$ROOT_DIR/setup-llm.sh" "$@"; }
 
-# --- Étape 3 de la skill : device ------------------------------------------
-# Liste par défaut : ce que --list-devices expose réellement (lignes
-# « <indentation>Vulkan0: … » de llama-bench --list-devices, reprises telles
-# quelles par cmd_list_devices).
-if [[ -z "$DEVICES" ]]; then
-  DEVICES="$(_llm --list-devices < /dev/null 2>/dev/null \
-    | sed 's/\x1b\[[0-9;]*m//g' \
-    | sed -n 's/^[[:space:]]\+\([A-Za-z][A-Za-z0-9]*[0-9]\):.*/\1/p' \
-    | paste -sd, - || true)"
-fi
-NB_DEVICES=0
-if [[ -n "$DEVICES" ]]; then
-  NB_DEVICES="$(tr ',' '\n' <<<"$DEVICES" | grep -c . || true)"
-fi
-# --bench-devices écrit bench-devices.conf, régénère le ini et redémarre le
-# service : le device servi pour les étapes 02 à 07 n'est plus forcément celui
-# lu au démarrage. Relire status.args, sinon resume.md annonce l'ancien device
-# pour des mesures faites sur le nouveau. Repli sur la valeur précédente si le
-# serveur ne répond pas (rien de pire qu'avant).
-_relire_dev() {
-  local json d
-  _attendre_service
-  json="$(curl -s --max-time 30 "$SPEC_TEST_URL/v1/models" 2>/dev/null || true)"
-  [[ -n "$json" ]] || return 0
-  MODELS_JSON="$json"
-  d="$(_arg_servi --device)"
-  if [[ -n "$d" && "$d" != "$DEV" ]]; then
-    info "device servi après --bench-devices : $d (était $DEV)"
-    DEV="$d"
-  fi
-  return 0
-}
-
-if [[ "$NB_DEVICES" -ge 2 ]]; then
-  _etape 01-devices.log "device (--bench-devices $DEVICES)" \
-    _llm --bench-devices "$SECTION" "$DEVICES" 3
-  _relire_dev
-else
-  _etape_sautee "device (--bench-devices)" \
-    "un seul device (${DEVICES:-$DEV}) : device hérité du défaut"
+# --- Étape 3 de la skill : justesse (--bench-sanity), BLOQUANTE -------------
+# Le moteur du service n'expose qu'un device (image ROCm, cf. lib/models.sh) :
+# --bench-devices a disparu le 18/09/2026, et l'étape 3 devient ce qui en
+# faisait la valeur : la question de contrôle. Elle est jouée EN PREMIER et
+# elle ARRÊTE la qualification si la réponse est fausse : mesurer les t/s d'un
+# moteur qui produit du charabia n'a aucun sens, et c'est exactement ce qui est
+# arrivé deux fois (DeepSeek V4 et Qwen3-Coder-Next couronnés sur un ROCm qui
+# répondait « Nous dev dev dev » et « LAMPAMPAMP » à 500 t/s).
+# C'est la seule étape bloquante de l'enchaînement ; toutes les autres se
+# contentent d'être marquées ÉCHEC.
+_etape 01-sanity.log "justesse (--bench-sanity)" _llm --bench-sanity "$SECTION"
+if [[ "${ETAPES[-1]}" != *"|OK|"* ]]; then
+  warn "Question de contrôle en échec sur '$SECTION' : la sortie du moteur est"
+  warn "  fausse ou dégénérée. Toute mesure de débit serait sans objet."
+  warn "  Relire $OUT/01-sanity.log et le texte généré avant d'aller plus loin :"
+  warn "    ./setup-llm.sh --logs --tail 400 | grep -i 'warn\|error\|cpu'"
+  error "Qualification arrêtée à l'étape 1 (justesse)."
 fi
 
 # --- Étape 5 de la skill : longueur de draft n-gram, par --spec-ab ---------
@@ -587,11 +564,12 @@ _meilleur_size_m() {
   echo "${v:-n/c}"
 }
 
-# Vainqueur de --bench-devices (lib/bench/bench-devices.sh) :
-#   « Vainqueur : Vulkan0 (tour simulé le plus court), enregistré dans … »
-_vainqueur_device() {
+# Verdict de la question de contrôle (lib/bench/bench.sh, _bench_sanity_one,
+# qui délègue l'affichage à py/check_answer.py). L'étape étant bloquante, si on
+# arrive ici elle est passée : la ligne sert à le tracer dans resume.md.
+_verdict_sanity() {
   local v
-  v="$(_sans_ansi "$OUT/01-devices.log" | sed -n 's/.*Vainqueur : \([^ ]*\) .*/\1/p' | tail -1 || true)"
+  v="$(_sans_ansi "$OUT/01-sanity.log" | grep -i 'justesse\|attendu\|trouv' | tail -1 || true)"
   echo "${v:-n/c}"
 }
 
@@ -614,7 +592,7 @@ _vainqueur_device() {
   _ligne_bench
   echo ""
   echo "- Meilleur size-m : $(_meilleur_size_m)"
-  echo "- Device retenu par --bench-devices : $(_vainqueur_device)"
+  echo "- Justesse (--bench-sanity, bloquante) : $(_verdict_sanity)"
   echo "- Cache de prompt : suite $(_part_cache suite) %, édition $(_part_cache édition) %, identique $(_part_cache identique) %"
   echo "- Chargement : $(_ligne_load)"
   if [[ "$AVEC_AGENTIC" -eq 1 ]]; then
@@ -628,8 +606,8 @@ _vainqueur_device() {
     echo "| $_l | $_s | $_f | $_d |"
   done
   echo ""
-  echo "Rien n'a été écrit dans lib/models.sh ni dans les .conf (sauf"
-  echo "bench-devices.conf si l'étape device a tourné) : reporter à la main le"
+  echo "Rien n'a été écrit dans lib/models.sh ni dans les .conf : reporter à"
+  echo "la main le"
   echo "réglage retenu avec ces chiffres, dans le commentaire du bloc, le README"
   echo "et docs/HISTORIQUE.md. --spec-tune (n-max MTP) reste à jouer séparément."
 } > "$RESUME"

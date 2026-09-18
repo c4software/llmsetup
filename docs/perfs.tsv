@@ -1,16 +1,24 @@
-# Mesures paquet Arch contre fork strix-llama.cpp, une ligne par section servie
-# du models.ini (table « Parc au 17/09/2026 » du README, qui fait foi).
+# Fork Vulkan0 contre moteur conteneurise ROCm0, une ligne par section servie du
+# models.ini (table « Parc au 18/09/2026 » du README, qui fait foi).
+# Colonne vulkan : dernier --bench de la section sur le fork strix-0007bc6
+# installe sur l'hote (Vulkan0, 12 au 17/09/2026), moteur du service jusqu'au
+# 18/09/2026. Colonne rocm : --bench du 18/09/2026 sur l'image du depot
+# (serie strix-8c1c282+r7dda3ac, ROCm0, mode EC performance, cache K et V f16,
+# fit off, load-mode none). Deux series distinctes : un ordre de grandeur, pas
+# une comparaison a la decimale.
+# La serie du paquet Arch (bNNNNN, 21/08 au 05/09/2026) n'est plus portee ici :
+# elle est deux moteurs en arriere et vit dans docs/HISTORIQUE.md
+# (« Resultats mesures » et « Paquet Arch contre fork : mesures »).
 # Prefill et decode en t/s, acceptance sans unite (vide = pas de speculation).
 # Decimales avec un point ici, virgule a l'affichage (py/perf_graphs.py).
 # Regenerer docs/graphs/ apres toute modification : python3 py/perf_graphs.py
-modele	prefill_paquet	prefill_fork	decode_paquet	decode_fork	acceptance_paquet	acceptance_fork	reglage	source
-lfm2.5-2.6b	2279	2875	67.7	108.8		0.50	draft-dspark 3, drafter DSpark officiel Liquid AI Q8_0, parallel 1 (KV f16) ; paquet sans drafter, parallel 4	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
-lfm2.5-8b-a1b-nothink		3079		108.1		0.55	ngram-map-k 47 + draft-dspark 3, min-hits 2, drafter DSpark officiel Liquid AI Q8_0, reasoning-budget 0 (thinking coupe), parallel 1 (KV f16)	jamais mesure au paquet ; strix-0007bc6 16/09/2026
-ornith-1.5-9b-mtp-nothink		827.9		39.5		0.56	ngram-map-k 7 + draft-mtp 3, min-hits 2, tete MTP tierce embarquee (GGUF fusionne protoLabsAI), parallel 1 (remplace qwen3.5-9b : 745 / 33.0 / 0.58 le meme jour sur le meme fork)	jamais mesure au paquet ; strix-0007bc6 15/09/2026
-ornith-1.5-35b-a3b-parallel	974	1129	70.7	73.3			aucun, parallel 4 (cache-type-v q8_0)	b10566 28/08/2026 contre strix-0007bc6 13/09/2026
-ornith-1.5-35b-a3b-mtp		1073		76.2		0.55	ngram-map-k 7 + draft-mtp 4, parallel 1 (meme GGUF que la ligne ci-dessus)	jamais mesure au paquet ; strix-0007bc6 15/09/2026
-qwen3.8-27b-dflash-nothink	261	302	29.5	32.2	0.65	0.625	ngram-map-k 47 + draft-dflash 7, cache-type-v f16 depuis le 17/09/2026 (MTP n-max 6 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 17/09/2026
-muse-glimmer-30b-dflash		266		38.0		0.635	ngram-map-k 7 + draft-dflash 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, reasoning_strength low + reasoning-budget 4096, parallel 1 (cache-type-v q8_0, swa-full)	jamais mesure au paquet ; strix-0007bc6 16/09/2026 (qwen3.8-27b-dflash-nothink : 302 / 32.2 / 0.625, controle a froid du 17/09/2026 sur le meme fork)
-qwen3.8-flash-next-mtp-nothink	197	383	25.9	50.0	0.75	0.87	ngram-map-k 7 + draft-mtp 4 et ngram-on-disk (n-gram seul sur le paquet)	b10809 05/09/2026 contre strix-0007bc6 12/09/2026
-qwen3-coder-next	468	727	43.7	52.2	0.29	0.515	draft-dflash 7, drafter DFlash z-lab Q8_0 (ngram-map-k 47 sur le paquet)	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
-deepseek-v4-flash	110	196	12.3	28.8		0.69	ngram-map-k 7 + draft-dspark 3 (drafter DSpark unsloth Q8_0 ; n-gram seul sur le paquet), reasoning-budget 6144	b10433 21/08/2026 contre strix-0007bc6 15/09/2026
+modele	prefill_vulkan	prefill_rocm	decode_vulkan	decode_rocm	acceptance_vulkan	acceptance_rocm	reglage	source
+ornith-1.5-9b-mtp-nothink	828	1134	39.5	41.7	0.56	0.565	ngram-map-k 7 + draft-mtp 3, min-hits 2, tete MTP tierce embarquee (GGUF fusionne protoLabsAI), parallel 1	strix-0007bc6 15/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026
+ornith-1.5-35b-a3b-parallel	1129	1378	73.3	72.4			aucun, parallel 4 ; cache-type-v q8_0 sous le fork, f16 depuis le 18/09/2026	strix-0007bc6 13/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026
+ornith-1.5-35b-a3b-mtp	1073	1306	76.2	75.9	0.55	0.615	ngram-map-k 7 + draft-mtp 4, min-hits 2, tete MTP embarquee, parallel 1 (meme GGUF que la ligne ci-dessus)	strix-0007bc6 15/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026
+lfm2.5-2.6b	2875	3749	108.8	120.3	0.50	0.505	draft-dspark 3, drafter DSpark officiel Liquid AI Q8_0, parallel 1	strix-0007bc6 15/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026
+qwen3-coder-next	727	1022	52.2	56.0	0.515	0.515	draft-dflash 7, drafter DFlash z-lab Q8_0 (conversion transmutator), parallel 1	strix-0007bc6 15/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026
+qwen3.8-27b-dflash-nothink	302	270	32.2	37.1	0.625	0.675	ngram-map-k 47 + draft-dflash 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, parallel 1	strix-0007bc6 17/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026
+muse-glimmer-30b-dflash	277	346	40.5	31.6	0.645	0.625	ngram-map-k 7 + draft-dflash 7, min-hits 2, drafter DFlash 2 z-lab Q8_0, reasoning_strength low + reasoning-budget 4096, parallel 1 ; decode tres bruite sur les deux series (cf. lib/models.sh)	strix-0007bc6 17/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026
+deepseek-v4-flash	196	131	28.8	26.3	0.69	0.685	ngram-map-k 7 + draft-dspark 3, drafter DSpark unsloth Q8_0, reasoning-budget 6144, parallel 1 ; servi seul (9 Gio libres une fois charge)	strix-0007bc6 15/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026
+qwen3.8-flash-next-mtp-nothink	364	835	52.4	46.7	0.865	0.455	quant AP-Q4_K_XL des deux cotes ; ngram-map-k 7 + draft-mtp 4 et ngram-on-disk sous le fork, draft-mtp,ngram-mod 3 + lazy-mode on-direct + batch 16384 / ubatch 4096 sur l'image	strix-0007bc6 17/09/2026 contre strix-8c1c282+r7dda3ac 18/09/2026

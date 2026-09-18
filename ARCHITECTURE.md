@@ -6,8 +6,8 @@
 lib/models.sh (déclarations : download_hf/llama_model/groupe → MODEL_INI, défauts)
         │
         ▼                    surcharges
-generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
-   (lib/ini.sh)      ◄──  spec-nmax.conf       (spec-draft-n-max par modèle)
+generate_models_ini  ◄──  spec-nmax.conf       (spec-draft-n-max par modèle)
+   (lib/ini.sh)
         │            ◄──  spec-ngram.conf      (spec-ngram-map-k-size-m par modèle)
         │            ◄──  preload.conf         (load-on-startup)
         ▼
@@ -15,9 +15,35 @@ generate_models_ini  ◄──  bench-devices.conf   (device par GGUF)
                           ⚠ lu AU DÉMARRAGE SEULEMENT → restart requis
 ```
 
-À part, hors de ce flux : `fork.conf` (épinglage du moteur — `pin = <commit>`,
-`raison = <texte>`), lu par `lib/fork.sh` seul. Il ne touche pas au ini, il
-décide quel commit du fork est construit et bloque le suivi d'amont.
+Le service est un **conteneur**, décrit par un second fichier généré, à côté du
+ini et du même statut (produit, non versionné, jamais édité à la main) :
+
+```
+runtime/image.conf ──► --image-build ──► image llm-rocm-strix:latest
+preload.conf       ──┐                            │
+lib/compose.sh     ──┴─► regen_compose ──► ~/models/docker-compose.yml
+                                                   │
+                        _svc_start ────────────────┘
+                        docker compose up -d --force-recreate
+                                                   │
+                                                   ▼
+   conteneur « llama-server »            hôte
+   ┌──────────────────────────┐          ┌──────────────────────────────┐
+   │ /usr/local/bin/llama-    │          │                              │
+   │   server (image)         │          │                              │
+   │ --models-preset          │◄── ro ───┤ ~/models  (MÊME chemin       │
+   │   ~/models/models.ini    │          │            absolu, en :ro)   │
+   │ --host 0.0.0.0 --port … ─┼── :8009 ─┤ $BIND_ADDR:8009 (défaut      │
+   │ /var/cache/llama   (rw)  │◄── rw ───┤ 0.0.0.0, comme l'ancien      │
+   │ /dev/kfd, /dev/dri       │◄─────────┤ --host 0.0.0.0 de l'unité)   │
+   └──────────────────────────┘          │ ~/.local/state/llm-setup/    │
+                                         │   cache                      │
+                                         └──────────────────────────────┘
+```
+
+`~/models` est monté **au même chemin absolu** des deux côtés : `models.ini`
+porte des chemins absolus de l'hôte et n'a donc jamais à être réécrit pour le
+conteneur. En lecture seule : le moteur n'a rien à écrire dans les poids.
 
 Le script ne parle jamais directement aux GGUF pour mesurer : `--bench` et
 `--spec-test` passent par l'API du serveur **tel qu'il tourne**
@@ -32,20 +58,33 @@ régresser.
 ordre imposé :
 
 ```
-common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
   `_dl`, `_dl_shard`, `_maybe_restart_service`, `_llama_build` : version
   courte de llama.cpp, journalisée partout ; `_ensure_room_for` : garde
   mémoire avant chargement d'un modèle, cf. plus bas) et **toutes les variables
-  globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `BENCH_CONF`,
-  `PRELOAD_CONF`, `SPEC_TEST_URL`, `LOG_DIR` (+ migration des journaux de la
+  globales de config** : `MODELS_BASE`, `CONFIG_DIR`, `PRELOAD_CONF`, `SPEC_TEST_URL`, `LOG_DIR` (+ migration des journaux de la
   racine), `SPEC_LOG`, `BENCH_LOG`, `SPEC_CONF`, `SPEC_NGRAM_CONF`, `SERVICE_NAME`,
   `SERVICE_FILE`, `REFRESH`/`ONLY`. Elles vivent ici parce que plusieurs modules les
   consomment (`_maybe_restart_service` utilise `SERVICE_NAME`, `cmd_bench`
   utilise `SPEC_TEST_URL`) — définies **avant** toute fonction qui les utilise.
-- `models.sh` : `DEFAULT_DEVICE` et la **déclaration des modèles**, un bloc
+- `svc.sh` : **le seul point d'appel de `docker compose` pour le service**.
+  `_svc_compose` (`--project-directory $CONFIG_DIR -f $CONFIG_DIR/docker-compose.yml`),
+  `_svc_start` (régénère le compose, `up -d --force-recreate --remove-orphans`,
+  puis `_svc_wait_ready`), `_svc_stop [timeout=180]`, `_svc_restart` (stop puis
+  start), `_svc_is_active` (`docker inspect` sur le nom du conteneur),
+  `_svc_installed` (compose générable : docker, image locale, `models.ini`),
+  `_svc_wait_ready [timeout=300]` (boucle `/health`, sortie anticipée avec le
+  code de sortie si le conteneur est `exited`), `_svc_logs`, et les commandes
+  `cmd_start` / `cmd_stop` / `cmd_restart` / `cmd_status` / `cmd_logs`.
+  Sourcé juste après `common.sh` parce que `_maybe_restart_service` en dépend.
+  Ne pas confondre avec le compose **jetable** de `bench-agentic/`, qui lance le
+  client pi et ne sert aucun modèle.
+- `models.sh` : `DEFAULT_DEVICE` (`ROCm0`, device unique de l'image),
+  `INI_BATCH_MAX` / `INI_BIG_BATCH_OK` (garde-fou `batch-size`) et la
+  **déclaration des modèles**, un bloc
   par modèle **avec ses commentaires métier** (sampling officiels, contraintes
   cache/MTP/SWA, historique des choix, repo/quant). Quatre helpers déclaratifs :
   `download_hf`/`download_hf_shards` (définissent les chemins `*_PATH`,
@@ -55,8 +94,8 @@ common → models → ini → preload → setup → fork → bench → bench-dev
   et `PRESET_ORDER` = ordre de déclaration = ordre d'émission — `declare -A`
   ne préserve pas l'ordre d'insertion). Un `download_hf` peut servir
   plusieurs sections (même GGUF) et porter plusieurs fichiers (drafter externe).
-- `ini.sh` : loaders des quatre confs (`load_bench_conf`, `load_preload_conf`,
-  `load_spec_conf`, `load_spec_ngram_conf`), `_preset_model_key`,
+- `ini.sh` : loaders des trois confs (`load_preload_conf`,
+  `load_spec_conf`, `load_spec_ngram_conf`),
   `_preset_nmax` et `_preset_ngram_m` (surcharge conf > défaut script ;
   `SPEC_NMAX_FORCE` / `SPEC_NGRAM_FORCE` + `*_PRESET` priment, posés par les
   tuners pour tester une valeur sans l'écrire), `generate_models_ini`
@@ -64,57 +103,71 @@ common → models → ini → preload → setup → fork → bench → bench-dev
   remplacé le temps d'une mesure, `draft-mtp` pour `--spec-tune` sur une
   liste, `none` pour la référence de `--spec-ngram-tune` sans MTP ; et
   `SPEC_AB_OVERRIDES` + `SPEC_AB_PRESET` : surcharges libres de `--spec-ab`,
-  via `_apply_overrides`).
+  via `_apply_overrides`). Émet aussi les **quatre injections** de device
+  (`device`, `device-draft`, `spec-draft-ngl = all`, `mmproj-device`, toutes
+  sur `DEFAULT_DEVICE`), le **garde-fou `batch-size`/`ubatch-size`**
+  (`_ini_guard_batch`, refus au-delà de `INI_BATCH_MAX` hors
+  `INI_BIG_BATCH_OK`, surcharges `--spec-ab` comprises) et l'avertissement
+  `_ini_warn_conf_nmax` (une valeur locale de `spec-nmax.conf` qui contredit
+  le dépôt).
+- `compose.sh` : **génération du `docker-compose.yml`** de `$CONFIG_DIR`
+  (`~/models`, à côté de `models.ini`). `generate_compose` écrit le YAML sur
+  **stdout** (aucun effet de bord, donc testable et diffable), `regen_compose`
+  l'écrit sur disque par un fichier temporaire et **ne remplace que si le
+  contenu diffère**. `_compose_check` valide les prérequis avant d'écrire une
+  seule ligne (docker, image locale via `_image_ref`, `models.ini`, gid de
+  `render` et `video`), `_compose_gid` résout un groupe de l'hôte en **nombre**.
+  `BIND_ADDR` (défaut `0.0.0.0`) et `COMPOSE_CACHE_DIR`
+  (`~/.local/state/llm-setup/cache`) vivent ici.
 - `preload.sh` : sélection interactive (`select_preload_models`, gum ou
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
   dossiers `<clé>`/`<clé>-mtp`), `cmd_preload`.
-- `setup.sh` : `cmd_setup` (dépendances, ROCm best-effort, téléchargements,
-  puis `_setup_propose_fork` : proposition d'installer le fork quand il n'est
-  pas le moteur résolu — défaut oui, rien en entrée non interactive, isolée de
-  `cmd_setup` pour être testable sans réseau),
+- `setup.sh` : `cmd_setup` (dépendances - curl et `hf` seulement depuis le
+  18/09/2026, plus aucun paquet llama.cpp ni ggml -, téléchargements, puis
+  `_setup_check_docker` : docker présent, démon qui répond ET activé au boot,
+  utilisateur dans le groupe `docker`, image du moteur présente ; jamais
+  bloquant, isolée de `cmd_setup` pour être testable sans réseau),
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
-- `fork.sh` : moteur. Briques communes `_fork_pull` (refus sur arbre sale,
-  `git pull --ff-only`), `_fork_build` (cmake Vulkan, quatre cibles),
-  `_fork_links` (liens dans `~/.local/bin`), `_fork_arbre_propre` (refus commun
-  au pull et au checkout d'épinglage). `cmd_setup_fork [commit] [raison]` (clone
-  ou pull de `halo-box/strix-llama.cpp` dans `~/llm/strix-llama.cpp`, build,
-  liens : la même commande installe et remet à niveau ; avec une référence, elle
-  ÉPINGLE le moteur dessus — `_fork_fetch_ref` puis `_fork_checkout`, détaché
-  sur un commit ou un tag, suivi de branche sur une branche — et l'écrit dans
-  `fork.conf` ; sans argument, elle retire l'épinglage et revient sur la
-  branche), `cmd_update_fork` (suivi d'amont
-  seul : refuse sans clone ou sans liens, pull, rebuild seulement s'il y a du
-  nouveau, rappelle le restart ; ne lance jamais de bench, `--update` renvoie
-  vers elle en fin de run ; sur un moteur épinglé, ne tire ni ne demande rien,
-  affiche le commit épinglé, sa raison et le changelog en attente),
-  `FORK_CONF` + `_fork_pin_read` / `_fork_pin_write` / `_fork_pin_clear`
-  (épinglage : `pin = <commit>`, `raison = <texte>` facultative, aussi prise
-  dans `$FORK_PIN_REASON` ; relu par `_fork_status` et `_setup_propose_fork`),
-  `cmd_unset_fork` (retrait des liens, retour au paquet Arch), `_fork_status`
-  (binaire résolu + version, affiché aussi par `--list-devices`), `FORK_ONLY_KEYS`
-  + `_fork_keys_guard` (clés ini que seul le fork comprend ; appelé par
-  `cmd_start` : un moteur upstream sur un ini qui en porte une ne démarre pas
-  du tout, le routeur entier refuse la clé inconnue — la garde le dit en
-  nommant modèle et clé, elle ne filtre ni ne réécrit rien). Les binaires
-  portent un RUNPATH absolu : déplacer le dépôt impose un rebuild. Les mesures
-  faites sous le fork forment une série à part (`_llama_build` les étiquette
-  `strix-<commit>` au lieu de `bNNNNN`).
+- `runtime.sh` : **le moteur**, conteneurisé (dossier `runtime/`, voir plus
+  bas), pour le service comme pour les outils hors service. `_image_read_conf` (lecture stricte de `runtime/image.conf` : une clé
+  inconnue est une erreur, pas un silence), `_image_tag` / `_image_ref` (tag
+  unique `latest`), `_image_ls_remote` (résolution d'une branche en sha avant le
+  build : un `LABEL` ne peut pas lire `versions.txt`, produit pendant le build),
+  `cmd_image_build [--no-cache]` (build sous le tag TEMPORAIRE `:build`,
+  vérification que `/opt/strix/versions.txt` et les quatre binaires
+  correspondent à ce qui a été demandé, PUIS seulement promotion en `:latest`,
+  journal `logs/images.tsv` et ménage), `_image_purge_dangling` (ne supprime que
+  des images **sans tag portant `llm-setup.engine_rev`** : jamais de
+  `docker system prune`, jamais `docker image prune -a`, la machine héberge
+  d'autres images), `cmd_image_update [engine-rev] [rocm-rev]` (compare aux
+  sommets des deux branches et s'arrête ; `IMAGE_UPDATE_YES=1` vaut accord ;
+  c'est aussi le retour arrière du moteur),
+  `cmd_image_status`, et `_dk_run <binaire> [args]` (exécution dans l'image :
+  `/dev/kfd` + `/dev/dri`, gid NUMÉRIQUES de `render` et `video` via `getent`,
+  `seccomp=unconfined` compensé par `no-new-privileges` et `cap-drop=ALL`,
+  `--shm-size 8g`, memlock illimité, `~/models` monté au MÊME chemin absolu en
+  lecture seule, `--network none` par défaut — jamais `--privileged`, jamais
+  `docker.sock`. `DK_RUN_PUBLISH=127.0.0.1:<port>:<port>` publie un port, borné
+  à la loopback, et bascule le réseau par défaut sur `bridge` ; `DK_RUN_NAME`
+  nomme le conteneur pour qu'un trap puisse faire `docker rm -f` : les deux
+  servent au `llama-server` jetable de `tools/spec-isolate.sh`).
+  ⚠ Cette image EST le moteur du service (le compose la nomme par `_image_ref`),
+  mais aucune de ces commandes ne redémarre quoi que ce soit : une image neuve
+  n'est servie qu'au prochain `--restart`. Une image = une série de mesures.
 - `bench/bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`, précédée
   de la garde mémoire `_ensure_room_for`), les
   sélections (`_bench_presets`, `_bench_select_presets`, `_bench_select_one`)
   et `cmd_bench` (mesure du serveur en l'état, journal `logs/bench.log` +
   comparaison au run précédent). Une mesure = un module `bench/bench-*.sh` qui
   réutilise ce noyau :
-- `bench/bench-devices.sh` : `cmd_bench_devices` (comparaison automatique des
-  devices d'un modèle : device forcé via `BENCH_DEVICE_FORCE`, ini régénéré +
-  restart par device, verdict = temps d'un tour d'usage simulé
-  `PP/prefill + GEN/décode` (profil `BENCH_PROFILE_PP`/`BENCH_PROFILE_GEN`,
-  défaut 2000/3000 ; à <2 % d'écart le device par défaut est préféré),
-  vainqueur écrit dans `bench-devices.conf` via `_bench_save_device`),
-  `cmd_bench_sanity` / `_bench_sanity_one` (justesse, `py/check_answer.py`,
-  appliquée par `cmd_bench_devices` avant chaque device), `cmd_list_devices`.
+  `bench.sh` porte aussi `cmd_bench_sanity` / `_bench_sanity_one` (justesse,
+  `py/check_answer.py` ; première étape **bloquante** de
+  `tools/qualif-modele.sh`) et `cmd_list_devices` (étiquette du moteur, puis
+  les devices de l'**image** par `_dk_run llama-bench --list-devices`). Le
+  module `bench/bench-devices.sh` et `--bench-devices` ont été retirés le
+  18/09/2026 : l'image n'expose qu'un device.
 - `bench/bench-parallel.sh` : `cmd_bench_parallel` (salves de 1 puis n requêtes
   simultanées, `parallel` réel lu sur `/v1/models`, agrégat par
   `py/parallel_agg.py`).
@@ -155,11 +208,11 @@ common → models → ini → preload → setup → fork → bench → bench-dev
   `_preset_has_spec_type` (un `spec-type` peut être une liste : ne jamais
   ancrer un grep sur `= draft-mtp`), sélection des modèles MTP et n-gram ;
   l'analyse est déléguée à `py/spec_analyze.py` et `py/batch_curve.py`.
-- `service.sh` : `cmd_start` (`--models-max` = préchargés + 1, min 2),
-  `cmd_install_service` (service **user** piloté par `systemctl --user`, linger
-  activé pour le démarrage au boot, `ExecStart` via `realpath` du
-  script, `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` posé d'office pour ROCm/iGPU),
-  `cmd_uninstall_service`.
+- `service.sh` : ne contient plus que `cmd_migrate_off_systemd`, commande
+  **temporaire** de bascule (stop, disable, suppression de l'unité,
+  `daemon-reload`, contrôle que le port 8009 est libre). Idempotente, à retirer
+  quand le parc sera passé. L'unité systemd, `--install-service`, le linger et
+  le PATH de l'unité ont disparu avec la conteneurisation.
 - `help.sh` : `cmd_help`.
 
 Les fichiers de conf restent à côté du **point d'entrée** (`SCRIPT_DIR`),
@@ -168,7 +221,8 @@ jamais dans les sous-dossiers.
 ## Scripts Python (`py/`)
 
 Appelés par chemin absolu `python3 "$SCRIPT_DIR/py/x.py"` (jamais relatif
-au cwd : le service systemd démarre ailleurs). Python 3 stdlib uniquement.
+au cwd : les commandes du dépôt sont lancées depuis n'importe où).
+Python 3 stdlib uniquement.
 Leurs sorties sont contractuelles : le bash les consomme au `sed -n`/`grep`
 près — voir `tests/py-golden.sh`.
 
@@ -181,12 +235,12 @@ près — voir `tests/py-golden.sh`.
 | `batch_curve.py <modèle> <device> <depth> [tsv] [rec]` | jsonl de `llama-bench -o jsonl` sur stdin (plusieurs balayages concaténés, le plus récent fait foi) | tableau batch/size_m/coût/seuil/gain, marches, baisses au-delà du bruit, tailles dominées, verdict ; `SIZEM_SAFE=`/`SIZEM_LARGE=`/`STEP_LO=`/`STEP_HI=` si `rec` ; append TSV si fichier donné | `cmd_spec_ngram_tune`, `tools/bench-spec-batch.sh` |
 | `depth_curve.py <modèle> <device> <pp> <gen> [tsv] [rec]` | jsonl de `llama-bench -d` sur stdin | tableau prefill/décode/tour simulé par profondeur, dégradation de 0 à la profondeur max, `TOUR_<depth>=` si `rec` ; append TSV | `tools/bench-depth.sh` |
 | `spec_isolate_bench.py --port --tag --out --prompts --passes --max-tokens --np [--seed] [--temp]` | le serveur jetable de `tools/spec-isolate.sh` sur `--port` | tableau par passe (prefill, décode, acceptance, sanité, aperçu), salve simultanée si `--np > 1`, médianes hors 1re passe ; append `<out>/mesures.tsv` et `<out>/gen-*.txt` | `tools/spec-isolate.sh` |
-| `check_answer.py <json> <attendu>` | réponse `/v1/chat/completions` | ligne lisible ; code 0 si la valeur attendue est dans la réponse (ou le raisonnement), 1 sinon | `_bench_sanity_one` (bench.sh, aussi appelé par `cmd_bench_devices`) |
+| `check_answer.py <json> <attendu>` | réponse `/v1/chat/completions` | ligne lisible ; code 0 si la valeur attendue est dans la réponse (ou le raisonnement), 1 sinon | `_bench_sanity_one` (bench.sh) |
 | `cache_stats.py <json> <étiquette>` | réponse `/v1/chat/completions` | ligne lisible + `PN=` (tokens du prompt) `CN=` (servis du cache) `PMS=` (prefill ms) | `cmd_bench_cache` |
 | `parallel_agg.py <temps_mur_s> <réponse.json>...` | réponses d'une salve de requêtes simultanées | ligne lisible + `AGG=` (tokens / temps mur) `MED=` (décode médian par requête) `TOK=` `ERR=` | `_bench_parallel_salve` (bench.sh) |
 | `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device **et du même mode EC** (à défaut, le dernier run avec la mention « mode EC différent »), build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
 | `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `logs/spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
-| `perf_graphs.py [<tsv> [<dossier>]]` | `docs/perfs.tsv` (TSV versionné, une ligne par section servie) | `docs/graphs/prefill.svg`, `decode.svg`, `ecarts.svg` (SVG statiques, rendu sobre, tracé déterministe → sortie reproductible) | personne : lancé à la main quand la table du parc change (README, skill `ajout-modele` étape 6) |
+| `perf_graphs.py [<tsv> [<dossier>]]` | `docs/perfs.tsv` (TSV versionné, une ligne par section servie, deux séries : fork Vulkan0 et moteur conteneurisé ROCm0) | `docs/graphs/prefill.svg`, `decode.svg`, `ecarts.svg` (SVG statiques, rendu sobre, tracé déterministe → sortie reproductible) | personne : lancé à la main quand la table du parc change (README, skill `ajout-modele` étape 6) |
 
 ## Prompts de mesure (`prompts/`)
 
@@ -198,7 +252,7 @@ fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
 | `spec-test.txt` | `cmd_spec_test` | prompt de référence (module `inventory.py` + tests pytest — code structuré = meilleur cas MTP) ; seul prompt qui alimente la calibration α |
 | `spec-refactor.txt` | `cmd_spec_ngram_tune` (via `cmd_spec_test`) | le même module fourni dans le contexte, avec des blocs à recopier exactement puis à remplacer (forme oldString/newString d'opencode) : le seul cas où un n-gram a des hits, donc le seul qui départage deux `size_m` |
 | `bench-context.txt` | `_bench_one` | contexte réaliste du bench : cahier des charges du système que la tâche demande d'implémenter (long prefill varié ; taille réelle = `n=` de la passe 1) |
-| `bench-sanity.txt` | `_bench_sanity_one` | recopie exacte d'un code (`LAMPADAIRE-2719`) : contrôle de justesse d'un device, volontairement trivial pour ne tester que le backend, pas le modèle |
+| `bench-sanity.txt` | `_bench_sanity_one` | recopie exacte d'un code (`LAMPADAIRE-2719`) : contrôle de justesse du moteur, volontairement trivial pour ne tester que le backend, pas le modèle |
 | `bench-task.txt` | `_bench_one` | tâche de génération posée après le contexte (référence les sections du cahier des charges) |
 
 **⚠ Comparabilité.** Modifier un de ces fichiers invalide les comparaisons
@@ -212,11 +266,9 @@ dans le message de commit.
 
 ## Cycle de vie d'un modèle
 
-1. Défaut : corps `MODEL_INI[modèle]` (models.sh), device hérité du `[*]`
-   (Vulkan0).
+1. Défaut : corps `MODEL_INI[modèle]` (models.sh), plus les flags globaux du
+   `[*]` (device `ROCm0`, `fit = off`, `load-mode = none`, cache K et V `f16`).
 2. Surcharges appliquées par `generate_models_ini` :
-   `bench-devices.conf` (ligne `device =` si le vainqueur du GGUF ≠ défaut ;
-   clé = **dossier du GGUF**, donc partagée entre modèles d'un même fichier),
    `spec-nmax.conf` (substitution de `spec-draft-n-max`),
    `spec-ngram.conf` (substitution de `spec-ngram-map-k-size-m`),
    `preload.conf` (ajout de `load-on-startup = true`).
@@ -253,9 +305,10 @@ mesure en `draft-mtp` seul (`SPEC_TYPE_FORCE=draft-mtp`).
 
 Un draft de `size_m` tokens est vérifié dans un forward de batch
 `size_m + 1`. Le gain ne dépend que de la forme de `t_forward(batch)`, qui
-a des marches : ggml change de noyau selon la taille du batch (Vulkan :
-`mul_mat_vec_max_cols = 8`, x2 entre batch 8 et 9, mesuré sur un dense et
-un MoE). Deux régimes seulement ont du sens, le script sort les deux :
+a des marches : ggml change de noyau selon la taille du batch (mesuré sur
+ggml-vulkan, `mul_mat_vec_max_cols = 8`, x2 entre batch 8 et 9, sur un dense
+et un MoE ; seuil non rejoué sur le moteur HIP de l'image, les `size-m`
+antérieurs au 18/09/2026 en découlent). Deux régimes seulement ont du sens, le script sort les deux :
 **sûr** = plus grande taille sous la première marche (seuil de non-perte
 minimal), **large** = taille qui maximise `gain = batch / coût relatif` sous
 `PART_SEUIL_MAX` (25 % du draft). Une marche est un saut de coût **par unité
@@ -278,48 +331,38 @@ référence en `spec-type none` (`SPEC_TYPE_FORCE`) et n'écrit rien si aucun
 n'est pas réglé (second ordre, restarts multipliés), il vit dans
 `lib/models.sh`.
 
-## Verdict de --bench-devices (temps de tour simulé)
+## Le device : plus de choix depuis le 18/09/2026
 
-Comparer deux devices sur deux métriques (prefill t/s, décode t/s) ne
-tranche pas quand chacun gagne la sienne : ROCm est souvent devant en
-prefill, Vulkan en décode. Le verdict ramène donc la comparaison à un seul
-scalaire : le temps d'un tour d'usage type,
+Le moteur du service est l'image de `runtime/`, construite en **HIP seul** :
+elle n'expose que `ROCm0`. `--bench-devices`, `bench-devices.conf`,
+`BENCH_DEVICE*`, `_bench_save_device` et `lib/bench/bench-devices.sh` ont donc
+été retirés, et `DEFAULT_DEVICE` (`lib/models.sh`) est la seule valeur écrite
+dans le ini, sur quatre lignes par section : `device`, `device-draft`,
+`spec-draft-ngl = all` et `mmproj-device`, pour qu'aucun morceau du modèle
+(drafter, projecteur vision) n'atterrisse ailleurs que sur sa cible.
 
-```
-t(device) = PP_froid / prefill_t/s  +  GEN / décode_t/s
-```
+Ce qui en reste :
 
-avec par défaut `PP_froid = 2000` tokens de prefill froid et `GEN = 3000`
-tokens générés (variables d'environnement `BENCH_PROFILE_PP` /
-`BENCH_PROFILE_GEN`, surchargables à l'appel sans toucher au script). Le
-profil représente un tour agentic : un morceau de contexte nouveau à
-calculer réellement, puis une réponse longue. Les tokens resservis par le
-prompt cache sont volontairement hors profil : leur coût réel est quasi
-nul (cf. les passes 2+ du bench, n=4 calculés sur ~1400), les compter
-n'ajouterait que du bruit sans changer l'ordre.
+- **`--bench-sanity`** (la question de contrôle, `prompts/bench-sanity.txt`) :
+  c'était la porte d'entrée de `--bench-devices`, c'est maintenant la première
+  étape, **bloquante**, de `tools/qualif-modele.sh`. Elle attrape un texte
+  propre mais faux, là où le garde-fou « sortie dégénérée » de `timings.py`
+  attrape le charabia. Les deux servent : un backend cassé produit des t/s
+  superbes (DeepSeek V4 sur le ROCm système, 550 t/s de « Nous dev dev dev »).
+- **`--list-devices`** : un contrôle, plus un choix. Il montre l'étiquette du
+  moteur, puis les devices de l'IMAGE (`_dk_run llama-bench --list-devices`),
+  et alerte si `ROCm0` manque : sans lui, rien ne charge.
+- **le verdict de tour simulé** (`t = PP_froid/prefill + GEN/décode`, profil
+  2000 / 3000) n'a plus de commande, mais il reste la bonne façon de trancher
+  un compromis prefill contre décode à la main : c'est ainsi que se lit le cas
+  `qwen3.8-27b-dflash-nothink` sur le nouveau moteur (+26 % de décode, -24 % de
+  prefill, cf. son bloc). Limites inchangées : modèle linéaire, acceptance déjà
+  incluse dans le décode mesuré.
 
-Le vainqueur est le temps minimal, affiché en colonne « tour simulé (s) »
-du tableau. Deux garde-fous :
-
-- à moins de 2 % d'écart, le device par défaut (`DEFAULT_DEVICE`) est
-  préféré : on ne change pas de backend sur du bruit de mesure ;
-- un prefill marqué `*` (passe 1 partiellement servie par le cache) entre
-  dans le calcul sans l'astérisque mais reste signalé au tableau. Le cas
-  est théorique ici : le restart entre devices garantit un cache froid.
-
-Les entrées du calcul sont les médianes de `_bench_one` (prefill de la
-passe 1, décode hors passe 1), donc les mêmes chiffres et les mêmes
-prompts que `--bench` : un tableau `--bench-devices` se compare à un
-tableau `--bench` de la même époque de prompts. Limites assumées : le
-modèle est linéaire (pas de dépendance du prefill à la taille du contexte
-ni du décode à la profondeur), et l'acceptance MTP n'entre pas dans la
-formule, elle est déjà incluse dans le décode mesuré.
-
-Exemple (qwen3.8-27b-mtp-nothink, 2026-08-16) : Vulkan0 307 pp / 29,9 tg
-donne 106,7 s ; ROCm0 356 pp / 21,8 tg donne 143,3 s. Le gain de prefill
-de ROCm (+16 %) ne compense pas son décode plus lent (-27 %) : sur ce
-profil, le décode domine dès que GEN/décode dépasse largement
-PP/prefill, ce qui est le cas de tous les modèles denses de ce parc.
+Historique, pour mémoire : le verdict comparait Vulkan0 et ROCm0 parce que
+chacun gagnait une métrique (exemple du 16/08/2026, qwen3.8-27b-mtp-nothink :
+Vulkan0 307 pp / 29,9 tg = 106,7 s ; ROCm0 356 / 21,8 = 143,3 s). Ce ROCm0-là
+est le ROCm SYSTÈME, sans rapport avec le runtime retained-PM4 de l'image.
 
 ## Garde mémoire avant chargement (`_ensure_room_for`)
 
@@ -331,8 +374,7 @@ coupé le temps du `Restart=on-failure`).
 
 `_ensure_room_for <modèle>` (lib/common.sh) est donc appelé avant la première
 requête de chaque mesure (`_bench_one`, `_bench_sanity_one`, `cmd_bench_cache`,
-`cmd_bench_parallel`, `cmd_spec_test` — donc aussi `--bench-devices` et
-`--spec-ab`). Dans l'ordre :
+`cmd_bench_parallel`, `cmd_spec_test`, donc aussi `--spec-ab`). Dans l'ordre :
 
 1. taille estimée du modèle = somme des GGUF de sa ligne `model =` (shards
    compris : le ini ne nomme que le premier, le routeur charge la série) plus
@@ -367,6 +409,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench-parallel.log` | `cmd_bench_parallel` | `date modèle device build parallel_srv n agrégé décode_par_requête passes` |
 | `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
 | `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N` (une ligne par scénario et par passe, passe 0 = appel froid ; `N` = boucles simultanées de la salve, 1 pour la référence solo ; colonne ajoutée en queue le 15/09/2026, les lignes antérieures à 13 colonnes restent lisibles ; sur les lignes `N > 1`, `prompt_tok`..`decode_tps` valent `n/c`, chaque conteneur lisant le compteur global du serveur) |
+| `images.tsv` | `cmd_image_build` | `date tag engine_rev rocm_rev taille_octets` (une ligne par image construite ET vérifiée ; complément de l'historique git de `runtime/image.conf`) |
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
@@ -383,8 +426,7 @@ sur un ou plusieurs devices, sans passer par le service (à arrêter soi-même
 pour une mesure propre, l'état est journalisé). Journal lisible
 `logs/spec-batch.log` et TSV `logs/spec-batch.tsv`. Sert à
 explorer ; pour régler, `--spec-ngram-tune`. Les autres fichiers de `tools/`
-(sync opencode, extension pi, renommage du sidecar MTP pour le fork) sont
-décrits dans le README.
+(sync opencode, extension pi) sont décrits dans le README.
 
 `spec-isolate.sh <tag> -- <args llama-server...>` : monte un `llama-server`
 JETABLE (port 8099 par défaut, jamais 8009) avec les arguments bruts passés
@@ -402,7 +444,7 @@ GPU. Variables : `PORT`, `NP` (ajoute `-np` et une salve simultanée),
 
 `qualif-modele.sh <section> [options]` : enchaîne, sur un modèle DÉJÀ déclaré
 dans `lib/models.sh` et servi par le routeur, les étapes 3, 5, 6 et 7 de la
-skill ajout-modele : `--bench-devices`, `--spec-ab` (sur `spec-refactor.txt`
+skill ajout-modele : `--bench-sanity` (bloquante), `--spec-ab` (sur `spec-refactor.txt`
 puis `spec-test.txt`), `--bench`, `--bench-cache`, `--bench-load` et
 `--bench-agentic`, toutes en séquence (un seul GPU) et toutes avec leur entrée
 sur `/dev/null`. Les variantes de `--spec-ab` sont dérivées du drafter et du
@@ -412,14 +454,48 @@ refus de démarrage que `spec-isolate.sh` (mesure du dépôt en cours,
 `logs/qualif/<tag>/` : un journal par étape et `resume.md`, le tableau de
 l'étape 6 rempli par parsing des bilans (codes ANSI filtrés, `n/c` quand un
 motif manque). Une étape en échec n'arrête pas les suivantes ; code de retour
-non nul si l'une a échoué. N'écrit ni `lib/models.sh` ni les `.conf` (sauf
-`bench-devices.conf`, écrit par `--bench-devices` lui-même) ; ne joue ni le
+non nul si l'une a échoué, sauf l'étape de justesse, qui ARRÊTE la
+qualification. N'écrit ni `lib/models.sh` ni les `.conf` ; ne joue ni le
 test isolé ni `--spec-tune`.
 
 `bench-depth.sh` : même principe avec `llama-bench -d` (profondeur de KV
 avant la mesure) : prefill et décode à 0 / 16k / 32k (64k sur demande), KV
 en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 `logs/bench-depth.log` + `.tsv`.
+
+## Moteur conteneurisé (`runtime/`)
+
+Dossier **versionné**, consommé par `lib/runtime.sh` et par personne d'autre.
+
+| Fichier | Rôle |
+|---|---|
+| `Dockerfile.rocm-strix` | copie vendorisée du Dockerfile de la PR 133 de `kyuz0/amd-strix-halo-toolboxes` (ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 de `pwilkin/rocm-systems` + `halo-box/strix-llama.cpp` en HIP seul) |
+| `patches/` | les deux patchs que le build applique au moteur (grammaire, contournement llama.cpp #25992) |
+| `image.conf` | dépôts, branches, **révisions épinglées**, nom de l'image |
+| `AMONT.md` | provenance, **liste exacte des écarts** avec l'amont, procédure de resynchronisation |
+
+Trois choix structurent le reste :
+
+1. **L'image ne contient que le moteur et son runtime** — pas de modèle, pas de
+   configuration, pas de cache, pas d'état. Les poids arrivent par le montage en
+   lecture seule (compose du service, ou `_dk_run`), `models.ini` reste dans
+   `~/models`. Une image est donc jetable, et un `COPY` amont d'outil ou de
+   données ne se reprend pas.
+2. **Un seul tag, `llm-rocm-strix:latest`.** Reconstruire prend quelques
+   minutes, on ne collectionne pas les images. La traçabilité tient aux trois
+   `LABEL` (`llm-setup.engine_rev`, `llm-setup.rocm_rev`,
+   `llm-setup.build_date`), à `/opt/strix/versions.txt` dans l'image, à
+   `logs/images.tsv` sur la machine — et surtout à **l'historique git de
+   `image.conf`**, qui EST le journal des révisions. Il n'y a pas de rollback
+   par tag : revenir en arrière, c'est y remettre les anciennes révisions.
+3. **Construire ne promeut pas.** Le build se fait sous `:build`, la
+   vérification décide, la promotion suit. Un build raté ou une `versions.txt`
+   discordante laissent `:latest` intacte — c'est le seul filet qui reste, et
+   `tests/sh-unit.sh` le couvre (faux `docker`, faux `git ls-remote`).
+
+L'épinglage de `image.conf` est le seul écart de fond avec l'amont, qui assume
+de ne rien épingler. Le motif : un moteur qui change tout seul rend les séries
+de mesures incomparables.
 
 ## Invariants (à ne pas casser)
 
@@ -430,10 +506,40 @@ en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 - `parallel` est un choix par modèle (contexte par slot, mémoire, rendement
   mesuré de la spéculation), pas une contrainte de `spec-type` : le « np > 1
   non supporté avec MTP » affirmé ici jusqu'au 15/09/2026 venait d'une doc
-  unsloth, absente du fork servi (vérifié le 15/09/2026) ; seul `--mmproj`
+  unsloth, absente de la dorsale `strix-llama.cpp` que sert l'image (vérifié
+  le 15/09/2026 sur le fork, moteur du service à cette date) ; seul `--mmproj`
   reste incompatible avec un drafter.
-- `--cleanup` piloté uniquement par `KNOWN_FILES`.
+- `--cleanup` piloté uniquement par `KNOWN_FILES`. Les deux artefacts générés
+  de `~/models` (`models.ini`, `docker-compose.yml`) sont hors d'atteinte **par
+  construction** : le premier `find` ne liste que des dossiers de premier
+  niveau, le second que des `*.gguf` à partir de la profondeur 2. Ne pas
+  « corriger » ces `find`.
+- Le ménage d'images ne touche QUE des images sans tag portant
+  `llm-setup.engine_rev` : jamais `docker system prune`, jamais
+  `docker image prune -a`, jamais une image taguée qu'on n'a pas construite.
+- Une image n'est promue en `llm-rocm-strix:latest` qu'après vérification de
+  `/opt/strix/versions.txt` contre les révisions demandées : un échec laisse
+  l'image précédente en place.
 - Restart requis après toute régénération du ini (routeur = lecture au boot).
+- **Jamais `docker compose restart`** : il relance le conteneur existant, donc
+  l'ancienne image, l'ancienne ligne de commande et l'ancien `--models-max`.
+  `_svc_restart` est un `stop` puis un `start`.
+- Le compose est **régénéré à chaque démarrage** (`_svc_start`), jamais édité :
+  `--models-max` suit `preload.conf`, l'image suit `runtime/image.conf`, les
+  gid suivent l'hôte. Toutes les valeurs y sont écrites **en clair** - pas de
+  `${VAR}`, pas de `.env`.
+- Les tuners (`--spec-ab`, `--spec-tune`, `--spec-ngram-tune`, `--bench-load`)
+  ne régénèrent que le **ini** (`regen_models_ini`), jamais le compose : leurs
+  surcharges sont temporaires et n'ont rien à voir avec la forme du service.
+  `regen_models_ini` n'appelle donc pas `regen_compose`.
+- L'attente de `/health` vit à UN seul endroit, `_svc_wait_ready` (appelée par
+  `_svc_start` / `_svc_restart`) : plus de boucle recopiée dans les mesures.
+  Une commande qui rend la main a un service qui répond, ou elle a échoué.
+- `seccomp=unconfined` est le seul assouplissement du conteneur (exigé par les
+  ioctl du KFD côté ROCr) ; il est compensé par `cap_drop: [ALL]` et
+  `no-new-privileges`. Jamais `privileged`, jamais `docker.sock`, jamais
+  `network_mode: host`, jamais de `mem_limit` (la garde mémoire raisonne sur le
+  `available` de l'hôte).
 - Mesures spec : l'état réel vient de `/v1/models`, jamais du script/ini.
 - Une mesure ne redémarre pas le routeur pour faire de la place : la garde
   mémoire (`_ensure_room_for`) ne décharge que par l'API, jamais un modèle
@@ -443,9 +549,12 @@ en q8_0 comme le service, tour simulé par profondeur et par device. Journal
   (`_preset_has_spec_type`), jamais un grep ancré sur `= draft-mtp`.
 - Les lignes existantes des journaux (`logs/*.log`) restent lisibles : toute
   colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
-- Tout journal de mesure porte la version de llama.cpp (`_llama_build`) : un
-  chiffre sans son build ne se compare pas. L'étiquette est une CHAÎNE, pas un
-  nombre : `bNNNNN` pour un build upstream, `strix-<commit>` pour le fork
-  (lib/fork.sh). Deux séries distinctes, jamais comparables entre elles.
+- Tout journal de mesure porte l'étiquette du moteur SERVI (`_llama_build`) :
+  un chiffre sans son build ne se compare pas. L'étiquette est une CHAÎNE, pas
+  un nombre - `strix-<engine7>+r<rocm7>`, lue sur les `LABEL` de l'image
+  (repli : dernière ligne de `logs/images.tsv`, puis `?`). C'est la SEULE
+  étiquette du dépôt depuis le retrait du fork (18/09/2026) : le service et les
+  outils hors service tournent sur la même image. Chaque révision d'image ouvre
+  une série distincte, jamais comparable à une autre.
 - Entrée non interactive (`! -t 0`) gérée partout : jamais de question, jamais
   de restart automatique.

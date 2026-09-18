@@ -1,5 +1,5 @@
 # lib/bench/bench-agentic.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 #
 # Séparé de bench.sh (déjà gros) : ce bench ne mesure pas l'API en direct
 # mais un client (pi) en conteneur, avec sa propre lecture des /metrics.
@@ -168,7 +168,7 @@ cmd_bench_agentic() {
   [[ "$passes" =~ ^[1-9][0-9]*$ ]] || error "passes doit être un entier >= 1 (reçu : '$passes')"
   [[ "$n" =~ ^[1-9][0-9]*$ ]] || error "N doit être un entier >= 1 (reçu : '$n')"
   curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1 \
-    || error "llama-server ne répond pas sur $SPEC_TEST_URL — systemctl --user start $SERVICE_NAME"
+    || error "llama-server ne répond pas sur $SPEC_TEST_URL - ./setup-llm.sh --start"
   if [[ -z "$preset" ]]; then
     _bench_select_one
     [[ -n "$BENCH_DEV_CHOICE" ]] || { info "Rien sélectionné — bench-agentic annulé."; return; }

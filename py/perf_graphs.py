@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Trois SVG statiques versionnés à partir de docs/perfs.tsv, pour lire d'un
-# coup d'oeil la comparaison paquet Arch contre fork strix-llama.cpp :
-#   docs/graphs/prefill.svg   barres groupées paquet / fork, t/s
+# coup d'oeil la comparaison fork Vulkan0 contre moteur conteneurisé ROCm0 :
+#   docs/graphs/prefill.svg   barres groupées fork / conteneur, t/s
 #   docs/graphs/decode.svg    idem sur le décode
-#   docs/graphs/ecarts.svg    écart du fork en % du paquet, zéro au centre
+#   docs/graphs/ecarts.svg    écart du conteneur en % du fork, zéro au centre
 #
 # Rendu sobre : barres rectangulaires à remplissage plein, sans contour ni
 # dégradé, grille verticale fine en gris clair, valeurs au bout des barres,
@@ -28,14 +28,15 @@ import sys
 LARGEUR = 900
 MARGE_G = 258              # place des noms de sections, les plus longs du parc
 MARGE_D = 74               # place des valeurs au bout des barres
-HAUT_TITRE = 116           # titre + sous-titre sur deux lignes + légende
+HAUT_TITRE = 132           # titre + sous-titre (jusqu'à 3 lignes) + légende
 HAUT_AXE = 44              # graduations sous le cadre
 H_BARRE = 16
 ECART_BARRES = 5           # entre les deux barres d'un même modèle
 ECART_GROUPES = 20         # entre deux modèles
 
 POLICE = "Inter, Helvetica, Arial, sans-serif"
-# Gris moyen pour le paquet, bleu pour le fork, rouge pour les écarts négatifs.
+# Gris moyen pour le fork Vulkan0, bleu pour le moteur conteneurisé ROCm0,
+# rouge pour les écarts négatifs.
 GRIS = "#9aa0a6"
 BLEU = "#2f6fdd"
 ROUGE = "#c0392b"
@@ -84,8 +85,8 @@ def lire(chemin):
     for r in csv.DictReader(lignes, delimiter="\t"):
         if not (r.get("modele") or "").strip():
             continue
-        for c in ("prefill_paquet", "prefill_fork", "decode_paquet",
-                  "decode_fork", "acceptance_paquet", "acceptance_fork"):
+        for c in ("prefill_vulkan", "prefill_rocm", "decode_vulkan",
+                  "decode_rocm", "acceptance_vulkan", "acceptance_rocm"):
             v = (r.get(c) or "").strip()
             r[c] = float(v) if v else None
         rows.append(r)
@@ -133,13 +134,17 @@ def _entete(titre, sous_titre, legende, largeur, hauteur):
            '<rect x="0" y="0" width="%d" height="%d" fill="#ffffff"/>'
            % (largeur, hauteur),
            texte(24, 34, titre, taille=18, graisse="600")]
-    for i, l in enumerate(str(sous_titre).split("\n")):
+    lignes = str(sous_titre).split("\n")
+    for i, l in enumerate(lignes):
         out.append(texte(24, 56 + 16 * i, l, taille=12, couleur=TEXTE_FAIBLE))
+    # Légende sous la dernière ligne du sous-titre, qui peut en compter une à
+    # trois : une position fixe la chevaucherait.
+    y_leg = 56 + 16 * len(lignes) + 5
     x = 24
     for libelle, couleur in legende:
         out.append('<rect x="%.1f" y="%.1f" width="11" height="11" '
-                   'fill="%s"/>' % (x, 89, couleur))
-        out.append(texte(x + 17, 98, libelle, taille=12))
+                   'fill="%s"/>' % (x, y_leg, couleur))
+        out.append(texte(x + 17, y_leg + 9, libelle, taille=12))
         x += 24 + int(7.0 * len(libelle))
     return out
 
@@ -155,7 +160,7 @@ def _axe_vertical(out, x, y0, y1, valeurs, xs, unite=""):
 
 # --- graphes groupés (prefill, décode) ---------------------------------------
 
-def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
+def graphe_groupe(rows, cle_vulkan, cle_rocm, titre, sous_titre, chemin,
                   forcer=None):
     h_groupe = 2 * H_BARRE + ECART_BARRES + ECART_GROUPES
     y_top = HAUT_TITRE
@@ -163,15 +168,16 @@ def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
     x0 = MARGE_G
     x_max = LARGEUR - MARGE_D
     # Une colonne vide = mesure absente (section jamais benchée sur cette
-    # série, ex. une variante servie seulement sous le fork) : elle ne compte
-    # pas dans l'échelle et sa barre n'est pas tracée, un « n/c » la remplace.
-    vmax = max(v for r in rows for v in (r[cle_paquet], r[cle_fork])
+    # série, ex. une variante servie sous un seul des deux moteurs) : elle ne
+    # compte pas dans l'échelle et sa barre n'est pas tracée, un « n/c » la
+    # remplace.
+    vmax = max(v for r in rows for v in (r[cle_vulkan], r[cle_rocm])
                if v is not None)
     ticks, haut = graduations(vmax)
     ech = (x_max - x0) / haut
 
     out = _entete(titre, sous_titre,
-                  [("paquet Arch", GRIS), ("fork strix-llama.cpp", BLEU)],
+                  [("fork Vulkan0", GRIS), ("conteneur ROCm0", BLEU)],
                   LARGEUR, hauteur)
     y_bas = y_top + h_groupe * len(rows)
     _axe_vertical(out, x0, y_top - 6, y_bas,
@@ -182,7 +188,7 @@ def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
         out.append(texte(x0 - 12, yg + H_BARRE + 2, r["modele"], taille=12,
                          ancre="end"))
         for j, (cle, couleur) in enumerate(
-                ((cle_paquet, GRIS), (cle_fork, BLEU))):
+                ((cle_vulkan, GRIS), (cle_rocm, BLEU))):
             y = yg + j * (H_BARRE + ECART_BARRES)
             if r[cle] is None:
                 out.append(texte(x0 + 8, y + H_BARRE - 3, "n/c", taille=11,
@@ -198,11 +204,11 @@ def graphe_groupe(rows, cle_paquet, cle_fork, titre, sous_titre, chemin,
 
 # --- graphe des écarts -------------------------------------------------------
 
-def ecart(paquet, fork):
+def ecart(vulkan, rocm):
     """None si l'une des deux séries manque : l'écart n'a pas de sens."""
-    if not paquet or fork is None:
+    if not vulkan or rocm is None:
         return None
-    return (fork - paquet) / paquet * 100.0
+    return (rocm - vulkan) / vulkan * 100.0
 
 
 def graphe_ecarts(rows, titre, sous_titre, chemin):
@@ -211,8 +217,8 @@ def graphe_ecarts(rows, titre, sous_titre, chemin):
     hauteur = HAUT_TITRE + h_groupe * len(rows) + HAUT_AXE
     x0 = MARGE_G
     x_max = LARGEUR - MARGE_D
-    vals = [(ecart(r["prefill_paquet"], r["prefill_fork"]),
-             ecart(r["decode_paquet"], r["decode_fork"])) for r in rows]
+    vals = [(ecart(r["prefill_vulkan"], r["prefill_rocm"]),
+             ecart(r["decode_vulkan"], r["decode_rocm"])) for r in rows]
     amax = max(abs(v) for a, b in vals for v in (a, b) if v is not None)
     ticks, haut = graduations(amax)
     # Zéro au centre : l'échelle est symétrique, les crans se miroitent.
@@ -269,19 +275,21 @@ def main(argv):
     # Sous-titre commun, sur sa propre ligne : les deux séries ne partagent ni
     # le build ni le jour, la colonne source du TSV garde le détail ligne par
     # ligne.
-    st = ("colonne paquet : dernier run bNNNNN du modèle ; colonne fork : "
-          "strix-0007bc6, Vulkan0, --bench 3 passes, 12 et 13/09/2026")
-    graphe_groupe(rows, "prefill_paquet", "prefill_fork",
-                  "Prefill : paquet Arch contre fork",
+    st = ("colonne fork : dernier --bench du modèle sur strix-0007bc6, "
+          "Vulkan0, 12 au 17/09/2026 ;\ncolonne conteneur : --bench du "
+          "18/09/2026, série strix-8c1c282+r7dda3ac, ROCm0")
+    graphe_groupe(rows, "prefill_vulkan", "prefill_rocm",
+                  "Prefill : fork Vulkan0 contre conteneur ROCm0",
                   "tokens/s du prompt, passe 1 à froid.\n" + st,
                   os.path.join(sortie, "prefill.svg"))
-    graphe_groupe(rows, "decode_paquet", "decode_fork",
-                  "Décode : paquet Arch contre fork",
+    graphe_groupe(rows, "decode_vulkan", "decode_rocm",
+                  "Décode : fork Vulkan0 contre conteneur ROCm0",
                   "tokens/s générés, médiane hors 1re passe.\n" + st,
                   os.path.join(sortie, "decode.svg"), forcer=1)
-    graphe_ecarts(rows, "Écart du fork, en % du paquet",
-                  "positif = le fork gagne ; réglages parfois différents des "
-                  "deux côtés,\ndeux séries non comparables à la décimale",
+    graphe_ecarts(rows, "Écart du conteneur ROCm0, en % du fork Vulkan0",
+                  "positif = le moteur conteneurisé gagne ; réglages parfois "
+                  "différents des deux côtés,\ndeux séries non comparables à "
+                  "la décimale",
                   os.path.join(sortie, "ecarts.svg"))
 
 

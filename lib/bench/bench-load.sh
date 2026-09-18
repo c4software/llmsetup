@@ -1,5 +1,5 @@
 # lib/bench/bench-load.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → models → ini → preload → setup → fork → bench → bench-devices → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
 # Sorti de bench.sh (trop gros). Réutilise _bench_select_presets de bench.sh.
 
 # =============================================================================
@@ -7,7 +7,7 @@
 #
 # Usage : ./setup-llm.sh --bench-load [modèle|all]
 #
-# Pour chaque modèle : restart du service (tout est évincé), puis une requête
+# Pour chaque modèle : restart du service conteneurisé (tout est évincé), puis une requête
 # d'un token chronométrée de bout en bout = chargement des poids + premier
 # token ; puis la même requête à chaud = temps de premier token (TTFT) seul.
 # Base objective pour preload.conf (ce que coûte un modèle à la demande) et
@@ -21,8 +21,8 @@ BENCH_LOAD_LOG="$LOG_DIR/bench-load.log"
 
 cmd_bench_load() {
   local target="${1:-}"
-  systemctl --user is-enabled "$SERVICE_NAME" &>/dev/null \
-    || error "Service $SERVICE_NAME non installé — --bench-load redémarre le service entre deux modèles (--install-service)."
+  _svc_installed \
+    || error "Service $SERVICE_NAME non montable ici - --bench-load redémarre le service entre deux modèles (docker + ./setup-llm.sh --image-build)."
   local -a cibles=()
   if [[ "$target" == "all" ]]; then
     _bench_presets; cibles=("${BENCH_PRESETS[@]}")
@@ -35,17 +35,13 @@ cmd_bench_load() {
     cibles=("$BENCH_DEV_CHOICE")
   fi
   warn "Chaque modèle = restart de $SERVICE_NAME (les modèles préchargés se rechargent ensuite)."
-  local p body t0 t1 froid chaud gguf taille dev t
+  local p body t0 t1 froid chaud gguf taille dev
   local -a rows=()
   for p in "${cibles[@]}"; do
     echo ""
     info "── $p ──"
-    systemctl --user restart "$SERVICE_NAME" || error "Restart de $SERVICE_NAME en échec"
-    t=0
-    until curl -sf "$SPEC_TEST_URL/health" >/dev/null 2>&1; do
-      sleep 1; t=$((t+1))
-      if [[ $t -ge 120 ]]; then error "llama-server ne répond pas après 120 s"; fi
-    done
+    # _svc_restart attend /health lui-même (lib/svc.sh) : plus de boucle maison.
+    _svc_restart || error "Restart de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
     body="$(python3 "$SCRIPT_DIR/py/build_body.py" "$p" 1 7 "$SCRIPT_DIR/prompts/bench-sanity.txt")"
     local code
     t0="$(date +%s.%N)"
@@ -86,5 +82,5 @@ cmd_bench_load() {
     printf '%s\n' "${rows[@]}"
   } | column -t -s'|'
   info "Restart final de $SERVICE_NAME (retour aux modèles préchargés)..."
-  systemctl --user restart "$SERVICE_NAME" || warn "Restart en échec : systemctl --user restart $SERVICE_NAME"
+  _svc_restart || warn "Restart en échec : ./setup-llm.sh --restart"
 }
