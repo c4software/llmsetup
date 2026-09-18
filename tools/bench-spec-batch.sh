@@ -70,7 +70,6 @@ command -v python3 >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
 # IMAGE= surcharge l'image mesurée (essai d'un autre moteur), comme dans
 # tools/spec-isolate.sh.
 if [[ -n "${IMAGE:-}" ]]; then
-  _image_read_conf
   IMAGE_NAME="${IMAGE%%:*}"
   [[ "$IMAGE" == *:* ]] && IMAGE_TAG="${IMAGE##*:}"
 fi

@@ -135,7 +135,6 @@ command -v python3 >/dev/null || { echo "python3 introuvable" >&2; exit 1; }
 # IMAGE_NAME/_image_tag : on ne détourne donc que le NOM, le tag restant celui
 # du dépôt ; une référence "dépôt:tag" complète est acceptée telle quelle.
 if [[ -n "${IMAGE:-}" ]]; then
-  _image_read_conf
   IMAGE_NAME="${IMAGE%%:*}"
   [[ "$IMAGE" == *:* ]] && IMAGE_TAG="${IMAGE##*:}"
 fi

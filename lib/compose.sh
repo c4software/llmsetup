@@ -9,12 +9,13 @@
 # module, à côté de models.ini dans $CONFIG_DIR (~/models). Les deux fichiers
 # ont exactement le même statut : produits, jamais édités à la main, jamais
 # versionnés, refaits à chaque démarrage. La source de vérité reste le dépôt
-# (lib/models.sh, les .conf, runtime/image.conf).
+# (lib/models.sh, les .conf, runtime/Dockerfile.rocm-strix).
 #
 # Pourquoi générer plutôt que versionner un compose :
 #   - le fichier porte des valeurs qui ne sont connues QUE sur la machine : les
 #     gid numériques de render et video (getent), le chemin absolu de ~/models,
-#     le tag de l'image locale, et --models-max dérivé de preload.conf ;
+#     le chemin absolu du dépôt (contexte de build), le tag de l'image locale,
+#     et --models-max dérivé de preload.conf ;
 #   - --models-max change dès qu'on touche au préchargement : un compose figé
 #     serait faux dès le premier --preload.
 #
@@ -71,9 +72,17 @@ _compose_check() {
     warn "docker introuvable - le service tourne en conteneur, il ne peut pas démarrer ici." >&2
     return 1
   fi
-  if ! _image_ref >/dev/null 2>&1; then
+  # Image absente = refus net. `docker compose up` construirait tout seul
+  # (c'est son comportement quand l'image du service manque) : vingt minutes
+  # de compilation silencieuse au milieu d'un --start, sans que personne l'ait
+  # demandé. Mieux vaut renvoyer sur la commande de build.
+  # COMPOSE_SKIP_IMAGE_CHECK=1 lève ce contrôle pour le SEUL appelant qui a une
+  # raison de générer le compose sans image : cmd_image_build, dont le travail
+  # est précisément de la construire.
+  if [[ "${COMPOSE_SKIP_IMAGE_CHECK:-0}" != "1" ]] && ! _image_ref >/dev/null 2>&1; then
     warn "Aucune image du moteur sur cette machine (${IMAGE_NAME:-llm-rocm-strix}:$(_image_tag))." >&2
     warn "  La construire d'abord : ./setup-llm.sh --image-build" >&2
+    warn "  (ou, à la main : cd $CONFIG_DIR && docker compose build)" >&2
     return 1
   fi
   [[ -f "$CONFIG_DIR/models.ini" ]] \
@@ -91,8 +100,9 @@ _compose_check() {
 generate_compose() {
   _compose_check || return 1
 
-  local ref gid_render gid_video models_max
-  ref="$(_image_ref)"
+  local ref gid_render gid_video models_max ctx
+  ref="${IMAGE_NAME:-llm-rocm-strix}:$(_image_tag)"
+  ctx="${RUNTIME_DIR:-$SCRIPT_DIR/runtime}"
   gid_render="$(_compose_gid render)"
   gid_video="$(_compose_gid video)"
 
@@ -113,7 +123,9 @@ generate_compose() {
 #
 # Sources de vérité :
 #   lib/compose.sh          forme du service (montages, durcissement, santé)
-#   runtime/image.conf      révisions du moteur, via l'image $ref
+#   $ctx/Dockerfile.rocm-strix
+#                           recette et RÉVISIONS ÉPINGLÉES du moteur (bloc
+#                           « build » ci-dessous, image $ref)
 #   preload.conf            modèles préchargés, d'où --models-max $models_max
 #   lib/models.sh + .conf   contenu de models.ini, passé en --models-preset
 #
@@ -137,8 +149,19 @@ services:
     # et _svc_is_active / _svc_wait_ready interrogent ce nom par docker inspect.
     container_name: $SERVICE_NAME
     image: $ref
-    # Image construite localement (--image-build), jamais poussée nulle part :
-    # un pull ne peut que échouer ou, pire, ramener autre chose.
+    # Recette de l'image, ici et nulle part ailleurs : le Dockerfile vendorisé
+    # du dépôt porte les deux révisions épinglées (ARG ENGINE_REV et
+    # ROCM_SYSTEMS_REV), son git log est le journal des révisions.
+    # « docker compose build » construit et pose le tag « image » ci-dessus ;
+    # « docker compose up -d » NE construit PAS quand cette image existe déjà
+    # (il ne construit que si elle manque), un démarrage ne déclenche donc
+    # jamais une compilation de 40 minutes par surprise. lib/compose.sh refuse
+    # de toute façon de générer ce fichier tant que l'image n'est pas là.
+    build:
+      context: $ctx
+      dockerfile: Dockerfile.rocm-strix
+    # Image construite localement, jamais poussée nulle part : un pull ne peut
+    # que échouer ou, pire, ramener autre chose.
     pull_policy: never
     restart: unless-stopped
     entrypoint: ["/usr/local/bin/llama-server"]

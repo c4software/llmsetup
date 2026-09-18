@@ -65,35 +65,19 @@ Commandes :
                            Image : construit le moteur CONTENEURISÉ (runtime/,
                            ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
                            halo-box/strix-llama.cpp en HIP seul) sur les
-                           révisions de runtime/image.conf, sous un tag
-                           temporaire ; vérifie que /opt/strix/versions.txt et
-                           les quatre binaires correspondent à ce qui a été
-                           demandé, puis seulement promeut en
-                           llm-rocm-strix:latest et supprime les images sans tag
-                           issues de nos builds (label llm-setup.engine_rev).
-                           Un build raté laisse l'image en place intacte.
-                           Journalise dans logs/images.tsv. ⚠ C'est le MOTEUR DU
-                           SERVICE : une image neuve n'est servie qu'au prochain
-                           --restart, et elle ouvre sa propre série de mesures
-                           (étiquette strix-<engine>+r<rocm>). Compter 40 à 60
-                           minutes à froid
-  --image-update [engine-rev] [rocm-rev]
-                           Image : suivi d'amont. Sans argument, compare les
-                           révisions de runtime/image.conf aux sommets des deux
-                           branches, affiche l'écart et S'ARRÊTE — rien n'est
-                           modifié sans confirmation (entrée non interactive :
-                           rien ; IMAGE_UPDATE_YES=1 vaut accord). Avec
-                           accord ou avec des révisions
-                           données : réécrit image.conf puis enchaîne
-                           --image-build. C'est aussi le RETOUR ARRIÈRE du
-                           moteur conteneurisé (y remettre les anciennes
-                           révisions ; il n'y a pas de rollback par tag)
-  --image-status           Image : révisions demandées (runtime/image.conf),
-                           image llm-rocm-strix:latest en place avec ses
-                           étiquettes (moteur, rocm-systems, date), verdict de
-                           conformité entre les deux, taille, images sans tag
-                           restantes et place du cache de build. Ne construit ni
-                           ne purge rien
+                           révisions épinglées dans les ARG de
+                           runtime/Dockerfile.rocm-strix. Simple raccourci vers
+                           « cd ~/models && docker compose build » : le compose
+                           généré porte le contexte et le Dockerfile. L'image
+                           qu'elle remplace perd son tag ; la retirer à la main
+                           par « docker image prune » (SANS -a, qui toucherait
+                           aux images des autres outils de la machine).
+                           ⚠ C'est le MOTEUR DU SERVICE : une image neuve n'est
+                           servie qu'au prochain --restart, et elle ouvre sa
+                           propre série de mesures (étiquette
+                           strix-<engine>+r<rocm>). Compter 40 à 60 minutes à
+                           froid. Changer de révision : éditer l'ARG dans le
+                           Dockerfile, commiter la raison, reconstruire
   --list-devices           Devices exposés par l'IMAGE du moteur
                            (llama-bench --list-devices dans le conteneur).
                            Alerte si ROCm0, le device de tout le ini, manque
@@ -161,28 +145,32 @@ Fichiers (à côté du script, locaux, non versionnés) :
   logs/bench-agentic.log   journal des --bench-agentic
   logs/bench-load.log      journal des --bench-load
   logs/spec-batch.log/.tsv journal des balayages tools/bench-spec-batch.sh
-  logs/images.tsv          journal des --image-build (date, tag, révisions, taille)
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
   spec-ngram.conf          modèle = spec-ngram-map-k-size-m retenu par --spec-ngram-tune
 Fichiers versionnés (runtime/, moteur conteneurisé) :
-  runtime/image.conf       dépôts, branches et RÉVISIONS épinglées de l'image,
-                           plus son nom ; son historique git est le journal des
-                           révisions (le retour arrière passe par lui)
   runtime/Dockerfile.rocm-strix
-                           copie vendorisée du Dockerfile amont (PR 133) ;
-                           écarts et resynchronisation dans runtime/AMONT.md
+                           copie vendorisée du Dockerfile amont (PR 133), qui
+                           porte les DEUX RÉVISIONS ÉPINGLÉES du moteur et du
+                           runtime ROCr (ARG ENGINE_REV, ARG ROCM_SYSTEMS_REV,
+                           bloc « Révisions épinglées » en tête) ; son
+                           historique git est le journal des révisions, et le
+                           retour arrière passe par lui. Écarts avec l'amont et
+                           resynchronisation : runtime/AMONT.md
 Fichiers ($CONFIG_DIR, générés - ne pas éditer à la main) :
   models.ini               configuration des modèles, relancer --preload/--setup
-  docker-compose.yml       description du service, régénérée à chaque --start
+  docker-compose.yml       description du service ET recette de son image
+                           (bloc build sur runtime/), régénérée à chaque --start
                            (lib/compose.sh) ; usage manuel :
                            cd $CONFIG_DIR && docker compose ps | logs -f
+                           cd $CONFIG_DIR && docker compose build
 
 Workflow typique :
   ./setup-llm.sh --setup && ./setup-llm.sh --image-build && ./setup-llm.sh --start
   ./setup-llm.sh --status ; ./setup-llm.sh --logs -f
   ./setup-llm.sh --bench all          # perfs de tous les modèles présents
   ./setup-llm.sh --update qwen3.8-27b # après un re-upload unsloth
-  ./setup-llm.sh --image-update       # puis le moteur : suivi d'amont de l'image
+  ./setup-llm.sh --image-build        # puis le moteur, après un bump de révision
+                                      # dans runtime/Dockerfile.rocm-strix
                                       # (restart du service et --bench restent à la main)
   ./setup-llm.sh --spec-test          # décode réel d'un modèle MTP (choix interactif)
   ./setup-llm.sh --spec-tune          # règle spec-draft-n-max tout seul (2,4,6)

@@ -145,17 +145,22 @@ BENCH_LOG="$LOG_DIR/bench.log"
 
 # Étiquette de moteur, journalisée par toutes les mesures.
 #
-# Ce qui sert les modèles est l'image (runtime/, lib/runtime.sh) : l'étiquette
-# vient de ses LABEL. Depuis le retrait du fork (18/09/2026) c'est la SEULE
-# étiquette de moteur du dépôt, pour le service comme pour les outils, qui
-# tournent dans la même image. Forme retenue :
-# "strix-<engine7>+r<rocm7>" - les deux révisions comptent, un même moteur
-# compilé sur un autre ROCr/HIP ne donne pas les mêmes chiffres, et c'est
-# précisément le couple que runtime/image.conf épingle.
+# Ce qui sert les modèles est l'image (runtime/, lib/runtime.sh), et ce qu'elle
+# contient est décidé par les deux ARG *_REV de runtime/Dockerfile.rocm-strix.
+# L'étiquette se lit donc DANS CE FICHIER, par un grep : depuis le 18/09/2026
+# il n'y a plus d'étiquettes llm-setup.* sur l'image, et surtout il ne faut pas
+# lancer un conteneur pour ça : la fonction est appelée à chaque journal de
+# chaque mesure.
+# Depuis le retrait du fork (18/09/2026) c'est la SEULE étiquette de moteur du
+# dépôt, pour le service comme pour les outils, qui tournent dans la même image.
+# Forme retenue : "strix-<engine7>+r<rocm7>" - les deux révisions comptent, un
+# même moteur compilé sur un autre ROCr/HIP ne donne pas les mêmes chiffres, et
+# c'est précisément le couple que le Dockerfile épingle.
+# Une REV vidée (= sommet de branche au build, cas non épinglé) ne se lit pas
+# ici : l'étiquette retombe alors sur "?", et les mesures disent ainsi
+# elles-mêmes qu'elles ne sont comparables à rien.
 # Mémoïsée dans le processus : une campagne --bench all appelle cette fonction
-# une fois par modèle et par journal, et chaque appel coûte deux docker inspect.
-# Replis, dans l'ordre : la dernière ligne de logs/images.tsv (l'image a pu
-# être supprimée après coup, le journal reste), puis "?".
+# une fois par modèle et par journal.
 # Une étiquette n'est JAMAIS numérique pure côté consommateurs : elle est
 # traitée en chaîne partout (colonne build des journaux TSV, comparaison
 # « build X → Y » de py/bench_compare.py).
@@ -166,18 +171,14 @@ _llama_build() {
     return 0
   fi
 
-  local etiquette="" ref e="" r=""
-  # lib/runtime.sh est sourcé après common.sh : la résolution se fait à
-  # l'appel, mais un outil qui ne source que common.sh (aucun aujourd'hui)
-  # ne doit pas échouer ici.
-  if declare -F _image_ref >/dev/null 2>&1 && ref="$(_image_ref 2>/dev/null)"; then
-    e="$(_image_label "$ref" "$IMAGE_LABEL_ENGINE")"
-    r="$(_image_label "$ref" "$IMAGE_LABEL_ROCM")"
-  fi
-  # Repli : le journal des builds (date, tag, engine_rev, rocm_rev, taille).
-  if [[ -z "$e" && -f "${IMAGE_LOG:-$LOG_DIR/images.tsv}" ]]; then
-    e="$(awk -F'\t' 'END{print $3}' "${IMAGE_LOG:-$LOG_DIR/images.tsv}" 2>/dev/null || true)"
-    r="$(awk -F'\t' 'END{print $4}' "${IMAGE_LOG:-$LOG_DIR/images.tsv}" 2>/dev/null || true)"
+  local etiquette="" df e="" r=""
+  # lib/runtime.sh est sourcé après common.sh : IMAGE_DOCKERFILE peut ne pas
+  # être défini à l'appel (aucun outil dans ce cas aujourd'hui), d'où le repli
+  # sur le chemin en dur.
+  df="${IMAGE_DOCKERFILE:-$SCRIPT_DIR/runtime/Dockerfile.rocm-strix}"
+  if [[ -f "$df" ]]; then
+    e="$(grep -m1 '^ARG ENGINE_REV=' "$df" 2>/dev/null | cut -d= -f2-)"
+    r="$(grep -m1 '^ARG ROCM_SYSTEMS_REV=' "$df" 2>/dev/null | cut -d= -f2-)"
     [[ "$e" =~ ^[0-9a-f]+$ ]] || e=""
     [[ "$r" =~ ^[0-9a-f]+$ ]] || r=""
   fi

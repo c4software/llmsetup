@@ -10,6 +10,44 @@ Trois séries de mesures cohabitent ici et ne se comparent jamais entre elles :
 le paquet Arch (`bNNNNN`), le fork strix-llama.cpp (`strix-<commit>`) et, depuis
 le 18/09/2026, l'image ROCm du service (`strix-<engine>+r<rocm>`).
 
+## Un Dockerfile et un compose (18/09/2026)
+
+La couche d'abstraction montée la veille autour de l'image est retirée :
+`runtime/image.conf`, les trois `LABEL llm-setup.*`, le build sous tag
+temporaire avec promotion après vérification de `versions.txt`, la purge des
+images sans tag par label, le journal `logs/images.tsv`, et les commandes
+`--image-update` et `--image-status`. Il reste ce que la chose est vraiment :
+**un Dockerfile et un compose**.
+
+Les deux révisions épinglées vivent désormais dans
+`runtime/Dockerfile.rocm-strix`, en valeurs par défaut de `ARG ENGINE_REV` et
+`ARG ROCM_SYSTEMS_REV`, avec en tête un bloc « Révisions épinglées » qui donne
+la source de chacune, sa date d'épinglage et la marche à suivre pour la faire
+bouger (`git ls-remote`, éditer l'`ARG`, commiter la raison,
+`docker compose build`, `--restart`, nouvelle campagne). L'historique git de ce
+fichier reste le journal des révisions, et le retour arrière consiste à y
+remettre les anciennes valeurs ; la procédure décrite plus bas, par
+`image.conf` et `--image-update`, ne vaut donc plus que pour les commits
+antérieurs à ce jour.
+
+Le `docker-compose.yml` généré porte un bloc `build` (contexte `runtime/` du
+dépôt, `dockerfile: Dockerfile.rocm-strix`), et `--image-build` n'est plus
+qu'un raccourci vers `docker compose build`. `docker compose up -d` ne
+construit pas quand l'image existe, et `lib/compose.sh` refuse de toute façon
+de générer le compose sans image, en renvoyant sur la commande de build : un
+`--start` ne peut pas partir en compilation de quarante minutes par surprise.
+L'étiquette des mesures (`_llama_build`) se lit maintenant par un `grep` sur
+les deux `ARG` du Dockerfile, sans lancer de conteneur.
+
+Ce qui est perdu, assumé : l'ancienne `:latest` n'est plus supprimée toute
+seule après un build (elle perd son tag, `docker image prune` sans `-a` la
+retire, à la main), et rien ne revérifie après coup que `/opt/strix/versions.txt`
+correspond aux révisions demandées : ce que l'image contient se lit dedans,
+quand on veut le savoir. Motif : pour deux fichiers, l'outillage coûtait plus
+cher à lire et à maintenir que ce qu'il protégeait. Aucune image amont n'est
+publiée pour ce Dockerfile (cf. l'entrée précédente), le build local reste donc
+le seul chemin.
+
 ## Campagne du moteur conteneurisé (17 au 18/09/2026)
 
 Première campagne sur le moteur qui devient celui du service : l'image ROCm de

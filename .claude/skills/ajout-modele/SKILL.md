@@ -25,12 +25,13 @@ seul). Elle sert le service ET les outils hors service (`llama-bench` des
 courbes de batch, `llama-server` jetable de `tools/spec-isolate.sh`), par
 `_dk_run` (`lib/runtime.sh`). Le fork Vulkan installé sur l'hôte, ses liens dans
 `~/.local/bin` et ses commandes `--setup-fork` / `--update-fork` /
-`--unset-fork` ont été retirés ce jour-là ; le retour arrière du moteur passe
-par les anciennes révisions de `runtime/image.conf` (`--image-update <engine>
-<rocm>` puis `--image-build`).
-`./setup-llm.sh --image-build` construit, `--image-update` suit l'amont,
-`--image-status` inventorie, `--list-devices` dit ce que l'image expose. Aucune
-ne redémarre le service ni ne lance de mesure.
+`--unset-fork` ont été retirés ce jour-là. Les révisions du moteur sont
+épinglées dans deux `ARG` de `runtime/Dockerfile.rocm-strix` : les faire bouger
+(ou revenir en arrière) consiste à éditer le fichier, commiter la raison, puis
+reconstruire.
+`./setup-llm.sh --image-build` construit (raccourci vers
+`cd ~/models && docker compose build`), `--list-devices` dit ce que l'image
+expose. Ni l'une ni l'autre ne redémarre le service ou ne lance de mesure.
 
 Trois conséquences pour toute la procédure ci-dessous :
 
@@ -285,8 +286,9 @@ tools/bench-depth.sh ~/models/<dossier>/<gguf>    # 0 / 16k / 32k
 ./setup-llm.sh --start
 ```
 
-Un `--image-update` change les noyaux et rouvre la question, comme un
-changement de quant : refaire ce contrôle après chaque bump d'image.
+Un bump de révision dans `runtime/Dockerfile.rocm-strix` change les noyaux et
+rouvre la question, comme un changement de quant : refaire ce contrôle après
+chaque reconstruction de l'image.
 
 Critère de passage : `--bench-sanity` répond juste (`tools/qualif-modele.sh`
 s'ARRÊTE sinon), le texte généré est lisible, et toute anomalie est notée dans

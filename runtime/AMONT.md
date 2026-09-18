@@ -43,45 +43,41 @@ Fichiers vendorisés avec lui, inchangés byte pour byte :
 
 ## Écarts avec l'amont
 
-1. **Épinglage des révisions.** Deux `ARG` ajoutés : `ENGINE_REV` (à côté de
-   `REPO`/`BRANCH`) et `ROCM_SYSTEMS_REV` (à côté de `ROCM_SYSTEMS_REPO`/
-   `ROCM_SYSTEMS_BRANCH`). Vides, le comportement est celui de l'amont (HEAD de
-   la branche). Renseignés, le build fait `git fetch origin <rev>` puis
-   `git checkout --detach <rev>` après le clone. Le clone de `rocm-systems`
-   reste blobless et n'a jamais été superficiel ; celui du moteur non plus. Rien
-   d'autre n'a bougé dans les deux clones.
+1. **Épinglage des révisions, avec valeurs par défaut.** Deux `ARG` ajoutés :
+   `ENGINE_REV` (à côté de `REPO`/`BRANCH`) et `ROCM_SYSTEMS_REV` (à côté de
+   `ROCM_SYSTEMS_REPO`/`ROCM_SYSTEMS_BRANCH`). Contrairement à l'amont, ils ont
+   une **valeur par défaut épinglée**, dans le fichier : ce sont elles qui sont
+   servies, et un bloc « Révisions épinglées » en tête du Dockerfile dit d'où
+   elles viennent et comment les faire évoluer. Vidées, le comportement redevient
+   celui de l'amont (HEAD de la branche). Renseignées, le build fait
+   `git fetch origin <rev>` puis `git checkout --detach <rev>` après le clone. Le
+   clone de `rocm-systems` reste blobless et n'a jamais été superficiel ; celui
+   du moteur non plus. Rien d'autre n'a bougé dans les deux clones.
    Motif : l'amont assume explicitement de ne rien épingler (« never commit
    pins », `--no-cache` comme seul mécanisme de rafraîchissement). Ici une image
    est le moteur d'un service dont on compare les mesures d'une semaine à
    l'autre : un moteur qui change tout seul rend la série incomparable.
-2. **Étiquettes.** Trois `LABEL` sur l'étage final : `llm-setup.engine_rev`,
-   `llm-setup.rocm_rev`, `llm-setup.build_date`, alimentées par les `ARG` du
-   même nom (plus `BUILD_DATE`) redéclarés dans cet étage. Un `LABEL` ne sait
-   pas lire `/opt/strix/versions.txt`, qui n'existe qu'une fois le build fait :
-   les valeurs sont donc résolues AVANT le build par `--image-build`
-   (`git ls-remote` quand la révision n'est pas épinglée), et `--image-build`
-   revérifie après coup qu'elles correspondent à `versions.txt`. `versions.txt`
-   reste inchangé et reste la source de vérité ; les étiquettes évitent d'avoir
-   à démarrer l'image pour savoir ce qu'elle contient.
-3. **Chemin des patchs.** `COPY llama-grammar.patch` →
+   L'historique git de ce fichier est le journal des révisions.
+2. **Chemin des patchs.** `COPY llama-grammar.patch` →
    `COPY patches/llama-grammar.patch`, idem pour celui de #25992. Le contexte de
    build amont est `toolboxes/` (à plat, partagé par une douzaine de
    Dockerfiles) ; ici c'est `runtime/`, et les deux patchs tiennent dans
    `runtime/patches/`.
-4. **`gguf-vram-estimator.py` retiré.** L'amont le copie deux fois
+3. **`gguf-vram-estimator.py` retiré.** L'amont le copie deux fois
    (`/usr/local/bin`, étages builder et final). C'est une aide interactive du
    toolbox : rien dans le build ni dans le dépôt ne l'appelle. Retiré plutôt que
    vendorisé, donc **deux `COPY` et deux `chmod` en moins**. C'est le seul
    fichier annexe de l'amont qui ne soit pas repris.
-5. **Garde sur les quatre binaires.** Un `RUN` ajouté dans l'étage builder,
+4. **Garde sur les quatre binaires.** Un `RUN` ajouté dans l'étage builder,
    après `cmake --install build` : il vérifie que `llama-server`, `llama-bench`,
    `llama-cli` et `llama-quantize` sont exécutables dans `/usr/local/bin` (seul
    chemin que l'étage final recopie) et les copie depuis `build/bin` si une
    cible cessait d'être installée en amont. Aujourd'hui `cmake --install` les y
    met tous les quatre : la garde ne change rien, elle empêche de livrer une
    image amputée que seul l'usage révélerait.
-6. **En-tête de commentaire** ajouté en tête de fichier (provenance, renvoi ici,
-   rappel que le build passe par `--image-build`).
+5. **En-tête de commentaire** ajouté en tête de fichier : provenance, renvoi
+   ici, commande de build (`docker compose build`), et le bloc « Révisions
+   épinglées » de l'écart 1.
 
 Rien d'autre n'est modifié : ni les dépôts et branches par défaut, ni les
 options cmake du moteur (`GGML_HIP_GRAPHS`, `GGML_HIP_NO_VMM`, `gfx1151`…), ni
@@ -102,15 +98,15 @@ remplacées ici par `_dk_run`, qui passe des gid numériques et ne donne pas
 
 1. Lire le fichier amont sur `main` :
    `gh api repos/kyuz0/amd-strix-halo-toolboxes/contents/toolboxes/Dockerfile.rocm-10.0-strix-llama?ref=main --jq .content | base64 -d`.
-2. Diffusion à la main contre ce fichier, en ne réappliquant que les six écarts
-   ci-dessus. `diff` direct inutile : les `ARG`, les `LABEL` et le chemin des
+2. Diffusion à la main contre ce fichier, en ne réappliquant que les cinq écarts
+   ci-dessus. `diff` direct inutile : les `ARG`, l'en-tête et le chemin des
    patchs le brouillent.
 3. Récupérer aussi les patchs amont s'ils ont bougé (`toolboxes/*.patch` : ils
    sont partagés entre Dockerfiles et changent sans que celui-ci change).
 4. Mettre à jour les lignes « Commit du fichier en amont » et
-   « Resynchronisé » ci-dessus, puis
-   `./setup-llm.sh --image-build` et une campagne de mesures : un changement de
-   Dockerfile vaut un changement de moteur.
+   « Resynchronisé » ci-dessus, puis `./setup-llm.sh --image-build` (ou
+   `cd ~/models && docker compose build`), `--restart` et une campagne de
+   mesures : un changement de Dockerfile vaut un changement de moteur.
 
 
 ## L'image ne contient que le moteur
@@ -134,36 +130,31 @@ image est donc jetable : la reconstruire ne perd rien.
 
 Conséquence à tenir en resynchronisant : si l'amont ajoute un `COPY` d'outil,
 de modèle ou de configuration, il ne se reprend pas (c'est ce qui est arrivé à
-`gguf-vram-estimator.py`, écart 4).
+`gguf-vram-estimator.py`, écart 3).
 
-## Gestion des images (décision du 17/09/2026)
+## Gestion des images (simplifiée le 18/09/2026)
 
 - **Un seul tag : `llm-rocm-strix:latest`.** Pas de tag daté, pas de collection
-  d'anciennes images gardées en filet. Une image se reconstruit en quelques
-  minutes depuis `runtime/image.conf`, et **l'historique git de ce fichier EST
-  le journal des révisions**. La traçabilité repose sur les trois `LABEL`, sur
-  `/opt/strix/versions.txt` et sur `logs/images.tsv`.
-- **Build sous tag temporaire.** `--image-build` construit
-  `llm-rocm-strix:build`, vérifie `versions.txt` et les quatre binaires, et ne
-  promeut en `:latest` qu'ensuite. Un build raté ou une vérification en échec
-  laissent `:latest` **intacte** : c'est le seul filet qui reste.
-- **Ménage ciblé.** Après une promotion, les images **sans tag qui portent
-  `llm-setup.engine_rev`** sont supprimées (l'ancienne `:latest` et les restes
-  de builds précédents). Jamais de `docker system prune`, jamais de
-  `docker image prune -a`, et rien qui ne porte pas notre étiquette : la machine
-  héberge d'autres images (`bench-agentic-pi`,
-  `ghcr.io/peonist-ai/halogen-flash-server`, `llama-rocm-10.0-strix-llama:pr133`).
-- **Cache de build non purgé.** `docker builder prune` ne sait pas filtrer sur
-  l'origine d'un cache et la machine construit aussi d'autres images :
-  `--image-status` affiche la place qu'il prend et la commande à lancer à la
-  main, rien de plus. Pas d'export `docker save` non plus.
-- **Pas de `--image-rollback`.** Revenir en arrière, c'est remettre les
-  anciennes révisions dans `image.conf` (`git revert`, ou
-  `--image-update <engine-rev> <rocm-rev>`) puis `--image-build`.
+  d'anciennes images gardées en filet. Ce qu'une image contient se lit dans
+  `/opt/strix/versions.txt` ; ce qui a été demandé se lit dans les deux `ARG`
+  de ce Dockerfile, dont l'historique git est le journal des révisions.
+- **Construire : `cd ~/models && docker compose build`** (le compose généré par
+  `lib/compose.sh` porte le contexte `runtime/` et ce Dockerfile).
+  `./setup-llm.sh --image-build` n'est qu'un raccourci vers cette commande.
+- **Ménage à la main.** Après un build, l'image remplacée devient une image sans
+  tag : `docker image prune` la retire, **sans `-a`** et jamais
+  `docker system prune` : la machine héberge d'autres images
+  (`bench-agentic-pi`, `ghcr.io/peonist-ai/halogen-flash-server`). Le cache de
+  build docker n'est pas purgé non plus : `docker builder prune`, à la main, si
+  la place manque.
 
 ## Ce qui n'est pas ici
 
 - **Pas de `docker-compose.yml` ici.** Le compose du service est GÉNÉRÉ par le
   dépôt (`lib/compose.sh`) et déposé dans `~/models`, à côté de `models.ini`.
-- `--image-build`, `--image-update` et `--image-status` ne redémarrent aucun
-  service : une image neuve n'est servie qu'au prochain `--restart`.
+- **Pas de couche d'abstraction au-dessus.** Il n'y a plus (18/09/2026) de
+  `runtime/image.conf`, de `LABEL llm-setup.*`, de promotion sous tag
+  temporaire, de purge par label, de `logs/images.tsv`, ni de commandes
+  `--image-update` / `--image-status` : un Dockerfile et un compose suffisent.
+- `--image-build` ne redémarre aucun service : une image neuve n'est servie
+  qu'au prochain `--restart`.

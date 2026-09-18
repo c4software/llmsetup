@@ -65,8 +65,6 @@ case "${1:-}" in
   --bench-load)        cmd_bench_load "${2:-}" ;;
   --preload)           cmd_preload ;;
   --image-build)       cmd_image_build "${2:-}" ;;
-  --image-update)      cmd_image_update "${2:-}" "${3:-}" ;;
-  --image-status)      cmd_image_status ;;
   --list-devices)      cmd_list_devices ;;
   --spec-test)         cmd_spec_test "${2:-}" "${3:-}" "${4:-}" ;;
   --spec-tune)         cmd_spec_tune "${2:-}" "${3:-}" "${4:-}" ;;

@@ -19,9 +19,12 @@ Le service est un **conteneur**, décrit par un second fichier généré, à cô
 ini et du même statut (produit, non versionné, jamais édité à la main) :
 
 ```
-runtime/image.conf ──► --image-build ──► image llm-rocm-strix:latest
-preload.conf       ──┐                            │
-lib/compose.sh     ──┴─► regen_compose ──► ~/models/docker-compose.yml
+runtime/Dockerfile.rocm-strix ─┐  (ARG ENGINE_REV, ARG ROCM_SYSTEMS_REV)
+preload.conf                  ─┤
+lib/compose.sh                ─┴─► regen_compose ──► ~/models/docker-compose.yml
+                                                   │        │
+                              docker compose build ┘        │
+                                   → llm-rocm-strix:latest  │
                                                    │
                         _svc_start ────────────────┘
                         docker compose up -d --force-recreate
@@ -131,20 +134,12 @@ common → svc → models → ini → compose → preload → setup → runtime 
   `cmd_update` (= setup avec `REFRESH=1`, `hf` compare les etags),
   `cmd_cleanup` (piloté par `KNOWN_FILES`, dry-run par défaut).
 - `runtime.sh` : **le moteur**, conteneurisé (dossier `runtime/`, voir plus
-  bas), pour le service comme pour les outils hors service. `_image_read_conf` (lecture stricte de `runtime/image.conf` : une clé
-  inconnue est une erreur, pas un silence), `_image_tag` / `_image_ref` (tag
-  unique `latest`), `_image_ls_remote` (résolution d'une branche en sha avant le
-  build : un `LABEL` ne peut pas lire `versions.txt`, produit pendant le build),
-  `cmd_image_build [--no-cache]` (build sous le tag TEMPORAIRE `:build`,
-  vérification que `/opt/strix/versions.txt` et les quatre binaires
-  correspondent à ce qui a été demandé, PUIS seulement promotion en `:latest`,
-  journal `logs/images.tsv` et ménage), `_image_purge_dangling` (ne supprime que
-  des images **sans tag portant `llm-setup.engine_rev`** : jamais de
-  `docker system prune`, jamais `docker image prune -a`, la machine héberge
-  d'autres images), `cmd_image_update [engine-rev] [rocm-rev]` (compare aux
-  sommets des deux branches et s'arrête ; `IMAGE_UPDATE_YES=1` vaut accord ;
-  c'est aussi le retour arrière du moteur),
-  `cmd_image_status`, et `_dk_run <binaire> [args]` (exécution dans l'image :
+  bas), pour le service comme pour les outils hors service. Module volontairement
+  court depuis le 18/09/2026 : `IMAGE_NAME` / `IMAGE_TAG` (tag unique `latest`),
+  `_image_tag` / `_image_ref`, `cmd_image_build [--no-cache]` (RACCOURCI :
+  `regen_compose` puis `docker compose -f ~/models/docker-compose.yml build` :
+  pas de tag temporaire, pas de promotion, pas de vérification d'après-coup, pas
+  de purge, pas de journal), et `_dk_run <binaire> [args]` (exécution dans l'image :
   `/dev/kfd` + `/dev/dri`, gid NUMÉRIQUES de `render` et `video` via `getent`,
   `seccomp=unconfined` compensé par `no-new-privileges` et `cap-drop=ALL`,
   `--shm-size 8g`, memlock illimité, `~/models` monté au MÊME chemin absolu en
@@ -409,7 +404,6 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench-parallel.log` | `cmd_bench_parallel` | `date modèle device build parallel_srv n agrégé décode_par_requête passes` |
 | `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
 | `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N` (une ligne par scénario et par passe, passe 0 = appel froid ; `N` = boucles simultanées de la salve, 1 pour la référence solo ; colonne ajoutée en queue le 15/09/2026, les lignes antérieures à 13 colonnes restent lisibles ; sur les lignes `N > 1`, `prompt_tok`..`decode_tps` valent `n/c`, chaque conteneur lisant le compteur global du serveur) |
-| `images.tsv` | `cmd_image_build` | `date tag engine_rev rocm_rev taille_octets` (une ligne par image construite ET vérifiée ; complément de l'historique git de `runtime/image.conf`) |
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
@@ -469,9 +463,8 @@ Dossier **versionné**, consommé par `lib/runtime.sh` et par personne d'autre.
 
 | Fichier | Rôle |
 |---|---|
-| `Dockerfile.rocm-strix` | copie vendorisée du Dockerfile de la PR 133 de `kyuz0/amd-strix-halo-toolboxes` (ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 de `pwilkin/rocm-systems` + `halo-box/strix-llama.cpp` en HIP seul) |
+| `Dockerfile.rocm-strix` | copie vendorisée du Dockerfile de la PR 133 de `kyuz0/amd-strix-halo-toolboxes` (ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 de `pwilkin/rocm-systems` + `halo-box/strix-llama.cpp` en HIP seul), qui porte aussi les **révisions épinglées** dans deux `ARG` et, en tête, le bloc « Révisions épinglées » qui dit comment les faire bouger |
 | `patches/` | les deux patchs que le build applique au moteur (grammaire, contournement llama.cpp #25992) |
-| `image.conf` | dépôts, branches, **révisions épinglées**, nom de l'image |
 | `AMONT.md` | provenance, **liste exacte des écarts** avec l'amont, procédure de resynchronisation |
 
 Trois choix structurent le reste :
@@ -482,18 +475,22 @@ Trois choix structurent le reste :
    `~/models`. Une image est donc jetable, et un `COPY` amont d'outil ou de
    données ne se reprend pas.
 2. **Un seul tag, `llm-rocm-strix:latest`.** Reconstruire prend quelques
-   minutes, on ne collectionne pas les images. La traçabilité tient aux trois
-   `LABEL` (`llm-setup.engine_rev`, `llm-setup.rocm_rev`,
-   `llm-setup.build_date`), à `/opt/strix/versions.txt` dans l'image, à
-   `logs/images.tsv` sur la machine — et surtout à **l'historique git de
-   `image.conf`**, qui EST le journal des révisions. Il n'y a pas de rollback
-   par tag : revenir en arrière, c'est y remettre les anciennes révisions.
-3. **Construire ne promeut pas.** Le build se fait sous `:build`, la
-   vérification décide, la promotion suit. Un build raté ou une `versions.txt`
-   discordante laissent `:latest` intacte — c'est le seul filet qui reste, et
-   `tests/sh-unit.sh` le couvre (faux `docker`, faux `git ls-remote`).
+   minutes, on ne collectionne pas les images. Ce qu'une image contient
+   RÉELLEMENT se lit dans `/opt/strix/versions.txt`, dedans ; ce qui a été
+   demandé se lit dans les deux `ARG` du Dockerfile, dont **l'historique git EST
+   le journal des révisions**. Il n'y a pas de rollback par tag : revenir en
+   arrière, c'est y remettre les anciennes révisions et reconstruire. L'image
+   remplacée perd son tag et se retire à la main (`docker image prune`, jamais
+   `-a` : la machine héberge les images d'autres outils).
+3. **Un Dockerfile et un compose, rien entre les deux.** Le bloc `build` du
+   compose généré porte le contexte (`runtime/`) et le Dockerfile ;
+   `--image-build` n'est qu'un raccourci vers `docker compose build`. La couche
+   d'abstraction du 17/09/2026 (`image.conf`, `LABEL llm-setup.*`, promotion
+   sous tag temporaire, purge par label, `logs/images.tsv`, `--image-update`,
+   `--image-status`) a été retirée le 18/09/2026 : trop lourde pour ce qu'elle
+   protégeait.
 
-L'épinglage de `image.conf` est le seul écart de fond avec l'amont, qui assume
+L'épinglage des deux `ARG` est le seul écart de fond avec l'amont, qui assume
 de ne rien épingler. Le motif : un moteur qui change tout seul rend les séries
 de mesures incomparables.
 
@@ -514,18 +511,18 @@ de mesures incomparables.
   construction** : le premier `find` ne liste que des dossiers de premier
   niveau, le second que des `*.gguf` à partir de la profondeur 2. Ne pas
   « corriger » ces `find`.
-- Le ménage d'images ne touche QUE des images sans tag portant
-  `llm-setup.engine_rev` : jamais `docker system prune`, jamais
-  `docker image prune -a`, jamais une image taguée qu'on n'a pas construite.
-- Une image n'est promue en `llm-rocm-strix:latest` qu'après vérification de
-  `/opt/strix/versions.txt` contre les révisions demandées : un échec laisse
-  l'image précédente en place.
+- Aucun ménage d'images automatique : après un build, l'image remplacée perd
+  son tag et attend un `docker image prune` **à la main, sans `-a`**. Jamais
+  `docker system prune`, jamais une image taguée qu'on n'a pas construite.
+- Les révisions du moteur ne vivent qu'à UN endroit, les deux `ARG` de
+  `runtime/Dockerfile.rocm-strix`, et ne bougent qu'à la main, dans un commit
+  qui dit pourquoi.
 - Restart requis après toute régénération du ini (routeur = lecture au boot).
 - **Jamais `docker compose restart`** : il relance le conteneur existant, donc
   l'ancienne image, l'ancienne ligne de commande et l'ancien `--models-max`.
   `_svc_restart` est un `stop` puis un `start`.
 - Le compose est **régénéré à chaque démarrage** (`_svc_start`), jamais édité :
-  `--models-max` suit `preload.conf`, l'image suit `runtime/image.conf`, les
+  `--models-max` suit `preload.conf`, le bloc `build` suit `runtime/`, les
   gid suivent l'hôte. Toutes les valeurs y sont écrites **en clair** - pas de
   `${VAR}`, pas de `.env`.
 - Les tuners (`--spec-ab`, `--spec-tune`, `--spec-ngram-tune`, `--bench-load`)
@@ -551,8 +548,9 @@ de mesures incomparables.
   colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 - Tout journal de mesure porte l'étiquette du moteur SERVI (`_llama_build`) :
   un chiffre sans son build ne se compare pas. L'étiquette est une CHAÎNE, pas
-  un nombre - `strix-<engine7>+r<rocm7>`, lue sur les `LABEL` de l'image
-  (repli : dernière ligne de `logs/images.tsv`, puis `?`). C'est la SEULE
+  un nombre - `strix-<engine7>+r<rocm7>`, lue par un `grep` sur les deux `ARG`
+  `*_REV` de `runtime/Dockerfile.rocm-strix` (repli : `?`). Jamais en lançant un
+  conteneur : la fonction est appelée à chaque journal. C'est la SEULE
   étiquette du dépôt depuis le retrait du fork (18/09/2026) : le service et les
   outils hors service tournent sur la même image. Chaque révision d'image ouvre
   une série distincte, jamais comparable à une autre.

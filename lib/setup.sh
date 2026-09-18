@@ -151,9 +151,9 @@ cmd_update() {
   warn "Un restart du service sera proposé en fin de run (poids mmap'és sur l'ancien inode sinon)."
 
   # Suivi du moteur : les modèles viennent d'être mis à jour, le MOTEUR qui les
-  # sert ne l'est pas par cette commande. Il vit dans l'image et se suit par
-  # ./setup-llm.sh --image-update, à lancer à la main : rien n'est lancé
-  # automatiquement ici, ni mise à jour du moteur, ni restart, ni mesure.
+  # sert ne l'est pas par cette commande. Il vit dans l'image, dont les
+  # révisions sont épinglées à la main dans runtime/Dockerfile.rocm-strix : rien
+  # n'est lancé automatiquement ici, ni bump du moteur, ni restart, ni mesure.
   cmd_setup
 }
 

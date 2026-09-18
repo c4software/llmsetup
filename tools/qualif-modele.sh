@@ -134,10 +134,10 @@ done
 [[ -n "$TAG" ]] || TAG="$SECTION-$(date '+%Y%m%d-%H%M')"
 
 # lib/common.sh apporte SPEC_TEST_URL, SERVICE_NAME, _llama_build (étiquette de
-# moteur, lue sur les LABEL de l'image qui sert) et les helpers info/warn/error.
-# Il attend SCRIPT_DIR : c'est la racine du dépôt, comme pour setup-llm.sh.
-# runtime.sh donne _image_ref/_image_label (étiquette de moteur), compose.sh les
-# chemins du compose généré, svc.sh les _svc_* (état du service).
+# moteur, lue sur les ARG *_REV de runtime/Dockerfile.rocm-strix) et les helpers
+# info/warn/error. Il attend SCRIPT_DIR : c'est la racine du dépôt, comme pour
+# setup-llm.sh. runtime.sh donne _image_ref/_dk_run, compose.sh les chemins du
+# compose généré, svc.sh les _svc_* (état du service).
 SCRIPT_DIR="$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/common.sh"

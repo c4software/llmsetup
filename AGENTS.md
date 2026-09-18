@@ -54,10 +54,11 @@ résumer ou la supprimer, non.
   de `lib/compose.sh` (compose généré) ou de
   `lib/svc.sh` (pilotage du service) ou de `lib/ini.sh` / `lib/models.sh`
   (ini généré) ⇒ `./tests/sh-unit.sh` : forme de l'étiquette de moteur
-  (`strix-<engine7>+r<rocm7>`, lue sur les LABEL de l'image),
-  promotion en `:latest` seulement après
-  vérification de `versions.txt`, ménage limité à nos images sans tag, et pour
-  le service : contenu du compose généré (montage au même chemin en `:ro`, gid
+  (`strix-<engine7>+r<rocm7>`, lue par un `grep` sur les deux `ARG` `*_REV` de
+  `runtime/Dockerfile.rocm-strix`, sans lancer de conteneur), `--image-build`
+  qui passe bien par `docker compose build` sans se bloquer sur l'absence
+  d'image, et pour le service : contenu du compose généré (bloc `build` sur
+  `runtime/`, montage au même chemin en `:ro`, gid
   numériques, `cap_drop ALL`, pas de `mem_limit`, `--models-max` suivant
   `preload.conf`), régénération qui ne réécrit pas un fichier identique,
   `_svc_restart` qui n'émet jamais `compose restart`, `_svc_wait_ready` qui

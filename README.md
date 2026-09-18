@@ -97,39 +97,41 @@ mergée le 18/09/2026 ; l'amont ne publie pas d'image pour ce Dockerfile, d'où
 le build local. Provenance, écarts exacts et procédure de resynchronisation
 dans [`runtime/AMONT.md`](runtime/AMONT.md).
 
+Tout tient en **deux fichiers** : le Dockerfile vendorisé, qui porte les
+révisions, et le `docker-compose.yml` généré dans `~/models`, dont le bloc
+`build` pointe sur `runtime/`. Il n'y a pas de couche au-dessus.
+
 > ⚠ **C'est le moteur du service, et celui des outils hors service.**
-> `--image-build`, `--image-update` et
-> `--image-status` construisent et inventorient des images sans rien redémarrer :
-> une image neuve n'est servie qu'au prochain `./setup-llm.sh --restart`, qui
-> régénère le compose et recrée le conteneur.
+> Construire ne redémarre rien : une image neuve n'est servie qu'au prochain
+> `./setup-llm.sh --restart`, qui régénère le compose et recrée le conteneur.
 
 ```bash
-./setup-llm.sh --image-status   # ce qui est demandé, ce qui est en place
-./setup-llm.sh --image-build    # construit et vérifie (40 à 60 min à froid)
-./setup-llm.sh --image-update   # ce qui a bougé en amont, sans rien changer
+./setup-llm.sh --image-build    # 40 à 60 min à froid
+cd ~/models && docker compose build   # exactement la même chose, à la main
 ```
 
 Ce qui tient l'ensemble :
 
-- `runtime/image.conf` (**versionné**) porte les dépôts, les branches et les
-  **révisions épinglées**. Son historique git **est** le journal des révisions,
-  et le retour arrière passe par lui (`git revert`, ou
-  `--image-update <engine-rev> <rocm-rev>`, puis `--image-build`).
+- `runtime/Dockerfile.rocm-strix` (**versionné**) porte les **révisions
+  épinglées** dans deux `ARG` (`ENGINE_REV`, `ROCM_SYSTEMS_REV`), avec en tête
+  un bloc « Révisions épinglées » qui dit d'où elles viennent et comment les
+  faire évoluer. Son historique git **est** le journal des révisions, et le
+  retour arrière consiste à y remettre les anciennes valeurs, puis à
+  reconstruire.
 - **Un seul tag**, `llm-rocm-strix:latest` : une image se reconstruit en
-  quelques minutes, on n'en collectionne pas. Ce qu'elle contient se lit dans
-  ses étiquettes (`llm-setup.engine_rev`, `llm-setup.rocm_rev`,
-  `llm-setup.build_date`), dans `/opt/strix/versions.txt` et dans
-  `logs/images.tsv` - et c'est de là que vient l'étiquette de toutes les
-  mesures (`_llama_build`, forme `strix-<engine7>+r<rocm7>`).
+  quelques minutes, on n'en collectionne pas. Ce qu'elle contient RÉELLEMENT se
+  lit dans `/opt/strix/versions.txt`, dedans ; ce qui a été demandé se lit dans
+  les `ARG` du Dockerfile, d'où vient aussi l'étiquette de toutes les mesures
+  (`_llama_build`, forme `strix-<engine7>+r<rocm7>`).
 - L'image ne contient **que le moteur et son runtime** : pas de modèle, pas de
   configuration, pas d'état. `~/models` est monté en lecture seule au même
   chemin absolu au moment de lancer un binaire.
-- Le ménage d'après-build ne supprime que des images **sans tag portant notre
-  étiquette** — jamais de `docker system prune`, jamais `docker image prune -a`.
+- Après un build, l'image remplacée perd son tag. La retirer à la main par
+  `docker image prune` (**sans `-a`**, qui toucherait aux images des autres
+  outils de la machine.
 
-**Une image = une série de mesures** : un changement de
-révision n'est pas comparable à ce qui précède, d'où le refus d'`--image-update`
-d'avancer sans accord explicite.
+**Une image = une série de mesures** : un changement de révision n'est pas
+comparable à ce qui précède, d'où le bump à la main, commité avec sa raison.
 
 ## Sous-commandes
 
@@ -145,9 +147,7 @@ d'avancer sans accord explicite.
 | `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : complète le garde-fou anti-charabia, qui n'attrape pas un texte propre et faux. Première étape, **bloquante**, de `tools/qualif-modele.sh` |
 | `--bench-agentic [modèle] [passes] [N]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels). 3e argument `N` > 1 : chaque passe joue la suite seule puis à `N` boucles pi **simultanées** (orchestrateur + sous-agents), avec le facteur de débit de tâches et le décode agrégé |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
-| `--image-build [--no-cache]` | Construit l'image du moteur **conteneurisé** (`runtime/`) sur les révisions de `runtime/image.conf`, sous un tag temporaire ; vérifie `/opt/strix/versions.txt` et les quatre binaires, puis seulement promeut en `llm-rocm-strix:latest` et supprime les images sans tag issues de nos builds. Un build raté laisse l'image en place intacte. **C'est le moteur du service** : une image neuve n'est servie qu'au prochain `--restart` |
-| `--image-update [engine-rev] [rocm-rev]` | Suivi d'amont de l'image : sans argument, montre l'écart avec les sommets des deux branches et s'arrête (`IMAGE_UPDATE_YES=1` vaut accord) ; avec accord ou révisions données, réécrit `image.conf` puis construit. C'est aussi le retour arrière du moteur conteneurisé |
-| `--image-status` | Révisions demandées, image `:latest` en place avec ses étiquettes, verdict de conformité, taille, images sans tag restantes et place du cache de build. Ne construit ni ne purge rien |
+| `--image-build [--no-cache]` | Construit l'image du moteur **conteneurisé** (`runtime/`) sur les révisions épinglées dans les `ARG` de `runtime/Dockerfile.rocm-strix`. Raccourci vers `cd ~/models && docker compose build`, rien de plus. L'image remplacée perd son tag : `docker image prune` (sans `-a`) la retire, à la main. **C'est le moteur du service** : une image neuve n'est servie qu'au prochain `--restart` |
 | `--list-devices` | Étiquette du moteur, puis les devices exposés par l'**image** ; alerte si `ROCm0` manque |
 | `--spec-test [modèle] [n] [prompt]` | Décode réel via l'API (spéculation incluse), journalise, calibre et persiste le n-max dès 2 valeurs mesurées. Prompt par défaut `spec-test.txt` ; un autre prompt est journalisé à part et ne calibre pas |
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
@@ -166,7 +166,8 @@ d'avancer sans accord explicite.
 ```bash
 ./setup-llm.sh --setup                # première mise en place
 ./setup-llm.sh --update               # 1. modèles (etags)
-./setup-llm.sh --image-update         # 2. moteur du service (image, si bump accepté)
+./setup-llm.sh --image-build          # 2. moteur du service, après un bump de
+                                      #    révision dans le Dockerfile
 ./setup-llm.sh --restart              # 3. appliquer
 ./setup-llm.sh --bench all            # 4. perfs de tous les modèles présents : régressions
 ./setup-llm.sh --bench-sanity <m>     # le moteur répond-il juste ?
@@ -388,7 +389,6 @@ table ci-dessus change.
 | `logs/bench-cache.log` | journal TSV des `--bench-cache` |
 | `logs/bench-load.log` | journal TSV des `--bench-load` |
 | `logs/spec-batch.log` / `.tsv` | journal des balayages `tools/bench-spec-batch.sh` |
-| `logs/images.tsv` | journal TSV des `--image-build` (date, tag, révisions, taille) |
 | `logs/spec-isolate/<tag>/` | sorties de `tools/spec-isolate.sh` : `serveur.log`, `mesures.tsv`, `gen-*.txt` |
 | `logs/qualif/<tag>/` | sorties de `tools/qualif-modele.sh` : un journal par étape (`01-devices.log` … `07-agentic.log`) et `resume.md` (tableau de perfs) |
 
@@ -396,8 +396,7 @@ Versionnés, eux (ils décrivent ce qu'on construit, pas la machine) :
 
 | Fichier | Rôle |
 |---|---|
-| `runtime/image.conf` | dépôts, branches et **révisions épinglées** de l'image du moteur conteneurisé, plus son nom ; son historique git est le journal des révisions |
-| `runtime/Dockerfile.rocm-strix` | copie vendorisée du Dockerfile amont (PR 133, mergée) — écarts et resynchronisation dans `runtime/AMONT.md` |
+| `runtime/Dockerfile.rocm-strix` | copie vendorisée du Dockerfile amont (PR 133, mergée), qui porte aussi les **révisions épinglées** du moteur et du runtime ROCr (`ARG ENGINE_REV`, `ARG ROCM_SYSTEMS_REV`) ; son historique git est le journal des révisions. Écarts et resynchronisation dans `runtime/AMONT.md` |
 | `runtime/patches/` | les deux patchs que le build applique au moteur |
 
 Côté `~/models/` : `models.ini`, généré. Ne jamais l'éditer : relancer

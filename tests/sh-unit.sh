@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Test unitaire des helpers bash qui dépendent de l'ENVIRONNEMENT plutôt que
-# d'une entrée : _llama_build (étiquette du moteur, lue sur les LABEL de
-# l'image), _ec_power_mode (mode d'alimentation de l'APU lu sur le contrôleur
+# d'une entrée : _llama_build (étiquette du moteur, lue sur les ARG du
+# Dockerfile vendorisé), _ec_power_mode (mode d'alimentation de l'APU lu sur le contrôleur
 # embarqué), la garde mémoire (lib/common.sh), le moteur conteneurisé
-# (lib/runtime.sh, sur un faux docker et un faux git ls-remote), le service en
-# conteneur (compose généré, _svc_*, --migrate-off-systemd) et le models.ini
-# généré (lib/ini.sh, lib/models.sh).
+# (lib/runtime.sh, sur un faux docker), le service en conteneur (compose
+# généré, _svc_*, --migrate-off-systemd) et le models.ini généré (lib/ini.sh,
+# lib/models.sh).
 #
 # Ce qui a disparu le 18/09/2026, avec le fork strix-llama.cpp : la résolution
 # d'un binaire llama-* sur l'HÔTE (_llama_bin, _host_llama_build) et ses
@@ -14,6 +14,12 @@
 # (FORK_ONLY_KEYS), l'épinglage (fork.conf), le suivi d'amont (--update-fork) et
 # la proposition du fork en fin de --setup. Il n'y a plus qu'un moteur, celui de
 # l'image, et une seule forme d'étiquette.
+#
+# Ce qui a disparu le 18/09/2026 au soir, avec la couche d'abstraction autour de
+# l'image : runtime/image.conf et sa lecture stricte, les LABEL llm-setup.*, la
+# promotion sous tag temporaire et sa vérification d'après-coup, la purge par
+# label, logs/images.tsv, --image-update et --image-status. Il reste un
+# Dockerfile (qui porte les révisions) et un compose (qui porte le bloc build).
 #
 # Lancement : ./tests/sh-unit.sh (aucune dépendance, aucun modèle, aucun réseau)
 # =============================================================================
@@ -145,35 +151,28 @@ else
   echo "[FAIL] mode EC : la fonction a fait échouer l'appelant sous set -e"; rc=1
 fi
 
-# 6. Moteur conteneurisé (lib/runtime.sh). Ce qui est testé ici est ce qui, en
-# cas de bug, casse SILENCIEUSEMENT : une image qui ne contient pas les
-# révisions demandées (toutes les mesures suivantes seraient étiquetées à
-# tort), un --image-update qui avancerait le moteur sans qu'on l'ait dit, et un
-# ménage d'images qui déborderait sur les images des autres outils de la
-# machine. Tout passe par un faux `docker` (petit magasin d'images sur disque)
-# et un faux `git ls-remote` : aucun build, aucun réseau, aucun daemon.
+# 6. Moteur conteneurisé (lib/runtime.sh). Depuis le 18/09/2026 il n'y a plus
+# d'abstraction autour de l'image : --image-build n'est qu'un raccourci vers
+# « docker compose build ». Ce qui reste à tenir, et qui casserait
+# SILENCIEUSEMENT : la référence de l'image (un seul tag, absence distinguable)
+# et le fait que le build passe bien par le compose SANS être bloqué par
+# l'absence d'image : sinon la machine ne pourrait jamais construire la
+# première. Tout passe par un faux `docker` : aucun build, aucun réseau, aucun
+# daemon.
 IMG="$TMP/img"
-mkdir -p "$IMG/bin" "$IMG/repo/runtime" "$IMG/store" "$IMG/store/dangling" "$IMG/store/nolabel"
+mkdir -p "$IMG/bin" "$IMG/repo/runtime" "$IMG/store"
 
-cat > "$IMG/repo/runtime/image.conf" <<'EOF'
-# commentaire, ligne ignorée
-ENGINE_REPO=https://example.invalid/moteur.git
-ENGINE_BRANCH=master
-ENGINE_REV=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-
-ROCM_SYSTEMS_REPO=https://example.invalid/rocm.git
-ROCM_SYSTEMS_BRANCH=ilintar-experiments
-ROCM_SYSTEMS_REV=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-
-IMAGE_NAME=llm-rocm-strix
+# Dockerfile factice : seules les deux lignes ARG *_REV sont lues (par
+# _llama_build), et sa seule présence est exigée par cmd_image_build.
+cat > "$IMG/repo/runtime/Dockerfile.rocm-strix" <<'EOF'
+ARG ENGINE_REV=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG ROCM_SYSTEMS_REV=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EOF
-: > "$IMG/repo/runtime/Dockerfile.rocm-strix"
+: > "$IMG/repo/preload.conf"
 
-# Faux docker : magasin d'images en fichiers ($IMG/store/<nom>_<tag>), chaque
-# fichier portant les révisions "compilées". `dangling/` = images sans tag qui
-# portent notre label, `nolabel/` = une image sans tag d'un AUTRE outil, qui ne
-# doit jamais être listée quand le filtre de label est présent — c'est ce qui
-# fait échouer le test si le ménage oubliait le filtre.
+# Faux docker : magasin d'images en fichiers ($IMG/store/<nom>_<tag>) et journal
+# des appels. `compose build` crée l'image, comme le vrai (il pose le tag de la
+# clé `image` du service).
 cat > "$IMG/bin/docker" <<EOF
 #!/usr/bin/env bash
 S="$IMG/store"
@@ -182,240 +181,75 @@ cat >> "$IMG/bin/docker" <<'EOF'
 _f() { echo "$S/${1//[:\/]/_}"; }
 printf '%s\n' "$*" >> "$S/../docker.log"
 case "$1" in
-  build)
-    # Révisions demandées, reprises telles quelles sauf si le test force un
-    # écart (FAKE_BUILD_ENGINE) pour simuler un cache de couche menteur.
-    e=""; r=""; t=""; prev=""
-    for a in "$@"; do
-      case "$prev" in
-        --build-arg) case "$a" in ENGINE_REV=*) e="${a#*=}" ;; ROCM_SYSTEMS_REV=*) r="${a#*=}" ;; esac ;;
-        -t) t="$a" ;;
-      esac
-      prev="$a"
-    done
-    [[ "${FAKE_BUILD_FAIL:-0}" == "1" ]] && exit 1
-    printf 'engine=%s\nrocm=%s\n' "${FAKE_BUILD_ENGINE:-$e}" "${FAKE_BUILD_ROCM:-$r}" > "$(_f "$t")"
-    exit 0 ;;
-  tag)
-    src="$(_f "$2")"; dst="$(_f "$3")"
-    [[ -f "$src" ]] || exit 1
-    # L'ancienne image du tag de destination perd son tag : elle devient une
-    # image sans tag portant notre label, exactement comme docker le fait.
-    [[ -f "$dst" ]] && mv "$dst" "$S/dangling/id$RANDOM$RANDOM"
-    cp "$src" "$dst"; exit 0 ;;
-  run)
-    ref=""; mode=""
-    for a in "$@"; do
-      case "$a" in
-        --entrypoint) mode="next" ;;
-        *) if [[ "$mode" == "next" ]]; then mode="$a"; elif [[ -z "$ref" && "$a" == *:* && -f "$(_f "$a")" ]]; then ref="$a"; fi ;;
-      esac
-    done
-    [[ -n "$ref" ]] || exit 1
-    case "$mode" in
-      cat)     sed -e 's/^engine=/llama_cpp=/' -e 's/^rocm=/rocm_systems=/' "$(_f "$ref")" ;;
-      /bin/sh) [[ "${FAKE_BINS_MISSING:-0}" == "1" ]] && exit 1 ;;
-    esac
-    exit 0 ;;
   image)
-    case "$2" in
-      inspect)
-        ref="$3"
-        [[ -f "$(_f "$ref")" ]] || exit 1
-        case "$*" in
-          *Size*)   echo 8000000000 ;;
-          *engine_rev*) sed -n 's/^engine=//p' "$(_f "$ref")" ;;
-          *rocm_rev*)   sed -n 's/^rocm=//p'   "$(_f "$ref")" ;;
-          *build_date*) echo "2026-09-18T00:00:00Z" ;;
-        esac
-        exit 0 ;;
-      rm)
-        for d in "$(_f "$3")" "$S/dangling/$3" "$S/nolabel/$3"; do
-          [[ -f "$d" ]] && { rm -f "$d"; exit 0; }
-        done
-        exit 1 ;;
-      ls)
-        if [[ "$*" == *"label=llm-setup.engine_rev"* ]]; then
-          ls "$S/dangling" 2>/dev/null
-        else
-          ls "$S/dangling" "$S/nolabel" 2>/dev/null
-        fi
-        exit 0 ;;
-    esac
+    [[ "$2" == "inspect" ]] || exit 1
+    [[ -f "$(_f "$3")" ]] || exit 1
+    exit 0 ;;
+  compose)
+    for a in "$@"; do [[ "$a" == "build" ]] && { echo bati > "$(_f llm-rocm-strix:latest)"; exit 0; }; done
     exit 1 ;;
-  system) printf 'TYPE\tTOTAL\tACTIVE\tSIZE\tRECLAIMABLE\nBuild Cache\t45\t0\t2.5GB\t2.5GB\n'; exit 0 ;;
 esac
 exit 1
 EOF
 
-# Faux git : seul ls-remote est utilisé par lib/runtime.sh. Le sommet de chaque
-# branche est lu dans un fichier que le test réécrit — c'est lui qui joue « un
-# commit est arrivé en amont ».
-cat > "$IMG/bin/git" <<EOF
+cat > "$IMG/bin/getent" <<'EOF'
 #!/usr/bin/env bash
-if [[ "\$1" == "ls-remote" ]]; then
-  case "\$2" in
-    *moteur*) printf '%s\trefs/heads/master\n' "\$(cat "$IMG/head-engine")" ;;
-    *rocm*)   printf '%s\trefs/heads/ilintar-experiments\n' "\$(cat "$IMG/head-rocm")" ;;
-  esac
-  exit 0
-fi
-exec /usr/bin/git "\$@"
+[[ "$1" == "group" ]] || exit 2
+case "$2" in
+  render) echo "render:x:303:" ;;
+  video)  echo "video:x:986:" ;;
+  *) exit 2 ;;
+esac
 EOF
-chmod +x "$IMG/bin/docker" "$IMG/bin/git"
-printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > "$IMG/head-engine"
-printf 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' > "$IMG/head-rocm"
+chmod +x "$IMG/bin/docker" "$IMG/bin/getent"
+mkdir -p "$TMP/home/models"
+: > "$TMP/home/models/models.ini"
 
 _run_img() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé = non interactif
   env -i HOME="$TMP/home" PATH="$IMG/bin:/usr/bin:/bin" SCRIPT_DIR="$IMG/repo" ${2:-} \
     bash -c "set -euo pipefail
       source '$REPO_DIR/lib/common.sh'
+      source '$REPO_DIR/lib/ini.sh'
+      source '$REPO_DIR/lib/compose.sh'
       source '$REPO_DIR/lib/runtime.sh'
       $1" </dev/null 2>&1
 }
 
-# (a) Lecture de image.conf : les sept clés, commentaires et lignes vides
-#     ignorés. C'est le fichier qui décide de ce qu'on compile.
-_ck "image.conf : ENGINE_REV" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
-    "$(_run_img '_image_read_conf; echo "$ENGINE_REV"')"
-_ck "image.conf : ROCM_SYSTEMS_BRANCH" "ilintar-experiments" \
-    "$(_run_img '_image_read_conf; echo "$ROCM_SYSTEMS_BRANCH"')"
-_ck "image.conf : IMAGE_NAME" "llm-rocm-strix" \
-    "$(_run_img '_image_read_conf; echo "$IMAGE_NAME"')"
+# (a) Tag et référence. Un seul tag : la référence de l'image courante ne dépend
+#     d'aucun tri, mais l'absence d'image doit rester distinguable (code 1, rien
+#     sur la sortie) : c'est ce qui fait refuser la génération du compose.
+_ck "tag de l'image" "latest" "$(_run_img '_image_tag')"
+_ck "image absente : rien" "absente" "$(_run_img '_image_ref || echo absente')"
 
-# (b) Une clé inconnue est une faute de frappe qui, tolérée, ferait construire
-#     la branche au lieu de la révision : refus explicite, pas un silence.
-out="$(_run_img '_image_read_conf' "" )"
-printf 'ENGINE_REVISION=zz\n' >> "$IMG/repo/runtime/image.conf"
-out="$(_run_img '_image_read_conf')"; grc=$?
-if [[ "$grc" -ne 0 && "$out" == *"ENGINE_REVISION"* ]]; then
-  echo "[OK]   image.conf : clé inconnue ⇒ refus nommant la clé"
-else
-  echo "[FAIL] image.conf : clé inconnue acceptée, code $grc, sortie : $out"; rc=1
-fi
-sed -i '/^ENGINE_REVISION=/d' "$IMG/repo/runtime/image.conf"
-
-# (c) Tag et référence. Un seul tag depuis le 17/09/2026 : la référence de
-#     l'image courante ne dépend plus d'un tri, mais l'absence d'image doit
-#     rester distinguable (code 1, rien sur la sortie).
-_ck "tag de l'image" "latest" "$(_run_img '_image_read_conf; _image_tag')"
-_ck "image absente : rien" "absente" \
-    "$(_run_img '_image_read_conf; _image_ref || echo absente')"
-
-# (d) --image-update sans confirmation. Un bump d'image ouvre une série de
-#     mesures à part : en entrée non interactive, la commande doit MONTRER
-#     l'écart et ne toucher ni image.conf ni docker.
-printf 'cccccccccccccccccccccccccccccccccccccccc\n' > "$IMG/head-engine"
+# (b) --image-build : passe par « docker compose build », et NE se bloque PAS
+#     sur l'absence d'image : sinon aucune machine ne pourrait construire la
+#     première (le compose refuse de se générer sans image, sauf pour lui).
 : > "$IMG/docker.log"
-avant="$(md5sum < "$IMG/repo/runtime/image.conf")"
-out="$(_run_img 'cmd_image_update')"; grc=$?
-grep -q '^build' "$IMG/docker.log" && batie=1 || batie=0
-if [[ "$grc" -eq 0 && "$out" == *"aaaaaaa → ccccccc"* && "$out" == *"IMAGE_UPDATE_YES=1"* \
-      && "$(md5sum < "$IMG/repo/runtime/image.conf")" == "$avant" && "$batie" -eq 0 ]]; then
-  echo "[OK]   image-update : écart montré, image.conf intact, aucun build"
-else
-  echo "[FAIL] image-update sans confirmation : code $grc"
-  echo "$out" | sed 's/^/       /'; rc=1
-fi
-
-# (e) Rien de nouveau en amont ⇒ aucun build non plus (le cas courant).
-printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' > "$IMG/head-engine"
-: > "$IMG/docker.log"
-out="$(_run_img 'cmd_image_update')"; grc=$?
-grep -q '^build' "$IMG/docker.log" && batie=1 || batie=0
-if [[ "$grc" -eq 0 && "$out" == *"Rien de nouveau en amont"* && "$batie" -eq 0 ]]; then
-  echo "[OK]   image-update : amonts à jour ⇒ rien à faire"
-else
-  echo "[FAIL] image-update à jour : code $grc, sortie : $out"; rc=1
-fi
-
-# (f) Build nominal : construction sous le tag TEMPORAIRE, vérification, puis
-#     promotion en :latest et ménage. Une image d'un autre outil, sans tag et
-#     sans notre label, doit survivre — c'est la garantie qu'on ne fait jamais
-#     de prune global.
-echo "vieille" > "$IMG/store/nolabel/id-autre-outil"
 out="$(_run_img 'cmd_image_build')"; grc=$?
-if [[ "$grc" -eq 0 && -f "$IMG/store/llm-rocm-strix_latest" \
-      && ! -f "$IMG/store/llm-rocm-strix_build" \
-      && -f "$IMG/store/nolabel/id-autre-outil" ]]; then
-  echo "[OK]   image-build : promu en :latest, tag temporaire retiré, image tierce intacte"
+if [[ "$grc" -eq 0 ]] && grep -q 'compose .* build' "$IMG/docker.log" \
+   && [[ -f "$IMG/store/llm-rocm-strix_latest" ]]; then
+  echo "[OK]   image-build : docker compose build, image absente non bloquante"
 else
-  echo "[FAIL] image-build nominal : code $grc"
-  echo "$out" | sed 's/^/       /'; rc=1
+  echo "[FAIL] image-build : code $grc, appels docker :"
+  sed 's/^/       /' "$IMG/docker.log"; echo "$out" | sed 's/^/       /'; rc=1
 fi
 
-# (g) Ménage : le second build réussi doit supprimer l'image que le nouveau
-#     :latest vient de remplacer (sans tag, avec notre label) et laisser
-#     l'autre tranquille.
-out="$(_run_img 'cmd_image_build')"; grc=$?
-if [[ "$grc" -eq 0 && -z "$(ls "$IMG/store/dangling" 2>/dev/null)" \
-      && -f "$IMG/store/nolabel/id-autre-outil" ]]; then
-  echo "[OK]   image-build : ancienne image sans tag purgée, image tierce intacte"
+# (c) Un argument inconnu ne doit pas partir en build silencieux.
+out="$(_run_img 'cmd_image_build --oups')"; grc=$?
+if [[ "$grc" -ne 0 && "$out" == *"--oups"* ]]; then
+  echo "[OK]   image-build : argument inconnu ⇒ refus nommant l'argument"
 else
-  echo "[FAIL] image-build ménage : code $grc, dangling : $(ls "$IMG/store/dangling" 2>/dev/null)"
-  echo "$out" | sed 's/^/       /'; rc=1
+  echo "[FAIL] image-build argument inconnu : code $grc, sortie : $out"; rc=1
 fi
 
-# (h) LE test qui compte : versions.txt ne correspond PAS aux révisions
-#     demandées (cache de couche, branche réécrite, build-arg perdu). Il faut
-#     un refus qui NOMME les deux révisions, un :latest laissé intact et le tag
-#     temporaire retiré — sinon on mesurerait pendant des jours un moteur qui
-#     n'est pas celui que le dépôt annonce.
-ref_avant="$(cat "$IMG/store/llm-rocm-strix_latest")"
-out="$(_run_img 'cmd_image_build' 'FAKE_BUILD_ENGINE=dddddddddddddddddddddddddddddddddddddddd')"; grc=$?
-if [[ "$grc" -ne 0 && "$out" == *"aaaaaaaaaa"* && "$out" == *"dddddddd"* \
-      && "$(cat "$IMG/store/llm-rocm-strix_latest")" == "$ref_avant" \
-      && ! -f "$IMG/store/llm-rocm-strix_build" ]]; then
-  echo "[OK]   image-build : versions.txt discordant ⇒ refus, :latest intacte"
-else
-  echo "[FAIL] image-build versions.txt discordant : code $grc"
-  echo "$out" | sed 's/^/       /'; rc=1
-fi
-
-# (i) Même exigence si un des quatre binaires manque : pas de promotion.
-out="$(_run_img 'cmd_image_build' 'FAKE_BINS_MISSING=1')"; grc=$?
-if [[ "$grc" -ne 0 && "$out" == *"llama-quantize"* \
-      && "$(cat "$IMG/store/llm-rocm-strix_latest")" == "$ref_avant" ]]; then
-  echo "[OK]   image-build : binaire manquant ⇒ refus, :latest intacte"
-else
-  echo "[FAIL] image-build binaire manquant : code $grc"
-  echo "$out" | sed 's/^/       /'; rc=1
-fi
-
-# (j) Build en échec (docker build non nul) : aucune promotion, :latest intacte.
-out="$(_run_img 'cmd_image_build' 'FAKE_BUILD_FAIL=1')"; grc=$?
-if [[ "$grc" -ne 0 && "$(cat "$IMG/store/llm-rocm-strix_latest")" == "$ref_avant" ]]; then
-  echo "[OK]   image-build : docker build en échec ⇒ :latest intacte"
-else
-  echo "[FAIL] image-build en échec : code $grc, sortie : $out"; rc=1
-fi
-
-# (k) --image-status : ne construit rien, ne purge rien, et dit la conformité.
+# (d) --no-cache est transmis tel quel à compose (un build « propre » demandé et
+#     silencieusement mis en cache ne se verrait qu'à la mesure suivante).
 : > "$IMG/docker.log"
-out="$(_run_img 'cmd_image_status')"; grc=$?
-grep -qE '^(build|tag|image rm)' "$IMG/docker.log" && ecrit=1 || ecrit=0
-if [[ "$grc" -eq 0 && "$out" == *"llm-rocm-strix:latest"* && "$out" == *"conf"* && "$ecrit" -eq 0 ]]; then
-  echo "[OK]   image-status : lecture seule (aucun build, aucun rm)"
+_run_img 'cmd_image_build --no-cache' >/dev/null
+if grep -q 'compose .* build --no-cache' "$IMG/docker.log"; then
+  echo "[OK]   image-build : --no-cache transmis à docker compose build"
 else
-  echo "[FAIL] image-status : code $grc"
-  echo "$out" | sed 's/^/       /'; rc=1
-fi
-
-# (l) IMAGE_UPDATE_YES=1 vaut accord explicite : image.conf est réécrit sur la
-#     révision d'amont, et le build enchaîne. C'est le seul chemin qui fait
-#     avancer le moteur sans terminal.
-printf 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-' > "$IMG/head-engine"
-out="$(_run_img 'cmd_image_update' 'IMAGE_UPDATE_YES=1')"; grc=$?
-if [[ "$grc" -eq 0 ]] \
-   && grep -q '^ENGINE_REV=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee$' "$IMG/repo/runtime/image.conf" \
-   && grep -q '^ROCM_SYSTEMS_REV=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb$' "$IMG/repo/runtime/image.conf" \
-   && grep -q '^ENGINE_BRANCH=master$' "$IMG/repo/runtime/image.conf"; then
-  echo "[OK]   image-update : IMAGE_UPDATE_YES=1 ⇒ image.conf réécrit, reste intact, build enchaîné"
-else
-  echo "[FAIL] image-update IMAGE_UPDATE_YES=1 : code $grc"
-  echo "$out" | sed 's/^/       /'
-  sed 's/^/       conf: /' "$IMG/repo/runtime/image.conf"; rc=1
+  echo "[FAIL] image-build : --no-cache perdu, appels : $(cat "$IMG/docker.log")"; rc=1
 fi
 
 # 7. Service en conteneur : compose généré (lib/compose.sh) et pilotage
@@ -430,14 +264,12 @@ fi
 SVC="$TMP/svc"
 mkdir -p "$SVC/bin" "$SVC/repo/runtime" "$SVC/home/models" "$SVC/etat"
 
-cat > "$SVC/repo/runtime/image.conf" <<'EOF'
-ENGINE_REPO=https://example.invalid/moteur.git
-ENGINE_BRANCH=master
-ENGINE_REV=abcdef1234567890abcdef1234567890abcdef12
-ROCM_SYSTEMS_REPO=https://example.invalid/rocm.git
-ROCM_SYSTEMS_BRANCH=ilintar-experiments
-ROCM_SYSTEMS_REV=9876543210fedcba9876543210fedcba98765432
-IMAGE_NAME=llm-rocm-strix
+# Dockerfile factice : c'est lui qui porte les révisions épinglées depuis le
+# 18/09/2026, et _llama_build les y lit par un grep (jamais en démarrant un
+# conteneur : la fonction est appelée à chaque journal de chaque mesure).
+cat > "$SVC/repo/runtime/Dockerfile.rocm-strix" <<'EOF'
+ARG ENGINE_REV=abcdef1234567890abcdef1234567890abcdef12
+ARG ROCM_SYSTEMS_REV=9876543210fedcba9876543210fedcba98765432
 EOF
 # preload.conf factice : deux modèles préchargés ⇒ --models-max attendu = 3.
 printf 'un\ndeux\n' > "$SVC/repo/preload.conf"
@@ -458,10 +290,6 @@ case "$1" in
     [[ "$2" == "inspect" ]] || exit 1
     [[ "$(cat "$E/image" 2>/dev/null || echo 1)" == "1" ]] || exit 1
     [[ "$3" == "llm-rocm-strix:latest" ]] || exit 1
-    case "$*" in
-      *engine_rev*) echo abcdef1234567890abcdef1234567890abcdef12 ;;
-      *rocm_rev*)   echo 9876543210fedcba9876543210fedcba98765432 ;;
-    esac
     exit 0 ;;
   inspect)
     case "$*" in
@@ -563,6 +391,10 @@ _ckin "nom de projet explicite"          "name: llm-setup"
 _ckin "nom de conteneur = SERVICE_NAME"  "container_name: llama-server"
 _ckin "image locale"                     "image: llm-rocm-strix:latest"
 _ckin "pas de pull"                      "pull_policy: never"
+# Le bloc build : c'est lui qui fait de ce compose la SEULE façon de construire
+# l'image, et du Dockerfile du dépôt la seule source des révisions.
+_ckin "contexte de build = runtime/ du dépôt" "context: $SVC/repo/runtime"
+_ckin "Dockerfile vendorisé nommé"       "dockerfile: Dockerfile.rocm-strix"
 _ckin "montage au même chemin, en ro"    "- \"$SVC/home/models:$SVC/home/models:ro\""
 _ckin "cache inscriptible hors de ~/models" ":/var/cache/llama:rw\""
 _ckin "gid numérique de render"          "- \"303\""
@@ -678,18 +510,28 @@ fi
 echo ok > "$SVC/etat/health"
 echo running > "$SVC/etat/status"
 
-# (f) Étiquette de moteur du SERVICE : les deux LABEL de l'image, en clair,
-#     puis les replis. C'est la colonne build de tous les journaux TSV : une
-#     étiquette fausse rend une campagne entière incomparable.
-_ck "étiquette : LABEL de l'image" "strix-abcdef1+r9876543" "$(_run_svc '_llama_build')"
+# (f) Étiquette de moteur du SERVICE : les deux ARG *_REV du Dockerfile
+#     vendorisé, lus par un grep, puis le repli. C'est la colonne build de tous
+#     les journaux TSV : une étiquette fausse rend une campagne entière
+#     incomparable. Elle ne doit JAMAIS dépendre de l'état de docker (l'image
+#     peut être absente pendant une reconstruction) ni coûter un conteneur.
+_ck "étiquette : ARG du Dockerfile" "strix-abcdef1+r9876543" "$(_run_svc '_llama_build')"
+: > "$SVC/etat/docker.log"
 echo 0 > "$SVC/etat/image"
-mkdir -p "$SVC/repo/logs"
-printf 'date\ttag\tengine_rev\trocm_rev\ttaille_octets\n' > "$SVC/repo/logs/images.tsv"
-printf '2026-09-18 00:00\tlatest\t1111111111111111111111111111111111111111\t2222222222222222222222222222222222222222\t8000000000\n' >> "$SVC/repo/logs/images.tsv"
-_ck "étiquette : repli sur logs/images.tsv" "strix-1111111+r2222222" "$(_run_svc '_llama_build')"
-rm -f "$SVC/repo/logs/images.tsv"
-_ck "étiquette : repli final" "?" "$(_run_svc '_llama_build')"
+_ck "étiquette : image absente, révisions quand même lues" "strix-abcdef1+r9876543" \
+    "$(_run_svc '_llama_build')"
+if [[ ! -s "$SVC/etat/docker.log" ]]; then
+  echo "[OK]   étiquette : aucun appel à docker (lecture de fichier seule)"
+else
+  echo "[FAIL] étiquette : docker appelé : $(cat "$SVC/etat/docker.log")"; rc=1
+fi
 echo 1 > "$SVC/etat/image"
+# REV vidée (cas non épinglé, sommet de branche au build) : rien à annoncer,
+# l'étiquette le dit.
+mv "$SVC/repo/runtime/Dockerfile.rocm-strix" "$SVC/repo/runtime/Dockerfile.garde"
+printf 'ARG ENGINE_REV=\nARG ROCM_SYSTEMS_REV=\n' > "$SVC/repo/runtime/Dockerfile.rocm-strix"
+_ck "étiquette : repli final" "?" "$(_run_svc '_llama_build')"
+mv -f "$SVC/repo/runtime/Dockerfile.garde" "$SVC/repo/runtime/Dockerfile.rocm-strix"
 
 # (g) --cleanup : les deux artefacts GÉNÉRÉS de ~/models (models.ini et
 #     docker-compose.yml) sont hors d'atteinte par construction des deux find.
@@ -855,5 +697,5 @@ else
   echo "[FAIL] étiquette d'image impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (image.conf, promotion après vérification, ménage ciblé, --image-update sans accord), service en conteneur (compose généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose généré avec son bloc build, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
 exit "$rc"

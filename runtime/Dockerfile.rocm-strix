@@ -17,8 +17,43 @@
 # fichier), resynchronisé le 18/09/2026 : contenu amont identique. Les écarts
 # avec l'amont sont listés dans runtime/AMONT.md ; les resynchroniser à la
 # main, ce fichier n'est pas régénéré.
-# Ne se construit pas à la main : ./setup-llm.sh --image-build (il résout les
-# révisions, passe les build-args et vérifie /opt/strix/versions.txt après coup).
+# Construction : `docker compose build` depuis ~/models (le compose généré par
+# lib/compose.sh porte le contexte et ce Dockerfile) ; `./setup-llm.sh
+# --image-build` n'est qu'un raccourci vers cette même commande.
+# ---------------------------------------------------------------------------
+#
+# Révisions épinglées
+# -------------------
+# Les deux ARG *_REV ci-dessous portent les révisions servies. Elles ont été
+# épinglées le 17/09/2026 : ce sont celles de l'image mesurée sur bigchuck
+# avant la migration vers le moteur conteneurisé.
+#
+#   moteur        https://github.com/halo-box/strix-llama.cpp.git
+#                 branche master
+#                 8c1c282ecb194e8f02613defcc4a07c22b6d1c08   (ARG ENGINE_REV)
+#   runtime ROCr  https://github.com/pwilkin/rocm-systems.git
+#                 branche ilintar-experiments
+#                 7dda3ac6cfe6bbe0b7f08c23a67cfa118d8641a1   (ARG ROCM_SYSTEMS_REV)
+#
+# Les faire évoluer, à la main et jamais autrement :
+#   1. voir le sommet de la branche :
+#        git ls-remote https://github.com/halo-box/strix-llama.cpp.git refs/heads/master
+#        git ls-remote https://github.com/pwilkin/rocm-systems.git refs/heads/ilintar-experiments
+#   2. remplacer la valeur de l'ARG concerné dans ce fichier ;
+#   3. commiter en disant POURQUOI (le correctif attendu, la mesure visée) ;
+#   4. cd ~/models && docker compose build, puis ./setup-llm.sh --restart ;
+#   5. relancer une campagne de mesures : un changement de révision est un
+#      NOUVEAU MOTEUR, donc une nouvelle série de journaux. Les chiffres pris
+#      sous les révisions précédentes ne s'y comparent pas.
+#
+# L'historique git de CE fichier est le journal des révisions (git log -p sur
+# lui dit quand et pourquoi chacune a bougé), et le retour arrière consiste à y
+# remettre les anciennes valeurs. Ce qui a réellement été compilé se lit, lui,
+# dans /opt/strix/versions.txt à l'intérieur de l'image.
+#
+# Une REV laissée VIDE reprend le comportement amont : sommet de la branche au
+# moment du build, donc deux builds à un jour d'écart ne donnent pas la même
+# image et aucune mesure ne se compare.
 # ---------------------------------------------------------------------------
 
 # build stage
@@ -70,12 +105,13 @@ ENV ROCM_PATH=/opt/rocm \
 
 # Écart llm-setup : l'amont ne prend que la branche ("never commit pins"), donc
 # deux builds à un jour d'écart ne donnent pas la même image et aucune mesure ne
-# se compare. ROCM_SYSTEMS_REV vide = HEAD de la branche, comme l'amont ; rempli
-# (sha, tag), le build se détache dessus. Le clone reste blobless mais NON
-# --depth 1 : une révision antérieure au sommet doit rester atteignable.
+# se compare. ROCM_SYSTEMS_REV a donc une valeur par défaut ÉPINGLÉE (cf. le
+# bloc « Révisions épinglées » en tête) ; vidée, on retrouve le HEAD de branche
+# de l'amont. Le clone reste blobless mais NON --depth 1 : une révision
+# antérieure au sommet doit rester atteignable.
 ARG ROCM_SYSTEMS_REPO=https://github.com/pwilkin/rocm-systems.git
 ARG ROCM_SYSTEMS_BRANCH=ilintar-experiments
-ARG ROCM_SYSTEMS_REV=
+ARG ROCM_SYSTEMS_REV=7dda3ac6cfe6bbe0b7f08c23a67cfa118d8641a1
 # CppHeaderParser generates headers during the HIP (CLR) build.
 RUN <<'EOF'
 set -eux
@@ -151,10 +187,11 @@ EOF
 WORKDIR /opt/llama.cpp
 ARG REPO=https://github.com/halo-box/strix-llama.cpp.git
 ARG BRANCH=master
-# Écart llm-setup : même épinglage que pour rocm-systems. ENGINE_REV vide = HEAD
+# Écart llm-setup : même épinglage que pour rocm-systems, valeur par défaut
+# comprise (cf. le bloc « Révisions épinglées » en tête) ; ENGINE_REV vidé = HEAD
 # de la branche. Le clone amont n'est déjà pas superficiel, la révision reste
 # donc atteignable sans rien changer d'autre.
-ARG ENGINE_REV=
+ARG ENGINE_REV=8c1c282ecb194e8f02613defcc4a07c22b6d1c08
 RUN <<'EOF'
 set -eux
 git clone -b "${BRANCH}" --single-branch "${REPO}" .
@@ -353,19 +390,6 @@ ENV ROCM_PATH=/opt/rocm \
   HSA_OVERRIDE_GFX_VERSION=11.5.1 \
   DEBUG_HIP_GRAPH_PM4=1 \
   GPU_MAX_HW_QUEUES=1
-
-# Écart llm-setup : trois étiquettes sur l'étage final, pour qu'une image posée
-# sur la machine dise d'où elle sort sans qu'on ait à la démarrer (--image-status
-# les lit). Un LABEL ne sait pas lire /opt/strix/versions.txt, produit pendant le
-# build : les valeurs arrivent par build-args, résolus AVANT le build par
-# --image-build (git ls-remote quand la révision n'est pas épinglée), et
-# --image-build revérifie après coup qu'elles correspondent bien à versions.txt.
-ARG ENGINE_REV=
-ARG ROCM_SYSTEMS_REV=
-ARG BUILD_DATE=
-LABEL llm-setup.engine_rev="${ENGINE_REV}" \
-      llm-setup.rocm_rev="${ROCM_SYSTEMS_REV}" \
-      llm-setup.build_date="${BUILD_DATE}"
 
 # shell
 CMD ["/bin/bash"]
