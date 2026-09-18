@@ -145,10 +145,10 @@ class TestPerfGraphs(unittest.TestCase):
     """Générateur des figures du README, sur un TSV minimal dans un tmpdir."""
 
     TSV = ("# commentaire ignoré\n"
-           "modele\tprefill_paquet\tprefill_fork\tdecode_paquet\tdecode_fork"
-           "\tacceptance_paquet\tacceptance_fork\treglage\tsource\n"
-           "modele-test-a\t100\t200\t10.0\t5.0\t\t0.5\taucun\tbXXXXX contre fork\n"
-           "modele-test-b\t200\t250\t20.0\t22.5\t0.6\t0.7\tngram\tbXXXXX contre fork\n")
+           "modele\tprefill_vulkan\tprefill_rocm\tdecode_vulkan\tdecode_rocm"
+           "\tacceptance_vulkan\tacceptance_rocm\treglage\tsource\n"
+           "modele-test-a\t100\t200\t10.0\t5.0\t\t0.5\taucun\tfork contre conteneur\n"
+           "modele-test-b\t200\t250\t20.0\t22.5\t0.6\t0.7\tngram\tfork contre conteneur\n")
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="perf-graphs-")
