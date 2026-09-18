@@ -120,20 +120,23 @@ INI_BIG_BATCH_OK=(qwen3.8-flash-next-mtp-nothink)
 #     aucune mesure de ce moteur ne justifie une valeur quantifiée, et sur
 #     DeepSeek f16 et q8_0 sont équivalents en mémoire comme en débit. Sur le
 #     27B et Muse-Glimmer, mesuré plus tôt sur le fork Vulkan, le V f16 donnait
-#     déjà une meilleure acceptance du drafter que le q8_0. SEULE EXCEPTION,
-#     assumée : ornith-1.5-35b-a3b-parallel garde son q8_0, faute d'avoir été
-#     mesurée sur ce moteur (cf. son bloc)
-#   - swa-full + ctx-checkpoints : posé sur ornith-1.5-9b-mtp-nothink,
-#     ornith-1.5-35b-a3b-parallel et
+#     déjà une meilleure acceptance du drafter que le q8_0. La dernière
+#     exception, ornith-1.5-35b-a3b-parallel, est tombée le 18/09/2026 après
+#     son A/B (f16 1379 / 72,4 et 145,9 t/s agrégés contre 1375,7 / 71,7 et
+#     144,1 en q8_0, 72 Gio libres contre 71, cf. son bloc) : il n'y a PLUS
+#     AUCUNE valeur de cache quantifiée dans ce fichier
+#   - swa-full + ctx-checkpoints : posé sur ornith-1.5-9b-mtp-nothink et
 #     qwen3.8-27b-dflash-nothink. Jusqu'au 15/09/2026 ce bloc affirmait que
 #     swa-full « n'est effectif que sur le 9b » ; le journal du 13/09/2026 dit
 #     le contraire : llama-server écrit « swa_full is not supported by this
 #     model, it will be disabled » AUSSI sur le 9b (puis « cache_reuse is not
 #     supported by this context »), comme sur les 35B A3B (pas de SWA) et sur
-#     l'arch du 3.8-27B. Donc swa-full n'est effectif sur AUCUNE des trois
-#     sections : seul ctx-checkpoints y travaille. Les lignes sont gardées
-#     telles quelles (coût nul, le serveur les désactive lui-même) et
-#     redeviendront utiles si une arch à vraie SWA entre au parc.
+#     l'arch du 3.8-27B. Donc swa-full n'est effectif sur AUCUNE de ces
+#     sections : seul ctx-checkpoints y travaille. La clé a été RETIRÉE des
+#     deux sections Ornith 35B A3B le 18/09/2026, le journal du moteur
+#     conteneurisé redisant le même refus ce jour-là ; elle reste ailleurs
+#     telle quelle (coût nul, le serveur la désactive lui-même) et redeviendra
+#     utile si une arch à vraie SWA entre au parc.
 #   - parallel : ce n'est PAS une contrainte de spec-type. Jusqu'au 15/09/2026
 #     le dépôt affirmait « parallel = 1 OBLIGATOIRE sur tous les modèles MTP »
 #     en citant "-np > 1 and --mmproj are not yet supported with MTP" ; cette
@@ -576,10 +579,9 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   du 17 au 18/09/2026 n'a pas joué le parallel 4 : tous ses réglages sont
 #   ceux du fork Vulkan, gardés tels quels faute de mesure. Ce qui change quand
 #   même, parce que c'est global : device ROCm0, fit off, load-mode none.
-#   Le cache-type-v = q8_0 du corps est GARDÉ pour la même raison (le reste du
-#   parc est passé au f16 global sur mesure, pas celui-ci) : c'est la seule
-#   valeur de cache quantifiée qui subsiste dans ce fichier. À trancher à la
-#   bascule, avec --bench-parallel.
+#   Le cache-type-v = q8_0 du corps a été gardé un temps pour la même raison,
+#   puis RETIRÉ le 18/09/2026 après l'A/B ci-dessous : le parc n'a plus aucune
+#   valeur de cache quantifiée.
 # QUALIFIÉE SUR LE MOTEUR CONTENEURISÉ le 18/09/2026 (strix-8c1c282+r7dda3ac,
 #   ROCm0, par le dépôt cette fois) :
 #     --bench-sanity : justesse OK, pas de charabia ;
@@ -594,22 +596,27 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #       comptages de lignes justes jusqu'à 51k ;
 #     mémoire : 76 Gio libres une fois chargé.
 #   ⚠ swa-full EST INERTE ICI : le moteur journalise « swa_full is not
-#   supported by this model, it will be disabled ». La clé est gardée telle
-#   quelle (elle ne coûte rien) mais elle n'explique aucun chiffre.
+#   supported by this model, it will be disabled ». La clé était gardée telle
+#   quelle (elle ne coûtait rien) ; RETIRÉE du corps le 18/09/2026, des deux
+#   côtés : une clé que le moteur refuse et désactive n'a rien à faire dans le
+#   ini, et elle n'expliquait aucun chiffre. ctx-checkpoints, lui, RESTE :
+#   c'est lui qui fait les 62 % du tour suivant sur cette arch GDN.
 #   ⚠ ctx-size 1048576 est PLAFONNÉ par le moteur à n_ctx_train : le journal
 #   donne « the slot context (1048576) exceeds the training context of the
 #   model (262144) - capping », puis n_ctx_slot = 262144 pour chacun des
 #   4 slots. Le contexte servi est donc 262144 par slot, pas 1048576 ; rien
 #   n'est changé (le résultat est celui voulu) mais la valeur est trompeuse.
 #   A/B cache-type-v, mesuré le 18/09/2026 par surcharge SPEC_AB_OVERRIDES :
-#     q8_0 (servi) : --bench 1375,7 / 71,7, parallel 4 agrégé 144,1 t/s,
+#     q8_0 (servi alors) : --bench 1375,7 / 71,7, parallel 4 agrégé 144,1 t/s,
 #       71 Gio libres ;
-#     f16          : --bench 1379,2 / 72,4, parallel 4 agrégé 145,9 t/s,
+#     f16                : --bench 1379,2 / 72,4, parallel 4 agrégé 145,9 t/s,
 #       72 Gio libres, justesse OK.
-#   PROPOSITION NON APPLIQUÉE : retirer cache-type-v = q8_0 et laisser le f16
-#   global. Le f16 gagne 1 % de décode et 1 % d'agrégé, ne coûte rien en
-#   mémoire (le contexte est plafonné, cf. ci-dessus) et alignerait la
-#   dernière section quantifiée du parc. À décider hors campagne.
+#   APPLIQUÉ le 18/09/2026 : la surcharge cache-type-v = q8_0 est retirée, le
+#   f16 global reprend. Le f16 gagne 1 % de décode (72,4 contre 71,7) et 1 %
+#   d'agrégé (145,9 contre 144,1), et ne coûte rien en mémoire (72 Gio libres
+#   contre 71, le contexte étant de toute façon plafonné à 262144, cf.
+#   ci-dessus). C'était la dernière valeur de cache quantifiée du parc : il
+#   n'y en a plus.
 # Device : ROCm0 depuis le 18/09/2026 (device unique de l'image, cf. en-tête).
 #   HISTORIQUE, --bench-devices 28/08/2026 (b10566, ROCm SYSTÈME, 3 passes) :
 #   Vulkan0 976 pp / 70,9 tg contre ROCm0 931 / 57,6, justesse OK sur les deux,
@@ -622,9 +629,9 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   --bench-agentic 28/08/2026 (pi 0.84.3, 3 passes) : 16/16, décode 71 t/s
 #   en boucle d'outils, cache 89 à 98 % en continuation (72 % sur un run à
 #   65 k tokens cumulés, trois tours de correction).
-# cache-type-v q8_0 : posé du temps du global q8_0 / q4_0 (le V q4_0 dégradait
-#   le tool calling). Gardé tel quel faute de mesure sur ce moteur, cf. l'avis
-#   « section non mesurée » ci-dessus.
+# cache-type-v : plus de surcharge depuis le 18/09/2026, la section suit le f16
+#   global. Le q8_0 datait du temps du global q8_0 / q4_0 (le V q4_0 dégradait
+#   le tool calling) ; l'A/B ci-dessus l'a départagé sur ce moteur.
 # cache-reuse 0 : ignoré sur GDN (état récurrent) — la restauration de
 #   préfixe passe par cache-ram + ctx-checkpoints, au dernier checkpoint
 #   seulement (cf. en-tête, 62 % au tour suivant sur cette arch).
@@ -641,11 +648,9 @@ temp                 = 0.6
 top-k                = 20
 top-p                = 0.95
 min-p                = 0.0
-cache-type-v         = q8_0
 jinja                = true
 parallel             = 4
 cache-reuse          = 0
-swa-full             = true
 ctx-checkpoints      = 128"
 
 groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot) ; la section de concurrence est ornith-1.5-35b-a3b-parallel ci-dessus ---"
@@ -683,10 +688,10 @@ groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot)
 # cache-reuse 0 : ignoré sur GDN comme sur la section de base ; la valeur est
 #   posée explicitement, contrainte des sections spéculatives.
 # Toutes les autres clés sont celles de la section de base (sampling, ctx,
-#   jinja, swa-full, ctx-checkpoints) : à ne changer qu'en même temps que
-#   là-bas. SAUF le cache KV : cette section-ci a été mesurée sur le moteur
-#   conteneurisé en f16 sur K et V (cf. plus bas) et n'a plus de
-#   cache-type-v = q8_0, quand la section de base le garde faute de mesure.
+#   jinja, ctx-checkpoints) : à ne changer qu'en même temps que là-bas. Les
+#   deux sections sont de nouveau alignées sur le cache KV depuis le
+#   18/09/2026 : la section de base a perdu sa surcharge cache-type-v = q8_0
+#   après l'A/B, tout le parc est en K et V f16 globaux.
 # --bench du 15/09/2026 tel que servi (fork strix-0007bc6, Vulkan0, 3 passes,
 #   première mesure journalisée de cette section) : prefill 1073 t/s, décode
 #   76,2 t/s, acceptance 0,55, contre 1129 / 73,3 pour la section de base le
@@ -716,7 +721,10 @@ groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot)
 #   modèle charge, et il reste 62 à 66 Gio libres, très au-dessus des 10 Gio de
 #   seuil. Aucune mesure à 262144 n'est nécessaire, c'est déjà ce qui tourne.
 #   swa-full est inerte de la même façon (« swa_full is not supported by this
-#   model, it will be disabled »), comme sur la section de base.
+#   model, it will be disabled »), comme sur la section de base : la clé est
+#   RETIRÉE du corps le 18/09/2026, des deux côtés. Elle ne coûtait rien mais
+#   n'expliquait aucun chiffre, et le moteur la refusait à chaque chargement.
+#   ctx-checkpoints est gardé : c'est lui qui rend les 62 % du tour suivant.
 # QUALIFIÉE SUR LE MOTEUR CONTENEURISÉ le 18/09/2026, par le dépôt
 #   (strix-8c1c282+r7dda3ac, ROCm0) :
 #     --bench-sanity : justesse OK ;
@@ -748,7 +756,6 @@ spec-type            = ngram-map-k,draft-mtp
 spec-draft-n-max     = 4
 spec-ngram-map-k-size-m   = 7
 spec-ngram-map-k-min-hits = 2
-swa-full             = true
 ctx-checkpoints      = 128"
 
 # =============================================================================

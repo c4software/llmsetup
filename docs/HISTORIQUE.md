@@ -1407,6 +1407,45 @@ pi 0.84.3 en conteneur, appel froid puis 3 passes de 5 scénarios, bigchuck, for
 
 Lecture : Muse-Glimmer tient la boucle complète, le cache sert 97 à 99 % à chaque tour (attention pure) et le décode en boucle (34 à 41 t/s) rejoint le `--bench` (38,0) ; le raisonnement en `reasoning_strength` low ne fait échouer aucun scénario. LFM2.5-8B-A1B (thinking coupé) réussit les tool calls simples mais rate la réponse simple et la création de module (fichiers écrits, test jamais relancé jusqu'au vert), et part en boucle de tool calls sur la correction de bug : `--bench-agentic` n'a pas de limite de tours, le conteneur a été tué à la main. C'est le résultat, pas un défaut du serveur (le 2.6B, lui, reste le modèle de tool calling). La section est gardée avec ce verdict, à retirer si elle ne sert pas dans l'usage réel. Suite : elle a été retirée le 18/09/2026 après un second échec, 0/16 sur le moteur conteneurisé (cf. « lfm2.5-8b-a1b-nothink retiré (18/09/2026) »).
 
+## Ornith 35B A3B : cache V f16 et retrait de swa-full (18/09/2026)
+
+Les deux sections `ornith-1.5-35b-a3b-parallel` et `ornith-1.5-35b-a3b-mtp`
+perdent des clés de corps, sur mesure et sur journal du moteur. Décision de
+l'utilisateur, hors campagne.
+
+**`cache-type-v = q8_0` retiré de `ornith-1.5-35b-a3b-parallel`.** C'était la
+dernière valeur de cache quantifiée du parc, gardée jusque-là faute d'avoir été
+re-mesurée sur le moteur conteneurisé. L'A/B du 18/09/2026 (surcharge
+`SPEC_AB_OVERRIDES`, même moteur strix-8c1c282+r7dda3ac, ROCm0) :
+
+| cache V | `--bench` prefill / décode | `--bench-parallel` 4 requêtes, agrégé | mémoire libre |
+|---|---|---|---|
+| q8_0 (servi alors) | 1375,7 / 71,7 t/s | 144,1 t/s | 71 Gio |
+| f16 | 1379,2 / 72,4 t/s | 145,9 t/s | 72 Gio |
+
+Le f16 gagne environ 1 % de décode et 1 % d'agrégé, et ne coûte rien en
+mémoire : `ctx-size` est de toute façon plafonné par le moteur à `n_ctx_train`
+(262144), donc le f16 ne double pas le KV servi. La section suit désormais le
+`cache-type-k` / `cache-type-v = f16` global. Plus aucune section du parc ne
+pose de valeur de cache quantifiée.
+
+**`swa-full = true` retiré des DEUX sections.** Clé inerte, constatée au journal
+du moteur le 18/09/2026 sur l'une comme sur l'autre : « swa_full is not
+supported by this model, it will be disabled ». Les 35B A3B n'ont pas de SWA.
+Elle ne coûtait rien, mais elle n'expliquait aucun chiffre et le moteur la
+refusait à chaque chargement : elle n'a rien à faire dans le ini. La clé reste
+posée ailleurs (`ornith-1.5-9b-mtp-nothink`, `qwen3.8-27b-dflash-nothink`), où
+elle est tout aussi inerte mais où rien n'a été re-décidé.
+
+**`ctx-checkpoints = 128` est GARDÉ** des deux côtés : contrairement à
+`swa-full`, c'est lui qui travaille sur cette architecture GDN, et il explique
+les 62 % de contexte restauré au tour suivant mesurés par `--bench-cache`.
+
+Aucune mesure n'est refaite ici : les chiffres de référence des deux sections
+restent ceux du 18/09/2026 (1376 / 71,7 pour la `-parallel`, 1312 / 76,9 pour
+la `-mtp`), la `-parallel` étant désormais servie dans la configuration f16 qui
+a donné 1379 / 72,4 à l'A/B.
+
 ## `--setup` allégé : plus de paquets llama.cpp ni ggml sur l'hôte (18/09/2026)
 
 Suite du retrait du fork. `--setup` installait `llama-cpp`, `ggml-cpu` et

@@ -189,9 +189,10 @@ version = 1
 ; cache-type-k / cache-type-v = f16 : toute la campagne du 17 au 18/09/2026 a
 ;   tourné en f16 sur les deux, sur les huit modèles mesurés. Aucune mesure de
 ;   ce moteur ne justifie une valeur quantifiée, et sur DeepSeek f16 et q8_0
-;   sont équivalents (mémoire et débits) : le global passe donc en f16, et une
-;   valeur quantifiée ne survit en surcharge locale que là où elle n'a pas
-;   encore été re-mesurée (ornith-1.5-35b-a3b-parallel, cf. lib/models.sh).
+;   sont équivalents (mémoire et débits) : le global passe donc en f16. Depuis
+;   le 18/09/2026 et l'A/B d'ornith-1.5-35b-a3b-parallel (la dernière section
+;   qui surchargeait, cf. lib/models.sh), AUCUNE section ne pose plus de valeur
+;   de cache quantifiée.
 ;   C'était q8_0 / q4_0 jusqu'au 18/09/2026, du temps du moteur Vulkan.
 ; =============================================================================
 [*]

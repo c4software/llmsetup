@@ -340,9 +340,15 @@ justesse vérifiée par comptage de lignes jusqu'à 40 à 51k tokens.
 `ornith-1.5-35b-a3b-parallel` a été qualifiée le 18/09/2026 : `--bench`
 1375,7 / 71,7 (contre 1129 / 73,3 sur le fork), `--bench-parallel` à 4 requêtes
 144,1 t/s agrégés (x2,03), `--bench-cache` 62 / 0 / 64 %, chargement 2,5 s,
-76 Gio libres, comptages justes jusqu'à 51k. Elle garde son cache `V q8_0` ; un
-A/B en `f16` donne 1379,2 / 72,4 et 145,9 t/s agrégés, soit environ 1 % de
-mieux sans coût mémoire : le retrait de la surcharge est proposé, pas appliqué.
+76 Gio libres, comptages justes jusqu'à 51k. L'A/B de cache du même jour a
+tranché : en `f16` elle donne 1379,2 / 72,4 et 145,9 t/s agrégés contre
+1375,7 / 71,7 et 144,1 en `q8_0`, pour 72 Gio libres contre 71. La surcharge
+`cache-type-v = q8_0` est donc **retirée** le 18/09/2026 : c'était la dernière
+valeur de cache quantifiée du parc. Le même jour, `swa-full` est retiré des
+**deux** sections Ornith 35B A3B, le journal du moteur le refusant et le
+désactivant à chaque chargement (« swa_full is not supported by this model, it
+will be disabled ») : la clé était inerte. `ctx-checkpoints = 128` reste des
+deux côtés, c'est lui qui rend les 62 % du tour suivant sur cette arch GDN.
 `lfm2.5-8b-a1b-nothink`, l'autre section que la campagne n'avait pas jouée,
 n'a pas été qualifiée : elle est retirée du parc le 18/09/2026 (0/16 au
 `--bench-agentic`, cf. `docs/HISTORIQUE.md`).
