@@ -240,7 +240,7 @@ près — voir `tests/py-golden.sh`.
 | `parallel_agg.py <temps_mur_s> <réponse.json>...` | réponses d'une salve de requêtes simultanées | ligne lisible + `AGG=` (tokens / temps mur) `MED=` (décode médian par requête) `TOK=` `ERR=` | `_bench_parallel_salve` (bench.sh) |
 | `bench_compare.py <bench.log> <modèle>...` | `logs/bench.log` (TSV) | pour chaque modèle, écart prefill/décode au run précédent du même GGUF/device **et du même mode EC** (à défaut, le dernier run avec la mention « mode EC différent »), build rappelé s'il a changé, drapeau à ±5 % | `cmd_bench` |
 | `spec_analyze.py <log> <modèle> <gguf> <device> <k> [rec]` | `logs/spec-tests.log` (TSV) | rapport texte + `REC=k` si demandé ; **réécrit le log** (quarantaine) | `_spec_analyze` (spec.sh) |
-| `perf_graphs.py [<tsv> [<dossier>]]` | `docs/perfs.tsv` (TSV versionné, une ligne par section servie) | `docs/graphs/prefill.svg`, `decode.svg`, `ecarts.svg` (SVG statiques, rendu sobre, tracé déterministe → sortie reproductible) | personne : lancé à la main quand la table du parc change (README, skill `ajout-modele` étape 6) |
+| `perf_graphs.py [<tsv> [<dossier>]]` | `docs/perfs.tsv` (TSV versionné, une ligne par section servie, deux séries : fork Vulkan0 et moteur conteneurisé ROCm0) | `docs/graphs/prefill.svg`, `decode.svg`, `ecarts.svg` (SVG statiques, rendu sobre, tracé déterministe → sortie reproductible) | personne : lancé à la main quand la table du parc change (README, skill `ajout-modele` étape 6) |
 
 ## Prompts de mesure (`prompts/`)
 
@@ -305,9 +305,10 @@ mesure en `draft-mtp` seul (`SPEC_TYPE_FORCE=draft-mtp`).
 
 Un draft de `size_m` tokens est vérifié dans un forward de batch
 `size_m + 1`. Le gain ne dépend que de la forme de `t_forward(batch)`, qui
-a des marches : ggml change de noyau selon la taille du batch (Vulkan :
-`mul_mat_vec_max_cols = 8`, x2 entre batch 8 et 9, mesuré sur un dense et
-un MoE). Deux régimes seulement ont du sens, le script sort les deux :
+a des marches : ggml change de noyau selon la taille du batch (mesuré sur
+ggml-vulkan, `mul_mat_vec_max_cols = 8`, x2 entre batch 8 et 9, sur un dense
+et un MoE ; seuil non rejoué sur le moteur HIP de l'image, les `size-m`
+antérieurs au 18/09/2026 en découlent). Deux régimes seulement ont du sens, le script sort les deux :
 **sûr** = plus grande taille sous la première marche (seuil de non-perte
 minimal), **large** = taille qui maximise `gain = batch / coût relatif` sous
 `PART_SEUIL_MAX` (25 % du draft). Une marche est un saut de coût **par unité
@@ -505,7 +506,8 @@ de mesures incomparables.
 - `parallel` est un choix par modèle (contexte par slot, mémoire, rendement
   mesuré de la spéculation), pas une contrainte de `spec-type` : le « np > 1
   non supporté avec MTP » affirmé ici jusqu'au 15/09/2026 venait d'une doc
-  unsloth, absente du fork servi (vérifié le 15/09/2026) ; seul `--mmproj`
+  unsloth, absente de la dorsale `strix-llama.cpp` que sert l'image (vérifié
+  le 15/09/2026 sur le fork, moteur du service à cette date) ; seul `--mmproj`
   reste incompatible avec un drafter.
 - `--cleanup` piloté uniquement par `KNOWN_FILES`. Les deux artefacts générés
   de `~/models` (`models.ini`, `docker-compose.yml`) sont hors d'atteinte **par
