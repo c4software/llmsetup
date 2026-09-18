@@ -93,16 +93,27 @@ LOG="$OUT/serveur.log"
 # mesure) et _dk_run (le serveur jetable tourne dans l'image). Ils s'appuient
 # sur common (helpers, SERVICE_NAME, CONFIG_DIR, MODELS_BASE), runtime (image,
 # _dk_run) et compose (chemin du compose).
+# models et ini sont là pour la RELANCE : _svc_start régénère le compose, qui
+# lit load_preload_conf (lib/ini.sh), qui lit MODEL_INI (lib/models.sh). Sans
+# eux le trap échouait sur « load_preload_conf: command not found » puis
+# « PRELOADED: unbound variable » et laissait le service ARRÊTÉ (constaté sur
+# bigchuck le 18/09/2026). Les sourcer ne fait que déclarer des variables :
+# aucun téléchargement, aucun réseau.
+# L'ordre est celui de setup-llm.sh : common → svc → models → ini → compose.
 # lib/common.sh attend SCRIPT_DIR = racine du dépôt, comme pour setup-llm.sh.
 SCRIPT_DIR="$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/common.sh"
 # shellcheck source=/dev/null
+source "$ROOT_DIR/lib/svc.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/models.sh"
+# shellcheck source=/dev/null
+source "$ROOT_DIR/lib/ini.sh"
+# shellcheck source=/dev/null
 source "$ROOT_DIR/lib/runtime.sh"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/compose.sh"
-# shellcheck source=/dev/null
-source "$ROOT_DIR/lib/svc.sh"
 
 # Mode d'alimentation de l'APU appliqué par le contrôleur embarqué. La lecture
 # est refaite ici plutôt qu'appelée par _ec_power_mode : ce script écrit ses
