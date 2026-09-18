@@ -543,6 +543,36 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 #   parc est passé au f16 global sur mesure, pas celui-ci) : c'est la seule
 #   valeur de cache quantifiée qui subsiste dans ce fichier. À trancher à la
 #   bascule, avec --bench-parallel.
+# QUALIFIÉE SUR LE MOTEUR CONTENEURISÉ le 18/09/2026 (strix-8c1c282+r7dda3ac,
+#   ROCm0, par le dépôt cette fois) :
+#     --bench-sanity : justesse OK, pas de charabia ;
+#     --bench 3 passes : prefill 1375,7 t/s, décode 71,7 t/s, contre 1129 /
+#       73,3 sur le fork Vulkan le 13/09 : prefill +22 %, décode -2 % ;
+#     --bench-cache : 62 / 0 / 64 %, exactement les valeurs du fork ;
+#     --bench-parallel 4 requêtes, 2 passes : agrégé 144,1 t/s (x2,03),
+#       36,9 t/s par requête, contre 138 t/s agrégés sur le fork le 15/09 :
+#       le parallel 4 tient sur ce moteur ;
+#     --bench-load : 2,5 s (fichier en cache de pages), TTFT à chaud 50 ms ;
+#     prefill en profondeur 2k / 8k / 25k / 51k : 1298 / 1254 / 1089 / 911 t/s,
+#       comptages de lignes justes jusqu'à 51k ;
+#     mémoire : 76 Gio libres une fois chargé.
+#   ⚠ swa-full EST INERTE ICI : le moteur journalise « swa_full is not
+#   supported by this model, it will be disabled ». La clé est gardée telle
+#   quelle (elle ne coûte rien) mais elle n'explique aucun chiffre.
+#   ⚠ ctx-size 1048576 est PLAFONNÉ par le moteur à n_ctx_train : le journal
+#   donne « the slot context (1048576) exceeds the training context of the
+#   model (262144) - capping », puis n_ctx_slot = 262144 pour chacun des
+#   4 slots. Le contexte servi est donc 262144 par slot, pas 1048576 ; rien
+#   n'est changé (le résultat est celui voulu) mais la valeur est trompeuse.
+#   A/B cache-type-v, mesuré le 18/09/2026 par surcharge SPEC_AB_OVERRIDES :
+#     q8_0 (servi) : --bench 1375,7 / 71,7, parallel 4 agrégé 144,1 t/s,
+#       71 Gio libres ;
+#     f16          : --bench 1379,2 / 72,4, parallel 4 agrégé 145,9 t/s,
+#       72 Gio libres, justesse OK.
+#   PROPOSITION NON APPLIQUÉE : retirer cache-type-v = q8_0 et laisser le f16
+#   global. Le f16 gagne 1 % de décode et 1 % d'agrégé, ne coûte rien en
+#   mémoire (le contexte est plafonné, cf. ci-dessus) et alignerait la
+#   dernière section quantifiée du parc. À décider hors campagne.
 # Device : ROCm0 depuis le 18/09/2026 (device unique de l'image, cf. en-tête).
 #   HISTORIQUE, --bench-devices 28/08/2026 (b10566, ROCm SYSTÈME, 3 passes) :
 #   Vulkan0 976 pp / 70,9 tg contre ROCm0 931 / 57,6, justesse OK sur les deux,
@@ -642,6 +672,29 @@ groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot)
 #   sans mesure), mais 1048576 en cache f16 n'a PAS été vérifié sur ce moteur :
 #   à contrôler à la bascule (chargement, mémoire résidente, décode), le f16
 #   pesant deux fois le q8_0 par token de KV.
+# CONTRÔLE DU 18/09/2026 : la question du contexte est close. Le moteur
+#   PLAFONNE ctx-size à n_ctx_train, journal à l'appui (« the slot context
+#   (1048576) exceeds the training context of the model (262144) - capping »),
+#   puis n_ctx_slot = 262144. Les 1048576 du corps ne coûtent donc rien : le
+#   modèle charge, et il reste 62 à 66 Gio libres, très au-dessus des 10 Gio de
+#   seuil. Aucune mesure à 262144 n'est nécessaire, c'est déjà ce qui tourne.
+#   swa-full est inerte de la même façon (« swa_full is not supported by this
+#   model, it will be disabled »), comme sur la section de base.
+# QUALIFIÉE SUR LE MOTEUR CONTENEURISÉ le 18/09/2026, par le dépôt
+#   (strix-8c1c282+r7dda3ac, ROCm0) :
+#     --bench-sanity : justesse OK ;
+#     --bench 3 passes : prefill 1311,6 t/s, décode 76,9 t/s, acceptance 0,615,
+#       contre 1073 / 76,2 / 0,55 sur le fork Vulkan le 15/09 : prefill +22 %,
+#       décode +1 % ;
+#     --bench-cache : 62 / 0 / 64 %, les valeurs du fork ;
+#     --bench-load : 2,8 s (fichier en cache de pages), TTFT à chaud 53 ms ;
+#     prompt court hors dépôt (1 439 tokens, 1 000 générés, 3 passes) :
+#       1313 / 78,0 t/s, acceptance 0,65 ; c'est 20 % sous les 1673 t/s de la
+#       nuit du 17 au 18/09 avec le même réglage, écart NON EXPLIQUÉ (le
+#       --bench du dépôt, lui, est cohérent avec le reste) ;
+#     prefill en profondeur 2k / 8k / 25k / 51k : 1227 / 1201 / 1041 / 862 t/s,
+#       comptages justes jusqu'à 51k ;
+#     mémoire : 62 à 66 Gio libres une fois chargé.
 llama_model ornith-1.5-35b-a3b-mtp "
 model                = $ORNITH15_35B_A3B_PATH
 ctx-size             = 1048576

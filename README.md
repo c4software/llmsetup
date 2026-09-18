@@ -392,18 +392,29 @@ justesse vérifiée par comptage de lignes jusqu'à 40 à 51k tokens.
 |---|---|---|---|---|---|
 | lfm2.5-2.6b | 4187 | 138,5 | 2875 / 108,8 | 4399 / 4181 / 3695 / 2954 | texte cohérent, 3 comptages justes sur 4 (251 au lieu de 260 : probable limite du modèle, à confirmer) |
 | ornith-1.5-9b-mtp-nothink | 1468 | 49,8 | 828 / 39,5 | 1355 / 1460 / 1294 / 1080 | juste |
-| ornith-1.5-35b-a3b-mtp | 1673 | 82,4 | 1073 / 76,2 | 1703 / 1700 / 1429 / 1145 | juste (ctx testé 262144, pas les 1048576 de production) |
+| ornith-1.5-35b-a3b-mtp | 1312 | 76,9 | 1073 / 76,2 | 1227 / 1201 / 1041 / 862 | juste jusqu'à 51k. Chiffres du dépôt (`--bench`, 18/09) ; le script hors dépôt de la nuit donnait 1673 / 82,4, écart non expliqué. ctx 1048576 plafonné par le moteur à 262144 |
 | qwen3.8-27b-dflash-nothink | 229 | 40,7 | 302 / 32,2 | 244 / 239 / 225 / 202 | juste (décode +26 %, prefill -24 % : compromis à trancher) |
 | muse-glimmer-30b-dflash | 318 | 36,4 | 266 / 38,0 | 328 / 323 / 293 / 259 | juste |
-| qwen3.8-flash-next-mtp-nothink | 877 | 52,2 | 364 / 52,4 | 938 / 1108 / 1111 / 1079 | juste jusqu'à 51k (batch 16384, 28 Gio restants) |
+| qwen3.8-flash-next-mtp-nothink | 866 | 48,1 | 364 / 52,4 | 938 / 990 / 984 / 966 | juste jusqu'à 51k. Micro-lot 4096 depuis le 18/09 (cache de prompt, cf. `lib/models.sh`) : environ 8 % de prefill en moins, 79 % du contexte restauré au tour suivant à 20k au lieu de 18 % |
 | qwen3-coder-next | 1352 | 65,1 | 727 / 52,2 | 1417 / 1455 / 1245 / 1006 | 4 comptages justes, le charabia « LAMPAMPAMP » est guéri |
 | deepseek-v4-flash | 162 | 29,3 | 196 / 28,8 | 173 / 161 / 136 / 111 | 4 comptages justes, acceptance 0,83 (0,69 sur le fork), le charabia « Nous dev dev dev » est guéri ; ne laisse que 9 Gio, à servir seul |
 
-Non mesurées sur ce moteur, donc non qualifiées : `lfm2.5-8b-a1b-nothink` et
-`ornith-1.5-35b-a3b-parallel` (les seules à garder un cache `V q8_0`).
+`ornith-1.5-35b-a3b-parallel` a été qualifiée le 18/09/2026 : `--bench`
+1375,7 / 71,7 (contre 1129 / 73,3 sur le fork), `--bench-parallel` à 4 requêtes
+144,1 t/s agrégés (x2,03), `--bench-cache` 62 / 0 / 64 %, chargement 2,5 s,
+76 Gio libres, comptages justes jusqu'à 51k. Elle garde son cache `V q8_0` ; un
+A/B en `f16` donne 1379,2 / 72,4 et 145,9 t/s agrégés, soit environ 1 % de
+mieux sans coût mémoire : le retrait de la surcharge est proposé, pas appliqué.
+Reste non mesurée, donc non qualifiée : `lfm2.5-8b-a1b-nothink`.
 
 Trois faits de la campagne, à ne pas perdre :
 
+- **Les points de reprise du cache de prompt sont pris aux frontières de
+  micro-lot.** Un `ubatch-size` géant annule donc le cache : sur Flash-Next à
+  `ubatch` 16384, un tour suivant à 20k tokens ne restaurait que 18 % du
+  contexte, et `--bench-cache` (prompt de 1 399 tokens, un seul micro-lot)
+  affichait 0 %. À `ubatch` 4096 : 79 % restaurés, pour 8 % de prefill en moins.
+  `--bench-cache` reste aveugle sur cette section, son prompt étant trop court.
 - **`batch-size` / `ubatch-size` 16384 est une erreur de segmentation** (code
   139) dès un prompt de 8k tokens sur tous les modèles SAUF Flash-Next, et coûte
   environ 33 Gio de tampons. `generate_models_ini` refuse désormais toute valeur
