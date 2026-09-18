@@ -46,6 +46,18 @@ DEFAULT_DEVICE="ROCm0"
 # applique son défaut (2048).
 # Ajouter une section ici demande une mesure : un prompt de 8k tokens au moins,
 # et la sortie relue.
+# MICRO-LOT 4096 MESURÉ ET ÉCARTÉ hors Flash-Next (18/09/2026, A/B sur
+# qwen3.8-27b-dflash-nothink par surcharge SPEC_AB_OVERRIDES, moteur de l'image,
+# cache K et V f16, prefill à froid 2k/8k/25k + cache long à 20k + --bench) :
+#   défaut 2048 : cache long 97 à 98 %, prefill 242/243/230 t/s, décode 36,8 t/s
+#   ubatch 4096 : cache long 90 %,      prefill 239/238/224 t/s, décode 29,4 t/s
+# soit -15 % de prefill au --bench (263 vers 223), -20 % de décode, acceptance
+# 0,675 vers 0,535 et 7 points de cache long perdus : le 4096 perd sur LES TROIS
+# axes du compromis (cache long / prefill / décode). Rien à gagner à monter le
+# micro-lot ailleurs que sur Flash-Next, dont l'arch est la seule à en profiter.
+# Le cache long se dégrade comme attendu : les points de reprise du cache de
+# prompt sont pris aux frontières de micro-lot, donc doubler le micro-lot double
+# la queue retraitée (532 tokens à 2048, 2064 à 4096 sur un prompt de 20k).
 # Flash-Next reste dans INI_BIG_BATCH_OK bien que son ubatch-size soit redescendu
 # à 4096 le 18/09/2026 (arbitrage du cache de prompt, cf. son bloc) : c'est son
 # batch-size, resté à 16384, qui a besoin de l'exemption.
@@ -442,6 +454,22 @@ download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
 #   ⚠ Ces chiffres ne viennent PAS de --bench : ne pas les mélanger aux lignes
 #   de logs/bench.log, ils seront rejoués par le dépôt après la bascule.
 
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (série tools/validation-parc-rocm.sh sur
+#   l'image llm-rocm-strix, ROCm0, cache K et V f16, micro-lot par défaut) :
+#   prefill 1 134 t/s, décode 41,7 t/s, acceptance 0,565, cache long à 20k 97 à
+#   98 %, chargement 1,5 s (9,2 Go), justesse exacte (70 / 260 / 800 ; 799 à un
+#   comptage, le modèle donnant le dernier numéro de ligne).
+# ⚠ LE PREFILL DÉPEND FORTEMENT DE LA LONGUEUR DU PROMPT sur cette section —
+#   mesuré le 18/09/2026 avec le script hors dépôt de la nuit, rejoué tel quel
+#   par le routeur : 1 063 à 1 080 t/s à 1 436 tokens, 1 409 à 1 438 t/s à
+#   8 216 tokens, 1 226 à 1 243 à 25 434, 1 021 à 1 034 à 51 549. La référence
+#   « 1 468 t/s » de la nuit appartient donc au régime des prompts longs, pas
+#   au prompt court d'environ 1 400 tokens du --bench : les deux chiffres ne
+#   sont pas comparables, et le --bench n'a pas régressé.
+#   Contrôle du même jour : le préchargement d'un autre modèle (lfm2.5-2.6b,
+#   load-on-startup) N'A AUCUN EFFET sur ces débits — 1 043 à 1 070 t/s et
+#   décode 42,9 à 46,9 avec preload.conf vidé, contre 1 063 à 1 080 et 41,8 à
+#   46,1 avec le préchargé. L'écart est dans le bruit.
 llama_model ornith-1.5-9b-mtp-nothink "
 model                = $ORNITH15_9B_MTP_PATH
 ctx-size             = 131072
@@ -823,6 +851,16 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-DSpark-GGUF" \
 #   (c'est le plus petit du parc et le seul à se tromper), comparaison en cours
 #   au 18/09/2026 : à confirmer par --bench-sanity à la bascule.
 #   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (même série) : prefill 3 749 t/s, décode
+#   120,3 t/s, acceptance 0,505, cache long à 20k 97 %, chargement 0,1 s.
+# ⚠ CETTE SECTION RAISONNE PAR DÉFAUT (template jinja), sans reasoning-budget
+#   dans son corps : son raisonnement fait 750 à 1 500 caractères avant la
+#   moindre réponse. Toute mesure de justesse à petit max_tokens rend donc une
+#   réponse VIDE (content vide, tout est parti dans reasoning_content) — c'est
+#   ce qui s'est vu le 18/09 à max_tokens 64, et c'est la même cause que le
+#   comptage « divergent » relevé la nuit. À max_tokens 2048 la justesse est
+#   EXACTE : 70 / 260 / 800, aux trois profondeurs. Ni le modèle ni le moteur
+#   ne sont en cause : mesurer cette section avec un max_tokens suffisant.
 llama_model lfm2.5-2.6b "
 model            = $LFM25_26B_PATH
 ctx-size         = 131072
@@ -957,6 +995,26 @@ download_hf lfm2.5-8b-a1b "LiquidAI/LFM2.5-8B-A1B-DSpark-GGUF" \
 #   réel (même critère que laguna et gpt-oss), ou à re-mesurer avec le
 #   raisonnement rétabli (reasoning-budget N > 0) si on veut lui donner sa
 #   chance en agentic, au prix du débit.
+# JUSTESSE MESURÉE LE 18/09/2026, PREMIÈRE FOIS SUR CE MOTEUR — réserve à
+#   lever avant tout usage réel. --bench-sanity passe (la chaîne de contrôle est
+#   bien recopiée) mais la réponse est bavarde et méta (« Je suis en train de
+#   copier exactement le code fourni sans aj… ») : ce n'est pas du charabia,
+#   c'est du commentaire de soi. Aux comptages de lignes, à max_tokens 2048 et
+#   finish_reason « stop » (donc sans troncature) : 69 / 259 / 399 pour
+#   70 / 260 / 800. Les deux premiers sont un décalage d'une unité (le modèle
+#   rend le dernier NUMÉRO de ligne), le troisième est une erreur grossière.
+#   Cause identifiée : reasoning-budget 0. Avec le budget porté à 2048 par
+#   surcharge SPEC_AB_OVERRIDES, même moteur, même prompt : 69 / 259 / 800 —
+#   l'erreur grossière à 20k DISPARAÎT, le décalage d'une unité reste (limite
+#   du modèle, 1,5B actifs). Les deux autres modèles du parc qui comptent juste
+#   (lfm2.5-2.6b, Muse-Glimmer) le font DANS leur raisonnement.
+#   RIEN N'EST CHANGÉ ICI : porter le budget à 2048 contredirait le « nothink »
+#   de la section, qui est un choix d'usage, et le débit n'a pas été remesuré
+#   sous ce budget. Proposition à trancher avec le --bench-agentic, en même
+#   temps que le retrait déjà en suspens (boucle agentic échouée le 16/09).
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 pour les débits (même série) : prefill
+#   4 076 t/s, décode 118,5 t/s, acceptance 0,535, cache long à 20k 97 %,
+#   chargement 1,4 s (8,4 Go).
 llama_model lfm2.5-8b-a1b-nothink "
 model            = $LFM25_8B_PATH
 ctx-size         = 131072
@@ -1382,7 +1440,8 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   Prefill en profondeur (2k / 8k / 25k / 51k) : 244 / 239 / 225 / 202 t/s,
 #   justesse vérifiée par comptage de lignes. À noter : Muse-Glimmer, son
 #   concurrent direct, ne perd pas de prefill (cf. son bloc).
-#   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
+#   ⚠ Ces chiffres ne venaient PAS de --bench — réserve LEVÉE par la série
+#   du dépôt du 18/09/2026, consignée plus bas.
 # cache-type-v f16 (était q8_0, 17/09/2026) : les deux réglages mesurés le
 #   même soir, à froid après redémarrage, même moteur (strix-0007bc6,
 #   Vulkan0, mode EC performance, --bench 3 passes) : f16 302 / 32,2 / 0,625
@@ -1394,6 +1453,18 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   Depuis le 18/09/2026 la ligne n'est plus dans le corps : le f16 vient du
 #   global (cf. en-tête), et c'est en f16 sur K ET V que la campagne du
 #   moteur conteneurisé a mesuré la section.
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (série tools/validation-parc-rocm.sh,
+#   logs/validation-rocm-2026-09-18.log, image llm-rocm-strix strix-8c1c282 +
+#   runtime r7dda3ac, ROCm0, --bench 3 passes, cache K et V f16, micro-lot par
+#   défaut 2048) : prefill 270 t/s, décode 37,1 t/s, acceptance 0,675, cache
+#   long à 20k 97 à 98 %, chargement 24,2 s (17 Go), justesse exacte aux trois
+#   comptages (70 / 260 / 800). Le --bench-cache affiche 62 à 64 % : c'est le
+#   régime normal des checkpoints sur un prompt de 1 400 tokens, pas un défaut
+#   de micro-lot — la mesure qui compte est le cache long à 20k.
+#   Ces chiffres confirment le hors-dépôt de la nuit (229 / 40,7) à la variance
+#   près et l'écart avec le fork Vulkan0 (302 / 32,2) : prefill -11 %, décode
+#   +15 %. LE COMPROMIS PREFILL/DÉCODE DE CETTE SECTION N'EST PAS TRANCHÉ ici :
+#   il demande un --bench-agentic, pas un --bench.
 # swa-full : inopérant sur cette architecture (le journal du serveur dit
 #   « swa_full is not supported by this model »). La clé est gardée telle
 #   quelle : elle ne coûte rien et redeviendra utile si l'arch est supportée.
@@ -1554,7 +1625,24 @@ download_hf muse-glimmer-30b "z-lab/Muse-Glimmer-30B-DFlash2-GGUF" \
 #   27B, qui gagne 26 % de décode et perd 24 % de prefill sur le même moteur.
 #   Prefill en profondeur (2k / 8k / 25k / 51k) : 328 / 323 / 293 / 259 t/s.
 #   Le raisonnement en strength low reste court, la réponse suit.
-#   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (même série que le 27B ci-dessus) :
+#   prefill 346 t/s, décode 31,6 t/s, acceptance 0,625, cache long à 20k 100 %,
+#   chargement 4,8 s (15 Go), justesse exacte (70 / 260 / 800). Le prefill est
+#   le meilleur jamais mesuré sur cette section (346 contre 318 la nuit et 266
+#   à 277 sur le fork Vulkan0).
+# ⚠ LE DÉCODE DE CETTE SECTION EST TRÈS BRUITÉ — ne pas conclure d'une série.
+#   --spec-ab 4 passes du 18/09/2026 (prompt spec-refactor.txt, 1 500 tokens
+#   générés par passe) : la MÊME configuration (n-max 7) a donné 34,4 / 37,8 /
+#   25,7 t/s sur trois passes consécutives, acceptance 0,65 / 0,73 / 0,47. Les
+#   31,6 du --bench et les 40,5 du fork Vulkan0 sont tous deux DANS cette
+#   plage : l'écart apparent n'est pas une régression démontrée.
+#   Bilan du même A/B, médianes : n-max 7 (base) 34,4 t/s / acceptance 0,648 ;
+#   n-max 5 : 35,6 t/s / 0,710 ; n-max 10 : 38,2 t/s / 0,527. RIEN N'EST
+#   CHANGÉ : les plages se recouvrent entièrement et l'acceptance de n-max 10
+#   baisse quand son débit monte, ce qui est incohérent. Trancher demande 8 à
+#   10 passes par variante, pas 4.
+#   (la réserve « ces chiffres ne viennent pas de --bench, à rejouer par le
+#   dépôt » qui accompagnait la campagne de la nuit est LEVÉE par cette série.)
 llama_model muse-glimmer-30b-dflash "
 model                = $MUSE_30B_PATH
 ctx-size             = 131072
@@ -1753,6 +1841,29 @@ download_hf deepseek-v4-flash "unsloth/DeepSeek-V4-Flash-0731-GGUF" \
 #   SEUL : la garde mémoire _ensure_room_for (lib/common.sh) décharge les
 #   autres modèles avant de le charger, c'est le comportement attendu.
 #   ⚠ Ces chiffres ne viennent PAS de --bench : à rejouer par le dépôt.
+# JUSTESSE ÉLUCIDÉE LE 18/09/2026 — aucun défaut de moteur ni de contexte long.
+#   Aux comptages de lignes la section rend 65 / 256 / 725 pour 70 / 260 / 800,
+#   à max_tokens 64 comme à 2048, finish_reason « stop », 23 tokens générés et
+#   un raisonnement réduit au message de garde-fou : le modèle ESTIME au lieu de
+#   compter, il ne raisonne pas sur ce prompt. Deux contrôles du même jour, même
+#   configuration servie :
+#     - la même question avec « raisonne étape par étape » rend 70 / 260 / 800,
+#       exact aux trois profondeurs ;
+#     - la restitution exacte demandée de la ligne 700 d'un prompt de 20k
+#       tokens est PARFAITE au caractère près.
+#   Le contexte long est donc intact et rien n'est à corriger dans la section.
+#   À retenir pour les mesures : ne jamais juger la justesse de ce modèle sur
+#   un comptage sans raisonnement.
+# VALIDÉ PAR LE DÉPÔT le 18/09/2026 (même série) : prefill 131 t/s, décode
+#   26,3 t/s, acceptance 0,685, cache long à 20k 100 %, --bench-cache 99 à
+#   100 % (attention pure), chargement 206,5 s (98 Go), 9 Gio libres une fois
+#   chargé — à servir seul, comme déjà noté. La conf servie a été comparée
+#   ligne à ligne à celle du test hors dépôt de la nuit : IDENTIQUE (ctx
+#   131072, cache K et V f16, ngram-map-k 7 + draft-dspark n-max 3, budget de
+#   raisonnement 6144 avec ses trois ratios, fit off, load-mode none, micro-lot
+#   par défaut). L'écart de débit avec la nuit (162 / 29,3) n'a donc PAS de
+#   cause de configuration ; la piste du modèle préchargé a été écartée par
+#   mesure sur Ornith 9B (cf. son bloc). Reste la variance entre séries.
 llama_model deepseek-v4-flash "
 model            = $DSV4_FLASH_PATH
 ctx-size         = 131072
