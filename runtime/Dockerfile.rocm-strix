@@ -11,10 +11,12 @@
 # LD_LIBRARY_PATH ordering. Never add /opt/strix/lib to ld.so.conf.
 #
 # ---------------------------------------------------------------------------
-# Copie vendorisée (llm-setup) — amont : kyuz0/amd-strix-halo-toolboxes PR 133,
-# toolboxes/Dockerfile.rocm-10.0-strix-llama, commit 3e78780, repris le
-# 17/09/2026. Les écarts avec l'amont sont listés dans runtime/AMONT.md ; les
-# resynchroniser à la main, ce fichier n'est pas régénéré.
+# Copie vendorisée (llm-setup) — amont : kyuz0/amd-strix-halo-toolboxes,
+# toolboxes/Dockerfile.rocm-10.0-strix-llama. Repris le 17/09/2026 du commit
+# 3e78780 de la PR 133 ; celle-ci est mergée sur main (commit b6a3c5f pour ce
+# fichier), resynchronisé le 18/09/2026 : contenu amont identique. Les écarts
+# avec l'amont sont listés dans runtime/AMONT.md ; les resynchroniser à la
+# main, ce fichier n'est pas régénéré.
 # Ne se construit pas à la main : ./setup-llm.sh --image-build (il résout les
 # révisions, passe les build-args et vérifie /opt/strix/versions.txt après coup).
 # ---------------------------------------------------------------------------

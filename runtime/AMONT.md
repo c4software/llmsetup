@@ -10,15 +10,19 @@ est un bug de suivi.
 | | |
 |---|---|
 | Dépôt amont | [kyuz0/amd-strix-halo-toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) |
-| Source | PR [#133](https://github.com/kyuz0/amd-strix-halo-toolboxes/pull/133), `toolboxes/Dockerfile.rocm-10.0-strix-llama` |
-| Commit repris | `3e78780` |
-| Date de reprise | 17/09/2026 |
+| Source | `toolboxes/Dockerfile.rocm-10.0-strix-llama` sur la branche `main` (PR [#133](https://github.com/kyuz0/amd-strix-halo-toolboxes/pull/133), mergée le 18/09/2026, merge `66da820`) |
+| Commit du fichier en amont | `b6a3c5f` |
+| Commit repris initialement | `3e78780` (commit de la PR), le 17/09/2026 |
+| Resynchronisé | 18/09/2026 : contenu amont identique, aucun changement à reprendre |
 
-La PR n'est pas mergée en amont : il n'y a donc pas d'image publiée
-`docker.io/kyuz0/amd-strix-halo-toolboxes:rocm-10.0-strix-llama` à tirer, et
-c'est la raison d'être de la vendorisation. Si la PR est mergée, le choix reste
-ouvert (tirer l'image publiée, ou continuer à construire ici pour garder
-l'épinglage des révisions — l'amont n'en veut pas, cf. écart 1).
+La PR est mergée, mais l'amont **ne publie pas d'image** pour ce Dockerfile :
+son README dit « Manual build only », et le tag
+`docker.io/kyuz0/amd-strix-halo-toolboxes:rocm-10.0-strix-llama` est absent du
+registre au 18/09/2026. La vendorisation reste donc nécessaire. Et même si une
+image était publiée un jour, le build local resterait le choix du dépôt : c'est
+lui qui permet d'épingler les révisions du moteur et du runtime, ce que l'amont
+refuse (écart 1). À surveiller : l'apparition de ce tag sur docker.io, et les
+commits amont sur le fichier.
 
 Ce que l'image contient, dans l'ordre du Dockerfile : Fedora 44, SDK ROCm 10.0.0
 gfx1151 (flux TheRock), un ROCr + HIP **retained-PM4** compilé depuis
@@ -96,14 +100,15 @@ remplacées ici par `_dk_run`, qui passe des gid numériques et ne donne pas
 
 ## Resynchroniser
 
-1. `gh pr diff 133 --repo kyuz0/amd-strix-halo-toolboxes` (ou, si la PR est
-   mergée, `toolboxes/Dockerfile.rocm-10.0-strix-llama` sur `master`).
+1. Lire le fichier amont sur `main` :
+   `gh api repos/kyuz0/amd-strix-halo-toolboxes/contents/toolboxes/Dockerfile.rocm-10.0-strix-llama?ref=main --jq .content | base64 -d`.
 2. Diffusion à la main contre ce fichier, en ne réappliquant que les six écarts
    ci-dessus. `diff` direct inutile : les `ARG`, les `LABEL` et le chemin des
    patchs le brouillent.
 3. Récupérer aussi les patchs amont s'ils ont bougé (`toolboxes/*.patch` : ils
    sont partagés entre Dockerfiles et changent sans que celui-ci change).
-4. Mettre à jour la ligne « Commit repris » et la date ci-dessus, puis
+4. Mettre à jour les lignes « Commit du fichier en amont » et
+   « Resynchronisé » ci-dessus, puis
    `./setup-llm.sh --image-build` et une campagne de mesures : un changement de
    Dockerfile vaut un changement de moteur.
 

@@ -91,9 +91,11 @@ ouvre une **nouvelle série** ; les séries ne se comparent pas
 Le moteur est une **image docker** construite par le dépôt : ROCm 10.0
 gfx1151, un runtime ROCr/HIP retained-PM4 recompilé, et
 `halo-box/strix-llama.cpp` construit en HIP seul. Le Dockerfile est vendorisé
-dans `runtime/` depuis la PR 133 de `kyuz0/amd-strix-halo-toolboxes` ;
-provenance, écarts exacts et procédure de resynchronisation dans
-[`runtime/AMONT.md`](runtime/AMONT.md).
+dans `runtime/` depuis la PR 133 de
+[`kyuz0/amd-strix-halo-toolboxes`](https://github.com/kyuz0/amd-strix-halo-toolboxes),
+mergée le 18/09/2026 ; l'amont ne publie pas d'image pour ce Dockerfile, d'où
+le build local. Provenance, écarts exacts et procédure de resynchronisation
+dans [`runtime/AMONT.md`](runtime/AMONT.md).
 
 > ⚠ **C'est le moteur du service, et celui des outils hors service.**
 > `--image-build`, `--image-update` et
@@ -395,7 +397,7 @@ Versionnés, eux (ils décrivent ce qu'on construit, pas la machine) :
 | Fichier | Rôle |
 |---|---|
 | `runtime/image.conf` | dépôts, branches et **révisions épinglées** de l'image du moteur conteneurisé, plus son nom ; son historique git est le journal des révisions |
-| `runtime/Dockerfile.rocm-strix` | copie vendorisée du Dockerfile amont (PR 133) — écarts et resynchronisation dans `runtime/AMONT.md` |
+| `runtime/Dockerfile.rocm-strix` | copie vendorisée du Dockerfile amont (PR 133, mergée) — écarts et resynchronisation dans `runtime/AMONT.md` |
 | `runtime/patches/` | les deux patchs que le build applique au moteur |
 
 Côté `~/models/` : `models.ini`, généré. Ne jamais l'éditer : relancer

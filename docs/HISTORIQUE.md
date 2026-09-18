@@ -18,6 +18,13 @@ pwilkin/rocm-systems + halo-box/strix-llama.cpp en HIP seul). Série
 **`strix-8c1c282+r7dda3ac`** (moteur `8c1c282`, runtime `7dda3ac`), image
 construite à la main depuis la PR kyuz0/amd-strix-halo-toolboxes#133.
 
+La PR #133 a été mergée en amont le 18/09/2026 (merge `66da820` sur `main`).
+Constat du jour : le Dockerfile amont est identique à notre copie vendorisée,
+aux six écarts de `runtime/AMONT.md` près, et **aucune image n'est publiée**
+pour lui (build manuel seulement, tag absent du registre). Le build local est
+donc conservé, ce qui garde aussi l'épinglage des révisions. Rien ne change ni
+dans `runtime/`, ni sur bigchuck.
+
 **Méthode, et ses limites.** `llama-server` lancé **hors dépôt** par un script
 de test, pas par `--bench` : ces chiffres ne sont donc PAS dans
 `logs/bench.log`, ils n'entrent pas dans `docs/perfs.tsv` (dont le format n'a
