@@ -138,8 +138,9 @@ de modèle ou de configuration, il ne se reprend pas (c'est ce qui est arrivé �
   d'anciennes images gardées en filet. Ce qu'une image contient se lit dans
   `/opt/strix/versions.txt` ; ce qui a été demandé se lit dans les deux `ARG`
   de ce Dockerfile, dont l'historique git est le journal des révisions.
-- **Construire : `cd ~/models && docker compose build`** (le compose généré par
-  `lib/compose.sh` porte le contexte `runtime/` et ce Dockerfile).
+- **Construire : `cd ~/models && docker compose build`** (`docker-compose.yml`, ici,
+  porte ce Dockerfile en bloc `build` ; le `.env` de `~/models`, généré par
+  `lib/compose.sh`, lui donne le contexte et le tag).
   `./setup-llm.sh --image-build` n'est qu'un raccourci vers cette commande.
 - **Ménage à la main.** Après un build, l'image remplacée devient une image sans
   tag : `docker image prune` la retire, **sans `-a`** et jamais
@@ -150,8 +151,10 @@ de modèle ou de configuration, il ne se reprend pas (c'est ce qui est arrivé �
 
 ## Ce qui n'est pas ici
 
-- **Pas de `docker-compose.yml` ici.** Le compose du service est GÉNÉRÉ par le
-  dépôt (`lib/compose.sh`) et déposé dans `~/models`, à côté de `models.ini`.
+- **Pas de valeur machine dans `docker-compose.yml`.** Le compose du service
+  est ici, versionné ; ses gid, chemins, `--models-max` et tag d'image sont
+  des variables `${VAR:?}`, écrites dans `~/models/.env` par le dépôt
+  (`lib/compose.sh`), à côté de `models.ini`.
 - **Pas de couche d'abstraction au-dessus.** Il n'y a plus (18/09/2026) de
   `runtime/image.conf`, de `LABEL llm-setup.*`, de promotion sous tag
   temporaire, de purge par label, de `logs/images.tsv`, ni de commandes

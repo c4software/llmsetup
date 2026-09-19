@@ -50,7 +50,7 @@ cmd_setup() {
 
   # --- Moteur : docker + image ---------------------------------------------
   # Le dépôt ne lance plus aucun binaire de l'hôte : le service monte un
-  # conteneur décrit par le compose généré, et les outils passent par _dk_run.
+  # conteneur décrit par runtime/docker-compose.yml, et les outils passent par _dk_run.
   # Sans docker ou sans image, --setup va jusqu'au bout (les poids et le ini
   # sont utiles quand même) mais le dit.
   _setup_check_docker
@@ -58,12 +58,12 @@ cmd_setup() {
   info "Sélection des modèles préchargés au démarrage..."
   select_preload_models
 
-  info "Génération de models.ini et du docker-compose.yml..."
+  info "Génération de models.ini et du .env du service..."
   regen_models_ini
-  # Le compose n'est pas indispensable au reste du setup : _svc_start le
+  # Le .env n'est pas indispensable au reste du setup : _svc_start le
   # régénère de toute façon. Le générer ici sert à échouer TÔT et clairement
   # (image absente, groupe render manquant) plutôt qu'au premier --start.
-  regen_compose || warn "docker-compose.yml non généré (voir ci-dessus) - --start le retentera."
+  regen_env || warn ".env non généré (voir ci-dessus) - --start le retentera."
 
   info "✅ Config générée : $CONFIG_DIR/models.ini"
   info "Setup terminé → ./setup-llm.sh --start"
@@ -171,7 +171,7 @@ cmd_update() {
 # ne cite que le shard 00001, les suivants ne doivent évidemment pas sauter.
 #
 # ⚠ Les deux artefacts GÉNÉRÉS de $MODELS_BASE - `models.ini` (lib/ini.sh) et
-# `docker-compose.yml` (lib/compose.sh) - sont hors d'atteinte PAR
+# `.env` (lib/compose.sh) - sont hors d'atteinte PAR
 # CONSTRUCTION, et les deux `find` ci-dessous ne doivent donc jamais être
 # « corrigés » en ce sens : le premier ne liste que des DOSSIERS de premier
 # niveau (`-maxdepth 1 -type d`), le second que des fichiers `*.gguf` à partir

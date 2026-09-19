@@ -23,21 +23,24 @@
 #
 # ⚠ JAMAIS `docker compose restart` : il relance le conteneur EXISTANT, donc
 # l'ancienne image, l'ancienne ligne de commande et l'ancien --models-max.
-# _svc_restart est un stop puis un start, et le start régénère le compose.
+# _svc_restart est un stop puis un start, et le start régénère le .env.
 # =============================================================================
 
 # _svc_compose [args...] - le seul point d'appel de docker compose du service.
-# --project-directory $CONFIG_DIR : le compose vit à côté de models.ini, et
-# c'est ce dossier qui doit servir de base, quel que soit le cwd de l'appelant
-# (les mesures sont lancées depuis le dépôt, le service depuis n'importe où).
+# --project-directory $CONFIG_DIR : c'est là que vit le .env (les valeurs
+# machine du compose versionné, runtime/docker-compose.yml), et docker compose
+# ne lit que le .env de son dossier de projet. Ce dossier sert donc de base,
+# quel que soit le cwd de l'appelant (les mesures sont lancées depuis le dépôt,
+# le service depuis n'importe où).
 _svc_compose() {
   command -v docker >/dev/null 2>&1 || { warn "docker introuvable."; return 1; }
-  [[ -f "$COMPOSE_FILE" ]] || { warn "$COMPOSE_FILE absent - ./setup-llm.sh --start le génère."; return 1; }
+  [[ -f "$COMPOSE_FILE" ]] || { warn "$COMPOSE_FILE absent : le dépôt est incomplet."; return 1; }
+  [[ -f "$ENV_FILE" ]] || { warn "$ENV_FILE absent - ./setup-llm.sh --start le génère."; return 1; }
   docker compose --project-directory "$CONFIG_DIR" -f "$COMPOSE_FILE" "$@"
 }
 
-# _svc_installed - le service est-il montable ici ? Compose générable (docker,
-# image locale, models.ini) : le compose lui-même n'a pas à exister, il se
+# _svc_installed - le service est-il montable ici ? .env générable (docker,
+# image locale, models.ini) : le .env lui-même n'a pas à exister, il se
 # régénère. Remplace le `systemctl --user is-enabled` des mesures.
 _svc_installed() {
   _compose_check >/dev/null 2>&1
@@ -94,14 +97,14 @@ _svc_wait_ready() {
   done
 }
 
-# _svc_start - compose régénéré PUIS démarrage PUIS attente.
+# _svc_start - .env régénéré PUIS démarrage PUIS attente.
 #
 # --force-recreate : le conteneur est recréé même si compose juge que rien n'a
 # changé. C'est voulu - ce qui a changé est souvent hors du compose (models.ini
 # régénéré, poids retéléchargés), et un conteneur réutilisé servirait l'ancien
 # état. --remove-orphans ramasse les conteneurs d'un service renommé.
 _svc_start() {
-  regen_compose || return 1
+  regen_env || return 1
   _svc_compose up -d --force-recreate --remove-orphans || return 1
   _svc_wait_ready
 }
@@ -164,7 +167,7 @@ cmd_stop() {
 }
 
 cmd_restart() {
-  info "Redémarrage de $SERVICE_NAME (compose régénéré, conteneur recréé)..."
+  info "Redémarrage de $SERVICE_NAME (.env régénéré, conteneur recréé)..."
   _svc_restart || error "Redémarrage de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
   info "✅ $SERVICE_NAME redémarré et prêt sur $SPEC_TEST_URL."
 }
@@ -172,10 +175,10 @@ cmd_restart() {
 # cmd_status - état du conteneur (compose) plus la seule chose qui compte
 # vraiment pour les mesures : le routeur répond-il ?
 cmd_status() {
-  if [[ -f "$COMPOSE_FILE" ]]; then
+  if [[ -f "$ENV_FILE" ]]; then
     _svc_compose ps -a || true
   else
-    warn "$COMPOSE_FILE absent (service jamais démarré depuis la bascule)."
+    warn "$ENV_FILE absent (service jamais démarré depuis la bascule)."
   fi
   echo ""
   if _svc_is_active; then

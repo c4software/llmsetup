@@ -33,8 +33,8 @@ Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTO
 
 - Arch/CachyOS, `paru`, bash 4.3 ou plus, python3 (stdlib seule), curl.
 - **docker et son démon activé au boot** (`systemctl enable --now docker`) :
-  le service llama-server est un **conteneur**, décrit par un
-  `docker-compose.yml` généré dans `~/models`. Sans démon actif au boot, le
+  le service llama-server est un **conteneur**, décrit par
+  `runtime/docker-compose.yml` et un `.env` généré dans `~/models`. Sans démon actif au boot, le
   service ne revient pas après un redémarrage de la machine - c'est `docker`
   qui remplace le `loginctl enable-linger` d'avant.
 - `hf` (python-huggingface-hub, python-hf-xet). `gum` optionnel (menus).
@@ -50,7 +50,7 @@ Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTO
 ## Installation
 
 ```bash
-./setup-llm.sh --setup        # dépendances, GGUF, préchargement, models.ini + docker-compose.yml
+./setup-llm.sh --setup        # dépendances, GGUF, préchargement, models.ini + .env du service
 ./setup-llm.sh --image-build  # moteur conteneurisé (40 à 60 min à froid)
 ./setup-llm.sh --start        # monte le conteneur et ATTEND que /health réponde
 ```
@@ -60,7 +60,7 @@ Le service ensuite :
 ```bash
 ./setup-llm.sh --status            # docker compose ps + réponse de /health
 ./setup-llm.sh --logs -f           # journaux du conteneur
-./setup-llm.sh --restart           # stop puis start (compose régénéré, conteneur recréé)
+./setup-llm.sh --restart           # stop puis start (.env régénéré, conteneur recréé)
 ./setup-llm.sh --stop
 ```
 
@@ -71,11 +71,14 @@ cd ~/models && docker compose ps
 cd ~/models && docker compose logs -f
 ```
 
-Le `docker-compose.yml` de `~/models` est **généré** (`lib/compose.sh`), au même
-titre que `models.ini` : il n'est pas versionné, il n'est pas à éditer, et
-`--start` le réécrit à chaque démarrage. Il porte toutes les valeurs en clair
-(pas de `${VAR}`, pas de `.env`), y compris `seccomp=unconfined` - **exigé par
-ROCr**, dont les ioctl du KFD sortent du profil seccomp par défaut de docker.
+Le compose est **versionné** (`runtime/docker-compose.yml`) et lu tel quel par
+docker. Tout ce qui varie d'une machine à l'autre y est une variable
+obligatoire (`${VAR:?}`) : gid numériques de `render` et `video`, chemins
+absolus, `--models-max`, tag de l'image. Ces valeurs vivent dans `~/models/.env`,
+**généré** (`lib/compose.sh`) au même titre que `models.ini` : non versionné,
+pas à éditer, réécrit par `--start` à chaque démarrage. Le `.env` porte aussi
+`COMPOSE_FILE`, ce qui rend l'usage manuel possible depuis `~/models` sans
+`-f`. Le compose fixe aussi `seccomp=unconfined` - **exigé par ROCr**, dont les ioctl du KFD sortent du profil seccomp par défaut de docker.
 C'est le seul assouplissement, et il est compensé : `cap_drop: [ALL]`,
 `no-new-privileges`, aucun `privileged`, aucun accès à `docker.sock`, `~/models`
 monté en lecture seule et un seul volume inscriptible hors du parc
@@ -98,12 +101,12 @@ le build local. Provenance, écarts exacts et procédure de resynchronisation
 dans [`runtime/AMONT.md`](runtime/AMONT.md).
 
 Tout tient en **deux fichiers** : le Dockerfile vendorisé, qui porte les
-révisions, et le `docker-compose.yml` généré dans `~/models`, dont le bloc
-`build` pointe sur `runtime/`. Il n'y a pas de couche au-dessus.
+révisions, et `runtime/docker-compose.yml`, dont le bloc `build` pointe sur
+`runtime/` (par `RUNTIME_DIR` du `.env`). Il n'y a pas de couche au-dessus.
 
 > ⚠ **C'est le moteur du service, et celui des outils hors service.**
 > Construire ne redémarre rien : une image neuve n'est servie qu'au prochain
-> `./setup-llm.sh --restart`, qui régénère le compose et recrée le conteneur.
+> `./setup-llm.sh --restart`, qui régénère le `.env` et recrée le conteneur.
 
 ```bash
 ./setup-llm.sh --image-build    # 40 à 60 min à froid
@@ -153,7 +156,7 @@ comparable à ce qui précède, d'où le bump à la main, commité avec sa raiso
 | `--spec-tune [modèle] [k1,k2,..] [n]` | Boucle automatique sur plusieurs n-max avec restart entre chaque, retient le meilleur mesuré |
 | `--spec-ab <modèle> <n> <prompt\|-> <variante>...` | A/B de réglages spéculatifs sur mesure réelle : chaque variante (`clé=val;clé=val` sur le corps ini, ou `base`) est appliquée, le service redémarré, `--spec-test` mesuré ; bilan comparé, rien d'écrit dans les conf |
 | `--spec-ngram-tune [modèle] [n] [prompt]` | Règle la longueur de draft n-gram (`spec-ngram-map-k-size-m`) : courbe `t_forward(batch)` pour localiser la marche de noyau ggml, puis arbitrage des candidats sur mesure réelle (prompt de refactor par défaut) |
-| `--start` | Démarre le service : `docker-compose.yml` régénéré dans `~/models`, conteneur recréé, puis **attente de `/health`** - la commande ne rend la main que quand le routeur répond sur le port 8009 |
+| `--start` | Démarre le service : `.env` régénéré dans `~/models`, conteneur recréé, puis **attente de `/health`** - la commande ne rend la main que quand le routeur répond sur le port 8009 |
 | `--stop` | Arrête le conteneur (SIGINT, jusqu'à 180 s : le déchargement des préchargés est long) |
 | `--restart` | `--stop` puis `--start`. Jamais `docker compose restart`, qui garderait l'ancienne image, l'ancienne ligne de commande et l'ancien `--models-max` |
 | `--status` | `docker compose ps` et réponse de `/health` |
@@ -355,7 +358,7 @@ sont racontés au même endroit.
 - **`GGML_CUDA_ENABLE_UNIFIED_MEMORY` est interdit** sur ce runtime : chaque
   allocation passerait par `hipMallocManaged` et la sortie se corrompt. La
   variable n'est plus exportée nulle part dans le dépôt, et un test de
-  `tests/sh-unit.sh` interdit sa présence dans le compose généré.
+  `tests/sh-unit.sh` interdit sa présence dans `runtime/docker-compose.yml`.
 - **`seccomp=unconfined` est exigé par ROCr**, dont les ioctl du KFD sortent du
   profil seccomp par défaut de docker. C'est le seul assouplissement du
   conteneur, et il est compensé : `cap_drop: [ALL]`, `no-new-privileges`, aucun

@@ -5,7 +5,8 @@
 # Sortie de systemd - commande de bascule, TEMPORAIRE
 #
 # Le service n'est plus une unité systemd user : c'est un conteneur décrit par
-# le docker-compose.yml généré (lib/compose.sh) et piloté par les _svc_*
+# runtime/docker-compose.yml (valeurs machine dans ~/models/.env, lib/compose.sh)
+# et piloté par les _svc_*
 # (lib/svc.sh). Il ne reste ici que la commande qui débranche l'ancienne unité
 # sur une machine qui l'avait installée - elle sera retirée du dépôt quand le
 # parc sera passé.

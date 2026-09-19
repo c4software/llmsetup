@@ -15,19 +15,23 @@ generate_models_ini  ◄──  spec-nmax.conf       (spec-draft-n-max par modè
                           ⚠ lu AU DÉMARRAGE SEULEMENT → restart requis
 ```
 
-Le service est un **conteneur**, décrit par un second fichier généré, à côté du
-ini et du même statut (produit, non versionné, jamais édité à la main) :
+Le service est un **conteneur**, décrit par `runtime/docker-compose.yml`
+(versionné, variables `${VAR:?}` pour tout ce qui dépend de la machine) et par
+un `.env` généré à côté du ini, du même statut que lui (produit, non versionné,
+jamais édité à la main) :
 
 ```
 runtime/Dockerfile.rocm-strix ─┐  (ARG ENGINE_REV, ARG ROCM_SYSTEMS_REV)
+runtime/docker-compose.yml    ─┤  (versionné : bloc build, ${VAR:?})
 preload.conf                  ─┤
-lib/compose.sh                ─┴─► regen_compose ──► ~/models/docker-compose.yml
+lib/compose.sh                ─┴─► regen_env ──► ~/models/.env
+                                     (gid, chemins, --models-max, IMAGE_REF, COMPOSE_FILE)
                                                    │        │
                               docker compose build ┘        │
                                    → llm-rocm-strix:latest  │
                                                    │
                         _svc_start ────────────────┘
-                        docker compose up -d --force-recreate
+                        docker compose --project-directory ~/models up -d --force-recreate
                                                    │
                                                    ▼
    conteneur « llama-server »            hôte
@@ -74,11 +78,11 @@ common → svc → models → ini → compose → preload → setup → runtime 
   consomment (`_maybe_restart_service` utilise `SERVICE_NAME`, `cmd_bench`
   utilise `SPEC_TEST_URL`) — définies **avant** toute fonction qui les utilise.
 - `svc.sh` : **le seul point d'appel de `docker compose` pour le service**.
-  `_svc_compose` (`--project-directory $CONFIG_DIR -f $CONFIG_DIR/docker-compose.yml`),
-  `_svc_start` (régénère le compose, `up -d --force-recreate --remove-orphans`,
+  `_svc_compose` (`--project-directory $CONFIG_DIR -f runtime/docker-compose.yml` :
+  le `.env` est lu dans le dossier de projet), `_svc_start` (régénère le `.env`, `up -d --force-recreate --remove-orphans`,
   puis `_svc_wait_ready`), `_svc_stop [timeout=180]`, `_svc_restart` (stop puis
   start), `_svc_is_active` (`docker inspect` sur le nom du conteneur),
-  `_svc_installed` (compose générable : docker, image locale, `models.ini`),
+  `_svc_installed` (`.env` générable : docker, image locale, `models.ini`),
   `_svc_wait_ready [timeout=300]` (boucle `/health`, sortie anticipée avec le
   code de sortie si le conteneur est `exited`), `_svc_logs`, et les commandes
   `cmd_start` / `cmd_stop` / `cmd_restart` / `cmd_status` / `cmd_logs`.
@@ -113,15 +117,18 @@ common → svc → models → ini → compose → preload → setup → runtime 
   `INI_BIG_BATCH_OK`, surcharges `--spec-ab` comprises) et l'avertissement
   `_ini_warn_conf_nmax` (une valeur locale de `spec-nmax.conf` qui contredit
   le dépôt).
-- `compose.sh` : **génération du `docker-compose.yml`** de `$CONFIG_DIR`
-  (`~/models`, à côté de `models.ini`). `generate_compose` écrit le YAML sur
-  **stdout** (aucun effet de bord, donc testable et diffable), `regen_compose`
-  l'écrit sur disque par un fichier temporaire et **ne remplace que si le
-  contenu diffère**. `_compose_check` valide les prérequis avant d'écrire une
-  seule ligne (docker, image locale via `_image_ref`, `models.ini`, gid de
+- `compose.sh` : **génération du `.env`** de `$CONFIG_DIR` (`~/models`, à côté
+  de `models.ini`), les valeurs machine de `runtime/docker-compose.yml` :
+  `COMPOSE_FILE`, `SERVICE_NAME`, `IMAGE_REF`, `RUNTIME_DIR`, `SERVER_PORT`,
+  `BIND_ADDR`, `CONFIG_DIR`, `MODELS_BASE`, `CACHE_DIR`, `GID_RENDER`,
+  `GID_VIDEO`, `MODELS_MAX`. `generate_env` écrit sur **stdout** (aucun effet
+  de bord, donc testable et diffable), `regen_env` l'écrit sur disque par un
+  fichier temporaire et **ne remplace que si le contenu diffère**.
+  `_compose_check` valide les prérequis avant d'écrire une seule ligne (docker,
+  compose du dépôt, image locale via `_image_ref`, `models.ini`, gid de
   `render` et `video`), `_compose_gid` résout un groupe de l'hôte en **nombre**.
-  `BIND_ADDR` (défaut `0.0.0.0`) et `COMPOSE_CACHE_DIR`
-  (`~/.local/state/llm-setup/cache`) vivent ici.
+  `COMPOSE_FILE`, `ENV_FILE`, `BIND_ADDR` (défaut `0.0.0.0`) et
+  `COMPOSE_CACHE_DIR` (`~/.local/state/llm-setup/cache`) vivent ici.
 - `preload.sh` : sélection interactive (`select_preload_models`, gum ou
   fallback numéroté), `_save_preload_conf`, `_preload_sanity` (garde-fous
   doublons de poids, dérivés des déclarations : même GGUF partagé ou paire de
@@ -137,7 +144,7 @@ common → svc → models → ini → compose → preload → setup → runtime 
   bas), pour le service comme pour les outils hors service. Module volontairement
   court depuis le 18/09/2026 : `IMAGE_NAME` / `IMAGE_TAG` (tag unique `latest`),
   `_image_tag` / `_image_ref`, `cmd_image_build [--no-cache]` (RACCOURCI :
-  `regen_compose` puis `docker compose -f ~/models/docker-compose.yml build` :
+  `regen_env` puis `_svc_compose build` :
   pas de tag temporaire, pas de promotion, pas de vérification d'après-coup, pas
   de purge, pas de journal), et `_dk_run <binaire> [args]` (exécution dans l'image :
   `/dev/kfd` + `/dev/dri`, gid NUMÉRIQUES de `render` et `video` via `getent`,
@@ -148,7 +155,7 @@ common → svc → models → ini → compose → preload → setup → runtime 
   à la loopback, et bascule le réseau par défaut sur `bridge` ; `DK_RUN_NAME`
   nomme le conteneur pour qu'un trap puisse faire `docker rm -f` : les deux
   servent au `llama-server` jetable de `tools/spec-isolate.sh`).
-  ⚠ Cette image EST le moteur du service (le compose la nomme par `_image_ref`),
+  ⚠ Cette image EST le moteur du service (`IMAGE_REF` du `.env` vient de `_image_ref`),
   mais aucune de ces commandes ne redémarre quoi que ce soit : une image neuve
   n'est servie qu'au prochain `--restart`. Une image = une série de mesures.
 - `bench/bench.sh` (noyau) : `_bench_one` (une mesure API, `BENCH_ROW`, précédée
@@ -482,8 +489,8 @@ Trois choix structurent le reste :
    arrière, c'est y remettre les anciennes révisions et reconstruire. L'image
    remplacée perd son tag et se retire à la main (`docker image prune`, jamais
    `-a` : la machine héberge les images d'autres outils).
-3. **Un Dockerfile et un compose, rien entre les deux.** Le bloc `build` du
-   compose généré porte le contexte (`runtime/`) et le Dockerfile ;
+3. **Un Dockerfile et un compose, rien entre les deux.** Le bloc `build` de
+   `runtime/docker-compose.yml` porte le contexte (`RUNTIME_DIR`) et le Dockerfile ;
    `--image-build` n'est qu'un raccourci vers `docker compose build`. La couche
    d'abstraction du 17/09/2026 (`image.conf`, `LABEL llm-setup.*`, promotion
    sous tag temporaire, purge par label, `logs/images.tsv`, `--image-update`,
@@ -507,7 +514,7 @@ de mesures incomparables.
   le 15/09/2026 sur le fork, moteur du service à cette date) ; seul `--mmproj`
   reste incompatible avec un drafter.
 - `--cleanup` piloté uniquement par `KNOWN_FILES`. Les deux artefacts générés
-  de `~/models` (`models.ini`, `docker-compose.yml`) sont hors d'atteinte **par
+  de `~/models` (`models.ini`, `.env`) sont hors d'atteinte **par
   construction** : le premier `find` ne liste que des dossiers de premier
   niveau, le second que des `*.gguf` à partir de la profondeur 2. Ne pas
   « corriger » ces `find`.
@@ -521,14 +528,15 @@ de mesures incomparables.
 - **Jamais `docker compose restart`** : il relance le conteneur existant, donc
   l'ancienne image, l'ancienne ligne de commande et l'ancien `--models-max`.
   `_svc_restart` est un `stop` puis un `start`.
-- Le compose est **régénéré à chaque démarrage** (`_svc_start`), jamais édité :
-  `--models-max` suit `preload.conf`, le bloc `build` suit `runtime/`, les
-  gid suivent l'hôte. Toutes les valeurs y sont écrites **en clair** - pas de
-  `${VAR}`, pas de `.env`.
+- Le `.env` est **régénéré à chaque démarrage** (`_svc_start`), jamais édité :
+  `--models-max` suit `preload.conf`, `RUNTIME_DIR` suit le dépôt, les gid
+  suivent l'hôte. Le compose, lui, est versionné et ne porte **aucune** valeur
+  machine : chaque variable y est obligatoire (`${VAR:?}`), un `.env` incomplet
+  fait refuser le fichier par docker au lieu de monter un service à moitié.
 - Les tuners (`--spec-ab`, `--spec-tune`, `--spec-ngram-tune`, `--bench-load`)
   ne régénèrent que le **ini** (`regen_models_ini`), jamais le compose : leurs
   surcharges sont temporaires et n'ont rien à voir avec la forme du service.
-  `regen_models_ini` n'appelle donc pas `regen_compose`.
+  `regen_models_ini` n'appelle donc pas `regen_env`.
 - L'attente de `/health` vit à UN seul endroit, `_svc_wait_ready` (appelée par
   `_svc_start` / `_svc_restart`) : plus de boucle recopiée dans les mesures.
   Une commande qui rend la main a un service qui répond, ou elle a échoué.

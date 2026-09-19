@@ -10,6 +10,25 @@ Trois séries de mesures cohabitent ici et ne se comparent jamais entre elles :
 le paquet Arch (`bNNNNN`), le fork strix-llama.cpp (`strix-<commit>`) et, depuis
 le 18/09/2026, l'image ROCm du service (`strix-<engine>+r<rocm>`).
 
+## Compose versionné, `.env` généré (19/09/2026)
+
+Le `docker-compose.yml` n'est plus généré par un heredoc de `lib/compose.sh` :
+il vit dans `runtime/docker-compose.yml`, versionné, lisible et validable par
+`docker compose config` sans passer par le script. Tout ce qui dépend de la
+machine y est une variable obligatoire (`${VAR:?}`), et `lib/compose.sh`
+n'écrit plus que `~/models/.env` : gid numériques de `render` et `video`,
+chemins absolus (`~/models`, `runtime/`, cache), `--models-max` dérivé de
+`preload.conf`, tag de l'image, port, et `COMPOSE_FILE`, qui permet toujours
+`cd ~/models && docker compose ps` sans `-f`. `_svc_compose` passe
+`--project-directory ~/models` pour que docker lise ce `.env`. Le refus de
+générer sans image, la réécriture seulement si le contenu change et la
+régénération à chaque `--start` sont inchangés, reportés sur le `.env`.
+`tests/sh-unit.sh` valide désormais le rendu réel (`docker compose config`
+sur le `.env` produit avec un faux `getent`) au lieu de grep sur un YAML
+généré. Le motif « pas de `${VAR}`, pas de `.env` » du 18/09 est abandonné :
+il enfermait le YAML dans un script pour un gain de lisibilité à la main que
+`COMPOSE_FILE` dans le `.env` rend sans objet.
+
 ## Un Dockerfile et un compose (18/09/2026)
 
 La couche d'abstraction montée la veille autour de l'image est retirée :

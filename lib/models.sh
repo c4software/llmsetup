@@ -30,7 +30,7 @@
 #   (cf. runtime/AMONT.md et lib/compose.sh). Depuis le 18/09/2026 il n'est
 #   plus exporté nulle part dans le dépôt : lib/spec.sh et les tools/ le
 #   posaient pour le moteur de l'HÔTE, qui n'existe plus. Un test de
-#   tests/sh-unit.sh interdit sa présence dans le compose généré.
+#   tests/sh-unit.sh interdit sa présence dans runtime/docker-compose.yml.
 # =============================================================================
 
 DEFAULT_DEVICE="ROCm0"

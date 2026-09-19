@@ -4,8 +4,8 @@
 # d'une entrée : _llama_build (étiquette du moteur, lue sur les ARG du
 # Dockerfile vendorisé), _ec_power_mode (mode d'alimentation de l'APU lu sur le contrôleur
 # embarqué), la garde mémoire (lib/common.sh), le moteur conteneurisé
-# (lib/runtime.sh, sur un faux docker), le service en conteneur (compose
-# généré, _svc_*, --migrate-off-systemd) et le models.ini généré (lib/ini.sh,
+# (lib/runtime.sh, sur un faux docker), le service en conteneur (.env
+# généré pour runtime/docker-compose.yml, _svc_*, --migrate-off-systemd) et le models.ini généré (lib/ini.sh,
 # lib/models.sh).
 #
 # Ce qui a disparu le 18/09/2026, avec le fork strix-llama.cpp : la résolution
@@ -20,6 +20,11 @@
 # promotion sous tag temporaire et sa vérification d'après-coup, la purge par
 # label, logs/images.tsv, --image-update et --image-status. Il reste un
 # Dockerfile (qui porte les révisions) et un compose (qui porte le bloc build).
+#
+# Depuis le 19/09/2026 le compose n'est plus généré : runtime/docker-compose.yml
+# est versionné, et lib/compose.sh n'écrit plus que ~/models/.env (gid, chemins,
+# --models-max, tag de l'image, COMPOSE_FILE). Le rendu est validé par le VRAI
+# `docker compose config` quand il est là, sur le .env produit avec un faux getent.
 #
 # Lancement : ./tests/sh-unit.sh (aucune dépendance, aucun modèle, aucun réseau)
 # =============================================================================
@@ -168,6 +173,8 @@ cat > "$IMG/repo/runtime/Dockerfile.rocm-strix" <<'EOF'
 ARG ENGINE_REV=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ARG ROCM_SYSTEMS_REV=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EOF
+# Le compose du dépôt, tel quel : c'est lui que le .env généré doit nommer.
+cp "$REPO_DIR/runtime/docker-compose.yml" "$IMG/repo/runtime/"
 : > "$IMG/repo/preload.conf"
 
 # Faux docker : magasin d'images en fichiers ($IMG/store/<nom>_<tag>) et journal
@@ -209,6 +216,7 @@ _run_img() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé = non 
   env -i HOME="$TMP/home" PATH="$IMG/bin:/usr/bin:/bin" SCRIPT_DIR="$IMG/repo" ${2:-} \
     bash -c "set -euo pipefail
       source '$REPO_DIR/lib/common.sh'
+      source '$REPO_DIR/lib/svc.sh'
       source '$REPO_DIR/lib/ini.sh'
       source '$REPO_DIR/lib/compose.sh'
       source '$REPO_DIR/lib/runtime.sh'
@@ -217,13 +225,13 @@ _run_img() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé = non 
 
 # (a) Tag et référence. Un seul tag : la référence de l'image courante ne dépend
 #     d'aucun tri, mais l'absence d'image doit rester distinguable (code 1, rien
-#     sur la sortie) : c'est ce qui fait refuser la génération du compose.
+#     sur la sortie) : c'est ce qui fait refuser la génération du .env.
 _ck "tag de l'image" "latest" "$(_run_img '_image_tag')"
 _ck "image absente : rien" "absente" "$(_run_img '_image_ref || echo absente')"
 
 # (b) --image-build : passe par « docker compose build », et NE se bloque PAS
 #     sur l'absence d'image : sinon aucune machine ne pourrait construire la
-#     première (le compose refuse de se générer sans image, sauf pour lui).
+#     première (le .env refuse de se générer sans image, sauf pour lui).
 : > "$IMG/docker.log"
 out="$(_run_img 'cmd_image_build')"; grc=$?
 if [[ "$grc" -eq 0 ]] && grep -q 'compose .* build' "$IMG/docker.log" \
@@ -252,8 +260,8 @@ else
   echo "[FAIL] image-build : --no-cache perdu, appels : $(cat "$IMG/docker.log")"; rc=1
 fi
 
-# 7. Service en conteneur : compose généré (lib/compose.sh) et pilotage
-# (lib/svc.sh). Ce qui est testé ici est ce qui, en cas de bug, casse
+# 7. Service en conteneur : compose versionné, .env généré (lib/compose.sh) et
+# pilotage (lib/svc.sh). Ce qui est testé ici est ce qui, en cas de bug, casse
 # SILENCIEUSEMENT ou coûte une campagne : un compose qui perdrait une option de
 # la ligne de commande du routeur ou un durcissement, un --models-max qui ne
 # suivrait plus preload.conf, un `docker compose restart` qui resservirait
@@ -362,14 +370,18 @@ _run_svc() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé
       $1" </dev/null 2>&1
 }
 
-# (a) Le YAML généré. Chaque assertion correspond à une décision qui a coûté
-#     une mise au point : le nom de projet (sinon « models »), le nom de
-#     conteneur (tous les messages du dépôt le nomment), le montage AU MÊME
-#     CHEMIN et en lecture seule (models.ini porte des chemins absolus), les
-#     gid NUMÉRIQUES (les noms n'existent pas dans l'image), cap_drop ALL avec
-#     seccomp=unconfined, l'absence de mem_limit (la garde mémoire raisonne
-#     sur l'hôte) et --models-max dérivé de preload.conf.
-YML="$(_run_svc 'generate_compose')"
+# (a) Le compose versionné et le .env généré. Chaque assertion correspond à une
+#     décision qui a coûté une mise au point : le nom de projet (sinon
+#     « models »), le nom de conteneur (tous les messages du dépôt le nomment),
+#     le montage AU MÊME CHEMIN et en lecture seule (models.ini porte des
+#     chemins absolus), les gid NUMÉRIQUES (les noms n'existent pas dans
+#     l'image), cap_drop ALL avec seccomp=unconfined, l'absence de mem_limit
+#     (la garde mémoire raisonne sur l'hôte) et --models-max dérivé de
+#     preload.conf. Le YAML est lu tel quel dans le dépôt ; le .env est ce que
+#     generate_env écrit sur stdout.
+cp "$REPO_DIR/runtime/docker-compose.yml" "$SVC/repo/runtime/"
+YML="$(cat "$REPO_DIR/runtime/docker-compose.yml")"
+ENVOUT="$(_run_svc 'generate_env')"
 _ckin() {  # $1 = libellé, $2 = motif attendu dans $YML
   if grep -qF -- "$2" <<<"$YML"; then
     echo "[OK]   compose : $1"
@@ -386,87 +398,143 @@ _ckout() {  # $1 = libellé, $2 = motif INTERDIT
     echo "[OK]   compose : $1"
   fi
 }
-_ckin "en-tête GÉNÉRÉ, NE PAS ÉDITER"   "GÉNÉRÉ par ./setup-llm.sh"
+_ckenv() {  # $1 = libellé, $2 = ligne attendue dans le .env
+  if grep -qxF -- "$2" <<<"$ENVOUT"; then
+    echo "[OK]   env : $1"
+  else
+    echo "[FAIL] env : $1 - ligne absente : $2"; rc=1
+  fi
+}
 _ckin "nom de projet explicite"          "name: llm-setup"
-_ckin "nom de conteneur = SERVICE_NAME"  "container_name: llama-server"
-_ckin "image locale"                     "image: llm-rocm-strix:latest"
+_ckin "nom de conteneur = SERVICE_NAME"  "container_name: \${SERVICE_NAME:?}"
+_ckin "image = IMAGE_REF"                "image: \${IMAGE_REF:?}"
 _ckin "pas de pull"                      "pull_policy: never"
 # Le bloc build : c'est lui qui fait de ce compose la SEULE façon de construire
 # l'image, et du Dockerfile du dépôt la seule source des révisions.
-_ckin "contexte de build = runtime/ du dépôt" "context: $SVC/repo/runtime"
+_ckin "contexte de build = RUNTIME_DIR"  "context: \${RUNTIME_DIR:?}"
 _ckin "Dockerfile vendorisé nommé"       "dockerfile: Dockerfile.rocm-strix"
-_ckin "montage au même chemin, en ro"    "- \"$SVC/home/models:$SVC/home/models:ro\""
+_ckin "montage au même chemin, en ro"    "- \"\${MODELS_BASE:?}:\${MODELS_BASE:?}:ro\""
 _ckin "cache inscriptible hors de ~/models" ":/var/cache/llama:rw\""
-_ckin "gid numérique de render"          "- \"303\""
-_ckin "gid numérique de video"           "- \"986\""
+_ckin "gid de render par variable"       "- \"\${GID_RENDER:?}\""
+_ckin "gid de video par variable"        "- \"\${GID_VIDEO:?}\""
 _ckin "cap_drop ALL"                     "- ALL"
 _ckin "seccomp exigé par ROCr"           "- \"seccomp=unconfined\""
 _ckin "no-new-privileges"                "- \"no-new-privileges:true\""
-_ckin "port publié sur 0.0.0.0"          "- \"0.0.0.0:8009:8009\""
-_ckin "models-max = préchargés + 1"      "\"3\""
-_ckin "ini passé au routeur"             "$SVC/home/models/models.ini"
+_ckin "port publié sur BIND_ADDR"        "- \"\${BIND_ADDR:?}:\${SERVER_PORT:?}:\${SERVER_PORT:?}\""
+_ckin "models-max par variable"          "\"\${MODELS_MAX:?}\""
+_ckin "ini passé au routeur"             "\${CONFIG_DIR:?}/models.ini"
 _ckin "jinja conservé"                   "\"--jinja\""
 _ckin "autoload conservé"                "\"--models-autoload\""
 _ckin "host interne 0.0.0.0"             "\"--host\""
 _ckin "arrêt long et SIGINT"             "stop_grace_period: 180s"
-_ckin "sonde sans curl"                  "/dev/tcp/127.0.0.1/8009"
+_ckin "sonde sans curl"                  "/dev/tcp/127.0.0.1/\${SERVER_PORT:?}"
 _ckout "jamais de mem_limit"             "mem_limit"
 _ckout "jamais privileged"               "privileged: true"
 _ckout "jamais docker.sock"              "docker.sock"
 _ckout "jamais network_mode host"        "network_mode"
 # Interdit par l'amont sur le runtime retained-PM4 : sortie corrompue.
 _ckout "jamais GGML_CUDA_ENABLE_UNIFIED_MEMORY" "GGML_CUDA_ENABLE_UNIFIED_MEMORY"
-_ckout "aucune variable non résolue"     '${'
+# Aucune variable optionnelle : un .env incomplet doit faire refuser le fichier
+# par compose (nom de la variable à l'appui), pas monter un service à moitié.
+if grep -v '^[[:space:]]*#' <<<"$YML" | grep -oE '\$\{[A-Z_]+[^}]*\}' | grep -qv ':?}$'; then
+  echo "[FAIL] compose : variable sans :? (elle passerait vide sans un mot)"; rc=1
+else
+  echo "[OK]   compose : toutes les variables sont obligatoires (:?)"
+fi
+# Le .env : chaque variable du YAML y est, avec la valeur machine attendue.
+_ckenv "en-tête GÉNÉRÉ, NE PAS ÉDITER"   "# GÉNÉRÉ par ./setup-llm.sh (lib/compose.sh) - NE PAS ÉDITER"
+_ckenv "COMPOSE_FILE = compose du dépôt" "COMPOSE_FILE=$SVC/repo/runtime/docker-compose.yml"
+_ckenv "nom de conteneur"                "SERVICE_NAME=llama-server"
+_ckenv "image locale"                    "IMAGE_REF=llm-rocm-strix:latest"
+_ckenv "contexte de build = runtime/ du dépôt" "RUNTIME_DIR=$SVC/repo/runtime"
+_ckenv "port"                            "SERVER_PORT=8009"
+_ckenv "bind 0.0.0.0 par défaut"         "BIND_ADDR=0.0.0.0"
+_ckenv "ini dans ~/models"               "CONFIG_DIR=$SVC/home/models"
+_ckenv "montage de ~/models"             "MODELS_BASE=$SVC/home/models"
+_ckenv "gid numérique de render"         "GID_RENDER=303"
+_ckenv "gid numérique de video"          "GID_VIDEO=986"
+_ckenv "models-max = préchargés + 1"     "MODELS_MAX=3"
+for v in $(grep -v '^[[:space:]]*#' <<<"$YML" | grep -oE '\$\{[A-Z_]+' | tr -d '${' | sort -u); do
+  if ! grep -q "^$v=" <<<"$ENVOUT"; then
+    echo "[FAIL] env : variable \$$v du compose absente du .env"; rc=1
+  fi
+done
 
 # (b) Image absente : rien n'est généré, et le message nomme --image-build.
-#     Un compose qui nommerait une image inexistante démarrerait « bien » et
+#     Un .env qui nommerait une image inexistante démarrerait « bien » et
 #     échouerait au premier up, sur un message de docker.
 echo 0 > "$SVC/etat/image"
-out="$(_run_svc 'generate_compose')"; grc=$?
+out="$(_run_svc 'generate_env')"; grc=$?
 if [[ "$grc" -ne 0 && "$out" == *"--image-build"* ]]; then
-  echo "[OK]   compose : image absente ⇒ refus nommant --image-build"
+  echo "[OK]   env : image absente ⇒ refus nommant --image-build"
 else
-  echo "[FAIL] compose : image absente, code $grc, sortie : $out"; rc=1
+  echo "[FAIL] env : image absente, code $grc, sortie : $out"; rc=1
 fi
 echo 1 > "$SVC/etat/image"
 
-# (c) regen_compose : écrit, puis NE RÉÉCRIT PAS un contenu identique (la date
-#     de modification doit vouloir dire « la configuration a bougé »), et
-#     réécrit dès qu'une source change (ici preload.conf ⇒ --models-max).
-_run_svc 'regen_compose' >/dev/null
-CF="$SVC/home/models/docker-compose.yml"
+# (c) regen_env : écrit, puis NE RÉÉCRIT PAS un contenu identique (la date de
+#     modification doit vouloir dire « la configuration a bougé »), et réécrit
+#     dès qu'une source change (ici preload.conf ⇒ --models-max).
+_run_svc 'regen_env' >/dev/null
+CF="$SVC/home/models/.env"
 if [[ -f "$CF" ]]; then
   touch -d '2020-01-01 00:00' "$CF"
   avant="$(stat -c %Y "$CF")"
-  _run_svc 'regen_compose' >/dev/null
+  _run_svc 'regen_env' >/dev/null
   apres="$(stat -c %Y "$CF")"
   if [[ "$avant" == "$apres" ]]; then
-    echo "[OK]   compose : contenu identique ⇒ fichier non réécrit"
+    echo "[OK]   env : contenu identique ⇒ fichier non réécrit"
   else
-    echo "[FAIL] compose : fichier réécrit sans changement de contenu"; rc=1
+    echo "[FAIL] env : fichier réécrit sans changement de contenu"; rc=1
   fi
   printf 'un\n' > "$SVC/repo/preload.conf"
-  _run_svc 'regen_compose' >/dev/null
-  if [[ "$(stat -c %Y "$CF")" != "$avant" ]] && grep -q '"2"' "$CF"; then
-    echo "[OK]   compose : preload.conf changé ⇒ --models-max suivi"
+  _run_svc 'regen_env' >/dev/null
+  if [[ "$(stat -c %Y "$CF")" != "$avant" ]] && grep -qx 'MODELS_MAX=2' "$CF"; then
+    echo "[OK]   env : preload.conf changé ⇒ --models-max suivi"
   else
-    echo "[FAIL] compose : --models-max n'a pas suivi preload.conf"; rc=1
+    echo "[FAIL] env : --models-max n'a pas suivi preload.conf"; rc=1
   fi
   printf 'un\ndeux\n' > "$SVC/repo/preload.conf"
-  _run_svc 'regen_compose' >/dev/null
+  _run_svc 'regen_env' >/dev/null
   # Validation par l'outil lui-même quand il est là : aucune assertion de
   # forme ne remplace le parseur de compose (une clé mal placée, un scalaire
-  # mal cité, un ulimit à la mauvaise profondeur passeraient nos greps).
-  # `config -q` est purement client, il ne parle pas au démon. À défaut,
-  # python3 + PyYAML valide au moins que c'est du YAML bien formé.
+  # mal cité, une variable non résolue passeraient nos greps). `config` est
+  # purement client, il ne parle pas au démon ; il est lancé EXACTEMENT comme
+  # _svc_compose (--project-directory sur ~/models, où vit le .env) et son
+  # rendu doit porter les valeurs machine, plus aucune variable.
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-    if out="$(docker compose -f "$CF" config -q 2>&1)"; then
-      echo "[OK]   compose : accepté par « docker compose config -q »"
+    if out="$(docker compose --project-directory "$SVC/home/models" -f "$SVC/repo/runtime/docker-compose.yml" config 2>&1)"; then
+      echo "[OK]   compose : accepté par « docker compose config » avec le .env"
+      _ckr() {  # $1 = libellé, $2 = motif attendu dans le rendu
+        if grep -qF -- "$2" <<<"$out"; then
+          echo "[OK]   rendu : $1"
+        else
+          echo "[FAIL] rendu : $1 - motif absent : $2"; rc=1
+        fi
+      }
+      _ckr "conteneur nommé"          "container_name: llama-server"
+      _ckr "image locale"             "image: llm-rocm-strix:latest"
+      _ckr "gid de render résolu"     "\"303\""
+      _ckr "ini au chemin de l'hôte"  "$SVC/home/models/models.ini"
+      _ckr "models-max résolu"        "\"3\""
+      _ckr "contexte de build résolu" "context: $SVC/repo/runtime"
+      if grep -q '\${' <<<"$out"; then
+        echo "[FAIL] rendu : une variable n'est pas résolue"; rc=1
+      else
+        echo "[OK]   rendu : aucune variable non résolue"
+      fi
+      # Le .env seul, depuis ~/models et sans -f : l'usage manuel documenté
+      # (cd ~/models && docker compose ps) doit trouver le compose par COMPOSE_FILE.
+      if (cd "$SVC/home/models" && docker compose config -q 2>&1); then
+        echo "[OK]   compose : trouvé depuis ~/models par COMPOSE_FILE du .env"
+      else
+        echo "[FAIL] compose : introuvable depuis ~/models sans -f (COMPOSE_FILE ?)"; rc=1
+      fi
     else
       echo "[FAIL] compose : refusé par docker compose : $out"; rc=1
     fi
   elif python3 -c 'import yaml' 2>/dev/null; then
-    if out="$(python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "$CF" 2>&1)"; then
+    if out="$(python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "$REPO_DIR/runtime/docker-compose.yml" 2>&1)"; then
       echo "[OK]   compose : YAML bien formé (python3-yaml ; docker compose absent)"
     else
       echo "[FAIL] compose : YAML invalide : $out"; rc=1
@@ -475,8 +543,27 @@ if [[ -f "$CF" ]]; then
     echo "[SKIP] compose : ni docker compose ni python3-yaml pour valider le fichier"
   fi
 else
-  echo "[FAIL] compose : regen_compose n'a rien écrit dans $CF"; rc=1
+  echo "[FAIL] env : regen_env n'a rien écrit dans $CF"; rc=1
 fi
+
+# (c2) Migration : l'ancien docker-compose.yml généré dans ~/models est retiré
+#      (il passerait avant COMPOSE_FILE du .env en usage manuel) ; un fichier
+#      sans l'en-tête de génération est laissé en place.
+printf '# GÉNÉRÉ par ./setup-llm.sh (lib/compose.sh) - NE PAS ÉDITER\nname: x\n' > "$SVC/home/models/docker-compose.yml"
+_run_svc 'regen_env' >/dev/null
+if [[ ! -f "$SVC/home/models/docker-compose.yml" ]]; then
+  echo "[OK]   env : ancien compose généré retiré de ~/models"
+else
+  echo "[FAIL] env : ancien compose généré laissé dans ~/models"; rc=1
+fi
+printf 'name: manuel\n' > "$SVC/home/models/docker-compose.yml"
+_run_svc 'regen_env' >/dev/null
+if [[ -f "$SVC/home/models/docker-compose.yml" ]]; then
+  echo "[OK]   env : compose écrit à la main laissé en place"
+else
+  echo "[FAIL] env : compose écrit à la main supprimé"; rc=1
+fi
+rm -f "$SVC/home/models/docker-compose.yml"
 
 # (d) LE test qui compte côté pilotage : _svc_restart ne doit JAMAIS émettre
 #     « compose restart », qui relancerait le conteneur existant - donc
@@ -534,7 +621,7 @@ _ck "étiquette : repli final" "?" "$(_run_svc '_llama_build')"
 mv -f "$SVC/repo/runtime/Dockerfile.garde" "$SVC/repo/runtime/Dockerfile.rocm-strix"
 
 # (g) --cleanup : les deux artefacts GÉNÉRÉS de ~/models (models.ini et
-#     docker-compose.yml) sont hors d'atteinte par construction des deux find.
+#     .env) sont hors d'atteinte par construction des deux find.
 #     Le test le fige : un « find -type f » à la racine les ferait apparaître
 #     ici, et --cleanup --yes supprimerait la configuration du service.
 mkdir -p "$SVC/home/models/un" "$SVC/home/models/orphelin"
@@ -542,8 +629,8 @@ mkdir -p "$SVC/home/models/un" "$SVC/home/models/orphelin"
 : > "$SVC/home/models/orphelin/vieux.gguf"
 out="$(_run_svc 'cmd_cleanup')"; grc=$?
 if [[ "$grc" -eq 0 && "$out" == *"orphelin"* \
-      && "$out" != *"models.ini"* && "$out" != *"docker-compose.yml"* ]]; then
-  echo "[OK]   cleanup : dossier orphelin listé, models.ini et docker-compose.yml intouchés"
+      && "$out" != *"models.ini"* && "$out" != *".env"* ]]; then
+  echo "[OK]   cleanup : dossier orphelin listé, models.ini et .env intouchés"
 else
   echo "[FAIL] cleanup : code $grc, sortie : $out"; rc=1
 fi
@@ -697,5 +784,5 @@ else
   echo "[FAIL] étiquette d'image impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose généré avec son bloc build, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
 exit "$rc"

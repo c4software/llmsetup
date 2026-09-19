@@ -10,7 +10,8 @@ résumer ou la supprimer, non.
 1. **Comportement identique** à confs égales : `models.ini` byte-identique,
    mêmes CLI, mêmes sorties, mêmes fichiers. Le point d'entrée reste
    `./setup-llm.sh <commande>`. Le service est un **conteneur** décrit par
-   `~/models/docker-compose.yml`, généré par `lib/compose.sh` et piloté par les
+   `runtime/docker-compose.yml` (versionné) et `~/models/.env` (généré par
+   `lib/compose.sh`), piloté par les
    `_svc_*` de `lib/svc.sh` : aucun `docker compose` du service ailleurs dans
    le dépôt, et **jamais** `docker compose restart`.
 2. **Bash pur, `set -euo pipefail`**, pas de dépendance nouvelle
@@ -51,16 +52,17 @@ résumer ou la supprimer, non.
   (tests unitaires de `fit_alpha`/`fit_timing`/`predict`/`recommend` sur
   données synthétiques exactes).
 - Toute modif de `_llama_build` (lib/common.sh), de `lib/runtime.sh` (image),
-  de `lib/compose.sh` (compose généré) ou de
+  de `lib/compose.sh` (`.env` généré), de `runtime/docker-compose.yml` ou de
   `lib/svc.sh` (pilotage du service) ou de `lib/ini.sh` / `lib/models.sh`
   (ini généré) ⇒ `./tests/sh-unit.sh` : forme de l'étiquette de moteur
   (`strix-<engine7>+r<rocm7>`, lue par un `grep` sur les deux `ARG` `*_REV` de
   `runtime/Dockerfile.rocm-strix`, sans lancer de conteneur), `--image-build`
   qui passe bien par `docker compose build` sans se bloquer sur l'absence
-  d'image, et pour le service : contenu du compose généré (bloc `build` sur
-  `runtime/`, montage au même chemin en `:ro`, gid
-  numériques, `cap_drop ALL`, pas de `mem_limit`, `--models-max` suivant
-  `preload.conf`), régénération qui ne réécrit pas un fichier identique,
+  d'image, et pour le service : forme du compose versionné (bloc `build`,
+  montage au même chemin en `:ro`, `cap_drop ALL`, pas de `mem_limit`, toutes
+  les variables en `${VAR:?}`), contenu du `.env` (gid numériques,
+  `--models-max` suivant `preload.conf`, `COMPOSE_FILE`), rendu par le vrai
+  `docker compose config`, régénération qui ne réécrit pas un fichier identique,
   `_svc_restart` qui n'émet jamais `compose restart`, `_svc_wait_ready` qui
   échoue vite sur un conteneur sorti, `--cleanup` qui épargne les deux
   artefacts générés et `--migrate-off-systemd` idempotente ; et pour le ini :
@@ -81,9 +83,9 @@ résumer ou la supprimer, non.
   `spec-tests.log`** : le signaler dans le message de commit et le récap ;
   ne jamais modifier un prompt au détour d'un autre changement.
   
-- Ne pas éditer `~/models/models.ini` ni `~/models/docker-compose.yml` : les
-  deux sont **générés**, non versionnés, et réécrits (`regen_models_ini`,
-  `regen_compose`). Le compose est régénéré à chaque `--start` ; les tuners qui
+- Ne pas éditer `~/models/models.ini` ni `~/models/.env` : les deux sont
+  **générés**, non versionnés, et réécrits (`regen_models_ini`, `regen_env`).
+  Le `.env` est régénéré à chaque `--start` ; les tuners qui
   surchargent le ini le temps d'une mesure n'y touchent pas.
 - Les fichiers `.conf` (`preload.conf`, `spec-nmax.conf`, `spec-ngram.conf`)
   sont des **choix utilisateur** : ne pas les régénérer ni

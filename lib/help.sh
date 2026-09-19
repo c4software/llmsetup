@@ -68,7 +68,8 @@ Commandes :
                            révisions épinglées dans les ARG de
                            runtime/Dockerfile.rocm-strix. Simple raccourci vers
                            « cd ~/models && docker compose build » : le compose
-                           généré porte le contexte et le Dockerfile. L'image
+                           (runtime/docker-compose.yml) porte le contexte et le
+                           Dockerfile, le .env de ~/models ses valeurs machine. L'image
                            qu'elle remplace perd son tag ; la retirer à la main
                            par « docker image prune » (SANS -a, qui toucherait
                            aux images des autres outils de la machine).
@@ -116,7 +117,7 @@ Commandes :
                            --spec-ab qwen3.8-27b-dflash-nothink 4 - base \
                              "spec-ngram-map-k-min-hits=1" "spec-type=ngram-map-k4v,draft-mtp"
   --start                  Démarre le service $SERVICE_NAME (défaut sans argument) :
-                           docker-compose.yml régénéré dans $CONFIG_DIR, conteneur
+                           .env du service régénéré dans $CONFIG_DIR, conteneur
                            recréé (docker compose up -d --force-recreate), puis
                            ATTENTE de /health - la commande ne rend la main que
                            quand le routeur répond sur :$SERVER_PORT
@@ -158,9 +159,10 @@ Fichiers versionnés (runtime/, moteur conteneurisé) :
                            resynchronisation : runtime/AMONT.md
 Fichiers ($CONFIG_DIR, générés - ne pas éditer à la main) :
   models.ini               configuration des modèles, relancer --preload/--setup
-  docker-compose.yml       description du service ET recette de son image
-                           (bloc build sur runtime/), régénérée à chaque --start
-                           (lib/compose.sh) ; usage manuel :
+  .env                     valeurs machine (gid, chemins, --models-max, tag de
+                           l'image) de runtime/docker-compose.yml, qui décrit le
+                           service ET la recette de son image (bloc build) ;
+                           régénéré à chaque --start (lib/compose.sh) ; usage manuel :
                            cd $CONFIG_DIR && docker compose ps | logs -f
                            cd $CONFIG_DIR && docker compose build
 

@@ -137,7 +137,7 @@ done
 # moteur, lue sur les ARG *_REV de runtime/Dockerfile.rocm-strix) et les helpers
 # info/warn/error. Il attend SCRIPT_DIR : c'est la racine du dépôt, comme pour
 # setup-llm.sh. runtime.sh donne _image_ref/_dk_run, compose.sh les chemins du
-# compose généré, svc.sh les _svc_* (état du service).
+# compose et du .env, svc.sh les _svc_* (état du service).
 SCRIPT_DIR="$ROOT_DIR"
 # shellcheck source=/dev/null
 source "$ROOT_DIR/lib/common.sh"

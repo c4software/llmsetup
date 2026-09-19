@@ -241,7 +241,7 @@ SPEC_CONF="$SCRIPT_DIR/spec-nmax.conf"
 # backend à l'autre — d'où une conf locale plutôt qu'une valeur dans le script.
 SPEC_NGRAM_CONF="$SCRIPT_DIR/spec-ngram.conf"
 
-# Nom du service, et NOM DU CONTENEUR (container_name du compose généré) :
+# Nom du service, et NOM DU CONTENEUR (container_name de runtime/docker-compose.yml, via le .env) :
 # les deux sont volontairement le même, pour que tous les messages du dépôt
 # restent exacts et qu'un `docker logs llama-server` à la main marche.
 SERVICE_NAME="llama-server"

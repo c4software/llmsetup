@@ -25,7 +25,7 @@ set -euo pipefail
 # dont les chemins *_CONF et SERVICE_NAME) → svc (pilotage du service, utilisé
 # dès common par _maybe_restart_service) → models (déclaration des modèles :
 # téléchargements, chemins, corps MODEL_INI) → ini (génération, référence les
-# modèles) → compose (docker-compose.yml généré : a besoin de CONFIG_DIR et de
+# modèles) → compose (.env du service : a besoin de CONFIG_DIR et de
 # load_preload_conf) → le reste (préload/setup/bench/spec référencent ini).
 # Toute variable globale doit être définie avant les fonctions qui l'utilisent.
 # =============================================================================
