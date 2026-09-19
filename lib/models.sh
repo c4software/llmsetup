@@ -1751,8 +1751,9 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 # partagé) + 51B d'embeddings n-gram (bigrammes/trigrammes à la couche 2, table
 # de hash lue une fois par forward), arch GDN (3 couches sur 4) + Qwen Sparse
 # Attention (QSA, budget 2048, ratio 4) + hyper-connections, vision Qwen3-VL,
-# ctx natif 256K (1M via YaRN). Quant AP-Q4_K_XL d'agentionai (94,2 Gio, fichier
-# unique) depuis le 17/09/2026.
+# ctx natif 256K (1M via YaRN). Servi depuis le 17/09/2026 par Signal-3.8-Flash-Next
+# d'agentionai en quant AP-Q4_K_XL (94,2 Gio, fichier unique) : un FINE-TUNE de
+# Flash-Next, pas un simple requant (cf. la note de migration plus bas).
 # SUPPORT llama.cpp : general.architecture = qwen4exp, PR #27742 (unsloth,
 #   mergée le 27/08/2026 dans b10661 : convertisseur, graphe texte, QSA avec un
 #   troisième cache dans llama_memory_hybrid_idx, vision, 3 correctifs de
@@ -1780,7 +1781,25 @@ groupe "; --- Qwen3.8-Flash-Next : arch 'qwen4exp', servie par le fork strix-lla
 #   metadata que le GGUF unsloth (mêmes 64 clés hors imatrix et file_type,
 #   mêmes 1224 tenseurs, même vocabulaire 248320 et même n_embd 2560, vérifié
 #   au lecteur gguf le 17/09/2026), mais des experts en Q4_K au lieu d'IQ4_XS.
-#   Raison : sur le runtime ROCm de la PR kyuz0/amd-strix-halo-toolboxes#133 la
+#   ATTENTION (relu sur la model card le 19/09/2026) : Signal N'EST PAS un
+#   requant de Flash-Next, c'est un FINE-TUNE « minimalement invasif » par
+#   auto-distillation, entraîné sur les réponses de Flash-Next générées sous
+#   une consigne de concision : il supprime préambules, mise en forme excessive
+#   et conclusions. Annonce d'agentionai : 15 % de tokens en moins et 25 % de
+#   temps mur en moins sur Terminal-Bench, acceptance MTP 0,90 contre 0,69 sur
+#   le modèle de base. Métadonnées et tenseurs identiques ne prouvent que la
+#   même architecture, pas les mêmes poids. Conséquences : les écarts mesurés
+#   contre l'UD-IQ4_XS ci-dessous mêlent l'effet de quant et l'effet du
+#   fine-tune (dont le saut d'acceptance 0,64 vers 0,87), et le modèle a passé
+#   le contrôle de justesse et le bench agentic APRÈS la migration, ce qui
+#   suffit à le garder. Le style plus direct est un choix assumé.
+#   La tête MTP proposée par agentionai (Qwen3.8-Flash-Next-MTP-Q8_0-GGUF,
+#   4,14 Go) est la tête autonome de Qwen, entraînée avec le modèle de base :
+#   mêmes poids que le sidecar unsloth, et elle exige encore le fork. On garde
+#   la tête SHARED unsloth déclarée plus bas, que le moteur de l'image charge
+#   nativement (acceptance 0,865 à 0,90 mesurée ici, le 0,90 annoncé est déjà
+#   acquis : il vient du modèle, pas de la tête).
+#   Raison de la quant : sur le runtime ROCm de la PR kyuz0/amd-strix-halo-toolboxes#133 la
 #   quant Q4_K y est nettement plus rapide que l'UD-IQ4_XS à configuration
 #   égale, 877 contre 526 t/s de prefill et 52,2 contre 45,3 t/s de décode
 #   (chiffres de la PR, AUTRE moteur : ils ne se comparent pas aux mesures
@@ -1906,8 +1925,9 @@ download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 
 # Qwen3.8-Flash-Next nothink : spéculation mixte n-gram + MTP, sampling instruct,
 # et vision depuis le 17/09/2026.
-# MIGRATION du 17/09/2026 : la section sert désormais la quant AP-Q4_K_XL
-#   d'agentionai (cf. la déclaration plus haut) au lieu des shards UD-IQ4_XS
+# MIGRATION du 17/09/2026 : la section sert désormais Signal-3.8-Flash-Next
+#   d'agentionai en quant AP-Q4_K_XL (fine-tune de Flash-Next, cf. la
+#   déclaration plus haut) au lieu des shards UD-IQ4_XS
 #   d'unsloth, avec le mmproj BF16 et son image-min-tokens 1024. Le NOM de la
 #   section ne change pas (décision utilisateur) : le drafter, lui, n'a pas
 #   bougé, c'est toujours la tête MTP en sidecar. Toutes les mesures citées
