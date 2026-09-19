@@ -55,7 +55,7 @@ export default async function (pi: ExtensionAPI) {
 
     models = payload.data
       // seuls les text-generation acceptent /v1/chat/completions
-      .filter((m) => m.type === "text-generation")
+      //.filter((m) => m.type === "text-generation")
       .map((m) => {
         const contextWindow = num(m.max_context_length, DEFAULT_CONTEXT);
         return {
