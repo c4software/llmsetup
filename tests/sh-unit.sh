@@ -307,6 +307,7 @@ case "$1" in
     esac
     exit 0 ;;
   compose) exit 0 ;;
+  stop) exit 0 ;;
 esac
 exit 1
 EOF
@@ -564,6 +565,19 @@ else
   echo "[FAIL] env : compose écrit à la main supprimé"; rc=1
 fi
 rm -f "$SVC/home/models/docker-compose.yml"
+
+# (c3) _svc_stop sans .env : arrêt propre par `docker stop` sur le nom du
+#      conteneur, jamais sauté (premier --restart sur le nouveau format).
+mv "$SVC/home/models/.env" "$SVC/home/models/.env.garde"
+: > "$SVC/etat/docker.log"
+out="$(_run_svc '_svc_stop 7')"; grc=$?
+if [[ "$grc" -eq 0 ]] && grep -qx 'stop -t 7 llama-server' "$SVC/etat/docker.log" \
+   && ! grep -q '^compose' "$SVC/etat/docker.log"; then
+  echo "[OK]   svc : stop sans .env ⇒ docker stop sur le nom du conteneur"
+else
+  echo "[FAIL] svc : stop sans .env, code $grc, appels : $(cat "$SVC/etat/docker.log")"; rc=1
+fi
+mv "$SVC/home/models/.env.garde" "$SVC/home/models/.env"
 
 # (d) LE test qui compte côté pilotage : _svc_restart ne doit JAMAIS émettre
 #     « compose restart », qui relancerait le conteneur existant - donc

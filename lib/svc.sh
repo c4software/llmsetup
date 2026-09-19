@@ -112,10 +112,19 @@ _svc_start() {
 # _svc_stop [timeout=180] - arrêt propre (SIGINT, cf. stop_signal du compose).
 # Le conteneur est arrêté, pas supprimé : `docker compose ps -a` garde la trace
 # du dernier code de sortie, et _svc_start le recrée de toute façon.
+# Sans .env (machine jamais démarrée sur ce format, ou fichier retiré), compose
+# ne peut pas lire son projet : le conteneur, lui, existe et se nomme
+# $SERVICE_NAME ; `docker stop` fait alors la même chose (StopSignal SIGINT du
+# conteneur, délai imposé ici). C'est ce qui rend --restart possible au premier
+# passage sur le nouveau format, au lieu de sauter l'arrêt propre.
 _svc_stop() {
   local timeout="${1:-180}"
   _svc_is_active || return 0
-  _svc_compose stop -t "$timeout" || return 1
+  if [[ -f "$ENV_FILE" ]]; then
+    _svc_compose stop -t "$timeout" || return 1
+  else
+    docker stop -t "$timeout" "$SERVICE_NAME" >/dev/null || return 1
+  fi
   return 0
 }
 
