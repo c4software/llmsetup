@@ -495,6 +495,14 @@ if [[ -f "$CF" ]]; then
   else
     echo "[FAIL] env : --models-max n'a pas suivi preload.conf"; rc=1
   fi
+  # preload.conf vide (commentaires seuls) ⇒ un seul résident, pas de plancher à 2.
+  printf '; rien\n' > "$SVC/repo/preload.conf"
+  _run_svc 'regen_env' >/dev/null
+  if grep -qx 'MODELS_MAX=1' "$CF"; then
+    echo "[OK]   env : preload.conf vide ⇒ --models-max 1 (un seul résident)"
+  else
+    echo "[FAIL] env : preload.conf vide devrait donner --models-max 1"; rc=1
+  fi
   printf 'un\ndeux\n' > "$SVC/repo/preload.conf"
   _run_svc 'regen_env' >/dev/null
   # Validation par l'outil lui-même quand il est là : aucune assertion de

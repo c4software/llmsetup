@@ -156,8 +156,7 @@ cmd_start() {
   _compose_check || error "Le service ne peut pas démarrer ici (voir ci-dessus)."
 
   load_preload_conf
-  local models_max=$(( ${#PRELOADED[@]} + 1 ))
-  (( models_max < 2 )) && models_max=2
+  local models_max=$(( ${#PRELOADED[@]} + 1 ))   # même dérivation que regen_env, sans plancher
   info "Démarrage de $SERVICE_NAME (conteneur, router mode) sur $BIND_ADDR:$SERVER_PORT..."
   info "  Préchargés : $(_preload_summary) - models-max=$models_max"
 

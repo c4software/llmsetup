@@ -10,6 +10,21 @@ Trois séries de mesures cohabitent ici et ne se comparent jamais entre elles :
 le paquet Arch (`bNNNNN`), le fork strix-llama.cpp (`strix-<commit>`) et, depuis
 le 18/09/2026, l'image ROCm du service (`strix-<engine>+r<rocm>`).
 
+## `--models-max` sans plancher (21/09/2026)
+
+Flash-Next injoignable sur bigchuck : plus de cinquante `cudaMalloc failed:
+out of memory` à l'allocation de son buffer de poids (68,5 Go) pendant
+qu'Ornith 35B MTP, contexte 1 M, tenait 74 Go (48,7 Go de GTT plus 25 Go
+anonymes). Le routeur avait évincé lfm2.5, l'inactif le plus ancien, puis,
+revenu à un seul résident sous `--models-max 2`, ne déchargeait plus rien :
+même mécanique que les deux OOM du 13/09, mais l'allocation ROCm échoue
+proprement au lieu de réveiller l'OOM killer, donc le service reste debout et
+le modèle demandé échoue en boucle. Le plancher `models_max >= 2` hérité du
+premier script rendait `preload.conf` vide inopérant. Retiré : préchargés + 1,
+sans minimum ; `preload.conf` vide ⇒ `--models-max 1`, un seul résident, le
+routeur décharge toujours avant de charger. Débloquage à chaud par
+`POST /models/unload` du résident.
+
 ## Compose versionné, `.env` généré (19/09/2026)
 
 Le `docker-compose.yml` n'est plus généré par un heredoc de `lib/compose.sh` :

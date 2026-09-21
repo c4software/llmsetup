@@ -118,12 +118,16 @@ generate_env() {
   gid_render="$(_compose_gid render)"
   gid_video="$(_compose_gid video)"
 
-  # --models-max dérivé de preload.conf, EXACTEMENT comme l'ancien cmd_start :
-  # nb de modèles préchargés + 1 slot LRU pour le modèle appelé à la demande
-  # (minimum 2).
+  # --models-max dérivé de preload.conf : nb de modèles préchargés + 1 slot
+  # LRU pour le modèle appelé à la demande. Pas de plancher : preload.conf
+  # vide ⇒ 1, un seul résident, et le routeur décharge TOUJOURS le résident
+  # avant de charger le suivant. L'ancien plancher à 2 (hérité du premier
+  # script) laissait deux géants cohabiter : le routeur évince l'inactif le
+  # plus ancien sans regarder les tailles, donc lfm2.5 (3 Go) partait et
+  # Flash-Next (85 Go) échouait en boucle à côté d'Ornith 1 M (74 Go),
+  # 21/09/2026.
   load_preload_conf
   models_max=$(( ${#PRELOADED[@]} + 1 ))
-  (( models_max < 2 )) && models_max=2
 
   cat <<ENV
 # GÉNÉRÉ par ./setup-llm.sh (lib/compose.sh) - NE PAS ÉDITER
