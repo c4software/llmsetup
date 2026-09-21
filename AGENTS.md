@@ -142,6 +142,20 @@ là-bas, lancer, ne rien commiter sur place.
    cache, prefill et décode réels). Ligne dans `docs/HISTORIQUE.md`
    (« Boucle agentic réelle ») et dans le commentaire du bloc.
 
+## Procédure de mise à jour du moteur
+
+Détail dans la skill locale `.claude/skills/maj-moteur/SKILL.md` (à charger
+dès qu'on demande si le moteur ou l'image est à jour, ou qu'on veut la mettre à
+jour). Les révisions de l'image (`ARG ENGINE_REV` et `ARG ROCM_SYSTEMS_REV` de
+`runtime/Dockerfile.rocm-strix`, Dockerfile amont et patchs suivis dans
+`runtime/AMONT.md`) ne bougent **jamais toutes seules** : une image est une
+série de mesures. `.claude/skills/maj-moteur/check.sh` compare les quatre
+pièces à leur amont en lecture seule et affiche les évolutions par partie ;
+l'update (édition des `ARG`, commit qui dit pourquoi, `--image-build` puis
+`--restart` sur la machine du service) ne se fait que sur accord explicite,
+et impose une remesure, justesse d'abord (`--bench-sanity` avant tout
+chiffre).
+
 ## Où ajouter…
 
 - **Un modèle** : un bloc dans `lib/models.sh` (`download_hf` + `llama_model`,
