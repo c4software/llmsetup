@@ -1872,6 +1872,11 @@ Essai mené sur le fork 0636c9aee (b11111), pas sur 0007bc6. Avec
 
 - prefill `--bench` 389 à 397 t/s contre 343, décode 45,3 à 46,5 contre 49,5 ;
 - `lazy-mode on-direct` neutre, double emploi avec `ngram-on-disk` ;
+  (relecture du 21/09/2026 : depuis le merge b11111, `--ngram-on-disk` n'est
+  qu'un alias de `--lazy-mode on`, pas de `on-direct`, reproduit par un membre
+  du Discord halo-box ; les deux flags étaient passés ensemble, le mode réel
+  dépendait donc de l'ordre d'analyse. Les mesures servies depuis le 18/09
+  passent `lazy-mode on-direct` seul et ne sont pas concernées.)
 - surtout, le prefill servi sur Vulkan0 s'effondre en profondeur : 135 t/s à
   12 000 tokens, puis le GPU décroche à 25 000 tokens
   (`vk::Queue::submit: ErrorDeviceLost`, reset de file amdgpu), après quoi
