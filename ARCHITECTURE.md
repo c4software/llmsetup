@@ -412,7 +412,6 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
 | `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N` (une ligne par scénario et par passe, passe 0 = appel froid ; `N` = boucles simultanées de la salve, 1 pour la référence solo ; colonne ajoutée en queue le 15/09/2026, les lignes antérieures à 13 colonnes restent lisibles ; sur les lignes `N > 1`, `prompt_tok`..`decode_tps` valent `n/c`, chaque conteneur lisant le compteur global du serveur) |
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
-| `image-test.log` | `image/setup-image.sh --test` | `date build dit encodeur taille steps seed mur_s sampling fichier ec` (build = `sdcpp-<commit>`, label OCI de l'image Docker de stable-diffusion.cpp) |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
 | `qualif/<tag>/` | `tools/qualif-modele.sh` | `01-devices.log` … `07-agentic.log` (sortie brute de chaque étape) et `resume.md` (en-tête, tableau de perfs, table des étapes) |

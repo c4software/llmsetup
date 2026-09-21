@@ -218,12 +218,9 @@ cmd_cleanup() {
   local -a doomed=()
 
   # 1. dossiers de modèle entiers
-  #    `image/` est le dossier de la génération d'images (image/setup-image.sh :
-  #    poids, .env, sorties), tenu par ses propres déclarations, pas par
-  #    KNOWN_FILES : exclu ici, jamais un orphelin.
   while IFS= read -r d; do
     _in_list "$(basename "$d")" "${keep_keys[@]}" || doomed+=("$d")
-  done < <(find "$MODELS_BASE" -mindepth 1 -maxdepth 1 -type d ! -name '.cache' ! -name 'image' | sort)
+  done < <(find "$MODELS_BASE" -mindepth 1 -maxdepth 1 -type d ! -name '.cache' | sort)
 
   # 2. .gguf orphelins dans les dossiers conservés
   while IFS= read -r f; do
