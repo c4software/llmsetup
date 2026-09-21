@@ -391,6 +391,7 @@ table ci-dessus change.
 | `logs/bench-agentic.log` | journal TSV des `--bench-agentic` (une ligne par scénario, colonne `N` en queue = boucles simultanées) |
 | `logs/bench-cache.log` | journal TSV des `--bench-cache` |
 | `logs/bench-load.log` | journal TSV des `--bench-load` |
+| `logs/image-test.log` | journal TSV des `image/setup-image.sh --test` (commit du moteur sd.cpp, quants, taille, steps, temps mur, temps de sampling, mode EC) ; détail par run dans `logs/image-test/<horodatage>.log` |
 | `logs/spec-batch.log` / `.tsv` | journal des balayages `tools/bench-spec-batch.sh` |
 | `logs/spec-isolate/<tag>/` | sorties de `tools/spec-isolate.sh` : `serveur.log`, `mesures.tsv`, `gen-*.txt` |
 | `logs/qualif/<tag>/` | sorties de `tools/qualif-modele.sh` : un journal par étape (`01-devices.log` … `07-agentic.log`) et `resume.md` (tableau de perfs) |
@@ -401,6 +402,8 @@ Versionnés, eux (ils décrivent ce qu'on construit, pas la machine) :
 |---|---|
 | `runtime/Dockerfile.rocm-strix` | copie vendorisée du Dockerfile amont (PR 133, mergée), qui porte aussi les **révisions épinglées** du moteur et du runtime ROCr (`ARG ENGINE_REV`, `ARG ROCM_SYSTEMS_REV`) ; son historique git est le journal des révisions. Écarts et resynchronisation dans `runtime/AMONT.md` |
 | `runtime/patches/` | les deux patchs que le build applique au moteur |
+
+Côté `~/models/image/` : `.env` du service d'images, généré (voir « Images »).
 
 Côté `~/models/` : `models.ini`, généré. Ne jamais l'éditer : relancer
 `--preload` ou `--setup`. Le routeur ne le lit qu'au démarrage, toute
@@ -442,6 +445,34 @@ parallel         = 4"
 La suite (device, spéculation, mesures, récap partageable) est la procédure en
 sept étapes de la skill locale `.claude/skills/ajout-modele/SKILL.md`, résumée
 dans `AGENTS.md`.
+
+## Images (image/)
+
+À côté du parc LLM, `image/setup-image.sh` sert la génération d'images avec
+[stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) dans son
+image Docker officielle Vulkan (`ghcr.io/leejet/stable-diffusion.cpp:master-vulkan`,
+pilote RADV embarqué, GPU passé par `/dev/dri`). Même approche que le service
+LLM conteneurisé : déclarations des fichiers HF en tête de script, poids sous
+`~/models/image/<modèle>/`, compose versionné `image/docker-compose.yml` dont
+les valeurs machine vont dans `~/models/image/.env` (généré, comme
+`~/models/.env`), pas d'unité systemd (`restart: unless-stopped`), pilotage
+`--start` / `--stop` / `--restart` / `--status` / `--logs`. API OpenAI-compatible
+sur `:7979` (`/v1/images/generations`, `/v1/images/edits`, interface web sur
+`/`). Modèle déclaré : Qwen-Image-2.1 (DiT Q8_0 de leejet, encodeur Qwen3-VL-8B
+Q8_0, VAE bf16 de Comfy-Org ; licence non commerciale). Choix du moteur et des
+quants dans l'en-tête du script et le bloc du modèle.
+
+```bash
+./image/setup-image.sh --setup     # docker, image, poids, .env
+./image/setup-image.sh --test      # une image chronométrée (logs/image-test.log), service arrêté
+./image/setup-image.sh --start     # puis --status, --logs -f ; cd ~/models/image && docker compose ps
+```
+
+L'étiquette de moteur des journaux est `sdcpp-<commit>` (label OCI de l'image) :
+le tag suit master amont, chaque `--setup` / `--update` peut la faire bouger,
+et une image neuve n'est servie qu'au prochain `--restart`.
+`setup-llm.sh --cleanup` ignore `~/models/image/` : ces poids ne sont pas des
+orphelins du parc LLM.
 
 ## Outils (tools/)
 
