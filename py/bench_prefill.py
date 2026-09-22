@@ -85,9 +85,14 @@ def mesure(url, modele, passes, tailles, fichiers):
             pms = float(t.get("prompt_ms") or mur * 1000)
             tps = float(t.get("prompt_per_second") or (pn / (pms / 1000) if pms else 0))
             cache_n = int((u.get("prompt_tokens_details") or {}).get("cached_tokens") or t.get("cache_n") or 0)
+            # Réponse « vide » = ni content ni reasoning_content : sur un modèle à
+            # réflexion (LFM2.5, Muse, DeepSeek), les 8 tokens partent dans
+            # reasoning_content et content reste vide, ce n'est pas un moteur muet
+            # (mesuré le 22/09/2026 : 8 passes saines exclues à tort).
             contenu = ""
             try:
-                contenu = (d["choices"][0]["message"].get("content") or "").strip()
+                m = d["choices"][0]["message"]
+                contenu = ((m.get("content") or "") + (m.get("reasoning_content") or "")).strip()
             except (KeyError, IndexError, TypeError):
                 pass
             sain = 1 if (cache_n == 0 and contenu and pn > 0) else 0
