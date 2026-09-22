@@ -118,14 +118,16 @@ def bilan(lignes):
     if not ordre:
         print("Aucune mesure.")
         return 1
-    print("cible\tprompt_n méd.\tprefill t/s méd.\tpasses saines")
+    # Aligné ici plutôt que par `column -t` : sous une locale absente (ssh non
+    # interactif) column abîme les accents.
+    print("%-8s %14s %18s %14s" % ("cible", "prompt_n méd.", "prefill t/s méd.", "passes saines"))
     for cible in ordre:
         sains = [(pn, tps) for pn, tps, s in par[cible] if s]
         n, ns = len(par[cible]), len(sains)
         pn_med = _median([pn for pn, _ in sains]) if sains else 0
         tps_med = _median([tps for _, tps in sains]) if sains else 0
         flag = "" if ns == n else "  ⚠ %d exclue(s)" % (n - ns)
-        print("%d\t%.0f\t%.0f\t%d/%d%s" % (cible, pn_med, tps_med, ns, n, flag))
+        print("%-8d %14.0f %18.0f %14s%s" % (cible, pn_med, tps_med, "%d/%d" % (ns, n), flag))
         print("MED=%d:%.0f:%.0f:%d/%d" % (cible, pn_med, tps_med, ns, n))
     return 0
 

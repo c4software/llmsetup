@@ -1,7 +1,7 @@
-cible	prompt_n méd.	prefill t/s méd.	passes saines
-4000	4962	829	2/2
+cible     prompt_n méd.   prefill t/s méd.  passes saines
+4000               4962                829            2/2
 MED=4000:4962:829:2/2
-32000	44463	961	2/3  ⚠ 1 exclue(s)
+32000             44463                961            2/3  ⚠ 1 exclue(s)
 MED=32000:44463:961:2/3
-65000	90019	919	1/2  ⚠ 1 exclue(s)
+65000             90019                919            1/2  ⚠ 1 exclue(s)
 MED=65000:90019:919:1/2

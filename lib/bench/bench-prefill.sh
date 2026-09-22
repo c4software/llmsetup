@@ -68,7 +68,7 @@ cmd_bench_prefill() {
 
   echo ""
   info "──── bilan ($passes passe(s), médianes sur les passes saines) ────"
-  grep $'^TSV\t' "$sortie" | python3 "$SCRIPT_DIR/py/bench_prefill.py" bilan | grep -v '^MED=' | column -t -s$'\t' || true
+  grep $'^TSV\t' "$sortie" | python3 "$SCRIPT_DIR/py/bench_prefill.py" bilan | grep -v '^MED=' || true
   echo "  (une passe est exclue si le serveur a servi une part du cache ou si la réponse est vide)"
   echo "  Ne comparer qu'à ubatch (${ub:-défaut}) et mode EC ($ec) égaux."
 
