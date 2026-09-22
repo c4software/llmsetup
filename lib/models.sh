@@ -2147,6 +2147,11 @@ parallel         = 1"
 #       ne coûte rien tant qu'un tour ne dépasse pas ~16 k tokens, la perte
 #       de cache mesurée le 18/09 (18 % contre 79 %) porte sur un tour de 20 k.
 #   spec-tune non joué : n-max 3 hérité de la base, même drafter, même GGUF.
+#   ⚠ Le 835 t/s de prefill de la base au --bench du 18/09 était un artefact
+#   de cache (bench-cache 78 s avant, même prompt) : à froid, base et
+#   variante font 627 à 669 sur ce prompt court (huit runs le 22/09, reboot
+#   compris). Le --bench ne départage pas les deux micro-lots, seule la
+#   courbe longue le fait (cf. ci-dessus).
 llama_model qwen3.8-flash-next-mtp-nothink-large-ub "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 262144

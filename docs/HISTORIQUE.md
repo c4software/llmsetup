@@ -108,9 +108,18 @@ processus à 0, avertissement présent, `--bench` 663 / 46,1 contre 664 / 45,8
 sans, `--bench-agentic` 15/15 et temps mur identiques des deux côtés. La clé
 `prio` est donc RETIRÉE de l'en-tête `[*]` de `lib/ini.sh` (ini généré : une
 ligne de moins, un commentaire de plus). Les 835 t/s de prefill
-du 18/09 sur cette section ne se retrouvent ni en root ni en 1000 le 22/09
-(659 à 669 sur quatre runs) : écart entre deux jours, décode inchangé, non
-élucidé.
+du 18/09 sur cette section ne se retrouvent ni en root ni en 1000 le 22/09 :
+huit `--bench` propres (après restart, base comme variante large-ub, puis un
+dernier après redémarrage complet de la machine, `performance` vérifié)
+donnent 627 à 669 t/s, décode 45,3 à 47,0 partout. ÉLUCIDÉ par le journal :
+le 18/09 une série de `--bench-cache` sur cette section a tourné de 06:42 à
+07:06, et le `--bench` à 835 est parti 78 s après le dernier ; `--bench-cache`
+lit `bench-context.txt`, le prompt même du `--bench`, donc ce prefill a été
+servi en partie par le cache du serveur sans que le marqueur « * » se
+déclenche (seuil de 10 % de `cache_n` en passe 1). Le run précédent du même
+matin, à 01:41, donnait 604. Valeur retenue pour la table du parc : 627 à
+669 t/s sur ce prompt court, la courbe longue (965 à 980 t/s à froid de 5 à
+42 k tokens) restant la mesure de référence du prefill.
 
 ## `--models-max` sans plancher (21/09/2026)
 
