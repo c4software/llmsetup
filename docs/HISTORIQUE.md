@@ -72,6 +72,25 @@ agentic), ngram-mod garde ses +10 % de décode en génération longue. Halogen
 conserve 5 à 8 % de prefill à froid une fois llmsetup en ub 16384, au prix
 d'un moteur mono-modèle sans vision ni sampling par défaut.
 
+**Courbes rejouées le soir en mode EC `performance` vérifié** (l'après-midi
+n'y était pas forcément), mêmes requêtes directes, médiane de deux requêtes
+par taille, halogen relancé avec les mêmes options puis retiré :
+
+| tokens | llmsetup base (ub 4096) | llmsetup large-ub (ub 16384) | halogen 0.11.4 |
+|---|---|---|---|
+| 1,2 à 1,7 k | 628 / 790 | 629 / 894 | 607 / 693 |
+| 4 à 6 k | 830 | 1 040 | 985 |
+| 20 à 26 k | 920 | 1 100 | 1 230 |
+| 32 à 39 k | 968 | 1 099 | 1 275 |
+| 41 à 50 k | 961 | 1 099 | 1 325 |
+| 84 à 90 k | 917 | 1 055 | 1 310 |
+
+Sous 5 k tokens les trois sont au même niveau ; à partir de 20 k halogen
+prend 12 % sur large-ub, 21 à 24 % de 40 à 90 k (35 % sur la base). C'est
+l'écart réel des deux moteurs sur le prefill à froid, en `performance` ; les
++24 % de l'après-midi sur 18 k étaient une mesure hors mode. Décode et temps
+mur des boucles agentic inchangés (cf. ci-dessus).
+
 **Suites dans le parc (22/09/2026, décision utilisateur)** : la section
 `ornith-1.5-35b-a3b-parallel` est retirée (usage mono-utilisateur, plus aucun
 multi-slot dans le parc ; son grand commentaire reste dans `lib/models.sh`
