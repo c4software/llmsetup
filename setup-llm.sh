@@ -45,6 +45,7 @@ source "$SCRIPT_DIR/lib/bench/bench-parallel.sh"
 source "$SCRIPT_DIR/lib/bench/bench-cache.sh"
 source "$SCRIPT_DIR/lib/bench/bench-load.sh"
 source "$SCRIPT_DIR/lib/bench/bench-agentic.sh"
+source "$SCRIPT_DIR/lib/bench/bench-prefill.sh"
 source "$SCRIPT_DIR/lib/spec.sh"
 source "$SCRIPT_DIR/lib/service.sh"
 source "$SCRIPT_DIR/lib/help.sh"
@@ -63,6 +64,7 @@ case "${1:-}" in
   --bench-agentic)     cmd_bench_agentic "${2:-}" "${3:-}" "${4:-}" ;;
   --bench-sanity)      cmd_bench_sanity "${2:-}" ;;
   --bench-load)        cmd_bench_load "${2:-}" ;;
+  --bench-prefill)     cmd_bench_prefill "${2:-}" "${3:-}" "${4:-}" ;;
   --preload)           cmd_preload ;;
   --image-build)       cmd_image_build "${2:-}" ;;
   --list-devices)      cmd_list_devices ;;

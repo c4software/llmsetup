@@ -65,7 +65,7 @@ régresser.
 ordre imposé :
 
 ```
-common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → bench-prefill → spec → service → help
 ```
 
 - `common.sh` : helpers (`info/warn/error`, `_key`, `_skip`,
@@ -179,6 +179,9 @@ common → svc → models → ini → compose → preload → setup → runtime 
   `py/cache_stats.py`).
 - `bench/bench-load.sh` : `cmd_bench_load` (restart + première requête
   chronométrée, TTFT à chaud).
+- `bench/bench-prefill.sh` : `cmd_bench_prefill` (prefill à froid en
+  profondeur par l'API, une requête à contenu unique par taille, mesure et
+  bilan par `py/bench_prefill.py`, ubatch et device lus dans `status.args`).
 - `bench/bench-agentic.sh` : `cmd_bench_agentic` (un client réel, pi, en conteneur
   jetable `bench-agentic/`, appel froid puis N passes de cinq scénarios de
   tool calls en direct sur le serveur ; delta de `/metrics?model=` par
@@ -413,6 +416,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench-cache.log` | `cmd_bench_cache` | `date modèle device build part_suite part_edit part_identique ms_froid ms_suite ms_edit ms_identique` |
 | `bench-agentic.log` | `cmd_bench_agentic` | `date modèle device build passe scénario verdict mur_s prompt_tok cache_tok gen_tok prefill_tps decode_tps N` (une ligne par scénario et par passe, passe 0 = appel froid ; `N` = boucles simultanées de la salve, 1 pour la référence solo ; colonne ajoutée en queue le 15/09/2026, les lignes antérieures à 13 colonnes restent lisibles ; sur les lignes `N > 1`, `prompt_tok`..`decode_tps` valent `n/c`, chaque conteneur lisant le compteur global du serveur) |
 | `bench-load.log` | `cmd_bench_load` | `date modèle gguf device build taille chargement_s ttft_chaud_ms` |
+| `bench-prefill.log` | `cmd_bench_prefill` | `date modèle device build ubatch cible passe prompt_n prompt_ms prefill_tps cache_n sain ec_mode` (une ligne par requête ; `sain` 0 = exclue des médianes : part du cache servie ou réponse vide) |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
 | `qualif/<tag>/` | `tools/qualif-modele.sh` | `01-devices.log` … `07-agentic.log` (sortie brute de chaque étape) et `resume.md` (en-tête, tableau de perfs, table des étapes) |

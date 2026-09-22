@@ -61,6 +61,13 @@ Commandes :
                            Temps de chargement + 1er token après restart, puis TTFT
                            à chaud — ce que coûte un modèle à la demande (preload,
                            bascule LRU). Journal logs/bench-load.log
+  --bench-prefill [modèle] [tailles] [passes]
+                           Prefill à froid en profondeur, tel que servi : une
+                           requête à contenu unique par taille (défaut
+                           1000,4000,16000,32000,65000 tokens, 2 passes), cache
+                           de prompt refusé, passes contaminées exclues. Là où
+                           le --bench (1,4 k) ne départage ni deux moteurs ni
+                           deux micro-lots. Journal logs/bench-prefill.log
   --image-build [--no-cache]
                            Image : construit le moteur CONTENEURISÉ (runtime/,
                            ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
@@ -145,6 +152,7 @@ Fichiers (à côté du script, locaux, non versionnés) :
   logs/bench-cache.log     journal des --bench-cache
   logs/bench-agentic.log   journal des --bench-agentic
   logs/bench-load.log      journal des --bench-load
+  logs/bench-prefill.log   journal des --bench-prefill
   logs/spec-batch.log/.tsv journal des balayages tools/bench-spec-batch.sh
   spec-nmax.conf           modèle = spec-draft-n-max retenu par --spec-tune
   spec-ngram.conf          modèle = spec-ngram-map-k-size-m retenu par --spec-ngram-tune
@@ -183,6 +191,8 @@ Workflow typique :
   ./setup-llm.sh --bench-agentic <m> 3  # vraie boucle de tool calls (pi), PASS/FAIL et t/s réels
   ./setup-llm.sh --bench-agentic <m> 2 3  # les mêmes, à 3 boucles simultanées : débit de tâches
   ./setup-llm.sh --bench-load <m>     # coût d'une bascule LRU
+  ./setup-llm.sh --bench-prefill <m>  # courbe de prefill à froid 1 k à 65 k (moteurs, micro-lots)
+  ./setup-llm.sh --bench-prefill <m> 32000 3  # une seule taille, 3 passes
   ./setup-llm.sh --bench all          # après chaque bump de l'image : régressions
 
 Modèles (models.ini, ${#PRESET_ORDER[@]}) :

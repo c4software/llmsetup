@@ -66,6 +66,14 @@ python3 "$PY/timings.py" --spec "$(cat "$F/chat-error.json")" 1 spec > "$TMP/o" 
 # consommées par le bash restent identiques au cas "spec").
 python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 2 specmix > "$TMP/o" || true; _ck spec-mix-p2.txt "$TMP/o"
 
+# --- bench_prefill.py (bilan : médianes par taille sur les passes saines) -----
+# prefill.tsv : deux passes saines à 4 k et 32 k, une passe contaminée à 32 k
+# (cache 30 000 tokens, 3 417 t/s : le faux 835 du 18/09) et une passe en
+# erreur à 65 k (tout à 0) — les deux doivent être EXCLUES des médianes et
+# comptées dans "saines/passes" ; les lignes MED= sont lues par le bash.
+python3 "$PY/bench_prefill.py" bilan < "$F/prefill.tsv" > "$TMP/o" || true; _ck prefill-bilan.txt "$TMP/o"
+printf '' | python3 "$PY/bench_prefill.py" bilan > "$TMP/o" || true; _ck prefill-vide.txt "$TMP/o"
+
 # --- spec_server_nmax.py -----------------------------------------------------
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink < "$F/models.json" > "$TMP/o"; _ck nmax-found.txt "$TMP/o"
 python3 "$PY/spec_server_nmax.py" qwen3.8-27b             < "$F/models.json" > "$TMP/o"; _ck nmax-noargs.txt "$TMP/o"
