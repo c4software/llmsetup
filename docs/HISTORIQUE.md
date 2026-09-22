@@ -79,7 +79,12 @@ au-dessus de `ornith-1.5-35b-a3b-mtp`, seule section Ornith 35B désormais, et
 son corps est consigné dans la note de retrait), et la variante
 `qwen3.8-flash-next-mtp-nothink-large-ub` est créée : même section que la base
 avec `ubatch-size` 16384, réservée aux gros prefills à froid, la base gardant
-4096 pour les boucles d'outils.
+4096 pour les boucles d'outils. Qualifiée le soir même par
+`tools/qualif-modele.sh` : justesse OK ; `--bench` 540 / 45,6 / 0,455 (prompt
+court, un seul micro-lot) ; `--bench-cache` 0 % partout (même limite que la
+base, prompt de 1,4 k) ; `--bench-agentic` 3 passes 15/15, décode 47 à 50 t/s,
+temps mur et part de cache identiques à la base (les scénarios restent sous
+7 k tokens, le grand micro-lot ne coûte qu'au-delà de ~16 k par tour).
 
 ## `--models-max` sans plancher (21/09/2026)
 

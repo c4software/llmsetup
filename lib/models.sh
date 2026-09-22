@@ -2130,6 +2130,23 @@ parallel         = 1"
 #   Même GGUF que la section de base : les deux ne se préchargent pas ensemble
 #   (89 Go chacune), le routeur décharge l'une pour charger l'autre. Absente
 #   de spec-nmax.conf et spec-ngram.conf (clé propre) : n-max 3 du script.
+# QUALIFIÉE le 22/09/2026 par tools/qualif-modele.sh (strix-8c1c282+r7dda3ac,
+#   ROCm0, mode EC performance, logs/qualif/…-large-ub-20260922-2102) :
+#     --bench-sanity : justesse OK ;
+#     --bench 3 passes (prompt court ~1,4 k) : prefill 540 t/s, décode 45,6,
+#       acceptance 0,455 : décode et acceptance de la base, prefill plus bas
+#       que ses 835 (un seul micro-lot de 1,4 k tokens, le grand micro-lot ne
+#       sert qu'au-delà de 4 k, cf. la courbe ci-dessus) ;
+#     --bench-cache : 0 / 0 / 0 % : son prompt de 1,4 k tient dans un seul
+#       micro-lot, aucun point de reprise, même limite que la base (cf. son
+#       bloc) ; la vraie mesure du cache est le 18 % à 20 k du 18/09 ;
+#     --bench-agentic 3 passes (pi 0.87.0) : 15/15, décode 47 à 50 t/s,
+#       temps mur outils 3,9 s / edit 5,1 / creation 20,5 / bugfix 9,6, cache
+#       72 à 97 % : IDENTIQUE à la base (3,7 / 5,0 / 17,4 / 9,2, 71 à 97 %).
+#       Les scénarios restent sous 7 k tokens de prompt : le grand micro-lot
+#       ne coûte rien tant qu'un tour ne dépasse pas ~16 k tokens, la perte
+#       de cache mesurée le 18/09 (18 % contre 79 %) porte sur un tour de 20 k.
+#   spec-tune non joué : n-max 3 hérité de la base, même drafter, même GGUF.
 llama_model qwen3.8-flash-next-mtp-nothink-large-ub "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 262144
