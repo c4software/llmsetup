@@ -277,7 +277,6 @@ la décimale.
 | Modèle (section) | Quant et taille | Réglage spéculatif | Micro-lot | Prefill t/s | Décode t/s | Acceptance | Cache long | Agentic | Contre le fork Vulkan0 (prefill / décode) |
 |---|---|---|---|---|---|---|---|---|---|
 | ornith-1.5-9b-mtp-nothink | Q8_0, 9,79 Go (GGUF fusionné tiers protoLabsAI, tête MTP nextn distillée) | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 3, parallel 1 | 2048 | 1134 | 41,7 | 0,565 | 97 à 98 % | 14/16 | 828 / 39,5, soit +37 % et +5,6 % |
-| ornith-1.5-35b-a3b-parallel | Q4_K_M, 21,7 Go | aucun, parallel 4 | 2048 | 1378 | 72,4 | | 97 % | n/j | 1129 / 73,3, soit +22 % et -1,2 % |
 | ornith-1.5-35b-a3b-mtp | Q4_K_M, 21,7 Go (même GGUF) | spec-type `ngram-map-k,draft-mtp`, size-m 7, min-hits 2, tête MTP embarquée, n-max 4, parallel 1 | 2048 | 1306 | 75,9 | 0,615 | 97 % | 16/16 | 1073 / 76,2, soit +22 % et -0,4 % |
 | lfm2.5-2.6b | Q8_0, 2,87 Go (+ drafter DSpark 0,36 Go) | spec-type `draft-dspark`, drafter DSpark officiel Liquid AI Q8_0, n-max 3, parallel 1 | 2048 | 3749 | 120,3 | 0,505 | 97 % | 16/16 | 2875 / 108,8, soit +30 % et +10,6 % |
 | qwen3-coder-next | UD-Q4_K_XL, 47 Go (+ drafter DFlash 0,51 Go) | spec-type `draft-dflash`, drafter DFlash z-lab Q8_0 (conversion transmutator), n-max 7, parallel 1 | 2048 | 1022 | 56,0 | 0,515 | 97 % | 16/16 | 727 / 52,2, soit +41 % et +7,3 % |
@@ -285,6 +284,7 @@ la décimale.
 | muse-glimmer-30b-dflash | UD-Q4_K_XL, 15,9 Go (+ drafter DFlash 2 3,0 Go) | spec-type `ngram-map-k,draft-dflash`, size-m 7, min-hits 2, n-max 7, `reasoning_strength` low et reasoning-budget 4096, parallel 1 | 2048 | 346 | 31,6 | 0,625 | 100 % | n/j | 277 / 40,5, soit +25 % et -22 % (décode très bruité, cf. `lib/models.sh`) |
 | deepseek-v4-flash | UD-IQ3_XXS, 104 Go (+ drafter DSpark 10,9 Go) | spec-type `ngram-map-k,draft-dspark`, size-m 7, min-hits 2, drafter DSpark unsloth Q8_0, n-max 3, reasoning-budget 6144 (soft 0,6 / 0,85, grâce 192), parallel 1 | 2048 | 131 | 26,3 | 0,685 | 100 % | n/j | 196 / 28,8, soit -33 % et -8,7 % |
 | qwen3.8-flash-next-mtp-nothink | Signal-3.8-Flash-Next (fine-tune agentionai) AP-Q4_K_XL, 94,2 Gio (+ tête MTP shared Q8_0 unsloth 2,8 Go et mmproj BF16) | spec-type `draft-mtp,ngram-mod`, tête MTP shared sans renommage, n-max 3, `lazy-mode on-direct`, ctx 262144, batch 16384, parallel 1 | 4096 | 835 | 46,7 | 0,455 | 79 % | 16/16 | 364 / 52,4, soit +129 % et -11 % (même quant des deux côtés) |
+| qwen3.8-flash-next-mtp-nothink-large-ub | même GGUF, même tête MTP, même mmproj | identique à la section de base, `ubatch-size` 16384 (gros prefills à froid, 22/09/2026) | 16384 | 1 090 à 1 110 (20 à 40 k tokens, à froid) | n/j | n/j | 18 % | n/j | n/j |
 
 Ce que la bascule a changé au bilan : le prefill monte sur sept sections sur
 neuf (+22 à +129 %, Flash-Next en tête avec son batch de 16384) et recule sur
@@ -296,10 +296,13 @@ série bien trop bruitée pour conclure, cf. `lib/models.sh`) et Flash-Next
 tranché, il demande un `--bench-agentic` comparé, pas un `--bench`.
 
 Composition du parc, pour mémoire : tout modèle qui dispose d'un drafter le
-sert à un slot, et `parallel 4` ne subsiste qu'à l'endroit où la concurrence
-est réelle (`ornith-1.5-35b-a3b-parallel`, 2 à 3 slots au journal du service,
-144 à 146 t/s agrégés à 4 requêtes au `--bench-parallel` du 18/09/2026). Ont
-quitté le parc : la section thinking du 27B (13/09/2026), `laguna-s-2.1` et
+sert à un slot. `parallel 4` ne subsistait qu'à l'endroit où la concurrence
+était réelle (`ornith-1.5-35b-a3b-parallel`, 2 à 3 slots au journal du
+service, 144 à 146 t/s agrégés à 4 requêtes au `--bench-parallel` du
+18/09/2026) ; cette section a été retirée le 22/09/2026, usage mono-utilisateur,
+il n'y a plus de multi-slot dans le parc. Est arrivée le même jour la variante
+`qwen3.8-flash-next-mtp-nothink-large-ub` (ubatch 16384, gros prefills à
+froid). Ont quitté le parc : la section thinking du 27B (13/09/2026), `laguna-s-2.1` et
 `qwen3.5-9b`, remplacée par `ornith-1.5-9b-mtp-nothink` (15/09/2026),
 `gpt-oss` (16/09/2026) et `lfm2.5-8b-a1b-nothink` (18/09/2026, échec de la
 boucle agentic sur les deux moteurs). Est arrivée le 16/09/2026
@@ -498,9 +501,10 @@ Ce que la mesure du 15/09/2026 a établi (`--bench-parallel`,
   pour une latence doublée : remis à 1. Ornith sans spéculation tient 3 boucles
   (40/40, cache 88 à 94 %, x2,33) : parallel 4 gardé.
 
-D'où le parc actuel : parallel 1 partout où il y a un drafter, parallel 4 sans
+D'où le parc du 15/09 : parallel 1 partout où il y a un drafter, parallel 4 sans
 spéculation au seul endroit où la concurrence est réelle
-(`ornith-1.5-35b-a3b-parallel`, 2 à 3 slots au journal du service). Les
+(`ornith-1.5-35b-a3b-parallel`, 2 à 3 slots au journal du service ; section
+retirée le 22/09/2026, usage mono-utilisateur). Les
 variantes `-parallel` de lfm2.5 et du 9b, créées le
 15/09/2026 pour garder l'ancien réglage à 4 slots, ont été retirées le soir
 même : aucune concurrence n'a jamais été observée sur ces deux modèles, et pas

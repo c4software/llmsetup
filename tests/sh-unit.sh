@@ -744,14 +744,16 @@ else
   echo "[FAIL] ini : $nb_draft drafters, $nb_ngl spec-draft-ngl, $nb_devdraft device-draft"; rc=1
 fi
 
-# batch 16384 : la seule section autorisée (INI_BIG_BATCH_OK) et personne d'autre.
-# Depuis le 18/09/2026 seul batch-size vaut 16384 sur Flash-Next ; son
+# batch 16384 : les seules sections autorisées (INI_BIG_BATCH_OK) et personne
+# d'autre. Depuis le 18/09/2026 seul batch-size vaut 16384 sur Flash-Next ; son
 # ubatch-size est redescendu à 4096 pour rendre le cache de prompt en long
-# contexte (cf. lib/models.sh).
+# contexte (cf. lib/models.sh). Depuis le 22/09/2026 la variante -large-ub du
+# même GGUF pose batch ET ubatch à 16384 : trois lignes, deux sections.
 nb_batch="$(grep -c '^u\?batch-size  *= 16384$' <<<"$INI")"
 sect_batch="$(awk '/^\[/ { s=$0 } /^u?batch-size[ ]*= 16384$/ { print s }' <<<"$INI" | sort -u | tr -d '[]' | tr '\n' ' ')"
-if [[ "$nb_batch" -eq 1 && "$sect_batch" == "qwen3.8-flash-next-mtp-nothink " ]]; then
-  echo "[OK]   ini : batch 16384 sur la seule section Flash-Next"
+nb_sect_batch="$(wc -w <<<"$sect_batch")"
+if [[ "$nb_batch" -eq 3 && "$nb_sect_batch" -eq 2 && "$sect_batch" == *"qwen3.8-flash-next-mtp-nothink "* && "$sect_batch" == *"qwen3.8-flash-next-mtp-nothink-large-ub "* ]]; then
+  echo "[OK]   ini : batch 16384 sur les deux seules sections Flash-Next (base et -large-ub)"
 else
   echo "[FAIL] ini : $nb_batch lignes à 16384, section(s) : '$sect_batch'"; rc=1
 fi

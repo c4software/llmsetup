@@ -72,6 +72,15 @@ agentic), ngram-mod garde ses +10 % de décode en génération longue. Halogen
 conserve 5 à 8 % de prefill à froid une fois llmsetup en ub 16384, au prix
 d'un moteur mono-modèle sans vision ni sampling par défaut.
 
+**Suites dans le parc (22/09/2026, décision utilisateur)** : la section
+`ornith-1.5-35b-a3b-parallel` est retirée (usage mono-utilisateur, plus aucun
+multi-slot dans le parc ; son grand commentaire reste dans `lib/models.sh`
+au-dessus de `ornith-1.5-35b-a3b-mtp`, seule section Ornith 35B désormais, et
+son corps est consigné dans la note de retrait), et la variante
+`qwen3.8-flash-next-mtp-nothink-large-ub` est créée : même section que la base
+avec `ubatch-size` 16384, réservée aux gros prefills à froid, la base gardant
+4096 pour les boucles d'outils.
+
 ## `--models-max` sans plancher (21/09/2026)
 
 Flash-Next injoignable sur bigchuck : plus de cinquante `cudaMalloc failed:

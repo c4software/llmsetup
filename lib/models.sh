@@ -61,10 +61,12 @@ DEFAULT_DEVICE="ROCm0"
 # la queue retraitée (532 tokens à 2048, 2064 à 4096 sur un prompt de 20k).
 # Flash-Next reste dans INI_BIG_BATCH_OK bien que son ubatch-size soit redescendu
 # à 4096 le 18/09/2026 (arbitrage du cache de prompt, cf. son bloc) : c'est son
-# batch-size, resté à 16384, qui a besoin de l'exemption.
+# batch-size, resté à 16384, qui a besoin de l'exemption. Sa variante
+# qwen3.8-flash-next-mtp-nothink-large-ub (22/09/2026) pose batch ET ubatch à
+# 16384, même arch, même mesure (prefill à froid 1 k à 90 k, cf. son bloc).
 # =============================================================================
 INI_BATCH_MAX=4096
-INI_BIG_BATCH_OK=(qwen3.8-flash-next-mtp-nothink)
+INI_BIG_BATCH_OK=(qwen3.8-flash-next-mtp-nothink qwen3.8-flash-next-mtp-nothink-large-ub)
 
 # =============================================================================
 # DÉFINITION DES MODÈLES
@@ -192,9 +194,11 @@ INI_BIG_BATCH_OK=(qwen3.8-flash-next-mtp-nothink)
 #     le 15/09/2026, RETIRÉE le soir même : aucune concurrence n'avait jamais
 #     été observée sur eux au journal du service, et leur section à drafter
 #     gagne en solo. Décision utilisateur : pas de parallel si perte de perf.
-#     Le seul multi-slot du parc est donc ornith-1.5-35b-a3b-parallel, où la
+#     Le seul multi-slot du parc était donc ornith-1.5-35b-a3b-parallel, où la
 #     concurrence
-#     est réelle (2 à 3 slots au journal) et ne coûte rien.
+#     est réelle (2 à 3 slots au journal) et ne coûte rien. RETIRÉE le
+#     22/09/2026 (usage mono-utilisateur, cf. son bloc) : plus aucun multi-slot
+#     dans le parc.
 #     Règle générale qui s'en dégage : un modèle spéculatif ne gagne au
 #     multi-slot que si parallel x (n-max + 1) reste <= 8 colonnes.
 #     ⚠ HISTORIQUE DEPUIS LE 18/09/2026 : ce seuil de 8 colonnes est celui de
@@ -341,8 +345,8 @@ llama_model() {
 # =============================================================================
 # Groupe de tête du ini — candidats naturels au préchargement (preload.conf) :
 #   ornith-1.5-9b-mtp-nothink = tâches auxiliaires et édition de code courte,
-#   ornith-1.5-35b-a3b-parallel = default agentic
-#   (opencode & co)
+#   ornith-1.5-35b-a3b-mtp = default agentic (opencode & co ; la section
+#   parallel 4 du même GGUF a été retirée le 22/09/2026, usage mono-utilisateur)
 # =============================================================================
 
 # GGUF fusionné (trunk officiel ornith-ai + tête MTP distillée par protoLabsAI),
@@ -639,26 +643,21 @@ download_hf ornith-1.5-35b-a3b "ornith-ai/Ornith-1.5-35B-A3B-GGUF" \
 # Mesuré le 13/09/2026 sur le fork (strix-0007bc6, --bench 3 passes) : prefill
 #   1129 t/s, décode 73,3 t/s : prefill +16 %, décode +4 % (sans spéculation
 #   des deux côtés).
-llama_model ornith-1.5-35b-a3b-parallel "
-model                = $ORNITH15_35B_A3B_PATH
-ctx-size             = 1048576
-cache-ram            = 12288
-reasoning            = off
-temp                 = 0.6
-top-k                = 20
-top-p                = 0.95
-min-p                = 0.0
-jinja                = true
-parallel             = 4
-cache-reuse          = 0
-ctx-checkpoints      = 128"
-
-groupe "; --- Variante MTP du même GGUF Ornith (mono-utilisateur, un seul slot) ; la section de concurrence est ornith-1.5-35b-a3b-parallel ci-dessus ---"
+# SECTION ornith-1.5-35b-a3b-parallel RETIRÉE le 22/09/2026 (décision
+#   utilisateur, usage mono-utilisateur avéré : la journée de comparaison avec
+#   halogen-flash-server n'a mesuré que des boucles à un client, cf.
+#   docs/HISTORIQUE.md « Flash-Next face à halogen-flash-server… »). Son corps
+#   était : ctx-size 1048576, cache-ram 12288, reasoning off, temp 0.6, top-k
+#   20, top-p 0.95, min-p 0.0, jinja, parallel 4, cache-reuse 0,
+#   ctx-checkpoints 128, sans spéculation. Le commentaire ci-dessus est
+#   CONSERVÉ : il documente le GGUF, ses mesures et ses garde-fous, et sert à
+#   la section ornith-1.5-35b-a3b-mtp qui suit, seule section Ornith 35B
+#   désormais. Pour revenir à 4 slots : recréer la section avec ce corps.
 
 # Ornith-1.5-35B-A3B nothink, VARIANTE MTP — même GGUF que la section
-#   ci-dessus (Ornith-1.5-35B-Q4_K_M.gguf, tête MTP embarquée blk.40.nextn,
-#   cf. le commentaire de la section de base), servi à un seul slot avec
-#   spéculation. Créée le 15/09/2026 à l'issue de la campagne multi-slot.
+#   parallel retirée le 22/09/2026 (Ornith-1.5-35B-Q4_K_M.gguf, tête MTP
+#   embarquée blk.40.nextn, cf. le grand commentaire ci-dessus, conservé),
+#   servi à un seul slot avec spéculation. Créée le 15/09/2026 à l'issue de la campagne multi-slot.
 #   Nommée `-mtp` par la convention de _preload_sanity (lib/preload.sh) : les
 #   deux sections partagent la ligne `model =`, le garde-fou avertit si elles
 #   sont préchargées ensemble (~22 Go chargés deux fois). Précédent du parc :
@@ -2099,6 +2098,44 @@ ctx-size         = 262144
 cache-ram        = 8192
 batch-size       = 16384
 ubatch-size      = 4096
+temp             = 0.7
+top-k            = 20
+top-p            = 0.80
+min-p            = 0.0
+presence-penalty = 1.5
+reasoning            = off
+cache-reuse      = 0
+mmproj           = $QWEN38_FLASH_NEXT_MMPROJ_PATH
+image-min-tokens = 1024
+spec-type        = draft-mtp,ngram-mod
+spec-draft-model = $QWEN38_FLASH_NEXT_MTP_PATH
+spec-draft-n-max = 3
+lazy-mode        = on-direct
+jinja            = true
+parallel         = 1"
+
+# VARIANTE large-ub, créée le 22/09/2026 : même modèle, même spéculation, même
+#   tout, sauf ubatch-size 16384 au lieu de 4096. Pour les gros prefills À
+#   FROID (documents de 30 k tokens et plus, pas de suite de conversation) :
+#   mesuré le 22/09/2026 par requêtes directes (image strix-8c1c282+r7dda3ac,
+#   contenu unique, deux requêtes par taille), ub 16384 = 1 036 / 1 082 t/s à
+#   5 à 6 k, 1 096 / 1 112 à 21 à 25 k, 1 091 / 1 093 à 40 k, 1 035 à 90 k,
+#   contre 935 / 967, 966 / 981, 964 / 965 et 925 en ub 4096 : +12 % dès 5 k.
+#   Le prix, mesuré le 18/09 : 18 % seulement du tour suivant restauré du
+#   cache de prompt (79 % en ub 4096), donc jusqu'à 16 k tokens repayés à
+#   chaque tour d'une boucle agentic, et 9 Gio disponibles au lieu de 18 une
+#   fois chargé. Mauvais choix pour une boucle d'outils, c'est pour ça que la
+#   section de base reste à 4096 ; b/ub 24576 (réglage du GGUF ilintar) a été
+#   essayé le même jour : rien de plus que 16384 et instance sortie à 90 k.
+#   Même GGUF que la section de base : les deux ne se préchargent pas ensemble
+#   (89 Go chacune), le routeur décharge l'une pour charger l'autre. Absente
+#   de spec-nmax.conf et spec-ngram.conf (clé propre) : n-max 3 du script.
+llama_model qwen3.8-flash-next-mtp-nothink-large-ub "
+model            = $QWEN38_FLASH_NEXT_PATH
+ctx-size         = 262144
+cache-ram        = 8192
+batch-size       = 16384
+ubatch-size      = 16384
 temp             = 0.7
 top-k            = 20
 top-p            = 0.80
