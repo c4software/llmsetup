@@ -75,6 +75,14 @@ services:
     # variables utiles (HSA_OVERRIDE_GFX_VERSION, DEBUG_HIP_GRAPH_PM4,
     # GPU_MAX_HW_QUEUES) sont déjà dans l'image. Toute la campagne de mesures
     # du 17/09/2026 a tourné sans cette variable.
+    # Le routeur tourne avec l'uid et le gid de l'utilisateur du service (hôte,
+    # résolus par regen_env), pas en root : rien dans l'image ne demande root,
+    # les devices passent par les groupes render et video ci-dessous (kfd et
+    # renderD128 sont en rw pour render, card0 pour video), ~/models est monté
+    # en lecture seule et le seul point inscriptible (CACHE_DIR) appartient
+    # déjà à cet utilisateur. Mesuré le 22/09/2026 : chargement, justesse et
+    # débit identiques à root. Jusqu'à ce jour le processus était uid 0.
+    user: "${SVC_UID:?}:${SVC_GID:?}"
     # Les deux seuls accès matériels dont le backend HIP a besoin.
     devices:
       - "/dev/kfd:/dev/kfd"

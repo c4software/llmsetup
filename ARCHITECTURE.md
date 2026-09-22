@@ -120,8 +120,9 @@ common → svc → models → ini → compose → preload → setup → runtime 
 - `compose.sh` : **génération du `.env`** de `$CONFIG_DIR` (`~/models`, à côté
   de `models.ini`), les valeurs machine de `runtime/docker-compose.yml` :
   `COMPOSE_FILE`, `SERVICE_NAME`, `IMAGE_REF`, `RUNTIME_DIR`, `SERVER_PORT`,
-  `BIND_ADDR`, `CONFIG_DIR`, `MODELS_BASE`, `CACHE_DIR`, `GID_RENDER`,
-  `GID_VIDEO`, `MODELS_MAX`. `generate_env` écrit sur **stdout** (aucun effet
+  `BIND_ADDR`, `CONFIG_DIR`, `MODELS_BASE`, `CACHE_DIR`, `SVC_UID`, `SVC_GID`
+  (le conteneur tourne avec l'uid:gid de l'utilisateur, pas en root, depuis le
+  22/09/2026), `GID_RENDER`, `GID_VIDEO`, `MODELS_MAX`. `generate_env` écrit sur **stdout** (aucun effet
   de bord, donc testable et diffable), `regen_env` l'écrit sur disque par un
   fichier temporaire et **ne remplace que si le contenu diffère**.
   `_compose_check` valide les prérequis avant d'écrire une seule ligne (docker,

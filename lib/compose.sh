@@ -12,6 +12,8 @@
 # produit, jamais édité à la main, jamais versionné, refait à chaque démarrage.
 #
 # Ce que le .env porte, et pourquoi ça ne peut pas être dans le YAML :
+#   - l'uid et le gid de l'utilisateur du service (id -u / id -g : le
+#     conteneur ne tourne pas en root, depuis le 22/09/2026) ;
 #   - les gid numériques de render et video (getent, propres à l'hôte) ;
 #   - le chemin absolu de ~/models, du dépôt (contexte de build) et du cache ;
 #   - --models-max, dérivé de preload.conf : il change dès qu'on touche au
@@ -113,10 +115,14 @@ _compose_check() {
 generate_env() {
   _compose_check || return 1
 
-  local ref gid_render gid_video models_max
+  local ref gid_render gid_video models_max svc_uid svc_gid
   ref="${IMAGE_NAME:-llm-rocm-strix}:$(_image_tag)"
   gid_render="$(_compose_gid render)"
   gid_video="$(_compose_gid video)"
+  # uid:gid du conteneur = l'utilisateur qui lance le service (jamais root :
+  # les devices passent par group_add, le cache appartient à cet utilisateur).
+  svc_uid="$(id -u)"
+  svc_gid="$(id -g)"
 
   # --models-max dérivé de preload.conf : nb de modèles préchargés + 1 slot
   # LRU pour le modèle appelé à la demande. Pas de plancher : preload.conf
@@ -142,6 +148,8 @@ BIND_ADDR=$BIND_ADDR
 CONFIG_DIR=$CONFIG_DIR
 MODELS_BASE=$MODELS_BASE
 CACHE_DIR=$COMPOSE_CACHE_DIR
+SVC_UID=$svc_uid
+SVC_GID=$svc_gid
 GID_RENDER=$gid_render
 GID_VIDEO=$gid_video
 MODELS_MAX=$models_max
