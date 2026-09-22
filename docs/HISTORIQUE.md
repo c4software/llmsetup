@@ -105,11 +105,16 @@ passes saines, à froid :
 | muse-glimmer-30b-dflash | 326 | 260 |
 | qwen3.8-flash-next-mtp-nothink (ub 4096) | 938 | 975 |
 | qwen3.8-flash-next-mtp-nothink-large-ub (ub 16384) | 1 040 | 1 099 |
+| deepseek-v4-flash | 111 | 89 |
 
-Toutes les courbes descendent avec la profondeur (attention dense, ou GDN
-avec une part d'attention), sauf Flash-Next, plate ou montante (attention
-sparse QSA) : c'est l'arch, pas le moteur. DeepSeek V4 non joué (32 k = 4 min
-par passe). La première série avait exclu LFM2.5 et Muse à tort : modèles à
+Toutes les courbes descendent avec la profondeur, de 8 % (27B) à 25 %
+(Ornith 35B), sauf Flash-Next, plate ou montante. DeepSeek V4 Flash, joué en
+dernier (6 min par passe à 32 k), descend aussi, de 20 %, alors que son
+attention est sparse elle aussi (DSA, Lightning Indexer, présent dans le
+graphe du moteur, cf. son bloc, et déjà 173 / 161 / 136 / 111 t/s de 2 k à
+51 k le 18/09) : la courbe plate n'est donc pas « l'attention sparse » en
+général mais le QSA de Flash-Next tel que ce moteur l'exécute (troisième
+cache d'index, budget 2048). La première série avait exclu LFM2.5 et Muse à tort : modèles à
 réflexion, leurs 8 tokens partent dans `reasoning_content` et le garde-fou ne
 regardait que `content` ; corrigé, rejoués.
 
