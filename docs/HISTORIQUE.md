@@ -10,6 +10,68 @@ Trois séries de mesures cohabitent ici et ne se comparent jamais entre elles :
 le paquet Arch (`bNNNNN`), le fork strix-llama.cpp (`strix-<commit>`) et, depuis
 le 18/09/2026, l'image ROCm du service (`strix-<engine>+r<rocm>`).
 
+## Flash-Next face à halogen-flash-server, micro-lot et n-gram (22/09/2026)
+
+Journée de comparaison sur bigchuck, image `strix-8c1c282+r7dda3ac`, ROCm0,
+Flash-Next servi par Signal-3.8-Flash-Next AP-Q4_K_XL, tête MTP shared,
+reasoning off. En face, halogen-flash-server 0.11.4 (moteur spécialisé,
+mono-modèle, checkpoint hgn w4b 5,53 bpw du Qwen de base, greedy par défaut,
+`HALOGEN_ENABLE_THINKING=0`), lancé sur `:8029` d'après son `run-test.sh`,
+jamais en même temps que le service. Poids différents des deux côtés : le mode
+GGUF de halogen refuse les Q4_K, l'UD-IQ4_XS n'était plus sur le disque.
+
+**Boucle agentic pi (`--bench-agentic`, 3 passes, même conteneur pi pointé sur
+chaque serveur)**, 16/16 PASS des deux côtés : temps mur des cinq scénarios
+35,5 s (llmsetup) contre 33,5 s (halogen) ; décode médian 48,5 contre 54,0 t/s
+(+11 % halogen, en greedy contre sampling 0,7) ; prefill sans cache sur
+l'appel froid 557 contre 613 t/s. Le `/metrics` de halogen n'a pas de compteur
+de tokens en cache et ignore `?model=` : ses colonnes prompt, cache et prefill
+du bench sont fausses par construction, seuls PASS, temps mur, généré et décode
+se comparent.
+
+**Boucle agentic omp (oh-my-pi 18.2.6 local, profil isolé, thinking off,
+TODO list Laravel du TP « base de données » sur un projet fraîchement créé, un
+run par configuration, 7/7 critères fonctionnels partout)** :
+
+| configuration | mur | tours / outils | généré | décode | prompt frais | prefill frais |
+|---|---|---|---|---|---|---|
+| llmsetup ngram-mod, run 1 | 170 s | 22 / 34 | 5 108 | 45,3 t/s | 20,6 k | ~650 t/s (estimé) |
+| llmsetup ngram-mod, run 2 | 169 s | 21 / 34 | 5 505 | 45,3 t/s | 20,9 k | 691 t/s |
+| llmsetup ngram-map-k 7, min-hits 2 | 119 s | 14 / 26 | 3 949 | 45,8 t/s | 19,6 k | 743 t/s |
+| halogen 0.11.4 | 184 s | 19 / 33 | 5 505 | 46,3 t/s | 47,6 k | 789 t/s |
+
+Décode identique partout. Le temps mur court de la variante n-gram vient du
+modèle qui a bouclé moins (une seule vérification navigateur), pas du drafter :
+variance de sampling. Halogen a reprefillé 2,3 fois plus de tokens frais sur
+la même conversation (reprise de cache aux frontières de 64 tokens, omp
+réécrit le contexte à chaque tour), d'où ses 14 s de plus. Le seul écart réel
+entre les moteurs : le prompt système omp de 17,9 k tokens à froid, 942 t/s
+sur llmsetup (ub 4096) contre 1 165 t/s sur halogen.
+
+**Prefill à froid en profondeur** (requêtes directes, contenu unique,
+`cache_prompt` false, deux requêtes par taille, `timings` de llama-server) :
+
+| tokens | ub 4096 (retenu) | ub 16384 | b/ub 24576 (réglage d'ilintar) |
+|---|---|---|---|
+| 1,4 k | 701 / 815 | 665 / 880 | 619 / 809 |
+| 5 à 7 k | 935 / 967 | 1 036 / 1 082 | 1 044 / 1 026 |
+| 21 à 25 k | 966 / 981 | 1 096 / 1 112 | 1 123 / 1 104 |
+| 40 à 49 k | 964 / 965 | 1 091 / 1 093 | 1 082 / 1 060 |
+| 85 à 90 k | 924 / 925 | 1 035 / 1 034 | 785, puis instance sortie (statut 1) |
+
+Le n-gram (ngram-mod contre ngram-map-k) ne change pas le prefill, à moins de
+1 % près. Le micro-lot, si : +12 % dès 5 k tokens en ub 16384, pour 9 Go
+disponibles pendant le run au lieu de 18. 24576 n'apporte rien de plus que
+16384 et fait sortir le modèle à 90 k tokens (4 Go disponibles, cache de
+prompt vidé entrée par entrée avant la chute). Le GGUF IQ4_NL d'ilintar
+(`ilintar/qwen3.8-flash-next-gguf-strix-halo`, 93 Go, branche strix-halo)
+annonce 1 152 t/s à vide et 1 060 à 40 k en `-b 24576 -ub 24576` : le niveau
+de l'ub 16384 ici, la quant n'est pas ce qui manque. Rien de retenu : ub 4096
+garde son arbitrage du 18/09 (cache de prompt restauré à 79 % en boucle
+agentic), ngram-mod garde ses +10 % de décode en génération longue. Halogen
+conserve 5 à 8 % de prefill à froid une fois llmsetup en ub 16384, au prix
+d'un moteur mono-modèle sans vision ni sampling par défaut.
+
 ## `--models-max` sans plancher (21/09/2026)
 
 Flash-Next injoignable sur bigchuck : plus de cinquante `cudaMalloc failed:

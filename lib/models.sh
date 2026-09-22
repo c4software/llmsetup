@@ -2081,6 +2081,18 @@ download_hf qwen3.8-flash-next "unsloth/Qwen3.8-Flash-Next-GGUF" \
 #   1 399 tokens tient toujours dans un seul micro-lot. L'outil ne mesure donc
 #   PAS le cache de ce modèle ; il faut un prompt long (voir les chiffres
 #   ci-dessus). Sous ub 1024, --bench-cache remonte à 26 / 28 / 28 %.
+# CONFIRMÉ le 22/09/2026 (même image, prefill à froid par requêtes directes,
+#   1 k à 90 k tokens, deux requêtes par taille) : ub 4096 = 965 à 980 t/s
+#   de 5 k à 42 k et 925 à 90 k ; ub 16384 = 1 090 à 1 110 t/s et 1 035 à
+#   90 k (+12 %, 9 Gio disponibles au lieu de 18) ; b/ub 24576 (réglage du
+#   GGUF ilintar) = pareil que 16384 puis instance sortie à 90 k. Le drafter
+#   n-gram ne change rien au prefill (ngram-map-k 7 à moins de 1 % de
+#   ngram-mod) ni au décode agentic omp (45,8 contre 45,3 t/s, TODO list
+#   Laravel, 7/7 les deux). Face à halogen-flash-server 0.11.4 le même jour :
+#   décode égal en boucle omp (46,3 contre 45,3), halogen +24 % de prefill à
+#   froid sur 18 k tokens contre ub 4096, 5 à 8 % contre ub 16384. Rien de
+#   changé : détail dans docs/HISTORIQUE.md, « Flash-Next face à
+#   halogen-flash-server, micro-lot et n-gram (22/09/2026) ».
 llama_model qwen3.8-flash-next-mtp-nothink "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 262144
