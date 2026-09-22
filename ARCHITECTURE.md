@@ -419,7 +419,7 @@ colonne nouvelle s'ajoute à droite avec un défaut pour les lignes courtes.
 | `bench-prefill.log` | `cmd_bench_prefill` | `date modèle device build ubatch cible passe prompt_n prompt_ms prefill_tps cache_n sain ec_mode` (une ligne par requête ; `sain` 0 = exclue des médianes : part du cache servie ou réponse vide) |
 | `spec-batch.log` / `.tsv` | `tools/bench-spec-batch.sh` | lisible / `date modele device depth fa_reel batch t_forward_ms sd_ms cout_rel gain_max` |
 | `bench-depth.log` / `.tsv` | `tools/bench-depth.sh` | lisible / `date modele device depth pp_ts pp_sd tg_ts tg_sd tour_s` |
-| `qualif/<tag>/` | `tools/qualif-modele.sh` | `01-devices.log` … `07-agentic.log` (sortie brute de chaque étape) et `resume.md` (en-tête, tableau de perfs, table des étapes) |
+| `qualif/<tag>/` | `tools/qualif-modele.sh` | `01-sanity.log` … `07-agentic.log` (sortie brute de chaque étape, `04b-prefill.log` pour `--bench-prefill 4000,32000`) et `resume.md` (en-tête, tableau de perfs, prefill 4 k et 32 k, table des étapes) |
 | `spec-isolate/<tag>/mesures.tsv` | `tools/spec-isolate.sh` | `date tag prompt np mesure pp gen n draft_n accepted acceptance sain agrege ec_mode` (`agrege` vide sur les passes séquentielles, débit agrégé de la salve sur les lignes np > 1 ; à côté de `serveur.log` et des `gen-*.txt` du même dossier) |
 
 `device` est l'état réel du serveur (`/v1/models`, flag `--device`) partout

@@ -59,6 +59,23 @@ cmd_bench_prefill() {
     | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --ubatch-size 2>/dev/null || true)"
   build="$(_llama_build)"; ec="$(_ec_power_mode)"
   info "Moteur : $build, device ${dev:-$DEFAULT_DEVICE}, ubatch ${ub:-défaut}, mode EC : $ec"
+
+  # Tailles au-delà du contexte RÉEL de la section (status.args --ctx-size,
+  # que le moteur peut avoir plafonné à n_ctx_train) : sautées, avec un mot.
+  # Le tokenizer déborde d'environ 3 à 5 % sur la cible (3 caractères par
+  # token visés), d'où la marge de 20 % avant de refuser une taille.
+  local ctx t; local -a gardees=()
+  ctx="$(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null \
+    | python3 "$SCRIPT_DIR/py/spec_server_nmax.py" "$preset" --ctx-size 2>/dev/null || true)"
+  for t in ${tailles//,/ }; do
+    if [[ -n "$ctx" ]] && (( t * 12 / 10 + 64 > ctx )); then
+      warn "  taille $t sautée : contexte servi de $ctx tokens (status.args)."
+    else
+      gardees+=("$t")
+    fi
+  done
+  [[ ${#gardees[@]} -gt 0 ]] || error "Aucune taille ne tient dans le contexte servi ($ctx tokens)."
+  tailles="$(IFS=,; echo "${gardees[*]}")"
   info "Tailles $tailles tokens, $passes passe(s) chacune, contenu unique, cache de prompt refusé."
 
   local sortie; sortie="$(mktemp)"

@@ -228,13 +228,13 @@ tools/qualif-modele.sh <section>
 
 joue dans l'ordre l'étape 3 (`--bench-sanity`, **bloquante**), l'étape 5
 (`--spec-ab` sur `spec-refactor.txt` puis sur `spec-test.txt`), l'étape 6
-(`--bench`, `--bench-cache`, `--bench-load`) et l'étape 7
+(`--bench`, `--bench-prefill 4000,32000`, `--bench-cache`, `--bench-load`) et l'étape 7
 (`--bench-agentic 3`), une à la
 fois (un seul GPU), lit le drafter et le `size-m` réellement servis dans
 `status.args` de `/v1/models`, et écrit `logs/qualif/<tag>/resume.md` : les
 sorties brutes par étape plus le tableau de l'étape 6 déjà rempli. Options :
 `--passes`, `--size-m`, `--sans-agentic`, `--sans-cache`,
-`--sans-load`, `--tag`. Une étape en échec n'arrête pas les suivantes, sauf la
+`--sans-load`, `--sans-prefill`, `--tag`. Une étape en échec n'arrête pas les suivantes, sauf la
 justesse : là, tout s'arrête.
 
 Ce qu'il ne fait pas : l'étape 4 (`--spec-tune`) reste manuelle, elle n'a de
@@ -411,7 +411,22 @@ service dans son état normal, puis selon le rôle du modèle :
 ./setup-llm.sh --bench-parallel <modèle>     # si parallel > 1 : ce que vaut le N choisi
 ./setup-llm.sh --bench-cache <modèle>        # si usage agentic : part du prompt repayée à chaque tour (62 à 66 % sur les archs récurrentes, 99 % en attention pure)
 ./setup-llm.sh --bench-load <modèle>         # si chargé à la demande : coût d'une bascule LRU
+./setup-llm.sh --bench-prefill <modèle> 4000,32000 2   # toujours : prefill à froid en profondeur, tel que servi
 ```
+
+`--bench-prefill` mesure ce que le `--bench` ne peut pas : le prefill sur un
+gros prompt (32 k tokens, le régime de l'agentic long), à froid, contenu
+unique, cache de prompt refusé, passes contaminées exclues. Le `--bench` à
+1,4 k tokens ne départage ni deux moteurs ni deux micro-lots (Flash-Next base
+et large-ub y font pareil, 627 à 669 t/s le 22/09/2026, contre 968 et 1 099
+à 32 k) et se laisse tromper par un `--bench-cache` joué juste avant sur le
+même prompt (835 t/s le 18/09, artefact). Deux tailles suffisent en
+qualification (4 k et 32 k, 2 passes : 2 min sur Flash-Next, 10 sur DeepSeek
+V4) ; la courbe complète (`--bench-prefill <modèle>`, 1 k à 65 k) sert à
+comparer un moteur, un micro-lot ou une quant. Les tailles au-delà du
+`ctx-size` réel sont sautées. Ne se compare qu'à ubatch et mode EC égaux,
+tous deux en colonne de `logs/bench-prefill.log`. Le 32 k va dans la colonne
+« Prefill 32 k » de la table du parc.
 
 `--bench` écrit dans `logs/bench.log` et signale tout écart de plus de 5 %
 avec le run précédent du même GGUF/device **et du même mode EC** : à relancer

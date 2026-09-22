@@ -40,6 +40,9 @@
 #     --sans-agentic     ne pas lancer --bench-agentic (lancé par défaut, 3 passes)
 #     --sans-cache       ne pas lancer --bench-cache
 #     --sans-load        ne pas lancer --bench-load
+#     --sans-prefill     ne pas lancer --bench-prefill (sinon 4000,32000 tokens,
+#                        2 passes : le --bench de 1,4 k ne dit rien du prefill
+#                        en profondeur, cf. lib/bench/bench-prefill.sh)
 #     --tag TAG          nom du dossier de sortie (défaut <section>-<date-heure>)
 #     --help             cet écran
 #
@@ -50,7 +53,7 @@
 #
 # Sorties, toutes dans logs/qualif/<tag>/ (donc non versionné) :
 #   01-sanity.log   02-ngram-refactor.log  03-ngram-generic.log  04-bench.log
-#   05-cache.log    06-load.log            07-agentic.log
+#   04b-prefill.log 05-cache.log           06-load.log            07-agentic.log
 #   resume.md       en-tête (section, machine, moteur, mode EC, device, date), tableau
 #                   « Configuration | Device | Prompt t/s | Gen t/s |
 #                   Acceptance | Source », meilleur size-m, verdict agentic.
@@ -88,6 +91,7 @@ déclaré et servi, et écrit logs/qualif/<tag>/resume.md (tableau de perfs).
   --sans-agentic     ne pas lancer --bench-agentic (sinon 3 passes)
   --sans-cache       ne pas lancer --bench-cache
   --sans-load        ne pas lancer --bench-load
+  --sans-prefill     ne pas lancer --bench-prefill (sinon 4000,32000 tokens, 2 passes)
   --tag TAG          dossier de sortie (défaut <section>-<date-heure>)
   --help             cet écran
 
@@ -105,6 +109,7 @@ SIZE_M="7,15,47"
 AVEC_AGENTIC=1
 AVEC_CACHE=1
 AVEC_LOAD=1
+AVEC_PREFILL=1
 TAG=""
 
 # Option à valeur appelée sans sa valeur : sans ce garde-fou, c'est le « shift 2 »
@@ -122,6 +127,7 @@ while [[ $# -gt 0 ]]; do
     --sans-agentic) AVEC_AGENTIC=0; shift ;;
     --sans-cache)   AVEC_CACHE=0; shift ;;
     --sans-load)    AVEC_LOAD=0; shift ;;
+    --sans-prefill) AVEC_PREFILL=0; shift ;;
     -*)             echo "Option inconnue : '$1'" >&2; _usage >&2; exit 1 ;;
     *)
       [[ -z "$SECTION" ]] || { echo "Une seule section à la fois : '$SECTION' puis '$1'" >&2; exit 1; }
@@ -448,6 +454,18 @@ fi
 _etape 04-bench.log "bench final (--bench, $PASSES_BENCH passes)" \
   _llm --bench "$SECTION" "$PASSES_BENCH"
 
+# Prefill en profondeur, tel que servi : deux tailles seulement pour rester
+# court sur un modèle lent (DeepSeek V4 à 130 t/s : 32 k tokens = 4 min par
+# passe), le 32 k étant la valeur qui compte en agentic long et qui départage
+# moteurs et micro-lots (22/09/2026). Les tailles hors contexte sont sautées
+# par la commande elle-même.
+if [[ "$AVEC_PREFILL" -eq 1 ]]; then
+  _etape 04b-prefill.log "prefill en profondeur (--bench-prefill 4000,32000, 2 passes)" \
+    _llm --bench-prefill "$SECTION" 4000,32000 2
+else
+  _etape_sautee "prefill en profondeur (--bench-prefill)" "--sans-prefill"
+fi
+
 if [[ "$AVEC_CACHE" -eq 1 ]]; then
   _etape 05-cache.log "cache de prompt (--bench-cache)" _llm --bench-cache "$SECTION"
 else
@@ -511,6 +529,18 @@ _ligne_bench() {
   gen="$(sed -n 's/.*décode \([0-9.]*\) t\/s.*/\1/p' <<<"$ligne")"
   acc="$(sed -n 's/.*acceptance \([0-9.]*\).*/\1/p' <<<"$ligne")"
   echo "| ${SPEC_TYPE:-configuration servie} | $DEV | ${pp:-n/c} | ${gen:-n/c} | ${acc:-n/c} | --bench, $PASSES_BENCH passes (bench-context + bench-task) |"
+}
+
+# Bilan de --bench-prefill (py/bench_prefill.py, bilan) : une ligne par taille,
+#   « 32000            32618                977            2/2 »
+# (cible, prompt_n médian, prefill t/s médian, passes saines/passes), à ne pas
+# confondre avec les lignes par requête, qui ont 7 champs et finissent par
+# oui/non : la ligne de bilan se reconnaît à son 4e champ « n/n ».
+_prefill_taille() {
+  local cible="$1" v
+  v="$(_sans_ansi "$OUT/04b-prefill.log" \
+    | awk -v c="$cible" '$1 == c && $4 ~ /^[0-9]+\/[0-9]+$/ { printf "%s t/s (%s saines)", $3, $4 }' | tail -1 || true)"
+  echo "${v:-n/c}"
 }
 
 # Lecture de --bench-cache (lib/bench/bench-cache.sh) : les trois lignes
@@ -593,6 +623,9 @@ _verdict_sanity() {
   echo ""
   echo "- Meilleur size-m : $(_meilleur_size_m)"
   echo "- Justesse (--bench-sanity, bloquante) : $(_verdict_sanity)"
+  if [[ "$AVEC_PREFILL" -eq 1 ]]; then
+    echo "- Prefill en profondeur (à froid, tel que servi) : 4 k = $(_prefill_taille 4000), 32 k = $(_prefill_taille 32000)"
+  fi
   echo "- Cache de prompt : suite $(_part_cache suite) %, édition $(_part_cache édition) %, identique $(_part_cache identique) %"
   echo "- Chargement : $(_ligne_load)"
   if [[ "$AVEC_AGENTIC" -eq 1 ]]; then
