@@ -86,6 +86,25 @@ base, prompt de 1,4 k) ; `--bench-agentic` 3 passes 15/15, décode 47 à 50 t/s,
 temps mur et part de cache identiques à la base (les scénarios restent sous
 7 k tokens, le grand micro-lot ne coûte qu'au-delà de ~16 k par tour).
 
+## Le conteneur du service en uid:gid de l'utilisateur (22/09/2026)
+
+Jusqu'ici `llama-server` tournait en root dans le conteneur (uid 0, avec les
+groupes `video` et `render` en supplément), faute de directive `user:` dans
+`runtime/docker-compose.yml`. Rien ne le demandait : les devices passent par
+`group_add` (`/dev/kfd` et `renderD128` en rw pour `render`, `card0` pour
+`video`), `~/models` est monté en lecture seule et le seul point inscriptible
+(`CACHE_DIR`) appartient déjà à l'utilisateur. Le compose pose maintenant
+`user: ${SVC_UID:?}:${SVC_GID:?}`, résolus par `regen_env` (`id -u`, `id -g`).
+A/B dos à dos sur bigchuck, `--bench qwen3.8-flash-next-mtp-nothink 3` : root
+664 t/s / 46,2 t/s / 0,455, uid 1000 669 / 46,1 / 0,455 ; justesse OK en 1000,
+aucun fichier créé hors 1000. L'avertissement `failed to set process
+priority 2 : Permission denied` (le `prio = 2` de l'en-tête du ini) est
+présent dans les deux cas : hausser la priorité demande `CAP_SYS_NICE`, que
+`cap_drop ALL` retire, root ou pas ; sans effet mesuré. Les 835 t/s de prefill
+du 18/09 sur cette section ne se retrouvent ni en root ni en 1000 le 22/09
+(659 à 669 sur quatre runs) : écart entre deux jours, décode inchangé, non
+élucidé.
+
 ## `--models-max` sans plancher (21/09/2026)
 
 Flash-Next injoignable sur bigchuck : plus de cinquante `cudaMalloc failed:
