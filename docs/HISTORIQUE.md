@@ -91,6 +91,28 @@ l'écart réel des deux moteurs sur le prefill à froid, en `performance` ; les
 +24 % de l'après-midi sur 18 k étaient une mesure hors mode. Décode et temps
 mur des boucles agentic inchangés (cf. ci-dessus).
 
+**Prefill 32 k du parc (`--bench-prefill 4000,32000 2`, nouvelle commande du
+soir, `performance`, ubatch par défaut sauf Flash-Next), médiane de deux
+passes saines, à froid :
+
+| section | 4 k | 32 k |
+|---|---|---|
+| ornith-1.5-9b-mtp-nothink | 1 419 | 1 143 |
+| ornith-1.5-35b-a3b-mtp | 1 261 | 965 |
+| lfm2.5-2.6b | 4 191 | 3 120 |
+| qwen3-coder-next | 918 | 740 |
+| qwen3.8-27b-dflash-nothink | 249 | 224 |
+| muse-glimmer-30b-dflash | 326 | 260 |
+| qwen3.8-flash-next-mtp-nothink (ub 4096) | 938 | 975 |
+| qwen3.8-flash-next-mtp-nothink-large-ub (ub 16384) | 1 040 | 1 099 |
+
+Toutes les courbes descendent avec la profondeur (attention dense, ou GDN
+avec une part d'attention), sauf Flash-Next, plate ou montante (attention
+sparse QSA) : c'est l'arch, pas le moteur. DeepSeek V4 non joué (32 k = 4 min
+par passe). La première série avait exclu LFM2.5 et Muse à tort : modèles à
+réflexion, leurs 8 tokens partent dans `reasoning_content` et le garde-fou ne
+regardait que `content` ; corrigé, rejoués.
+
 **Suites dans le parc (22/09/2026, décision utilisateur)** : la section
 `ornith-1.5-35b-a3b-parallel` est retirée (usage mono-utilisateur, plus aucun
 multi-slot dans le parc ; son grand commentaire reste dans `lib/models.sh`
