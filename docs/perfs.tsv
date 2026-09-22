@@ -1,5 +1,5 @@
 # Fork Vulkan0 contre moteur conteneurise ROCm0, une ligne par section servie du
-# models.ini (table « Parc au 18/09/2026 » du README, qui fait foi).
+# models.ini (table « Parc au 22/09/2026 » du README, qui fait foi).
 # Colonne vulkan : dernier --bench de la section sur le fork strix-0007bc6
 # installe sur l'hote (Vulkan0, 12 au 17/09/2026), moteur du service jusqu'au
 # 18/09/2026. Colonne rocm : --bench du 18/09/2026 sur l'image du depot

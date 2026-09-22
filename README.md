@@ -255,7 +255,7 @@ Vulkan et n'ont pas été re-tracés. Formules, garde-fous et limites :
 ARCHITECTURE.md.
 Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
 
-## Parc au 18/09/2026, moteur conteneurisé ROCm0
+## Parc au 22/09/2026, moteur conteneurisé ROCm0
 
 Une ligne par section servie du `models.ini`, dans l'ordre d'émission. Toutes
 les mesures viennent du `--bench` du dépôt, 3 passes, le 18/09/2026, sur la
