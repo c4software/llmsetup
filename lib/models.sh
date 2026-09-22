@@ -2152,6 +2152,11 @@ parallel         = 1"
 #   variante font 627 à 669 sur ce prompt court (huit runs le 22/09, reboot
 #   compris). Le --bench ne départage pas les deux micro-lots, seule la
 #   courbe longue le fait (cf. ci-dessus).
+#   Courbe rejouée le soir même en mode EC performance vérifié (médiane de
+#   deux requêtes) : 1 040 t/s à 5 k, 1 100 de 20 à 44 k, 1 055 à 90 k,
+#   contre 830 / 920 à 968 / 917 pour la base, et 985 / 1 230 à 1 325 /
+#   1 310 pour halogen-flash-server 0.11.4 sur la même machine : halogen
+#   garde 12 à 24 % au-delà de 20 k, égalité sous 5 k. Cf. docs/HISTORIQUE.md.
 llama_model qwen3.8-flash-next-mtp-nothink-large-ub "
 model            = $QWEN38_FLASH_NEXT_PATH
 ctx-size         = 262144
