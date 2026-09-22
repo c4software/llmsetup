@@ -203,7 +203,15 @@ load-mode              = none
 cache-type-k           = f16
 cache-type-v           = f16
 flash-attn             = on
-prio                   = 2
+; prio : RETIRÉ le 22/09/2026. Le « prio = 2 » posé ici depuis le premier
+;   script ne s'est jamais appliqué dans le conteneur : hausser la priorité
+;   demande CAP_SYS_NICE, que cap_drop ALL retire (en root aussi), et depuis
+;   le passage du conteneur en uid utilisateur un cap_add ne devient même
+;   plus effectif (CapEff = 0, no-new-privileges). A/B du 22/09/2026 sur
+;   bigchuck, avec et sans cap_add SYS_NICE : 663 / 46,1 contre 664 / 45,8 t/s
+;   au --bench, boucles agentic identiques, avertissement « failed to set
+;   process priority 2 : Permission denied » dans les deux cas. Cf.
+;   docs/HISTORIQUE.md, « Le conteneur du service en uid:gid… ».
 metrics                = true
 slot-prompt-similarity = 0.5
 cache-reuse            = 4096

@@ -100,7 +100,14 @@ A/B dos à dos sur bigchuck, `--bench qwen3.8-flash-next-mtp-nothink 3` : root
 aucun fichier créé hors 1000. L'avertissement `failed to set process
 priority 2 : Permission denied` (le `prio = 2` de l'en-tête du ini) est
 présent dans les deux cas : hausser la priorité demande `CAP_SYS_NICE`, que
-`cap_drop ALL` retire, root ou pas ; sans effet mesuré. Les 835 t/s de prefill
+`cap_drop ALL` retire, root ou pas ; sans effet mesuré. A/B du soir même avec
+`cap_add: SYS_NICE` (édition locale, non commitée) : en uid 1000 la capacité
+ne devient pas effective (`CapEff` = 0, un non-root ne reçoit pas les
+capacités ajoutées, `no-new-privileges` ferme l'autre voie), nice du
+processus à 0, avertissement présent, `--bench` 663 / 46,1 contre 664 / 45,8
+sans, `--bench-agentic` 15/15 et temps mur identiques des deux côtés. La clé
+`prio` est donc RETIRÉE de l'en-tête `[*]` de `lib/ini.sh` (ini généré : une
+ligne de moins, un commentaire de plus). Les 835 t/s de prefill
 du 18/09 sur cette section ne se retrouvent ni en root ni en 1000 le 22/09
 (659 à 669 sur quatre runs) : écart entre deux jours, décode inchangé, non
 élucidé.
