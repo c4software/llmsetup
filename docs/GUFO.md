@@ -310,7 +310,7 @@ Publié le 24/09/2026 sous le compte c4software :
 
 | Ticket | Sujet | État au 24/09/2026 |
 |---|---|---|
-| #259 | reprise d'un préfixe commun entre conversations | ouvert (le nôtre) ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé |
+| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | ouvert (le nôtre) |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert, confirmé par un second utilisateur |
 | #239 | n-gram (prompt lookup) | résultat négatif en greedy, clôture proposée |
@@ -355,6 +355,28 @@ Tout est conservé sur bigchuck dans `~/llm/gufo-test` (hors du dépôt, hors de
   (`1cd7b56`, 87 Go) et DSpark (`e7f0403`, 6 Go), drafter DFlash 2 Q4_K_M du
   27B (`2d9571f`, 1,1 Go).
 - Image `ghcr.io/gufo-org/toolboxes/gufo-runtime:latest` (8,3 Go).
+
+### Paramètres de `serve-8009.sh` et leur origine
+
+Gufo n'a pas de réglage de production « officiel » : ses défauts visent un
+usage minimal (4 096 tokens de contexte, 128 générés, glouton) et ses propres
+mesures tournent en glouton. Les valeurs ci-dessous visent un usage agentique
+comparable au service ; aucune n'est un réglage interne du moteur.
+
+| Paramètre | `serve-8009.sh` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
+|---|---|---|---|---|
+| `--context` | 262144 | 4096 | 32768 | nous : contexte natif, celui du service |
+| `--sessions` | 2 | non documenté | 2 | gufo et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
+| `--max-tokens` | 32768 | 128 | non indiqué | nous : à 128, un client qui n'envoie pas `max_tokens` serait coupé |
+| échantillonnage | temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 | glouton, aucun filtre | aucun | Qwen officiel, profil instruct (fiche du modèle, guide unsloth), celui des sections nothink du service ; surchargeable par requête |
+| `--think` | off | gabarit du modèle (raisonnement, effort xhigh) | non indiqué | nous : équivalent des sections nothink |
+| `--cache-disk` | activé, 16 Gio | désactivé (4 Gio si activé) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations (mesuré) |
+| `--cache-disk-staging-bytes` | 8 Gio | 512 Mio | non utilisé | nous : sinon les points de reprise du 27B sont abandonnés dès ~5k tokens (mesuré) |
+| spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
+| fichiers | Flash-Next UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q8_0 | | UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q4_K_M | gufo, sauf le drafter du 27B pris dans le parc (Q8_0, mesuré identique au Q4_K_M) |
+
+Les chiffres agentiques avec cache disque ont été mesurés avec ces réglages ;
+gufo « nu » (sans cache disque) était à égalité avec le service sur le 27B.
 
 Pour rejouer contre une nouvelle version de gufo : `docker pull` de l'image,
 puis `./run.sh gufo 27b` (banc HTTP) et, pour l'agentique, `./serve-8009.sh
