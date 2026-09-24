@@ -20,13 +20,19 @@ des mesures dans [`docs/GUFO.md`](GUFO.md).
 - Banc HTTP, 27B à fichiers identiques : prefill 547 contre 263 t/s (+108 %),
   décode 48,9 contre 35,7 (+37 %). Flash-Next et DeepSeek sur des quants
   différentes (gufo refuse les nôtres) : prefill +69 % et +212 %.
-- Boucle agentique pi, 16/16 partout : 27B 56 contre 57 s par passe, Flash-Next
-  39 contre 44 s, DeepSeek 90 contre 116 s. L'avance fond parce que gufo ne
-  reprend pas le préfixe commun d'une nouvelle conversation (14 ratés sur 16,
-  30 % du prompt recalculé contre 8 % au service sur le 27B).
-- Verdict : pas de remplacement du service. Issue amont
-  [#259](https://github.com/gufo-org/gufo/issues/259) ouverte sur le cache.
-  Banc et GGUF de référence conservés sur bigchuck dans `~/llm/gufo-test`.
+- Boucle agentique pi, 16/16 partout. Première série, gufo sans cache
+  disque : 27B 56 contre 57 s par passe, Flash-Next 39 contre 44 s, DeepSeek
+  90 contre 116 s ; sans `--cache-disk`, gufo ne reprend pas le préfixe commun
+  d'une nouvelle conversation (14 ratés sur 16). Seconde série avec
+  `--cache-disk` et `--cache-disk-staging-bytes` relevé (le défaut de 512 Mio
+  coupe en silence les points de reprise du 27B dès 4k tokens) : 27B **40**
+  contre 57 s, Flash-Next **31** contre 44 s, soit 30 % de temps en moins,
+  90 % du prompt repris.
+- Verdict : gufo bat le service en agentique une fois configuré, mais ne le
+  remplace pas (quants imposées, un modèle par processus, pas de n-gram).
+  Issue amont [#259](https://github.com/gufo-org/gufo/issues/259) ouverte puis
+  corrigée par nos soins (configuration). Banc, `serve-8009.sh` et GGUF de
+  référence conservés sur bigchuck dans `~/llm/gufo-test`.
 
 ## Flash-Next face à halogen-flash-server, micro-lot et n-gram (22/09/2026)
 

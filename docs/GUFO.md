@@ -7,6 +7,12 @@ garde les mesures, le verdict et ce qu'il faut surveiller pour y revenir.
 Tout le banc et les fichiers sont conservés sur bigchuck (voir « Reprendre les
 mesures »).
 
+Le soir même, une seconde série a corrigé la première : sans `--cache-disk`,
+gufo ne reprend pas le préfixe commun de deux conversations, et c'est ce qui
+le faisait paraître à égalité en boucle agentique. Bien configuré, il y fait
+le même travail en 30 % de temps en moins que le service. Les tableaux
+agentiques ci-dessous donnent les deux séries.
+
 ## Ce qu'est gufo
 
 - Moteur HIP écrit à la main pour gfx1151, sous licence MIT, v0.1.0, testé au
@@ -47,6 +53,10 @@ mesures »).
   0,7, top-k 20, top-p 0,8, presence-penalty 1,5, `--think off` ; DeepSeek :
   temp 1,0, top-k 40, top-p 0,95), et le cache, le prefill et le décode sont
   relus dans son journal, requête par requête.
+- Seconde série agentique (27B et Flash-Next) : gufo lancé par
+  `serve-8009.sh` sur le port du service, avec `--cache-disk` et
+  `--cache-disk-staging-bytes 8589934592` (voir « Le cache »), même conteneur
+  pi pointé sur `:8009`.
 
 ## Banc HTTP (médianes, gufo contre service)
 
@@ -92,24 +102,37 @@ micro-lot.
 
 ## Boucle agentique (pi, 3 passes, médianes)
 
-16/16 partout, sur les deux moteurs et les trois modèles.
+16/16 partout, sur les deux moteurs, les trois modèles et les deux séries.
 
-| Suite complète, par passe | gufo | service | écart |
-|---|---|---|---|
-| **Qwen3.8-27B** (mêmes fichiers) | 56 s | 57 s | **+2 %** |
-| **Flash-Next** (quants différentes) | 39 s | 44 s (46 s en large-ub) | **+13 %** |
-| **DeepSeek V4 Flash** (quants différentes) | 90 s | 116 s | **+29 %** |
+| Suite complète, par passe | gufo sans cache disque | gufo avec cache disque | service | gufo (cache disque) contre service |
+|---|---|---|---|---|
+| **Qwen3.8-27B** (mêmes fichiers) | 56 s | **40 s** | 57 s | **-30 %** de temps |
+| **Flash-Next** (quants différentes) | 39 s | **31 s** | 44 s (46 s en large-ub) | **-30 %** de temps |
+| **DeepSeek V4 Flash** (quants différentes) | 90 s | non rejoué | 116 s | -22 % sans cache disque |
 
-| Détail par scénario | 27B gufo | 27B service | Flash-Next gufo | Flash-Next service | DeepSeek gufo | DeepSeek service |
-|---|---|---|---|---|---|---|
-| simple | 3,0 s | **1,9 s** | **1,5 s** | 2,4 s | **4,0 s** | 5,0 s |
-| outils (write + bash + read) | 6,9 s | **4,4 s** | 4,3 s | **3,6 s** | **11,1 s** | 19,7 s |
-| edit | 7,8 s | **6,3 s** | 5,3 s | **5,1 s** | **16,0 s** | 20,6 s |
-| création (module + tests) | **25,6 s** | 29,9 s | **22,1 s** | 23,4 s | **27,4 s** | 43,2 s |
-| bugfix | **12,3 s** | 15,0 s | **8,0 s** | 9,4 s | 25,9 s | **25,5 s** |
-| tokens recalculés (tout le run) | 27,7k (30 %) | **7,0k (8 %)** | 27,3k (29 %) | **17,6k (17 %)** | 27,5k (30 %) | **11,3k (12 %)** |
-| temps en prefill / décode | 63 / **101 s** | **29** / 139 s | **30 / 82 s** | 33 / 96 s | **92 / 179 s** | 102 / 255 s |
-| prefill / décode réels (t/s) | **438 / 45,9** | 242 / 32,4 | **897 / 50,7** | 531 / 48,5 | **300 / 31,1** | 111 / 26,3 |
+| Détail par scénario | 27B gufo, cache disque | 27B service | Flash-Next gufo, cache disque | Flash-Next service |
+|---|---|---|---|---|
+| simple | **0,6 s** | 1,9 s | **0,5 s** | 2,4 s |
+| outils (write + bash + read) | 4,7 s | **4,4 s** | **3,3 s** | 3,6 s |
+| edit | **5,3 s** | 6,3 s | **4,3 s** | 5,1 s |
+| création (module + tests) | **20,0 s** | 29,9 s | **14,3 s** | 23,4 s |
+| bugfix | **9,3 s** | 15,0 s | **6,7 s** | 9,4 s |
+| prompt repris du cache | 90 % | **92 %** | **91 %** | 83 % |
+| temps en prefill / décode | **28 / 90 s** | 29 / 139 s | **16 / 71 s** | 33 / 96 s |
+| prefill / décode réels (t/s) | **298 / 46,4** | 242 / 32,4 | 486 / **51,1** | **531** / 48,5 |
+
+Première série, sans cache disque (pour mémoire) :
+
+| Détail par scénario | 27B gufo | Flash-Next gufo | DeepSeek gufo | DeepSeek service |
+|---|---|---|---|---|
+| simple | 3,0 s | 1,5 s | **4,0 s** | 5,0 s |
+| outils (write + bash + read) | 6,9 s | 4,3 s | **11,1 s** | 19,7 s |
+| edit | 7,8 s | 5,3 s | **16,0 s** | 20,6 s |
+| création (module + tests) | 25,6 s | 22,1 s | **27,4 s** | 43,2 s |
+| bugfix | 12,3 s | 8,0 s | 25,9 s | **25,5 s** |
+| tokens recalculés (tout le run) | 27,7k (30 %) | 27,3k (29 %) | 27,5k (30 %) | **11,3k (12 %)** |
+| temps en prefill / décode | 63 / 101 s | 30 / 82 s | **92 / 179 s** | 102 / 255 s |
+| prefill / décode réels (t/s) | 438 / 45,9 | 897 / 50,7 | **300 / 31,1** | 111 / 26,3 |
 
 L'appel froid n'est pas comparable : côté service, il comprend le chargement
 du modèle à la demande (9,7 s, 21,6 s, 86 s), alors que gufo était déjà chargé.
@@ -117,44 +140,64 @@ Sur DeepSeek, le service a généré 20 % de tokens en plus (6,7k contre 5,6k) :
 le raisonnement n'était sans doute pas réglé pareil (budget côté service,
 défaut du template côté gufo).
 
-### Pourquoi l'avance de gufo fond en agentique : le cache
+### Le cache : la configuration compte
 
-- Dans une même conversation, gufo reprend 94 % du prompt (4,1k tokens
-  recalculés sur 68,3k pour le 27B) : aussi bien que le service.
-- À chaque nouvelle conversation (chaque scénario ouvre une session pi, même
-  prompt système d'environ 1,5k tokens, puis un nouveau message), gufo
-  recalcule tout : 14 ratés sur 16 en `cache_miss_reason=prefix_changed`
-  avec `common_prefix_tokens` de 1 508 à 1 517, et 0 token réutilisé. Le
-  premier appel n'avait pas encore de point de reprise ; seul le deuxième
-  (répétition exacte du premier) a été repris.
-- Même un prompt identique rate dès qu'une autre conversation s'est intercalée :
-  gufo semble ne savoir restaurer que la dernière conversation, et seulement
-  comme prolongement exact.
-- Le service, avec `cache-ram 12288` et `ctx-checkpoints 128`, reprend 1 077 à
-  1 538 tokens du préfixe commun sur ces mêmes requêtes.
-- Ces ratés représentent environ 23,5k des 27,7k tokens recalculés par gufo
-  sur le 27B. Ils annulent son prefill ×1,8 et son décode +40 % : égalité à
-  56 contre 57 s.
+- Dans une même conversation, gufo reprend le prompt dès la configuration par
+  défaut (94 % sur le 27B dans la première série).
+- Le préfixe commun de deux conversations différentes (même prompt système,
+  nouveau message) ne se reprend **qu'avec `--cache-disk`** : c'est le disque
+  qui garde les points de reprise des préfixes partagés (au plus 4 par
+  prompt, 128 tokens minimum). Sans lui, première série : 14 débuts de
+  conversation sur 16 recalculés en entier (`prefix_changed`, 1 508 à 1 517
+  tokens communs, 0 repris), même un prompt identique dès qu'une autre
+  conversation s'est intercalée.
+- Piège du 27B : un point de reprise pèse environ 165 Mo plus 0,1 Mo par token
+  (575 Mo à 5k tokens), au-delà du `--cache-disk-staging-bytes` par défaut de
+  512 Mio dès 4k tokens environ. Gufo renonce alors à l'écrire, sans le
+  signaler dans son journal. Flash-Next (170 à 190 Mo) et DeepSeek (45 à
+  57 Mo) restent loin de la limite aux tailles de prompt de pi.
+- Période d'apprentissage : le point de reprise du préfixe apparaît à la 3e
+  conversation qui le partage, et sert à partir de la 4e ou 5e. Mesuré sur un
+  prompt système de 5k tokens : premier token en 8,5 à 9,1 s, puis 0,66 à
+  0,74 s (5 045 tokens repris du disque).
+- Avec cette configuration, seconde série : 12 requêtes servies par le disque,
+  34 par la RAM, 3 ratés (l'apprentissage), soit 90 à 91 % du prompt repris,
+  autant ou plus que le service.
+- Pourquoi c'est décisif : en agentique, quand le cache marche, le prefill ne
+  pèse qu'une petite part du temps (29 s sur 168 pour le service sur le 27B),
+  et c'est le décode qui départage. Le prefill ×2 de gufo ne compte vraiment
+  que sur les prompts neufs (document collé, première requête d'une session).
 
 ## Verdict
 
-À ce jour, gufo ne remplace pas le service, même en ne gardant que ses trois
-modèles.
+Bien configuré (`--cache-disk`, staging relevé), gufo fait le même travail
+agentique en 30 % de temps en moins que le service sur le 27B (fichiers
+identiques) comme sur Flash-Next (quant de base contre le fine-tune Signal),
+et il gagne nettement sur les prompts neufs (prefill ×1,7 à ×3). C'est le
+premier moteur qui bat le service sur son propre terrain.
 
-- Gain réel en boucle agentique : +2 % (27B), +13 % (Flash-Next), +29 %
-  (DeepSeek, en partie grâce à une quant plus légère dont la justesse n'est
-  pas établie).
-- Pertes : le fine-tune Signal de Flash-Next et notre quant DeepSeek, le
-  n-gram (décode du code répété +58 % côté service sur Flash-Next), le routeur
-  multi-modèle, la WebUI, le préchargement, tout l'outillage du dépôt
-  (`models.ini`, `--spec-tune`, `qualif-modele.sh`), le budget de raisonnement,
-  et la stabilité (projet v0.1.0, commits quotidiens, deux contributeurs
-  principaux).
-- Ce qui changerait l'avis, par ordre d'importance : la reprise d'un préfixe
-  commun entre conversations (#259), un n-gram autonome (#239), la justesse
-  de DeepSeek en IQ2XXS (série de comptages à faire).
-- Piste la plus défendable si le besoin apparaît : gufo pour DeepSeek seul sur
-  des longs contextes neufs (prefill jusqu'à ×5), après contrôle de justesse.
+Il ne le remplace pas pour autant, faute de :
+
+- quants libres : le fine-tune Signal de Flash-Next et notre quant DeepSeek
+  sont refusés, DeepSeek passe en IQ2XXS (un comptage raté, justesse non
+  établie) ;
+- routeur : un modèle par processus, donc pas de bascule entre modèles, de
+  WebUI ni de préchargement, et tout l'outillage du dépôt (`models.ini`,
+  `--spec-tune`, `qualif-modele.sh`) serait à refaire ;
+- n-gram : le service décode le code répété 58 % plus vite sur Flash-Next
+  (banc HTTP) ; en agentique, gufo gagne quand même ;
+- budget de raisonnement, et stabilité (v0.1.0, commits quotidiens, deux
+  contributeurs principaux).
+
+Pistes, par ordre de faisabilité :
+
+1. Gufo à la place du service pour un seul modèle, le 27B de préférence
+   (mêmes fichiers, gain mesuré), lancé comme `serve-8009.sh gufo 27b` ; les
+   autres modèles du parc ne sont alors plus servis.
+2. Gufo en second moteur à côté du service, sur un autre port. Points durs :
+   la mémoire partagée (27B gufo environ 45 Gio) et deux points d'entrée.
+3. Attendre un routeur ou un aiguillage multi-modèle en amont (rien de suivi à
+   ce jour).
 
 ## Récupérer ses optimisations dans le service
 
@@ -181,7 +224,11 @@ gufo. Personne n'y a encore mentionné gufo.
 Publié le 24/09/2026 sous le compte c4software :
 
 - [#259](https://github.com/gufo-org/gufo/issues/259) : cache non réutilisé
-  entre conversations au même préfixe (le point bloquant, mesures ci-dessus).
+  entre conversations au même préfixe. Corrigé par nos soins le même soir en
+  deux commentaires : c'était en grande partie une configuration (`--cache-disk`
+  absent, staging trop petit pour le 27B), chiffres agentiques à l'appui. Restent
+  trois points pour gufo : limite de staging qui coupe en silence, préfixes
+  partagés réservés au disque, période d'apprentissage.
 - [#239](https://github.com/gufo-org/gufo/issues/239) : deux commentaires sur
   le n-gram. Le même jour, un contributeur y a publié un résultat négatif :
   recherche dans le prompt en complément de la MTP, greedy, +0,2 à 1,1 %
@@ -193,7 +240,7 @@ Publié le 24/09/2026 sous le compte c4software :
 
 | Ticket | Sujet | État au 24/09/2026 |
 |---|---|---|
-| #259 | reprise d'un préfixe commun entre conversations | ouvert (le nôtre) |
+| #259 | reprise d'un préfixe commun entre conversations | ouvert (le nôtre) ; contournement : `--cache-disk` + staging relevé |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert, confirmé par un second utilisateur |
 | #239 | n-gram (prompt lookup) | résultat négatif en greedy, clôture proposée |
 | #255 | GEMM W8A8 du prefill Flash-Next, +5 % (pwilkin) | non reproduit : débordement propre à clang 23 |
@@ -218,7 +265,14 @@ Tout est conservé sur bigchuck dans `~/llm/gufo-test` (hors du dépôt, hors de
   `deepseek`, `deepseek-antirez` (`flashnext` et `deepseek` côté gufo
   échouent au chargement, cf. plus haut).
 - `agentic.sh` : boucle pi, mêmes cas et même convention
-  (`PASSES=3` par défaut, garde-temps d'une heure).
+  (`PASSES=3` par défaut, garde-temps d'une heure). Première série : il
+  lance gufo sur `:8090` **sans** cache disque.
+- `serve-8009.sh` : met gufo à la place du service sur `:8009`
+  (`gufo 27b` ou `gufo flashnext`, nom exposé = section habituelle, cache
+  disque dans `~/llm/gufo-test/cache`, 16 Gio, staging 8 Gio),
+  `service` pour revenir, `logs` pour suivre les requêtes. La seconde série
+  agentique a été jouée contre lui (conteneur pi lancé à la main, sorties
+  `resultats/agentic/*-diskcache.*`).
 - `resultats/` : `resultats.tsv` (banc HTTP), `chargements.tsv`,
   `reponses/` (textes générés), journaux gufo, `agentic/` (sorties pi et
   journaux gufo par requête).
@@ -230,6 +284,8 @@ Tout est conservé sur bigchuck dans `~/llm/gufo-test` (hors du dépôt, hors de
 - Image `ghcr.io/gufo-org/toolboxes/gufo-runtime:latest` (8,3 Go).
 
 Pour rejouer contre une nouvelle version de gufo : `docker pull` de l'image,
-puis `./run.sh gufo 27b` et `./agentic.sh gufo 27b`. Ce sont les deux mesures
+puis `./run.sh gufo 27b` (banc HTTP) et, pour l'agentique, `./serve-8009.sh
+gufo 27b` suivi du conteneur pi pointé sur `:8009` (`agentic.sh` n'active pas
+le cache disque). Ce sont les deux mesures
 qui comparent les moteurs à fichiers identiques ; les chiffres du service
 ci-dessus sont la référence du 24/09/2026.
