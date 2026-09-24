@@ -61,7 +61,7 @@ agentiques ci-dessous donnent les deux séries.
 ## Banc HTTP (médianes, gufo contre service)
 
 | Modèle | prefill, prompt court (t/s) | prefill long (t/s) | décode, prose (t/s) | décode, code (t/s) | justesse | mémoire |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|
 | **Qwen3.8-27B** (dense, mêmes fichiers UD-Q4_K_XL + DFlash 2 Q8_0) | 547 contre 263, soit **+108 %** | 502 contre 213 à 52k, soit **+136 %** | 48,9 contre 35,7, soit **+37 %** | 65,9 contre 52,4, soit **+26 %** | OK / OK | 44 contre 54 Gio |
 | **Flash-Next** (MoE ; gufo UD-Q4_K_XL unsloth, service AP-Q4_K_XL Signal) | 1 391 contre 825, soit **+69 %** | 1 363 contre 964 à 52k, soit **+41 %** | non comparable (voir ci-dessous) | 61,6 contre 88,7, soit **-31 %** | OK / OK | 97 contre 106 Gio |
 | **DeepSeek V4 Flash** (MoE ; gufo IQ2XXS antirez 87 Go, service UD-IQ3_XXS 104 Go) | 402 contre 129, soit **+212 %** | 457 contre 88 à 42k, soit **+419 %** | 34,1 contre 31,0, soit **+10 %** | 38,3 contre 33,5, soit **+14 %** | **KO** gufo (comptage à 26k : 1 au lieu de 8) / OK | 104 contre 119 Gio |
@@ -242,17 +242,21 @@ Gufo Flash-Next sur `:8009` avec cache disque, cinq minutes d'usage réel,
 
 Comparaison des trois clients sur le même gufo (Flash-Next, cache disque) :
 
-| Session réelle | Claude Code via le proxy | omp (direct) | pi (direct) |
+| Session réelle | Claude Code via le proxy | Claude Code, proxy corrigé | omp (direct) | pi (direct) |
 |---|---|---|---|
-| Tours, contexte | 42, de 19,5k à 61,2k | 9, de 22,1k à 34,1k | 16, de 3,1k à 22,0k |
-| Reprise | disque, avant-dernier tour | RAM, tour précédent | RAM, tour précédent |
-| Prompt repris | 92,7 % | 86,2 % | 91,0 % |
-| Tokens recalculés deux fois | 64k sur 125k | 40 sur 34k | 7 sur 19k |
-| Premier tour (prompt système) | 16,7 s | 16,8 s (22k tokens) | 2,4 s (3,1k tokens) |
-| Premier token ensuite, médiane | 2,7 s | 1,0 s | **0,8 s** (0,3 à 3,0) |
-| Attente cumulée / génération | 150 / 122 s | 28 / 83 s | **18 / 97 s** |
-| Décode, médiane | 53 t/s | 40 t/s | 50 t/s |
-| Requêtes rejetées | 6 sur 50 (`stop`) | 0 | 0 |
+| Tours, contexte | 42, de 19,5k à 61,2k | 12, de 19,5k à 28,7k | 9, de 22,1k à 34,1k | 16, de 3,1k à 22,0k |
+| Reprise | disque, avant-dernier tour | RAM, tour précédent | RAM, tour précédent | RAM, tour précédent |
+| Prompt repris | 92,7 % | 90,5 % | 86,2 % | 91,0 % |
+| Tokens recalculés deux fois | 64k sur 125k | 7 sur 28k | 40 sur 34k | 7 sur 19k |
+| Premier tour (prompt système) | 16,7 s | 15,4 s | 16,8 s (22k tokens) | 2,4 s (3,1k tokens) |
+| Premier token ensuite, médiane | 2,7 s | **0,5 s** | 1,0 s | 0,8 s (0,3 à 3,0) |
+| Attente cumulée / génération | 150 / 122 s | 26 / 56 s | 28 / 83 s | 18 / 97 s |
+| Décode, médiane | 53 t/s | 46 t/s | 40 t/s | 50 t/s |
+| Requêtes rejetées | 6 sur 50 (`stop`) | 0 | 0 | 0 |
+
+Reste un coût propre à `--sessions 1` : une requête annexe de Claude Code
+(titre, 770 tokens) prend la place de la conversation en RAM, et le tour
+suivant repart du disque (2,3 s au lieu d'environ 0,5 s).
 
 Aucune session équivalente n'a été jouée sur le service : pas de comparaison
 directe pour cet usage.
