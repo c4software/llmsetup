@@ -343,7 +343,10 @@ Tout est conservé sur bigchuck dans `~/llm/gufo-test` (hors du dépôt, hors de
   changer, nom exposé `qwen3.8-27b` ou
   `qwen3.8-flash-next`, distinct des sections du service, cache
   disque dans `~/llm/gufo-test/cache`, 16 Gio, staging 8 Gio),
-  `service` pour revenir, `logs` pour suivre les requêtes. La seconde série
+  `service` pour revenir, `logs` pour suivre les requêtes. Le dernier lancé
+  repart seul au démarrage de bigchuck : gufo en `--restart unless-stopped`,
+  le service par le `restart: unless-stopped` de son compose (l'autre est
+  arrêté volontairement ou supprimé à chaque bascule). La seconde série
   agentique a été jouée contre lui (conteneur pi lancé à la main, sorties
   `resultats/agentic/*-diskcache.*`).
 - `resultats/` : `resultats.tsv` (banc HTTP), `chargements.tsv`,
