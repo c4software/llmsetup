@@ -1,5 +1,5 @@
 # lib/common.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → gufo → help
 
 # =============================================================================
 # Helpers
@@ -100,6 +100,11 @@ CONFIG_DIR="$MODELS_BASE"
 
 # Port du routeur llama-server (service --start et mesures via l'API)
 SERVER_PORT=8009
+
+# Conteneur du moteur alternatif gufo quand il tient SERVER_PORT à la place du
+# service (runtime-gufo/docker-compose.yml, lib/gufo.sh ; docs/GUFO.md).
+# Surchargeable pour les bancs (gufo-banc).
+GUFO_CONTENEUR="${GUFO_CONTENEUR:-gufo-8009}"
 
 # (BENCH_CONF / bench-devices.conf, le device retenu par GGUF, a été retiré le
 #  18/09/2026 : le moteur du service est une image construite en HIP seul, elle

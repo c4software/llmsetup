@@ -2,19 +2,22 @@
 # Récupère l'image de gufo et les GGUF de référence que gufo exige, aux
 # révisions épinglées par ses guides de modèles (docs/models/*/README.md du
 # dépôt gufo), dans GUFO_DATA/models (défaut ~/llm/gufo-test/models).
+# Appelé par ./setup-llm.sh --gufo-download, ou seul.
 #
 # Usage :
-#   runtime-gufo/telecharger.sh image       docker pull de l'image (8,3 Go)
-#   runtime-gufo/telecharger.sh flashnext   Flash-Next UD-Q4_K_XL unsloth, 4 shards (≈ 104 Go)
-#   runtime-gufo/telecharger.sh deepseek    DeepSeek V4 Flash IQ2XXS antirez + DSpark (≈ 93 Go)
-#   runtime-gufo/telecharger.sh 27b-q4km    drafter DFlash 2 Q4_K_M du 27B (1,1 Go ; le Q8_0 du parc suffit)
-#   runtime-gufo/telecharger.sh tout        image, flashnext, deepseek et 27b-q4km
+#   runtime-gufo/download.sh image       docker pull de l'image (8,3 Go)
+#   runtime-gufo/download.sh flashnext   Flash-Next UD-Q4_K_XL unsloth, 4 shards (≈ 104 Go)
+#   runtime-gufo/download.sh deepseek    DeepSeek V4 Flash IQ2XXS antirez + DSpark (≈ 93 Go)
+#   runtime-gufo/download.sh 27b-q4km    drafter DFlash 2 Q4_K_M du 27B (1,1 Go ; le Q8_0 du parc suffit)
+#   runtime-gufo/download.sh all         image, flashnext, deepseek et 27b-q4km
 #
 # Le 27B, la tête MTP et le mmproj de Flash-Next viennent du parc
 # (./setup-llm.sh --setup) : rien à télécharger pour eux. hf ne re-télécharge
 # pas un fichier déjà présent.
 set -euo pipefail
-source "$(dirname "$(realpath "$0")")/commun.sh"
+GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
+IMG="${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime:latest}"
+DL="$GUFO_DATA/models"
 
 telecharge() {
   case "$1" in
@@ -39,7 +42,7 @@ telecharge() {
 }
 
 mkdir -p "$DL"
-if [[ "${1:-}" == tout ]]; then
+if [[ "${1:-}" == all ]]; then
   for quoi in image flashnext deepseek 27b-q4km; do telecharge "$quoi"; done
 else
   telecharge "${1:-}"

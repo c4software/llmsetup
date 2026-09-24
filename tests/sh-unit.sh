@@ -368,6 +368,7 @@ _run_svc() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé
       source '$REPO_DIR/lib/setup.sh'
       source '$REPO_DIR/lib/runtime.sh'
       source '$REPO_DIR/lib/service.sh'
+      source '$REPO_DIR/lib/gufo.sh'
       $1" </dev/null 2>&1
 }
 
@@ -811,5 +812,65 @@ else
   echo "[FAIL] étiquette d'image impropre à une colonne TSV : '$etiquette'"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
+# (i) gufo, moteur alternatif sur le port du service (lib/gufo.sh,
+#     runtime-gufo/docker-compose.yml). Le .env porte les valeurs machine
+#     (uid:gid de l'hôte, gid NUMÉRIQUES, profil = modèle) ; le compose rendu
+#     par le vrai docker compose n'active que le modèle choisi, tourne sous
+#     l'utilisateur de l'hôte et ne laisse aucune variable ; --start du service
+#     refuse tant que gufo tient le port.
+mkdir -p "$SVC/repo/runtime-gufo"
+cp "$REPO_DIR/runtime-gufo/docker-compose.yml" "$SVC/repo/runtime-gufo/"
+GENV="$(_run_svc 'generate_gufo_env flashnext')"
+for attendu in "COMPOSE_PROFILES=flashnext" "COMPOSE_PROJECT_NAME=gufo" "GUFO_CONTENEUR=gufo-8009" \
+               "GUFO_RESTART=unless-stopped" "GUFO_PORT=8009" "GUFO_SESSIONS=2" \
+               "GID_RENDER=303" "GID_VIDEO=986" "SVC_UID=$(id -u)"; do
+  if grep -qxF -- "$attendu" <<<"$GENV"; then
+    echo "[OK]   gufo env : $attendu"
+  else
+    echo "[FAIL] gufo env : ligne absente : $attendu"; rc=1
+  fi
+done
+GENV_BANC="$(_run_svc 'generate_gufo_env 27b' "GUFO_PORT=8090 GUFO_RESTART=no GUFO_SESSIONS=1 GUFO_PROJET=gufo-banc")"
+if grep -qx "GUFO_PORT=8090" <<<"$GENV_BANC" && grep -qx "GUFO_RESTART=no" <<<"$GENV_BANC" \
+   && grep -qx "COMPOSE_PROJECT_NAME=gufo-banc" <<<"$GENV_BANC"; then
+  echo "[OK]   gufo env : réglages du banc (port, redémarrage, projet) surchargeables"
+else
+  echo "[FAIL] gufo env : les surcharges du banc ne passent pas"; rc=1
+fi
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  GD="$SVC/gufo-data"; mkdir -p "$GD"
+  for m in 27b flashnext 27b-q4km deepseek; do
+    sed "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=$m|; s|^GUFO_DATA=.*|GUFO_DATA=$GD|" <<<"$GENV" > "$GD/.env"
+    if out="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config 2>&1)" \
+       && svcs="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config --services 2>&1)"; then
+      if [[ "$svcs" == "$m" ]] && grep -qF "user: $(id -u):$(id -g)" <<<"$out" \
+         && grep -qF "container_name: gufo-8009" <<<"$out" && ! grep -q '\${' <<<"$out"; then
+        echo "[OK]   gufo compose : profil $m seul, utilisateur de l'hôte, aucune variable non résolue"
+      else
+        echo "[FAIL] gufo compose : rendu inattendu pour $m (services : $svcs)"; rc=1
+      fi
+    else
+      echo "[FAIL] gufo compose : refusé par docker compose pour $m : $out"; rc=1
+    fi
+  done
+else
+  echo "[SKIP] gufo compose : docker compose absent"
+fi
+echo true > "$SVC/etat/running"
+if out="$(_run_svc '_gufo_refuse')"; then
+  echo "[FAIL] gufo : --start devrait refuser quand gufo tient le port"; rc=1
+elif grep -q -- "--gufo-off" <<<"$out"; then
+  echo "[OK]   gufo : --start refuse tant que gufo tient le port (renvoie à --gufo-off)"
+else
+  echo "[FAIL] gufo : refus sans renvoi à --gufo-off : $out"; rc=1
+fi
+echo false > "$SVC/etat/running"
+if _run_svc '_gufo_refuse' >/dev/null; then
+  echo "[OK]   gufo : --start autorisé quand gufo ne tourne pas"
+else
+  echo "[FAIL] gufo : --start refusé alors que gufo ne tourne pas"; rc=1
+fi
+echo true > "$SVC/etat/running"
+
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd), gufo (.env, compose par profil, refus de --start) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
 exit "$rc"

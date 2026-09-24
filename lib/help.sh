@@ -1,5 +1,5 @@
 # lib/help.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → gufo → help
 
 # =============================================================================
 # help
@@ -136,6 +136,17 @@ Commandes :
   --status                 État du conteneur (docker compose ps) et réponse de
                            /health
   --logs [-f] [--tail N]   Journaux du conteneur (docker compose logs)
+  --gufo [modèle]          Met le moteur alternatif gufo à la place du service
+                           sur :$SERVER_PORT (docs/GUFO.md) : 27b (défaut), flashnext,
+                           27b-q4km, deepseek. Compose runtime-gufo/, .env
+                           généré dans GUFO_DATA (défaut ~/llm/gufo-test),
+                           2 sessions (GUFO_SESSIONS). Le dernier lancé, gufo
+                           ou service, repart seul au démarrage
+  --gufo-off               Supprime gufo et relance le service ; --start et
+                           --restart refusent tant que gufo tient le port
+  --gufo-logs              Requêtes de gufo au fil de l'eau
+  --gufo-download <quoi>   Image et GGUF de référence de gufo : image,
+                           flashnext, deepseek, 27b-q4km ou all
   --migrate-off-systemd    TEMPORAIRE (migration) : arrête, désactive et supprime
                            l'ancienne unité systemd user $SERVICE_NAME, recharge
                            systemd et vérifie que le port $SERVER_PORT est

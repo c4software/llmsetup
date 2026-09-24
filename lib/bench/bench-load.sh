@@ -1,5 +1,5 @@
 # lib/bench/bench-load.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → gufo → help
 # Sorti de bench.sh (trop gros). Réutilise _bench_select_presets de bench.sh.
 
 # =============================================================================

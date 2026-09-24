@@ -1,0 +1,211 @@
+# =============================================================================
+# gufo : moteur alternatif, à la place du service sur SERVER_PORT
+#
+# gufo (https://github.com/gufo-org/gufo) est un moteur HIP spécialisé Strix
+# Halo évalué le 24/09/2026 (docs/GUFO.md) : trois modèles de texte, UN par
+# processus, GGUF imposés. Il ne s'intègre pas au routeur du service : il prend
+# sa place sur le port, le temps d'un essai ou d'une mesure.
+#
+# Fichier VERSIONNÉ, source de vérité de la ligne de commande de gufo. Comme
+# runtime/docker-compose.yml pour le service, il ne porte aucune valeur propre
+# à une machine : tout ce qui varie est une variable ${VAR:?}, lue dans le .env
+# que ./setup-llm.sh --gufo écrit dans GUFO_DATA (lib/gufo.sh). Le .env porte
+# COMPOSE_FILE et COMPOSE_PROFILES, d'où l'usage à la main :
+#   cd ~/llm/gufo-test && docker compose ps | logs -f
+#
+# Un service par modèle, sélectionné par PROFIL (COMPOSE_PROFILES) : un seul à
+# la fois, même nom de conteneur, même port. Pilotage : ./setup-llm.sh --gufo
+# <modèle> | --gufo-off | --gufo-logs (jamais « compose restart » : --gufo
+# régénère le .env puis recrée le conteneur).
+#
+# Réglages communs (entrypoint ci-dessous) et leur origine, détaillés dans
+# docs/GUFO.md (« Paramètres de gufo et leur origine ») :
+#   --context 262144        contexte natif, celui du service (défaut gufo 4096)
+#   --sessions N            2 par défaut : la seconde évite qu'une requête
+#                           annexe du client (titre, résumé) évince la
+#                           conversation principale de la RAM (+7 Gio)
+#   --max-tokens 32768      défaut gufo 128 : un client qui n'envoie pas
+#                           max_tokens serait coupé
+#   --cache-disk …          seul chemin qui reprend le préfixe commun de deux
+#                           conversations ; staging 8 Gio car au défaut de
+#                           512 Mio les points de reprise du 27B sont abandonnés
+#                           en silence dès ~4,5k tokens. Changer la
+#                           configuration rend ce cache inutilisable.
+# Par modèle (command) : fichiers, spéculatif, nom exposé, échantillonnage
+# (Qwen officiel instruct, celui des sections nothink du service ; DeepSeek :
+# celui de la section deepseek-v4-flash), raisonnement.
+# =============================================================================
+
+# Nom par défaut ; lib/gufo.sh passe COMPOSE_PROJECT_NAME par le .env (gufo, ou
+# gufo-banc pour les bancs de runtime-gufo/bench/).
+name: gufo
+
+x-gufo: &gufo
+  image: ${GUFO_IMAGE:?}
+  # container_name figé par variable : _gufo_actif et --gufo-logs l'interrogent
+  # par docker inspect, et --start du service refuse tant qu'il tourne.
+  container_name: ${GUFO_CONTENEUR:?}
+  # unless-stopped pour l'usage réel : le dernier moteur lancé (gufo ou
+  # service) repart seul au démarrage de la machine, l'autre ayant été arrêté
+  # volontairement (service) ou supprimé (compose down). « no » pour les bancs.
+  restart: ${GUFO_RESTART:?}
+  devices:
+    - "/dev/kfd:/dev/kfd"
+    - "/dev/dri:/dev/dri"
+  # Comme le service : uid:gid de l'utilisateur qui lance (hôte, résolus par
+  # lib/gufo.sh), jamais root. L'image a son propre utilisateur gufo (uid
+  # 1000) ; le fixer à l'utilisateur de l'hôte garde le cache disque à lui
+  # quel que soit son uid.
+  user: "${SVC_UID:?}:${SVC_GID:?}"
+  # gid NUMÉRIQUES de render et video, résolus sur l'hôte (_compose_gid) : les
+  # noms n'existent pas dans l'image.
+  group_add:
+    - "${GID_RENDER:?}"
+    - "${GID_VIDEO:?}"
+  # Les poids sont mappés et épinglés : memlock illimité, comme la
+  # documentation de gufo le demande (--ulimit memlock=-1).
+  ulimits:
+    memlock:
+      soft: -1
+      hard: -1
+  ports:
+    - "0.0.0.0:${GUFO_PORT:?}:8080"
+  # Parc et GGUF de référence au MÊME chemin et en lecture seule (la ligne de
+  # commande porte des chemins absolus de l'hôte) ; le cache disque est le
+  # seul point inscriptible.
+  volumes:
+    - "${MODELS_BASE:?}:${MODELS_BASE:?}:ro"
+    - "${GUFO_DATA:?}/models:${GUFO_DATA:?}/models:ro"
+    - "${GUFO_DATA:?}/cache:${GUFO_DATA:?}/cache:rw"
+  # Partie commune de la ligne de commande ; la partie propre au modèle est
+  # dans « command » de chaque service (docker concatène les deux).
+  entrypoint:
+    - "gufo"
+    - "serve"
+    - "llm"
+    - "--host"
+    - "0.0.0.0"
+    - "--port"
+    - "8080"
+    - "--context"
+    - "262144"
+    - "--sessions"
+    - "${GUFO_SESSIONS:?}"
+    - "--max-tokens"
+    - "32768"
+    - "--cache-disk"
+    - "${GUFO_DATA:?}/cache"
+    - "--cache-disk-bytes"
+    - "17179869184"
+    - "--cache-disk-staging-bytes"
+    - "8589934592"
+
+services:
+  # Qwen3.8-27B, fichiers du parc (./setup-llm.sh --setup) : cible UD-Q4_K_XL,
+  # drafter DFlash 2 Q8_0 (adaptatif, 7 tokens max, défauts gufo).
+  27b:
+    <<: *gufo
+    profiles: ["27b"]
+    command:
+      - "--served-model-name"
+      - "qwen3.8-27b"
+      - "--model"
+      - "${MODELS_BASE:?}/qwen3.8-27b/Qwen3.8-27B-UD-Q4_K_XL.gguf"
+      - "--speculative"
+      - "dflash2"
+      - "--dflash-model"
+      - "${MODELS_BASE:?}/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q8_0.gguf"
+      - "--temperature"
+      - "0.7"
+      - "--top-k"
+      - "20"
+      - "--top-p"
+      - "0.8"
+      - "--min-p"
+      - "0.0"
+      - "--presence-penalty"
+      - "1.5"
+      - "--think"
+      - "off"
+
+  # Même cible, drafter DFlash 2 Q4_K_M recommandé par gufo
+  # (runtime-gufo/download.sh 27b-q4km) : mesuré identique au Q8_0 du parc.
+  27b-q4km:
+    <<: *gufo
+    profiles: ["27b-q4km"]
+    command:
+      - "--served-model-name"
+      - "qwen3.8-27b"
+      - "--model"
+      - "${MODELS_BASE:?}/qwen3.8-27b/Qwen3.8-27B-UD-Q4_K_XL.gguf"
+      - "--speculative"
+      - "dflash2"
+      - "--dflash-model"
+      - "${GUFO_DATA:?}/models/Qwen3.8-27B-DFlash2-Q4_K_M.gguf"
+      - "--temperature"
+      - "0.7"
+      - "--top-k"
+      - "20"
+      - "--top-p"
+      - "0.8"
+      - "--min-p"
+      - "0.0"
+      - "--presence-penalty"
+      - "1.5"
+      - "--think"
+      - "off"
+
+  # Qwen3.8-Flash-Next : cible UD-Q4_K_XL unsloth (runtime-gufo/download.sh
+  # flashnext ; gufo refuse le fine-tune Signal AP-Q4_K_XL du parc, tenseur
+  # IQ4_NL), tête MTP shared Q8_0 et mmproj BF16 du parc.
+  flashnext:
+    <<: *gufo
+    profiles: ["flashnext"]
+    command:
+      - "--served-model-name"
+      - "qwen3.8-flash-next"
+      - "--model"
+      - "${GUFO_DATA:?}/models/qwen3.8-flash-next/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf"
+      - "--speculative"
+      - "mtp"
+      - "--mtp-model"
+      - "${MODELS_BASE:?}/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"
+      - "--mmproj"
+      - "${MODELS_BASE:?}/qwen3.8-flash-next/mmproj-BF16.gguf"
+      - "--temperature"
+      - "0.7"
+      - "--top-k"
+      - "20"
+      - "--top-p"
+      - "0.8"
+      - "--min-p"
+      - "0.0"
+      - "--presence-penalty"
+      - "1.5"
+      - "--think"
+      - "off"
+
+  # DeepSeek V4 Flash : seule quant acceptée, IQ2XXS d'antirez + DSpark
+  # (runtime-gufo/download.sh deepseek ; l'UD-IQ3_XXS du parc est refusé). Un
+  # comptage raté à 26k tokens : justesse non établie, pour les bancs.
+  # Raisonnement laissé au gabarit (pas de budget chez gufo).
+  deepseek:
+    <<: *gufo
+    profiles: ["deepseek"]
+    command:
+      - "--served-model-name"
+      - "deepseek-v4-flash"
+      - "--model"
+      - "${GUFO_DATA:?}/models/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf"
+      - "--speculative"
+      - "dspark"
+      - "--dspark-model"
+      - "${GUFO_DATA:?}/models/DeepSeek-V4-Flash-DSpark-support-0731.gguf"
+      - "--temperature"
+      - "1.0"
+      - "--top-k"
+      - "40"
+      - "--top-p"
+      - "0.95"
+      - "--min-p"
+      - "0.0"

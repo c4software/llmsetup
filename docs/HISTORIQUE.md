@@ -31,7 +31,7 @@ des mesures dans [`docs/GUFO.md`](GUFO.md).
 - Verdict : gufo bat le service en agentique une fois configuré, mais ne le
   remplace pas (quants imposées, un modèle par processus, pas de n-gram).
   Issue amont [#259](https://github.com/gufo-org/gufo/issues/259) ouverte puis
-  corrigée par nos soins (configuration). Banc, `serve-8009.sh` et GGUF de
+  corrigée par nos soins (configuration). Banc (`runtime-gufo/`, piloté par `./setup-llm.sh --gufo`) et GGUF de
   référence conservés sur bigchuck dans `~/llm/gufo-test`.
 
 ## Flash-Next face à halogen-flash-server, micro-lot et n-gram (22/09/2026)

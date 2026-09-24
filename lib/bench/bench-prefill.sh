@@ -1,5 +1,5 @@
 # lib/bench/bench-prefill.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → bench-prefill → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → bench-prefill → spec → service → gufo → help
 # Réutilise de bench.sh : _bench_select_one ; de common.sh : _llama_build, _ec_power_mode.
 
 # =============================================================================

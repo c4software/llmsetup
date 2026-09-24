@@ -5,9 +5,8 @@ Strix Halo, évalué contre le service le 24/09/2026 : mesures, verdict,
 paramètres et tickets amont dans [`docs/GUFO.md`](../docs/GUFO.md). En
 résumé : bien configuré, il fait le même travail agentique en 30 % de temps
 en moins sur le 27B et Flash-Next, mais il ne sert qu'un modèle par
-processus et n'accepte que ses propres GGUF. Ces scripts ne l'intègrent pas
-au service : ils le mettent à sa place sur `:8009` le temps d'un essai, ou
-le mesurent contre lui.
+processus et n'accepte que ses propres GGUF. Il ne s'intègre pas au routeur
+du service : il **prend sa place** sur `:8009`, les deux sont exclusifs.
 
 ## Mise en route, depuis un clone
 
@@ -15,24 +14,32 @@ Sur la machine du service (bigchuck), le service déjà installé
 (`./setup-llm.sh --setup`, qui télécharge les GGUF du parc) :
 
 ```bash
-runtime-gufo/telecharger.sh image        # l'image de gufo (8,3 Go)
-runtime-gufo/telecharger.sh flashnext    # Flash-Next UD-Q4_K_XL (104 Go), seulement pour flashnext
-runtime-gufo/serve-8009.sh gufo 27b      # ou : gufo flashnext
+./setup-llm.sh --gufo-download image       # l'image de gufo (8,3 Go)
+./setup-llm.sh --gufo-download flashnext   # Flash-Next UD-Q4_K_XL (104 Go), seulement pour flashnext
+./setup-llm.sh --gufo 27b                  # ou : --gufo flashnext
+./setup-llm.sh --gufo-off                  # retour au service
 ```
 
 Le 27B tourne avec les fichiers du parc, rien d'autre à télécharger.
-Retour au service : `runtime-gufo/serve-8009.sh service`. Chaque script
-affiche son aide sans argument.
+`./setup-llm.sh --status` dit qui tient le port, `--gufo-logs` suit les
+requêtes de gufo.
 
-## Les scripts
+## Le dossier
 
-| Script | Rôle |
+| Fichier | Rôle |
 |---|---|
-| `serve-8009.sh gufo [27b\|flashnext]` / `service` / `logs` | Bascule `:8009` entre gufo et le service ; le dernier lancé repart seul au démarrage de la machine |
-| `telecharger.sh image\|flashnext\|deepseek\|27b-q4km\|tout` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides |
+| `docker-compose.yml` | La description de gufo, versionnée : un service par modèle (`27b`, `flashnext`, `27b-q4km`, `deepseek`) sélectionné par profil, ligne de commande complète, utilisateur de l'hôte, `restart: ${GUFO_RESTART}`. Aucune valeur machine : tout vient du `.env` |
+| `download.sh image\|flashnext\|deepseek\|27b-q4km\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --gufo-download`) |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
-| `commun.sh` | Sourcé par les autres : chemins, image, fichiers et arguments de gufo par modèle, échantillonnage, cache disque |
+
+Le `.env` est généré par `./setup-llm.sh --gufo` (`lib/gufo.sh`) dans
+`GUFO_DATA`, comme celui du service dans `~/models`. Il porte `COMPOSE_FILE`
+et `COMPOSE_PROFILES`, d'où l'usage à la main :
+
+```bash
+cd ~/llm/gufo-test && docker compose ps     # ou logs -f
+```
 
 Nom exposé par gufo : `qwen3.8-27b` ou `qwen3.8-flash-next` (via le proxy :
 `bigchuck/<nom>`), distinct des sections du service.
@@ -42,19 +49,25 @@ Nom exposé par gufo : `qwen3.8-27b` ou `qwen3.8-flash-next` (via le proxy :
 Hors du dépôt et hors de `~/models` (où `--cleanup` les verrait orphelines),
 dans `GUFO_DATA`, par défaut `~/llm/gufo-test` :
 
-- `models/` : GGUF de référence de gufo (`telecharger.sh`) ;
+- `.env` (usage réel) et `banc.env` (bancs) : générés ;
+- `models/` : GGUF de référence de gufo (`--gufo-download`) ;
 - `cache/` : cache disque de gufo (16 Gio au plus) ;
 - `resultats/` : sorties des bancs.
 
-Variables : `GUFO_DATA`, `MODELS_BASE` (défaut `~/models`), `GUFO_IMAGE`,
-`SESSIONS` (serve et banc agentique), `PASSES` (banc agentique).
+Variables : `GUFO_DATA`, `GUFO_IMAGE`, `GUFO_SESSIONS` (défaut 2 ; `SESSIONS`
+pour les bancs, défaut 1), `PASSES` (banc agentique). Les bancs posent
+eux-mêmes `GUFO_PROJET=gufo-banc`, `GUFO_CONTENEUR=gufo-banc`,
+`GUFO_RESTART=no` et leur `.env`.
 
 ## Règles
 
-- Jamais deux moteurs sur le GPU : chaque script arrête le service avant de
-  lancer gufo, et les bancs le relancent à la sortie. Ne pas lancer
-  `./setup-llm.sh --start` pendant que gufo tient `:8009`.
-- Garder la configuration de gufo stable : la changer (`--sessions`…) rend
+- Un seul moteur à la fois sur `:8009` : `--gufo` arrête le service,
+  `--gufo-off` supprime gufo et relance le service, `--start` et `--restart`
+  refusent tant que gufo tourne. Le dernier lancé repart seul au démarrage
+  de la machine.
+- Les bancs retirent un gufo d'usage réel au départ et relancent le service
+  à la fin.
+- Garder la configuration de gufo stable : la changer (`GUFO_SESSIONS`…) rend
   son cache disque inutilisable.
 - Le proxy (llm-proxy) doit retirer `stop` des requêtes Anthropic pour gufo
   (`anthropic_drop_fields = ["stop"]` sous le backend), à enlever au retour

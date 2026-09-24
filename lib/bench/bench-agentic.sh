@@ -1,5 +1,5 @@
 # lib/bench/bench-agentic.sh — sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → gufo → help
 #
 # Séparé de bench.sh (déjà gros) : ce bench ne mesure pas l'API en direct
 # mais un client (pi) en conteneur, avec sa propre lecture des /metrics.

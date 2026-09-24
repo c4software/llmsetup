@@ -4,27 +4,37 @@
 # aiguille, reprise de cache au tour 2). Résultats dans GUFO_DATA/resultats/.
 #
 # Usage :
-#   runtime-gufo/bench/run.sh gufo  <cas>...   gufo sur :8090 ; le service est
+#   runtime-gufo/bench/run.sh gufo  <cas>...   gufo sur :8009 ; le service est
 #                                              arrêté et relancé à la sortie (trap)
 #   runtime-gufo/bench/run.sh llama <cas>...   la section équivalente du service
 #
-# Cas gufo : 27b, 27b-q4km, flashnext, deepseek (fichiers : commun.sh)
+# Cas gufo : 27b, 27b-q4km, flashnext, deepseek (services de runtime-gufo/docker-compose.yml)
 # Cas llama : 27b, flashnext, flashnext-large-ub, deepseek
 #
-# Réglage gufo de ce banc : 1 session, pas de cache disque (chaque requête a
-# un préfixe aléatoire, aucune reprise n'est possible), celui des mesures du
-# 24/09/2026.
+# Réglage gufo de ce banc : celui du compose (cache disque compris), 1 session
+# (SESSIONS=N), port 8009 (celui du service, exclusifs), sans redémarrage
+# automatique. Un gufo d'usage réel est retiré au départ ; le service est
+# relancé à la fin. Chaque requête a un préfixe aléatoire, le cache disque ne sert donc pas ici ; les mesures du
+# 24/09/2026 ont été faites sans lui (la seule différence, les écritures de
+# points de reprise, n'entre pas dans le premier token).
 set -euo pipefail
-source "$(dirname "$(realpath "$0")")/../commun.sh"
-PORT=8090
-NOM=gufo-banc
+DEPOT="$(realpath "$(dirname "$(realpath "$0")")/../..")"
+GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
+PORT=8009
+# gufo du banc : compose de runtime-gufo/, lancé par ./setup-llm.sh --gufo sur
+# le même port que le service (ils sont exclusifs), sans redémarrage
+# automatique, avec projet, conteneur et .env séparés de ceux de l'usage réel.
+export GUFO_DATA GUFO_PORT=$PORT GUFO_RESTART=no GUFO_SESSIONS="${SESSIONS:-1}" \
+  GUFO_PROJET=gufo-banc GUFO_CONTENEUR=gufo-banc GUFO_ENV_FILE="$GUFO_DATA/banc.env"
 RES="$GUFO_DATA/resultats"
 mkdir -p "$RES"
 STOPPE=0
 
 fin() {
-  docker rm -f "$NOM" >/dev/null 2>&1 || true
-  if ((STOPPE)); then "$DEPOT/setup-llm.sh" --start; fi
+  GUFO_SANS_SERVICE=1 "$DEPOT/setup-llm.sh" --gufo-off >/dev/null 2>&1 || true
+  if ((STOPPE)) && [[ "$(docker inspect -f '{{.State.Running}}' llama-server 2>/dev/null || true)" != true ]]; then
+    "$DEPOT/setup-llm.sh" --start
+  fi
   return 0
 }
 trap fin EXIT
@@ -41,31 +51,34 @@ section() {  # cas -> section du models.ini
 
 run_gufo() {
   local cas="$1" label="gufo-$1" t0 t1 nom_modele
-  gufo_modele "$cas" || return 1
-  if ! ((STOPPE)); then "$DEPOT/setup-llm.sh" --stop; STOPPE=1; fi
+  if ! ((STOPPE)); then
+    # Port à libérer : le service, et un éventuel gufo d'usage réel (projet
+    # gufo, conteneur gufo-8009). Le banc rend la main au service à la fin.
+    GUFO_PROJET=gufo GUFO_CONTENEUR=gufo-8009 GUFO_ENV_FILE="$GUFO_DATA/.env" \
+      GUFO_SANS_SERVICE=1 "$DEPOT/setup-llm.sh" --gufo-off >/dev/null 2>&1 || true
+    "$DEPOT/setup-llm.sh" --stop; STOPPE=1
+  fi
   t0=$(date +%s.%N)
-  if ! gufo_lance "$NOM" "$PORT" no "${MODELE[@]}" --context 262144 --sessions 1 \
-       >"$RES/$label.echec.log" 2>&1; then
-    echo "ÉCHEC du démarrage de $label :"; tail -25 "$RES/$label.echec.log"
+  if ! "$DEPOT/setup-llm.sh" --gufo "$cas" >"$RES/$label.lancement.log" 2>&1; then
+    echo "ÉCHEC du démarrage de $label :"; tail -25 "$RES/$label.lancement.log"
     return 1
   fi
-  rm -f "$RES/$label.echec.log"
   t1=$(date +%s.%N)
   printf '%s\t%s\tchargement %.1f s\n' "$(date +%FT%T)" "$label" \
     "$(awk -v a="$t0" -v b="$t1" 'BEGIN{print b-a}')" | tee -a "$RES/chargements.tsv"
   nom_modele="$(curl -s "localhost:$PORT/v1/models" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')"
-  python3 "$GUFO_DIR/bench/mesure.py" "http://localhost:$PORT" "$nom_modele" "$label" "$RES" "$DEPOT/prompts" || true
+  python3 "$DEPOT/runtime-gufo/bench/mesure.py" "http://localhost:$PORT" "$nom_modele" "$label" "$RES" "$DEPOT/prompts" || true
   printf '%s\t%s\tmémoire utilisée %s Mio\n' "$(date +%FT%T)" "$label" \
     "$(free -m | awk '/^Mem/{print $3}')" | tee -a "$RES/chargements.tsv"
-  docker logs "$NOM" >"$RES/$label.log" 2>&1
-  docker rm -f "$NOM" >/dev/null
+  docker logs "$GUFO_CONTENEUR" >"$RES/$label.log" 2>&1
+  GUFO_SANS_SERVICE=1 "$DEPOT/setup-llm.sh" --gufo-off >/dev/null
 }
 
 run_llama() {
   local cas="$1" label="llama-$1" sec
   sec="$(section "$cas")"
   if ((STOPPE)); then "$DEPOT/setup-llm.sh" --start; STOPPE=0; fi
-  python3 "$GUFO_DIR/bench/mesure.py" "http://localhost:8009" "$sec" "$label" "$RES" "$DEPOT/prompts" || true
+  python3 "$DEPOT/runtime-gufo/bench/mesure.py" "http://localhost:8009" "$sec" "$label" "$RES" "$DEPOT/prompts" || true
   printf '%s\t%s\tmémoire utilisée %s Mio\n' "$(date +%FT%T)" "$label" \
     "$(free -m | awk '/^Mem/{print $3}')" | tee -a "$RES/chargements.tsv"
 }

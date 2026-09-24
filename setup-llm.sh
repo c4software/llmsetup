@@ -48,6 +48,7 @@ source "$SCRIPT_DIR/lib/bench/bench-agentic.sh"
 source "$SCRIPT_DIR/lib/bench/bench-prefill.sh"
 source "$SCRIPT_DIR/lib/spec.sh"
 source "$SCRIPT_DIR/lib/service.sh"
+source "$SCRIPT_DIR/lib/gufo.sh"
 source "$SCRIPT_DIR/lib/help.sh"
 
 # =============================================================================
@@ -78,6 +79,10 @@ case "${1:-}" in
   --status)            cmd_status ;;
   --logs)              shift; cmd_logs "$@" ;;
   --migrate-off-systemd) cmd_migrate_off_systemd ;;
+  --gufo)              cmd_gufo "${2:-}" ;;
+  --gufo-off)          cmd_gufo_off ;;
+  --gufo-logs)         cmd_gufo_logs ;;
+  --gufo-download)     cmd_gufo_download "${2:-}" ;;
   --help | -h)         cmd_help ;;
   *) cmd_help >&2; error "Commande inconnue : '$1'" ;;
 esac

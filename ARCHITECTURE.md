@@ -469,19 +469,30 @@ avant la mesure) : prefill et décode à 0 / 16k / 32k (64k sur demande), KV
 en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 `logs/bench-depth.log` + `.tsv`.
 
-## gufo, hors du service (`runtime-gufo/`)
+## gufo, à la place du service (`lib/gufo.sh`, `runtime-gufo/`)
 
 Moteur alternatif évalué le 24/09/2026 (`docs/GUFO.md`), jamais intégré au
-service ni à `setup-llm.sh` : un modèle par processus, GGUF imposés.
-`runtime-gufo/serve-8009.sh` le met à la place du service sur `:8009` (arrêt
-et relance par `setup-llm.sh --stop` / `--start`, conteneur `gufo-8009` en
-`docker run`, aucun `docker compose` du service) ; `telecharger.sh` récupère
-l'image et les GGUF de référence ; `bench/run.sh` (banc HTTP,
-`bench/mesure.py`) et `bench/agentic.sh` (boucle pi de `bench-agentic/`) le
-mesurent contre le service, sur `:8090`, service arrêté puis relancé par trap.
-`commun.sh` porte les chemins, l'image et les arguments par modèle. Données
-dans `GUFO_DATA` (défaut `~/llm/gufo-test`), hors du dépôt et de `~/models`.
-Détail : `runtime-gufo/README.md`.
+routeur : un modèle par processus, GGUF imposés. Il PREND LA PLACE du service
+sur `SERVER_PORT` (8009), les deux étant exclusifs (même port, un GPU). Même
+schéma que le service : compose versionné `runtime-gufo/docker-compose.yml`
+(un service par modèle, sélectionné par profil ; partie commune de la ligne de
+commande dans l'entrypoint, partie propre au modèle dans `command`), `.env`
+généré par `lib/gufo.sh` dans `GUFO_DATA` (défaut `~/llm/gufo-test`, hors du
+dépôt et de `~/models`) avec les seules valeurs machine : uid:gid de l'hôte,
+gid NUMÉRIQUES de render et video, chemins, port, sessions, politique de
+redémarrage, `COMPOSE_FILE` et `COMPOSE_PROFILES` (usage manuel :
+`cd ~/llm/gufo-test && docker compose ps`). Commandes : `--gufo [modèle]`
+(`.env`, arrêt du service, `compose down` puis `up -d`, attente de `/health` ;
+en cas d'échec gufo est retiré et le service relancé), `--gufo-off` (`compose
+down` puis `--start`), `--gufo-logs`, `--gufo-download` (délègue à
+`runtime-gufo/download.sh`). Garde : `--start` et `--restart` refusent tant
+que le conteneur `GUFO_CONTENEUR` (`gufo-8009`) tourne (`_gufo_refuse`,
+`lib/svc.sh`) ; `--status` dit quand c'est gufo qui répond. Le dernier moteur
+lancé repart seul au démarrage (`restart: unless-stopped` des deux côtés,
+l'autre étant arrêté ou supprimé). Les bancs `runtime-gufo/bench/run.sh`
+(HTTP, `bench/mesure.py`) et `bench/agentic.sh` (boucle pi) lancent gufo par
+`--gufo` avec leurs propres valeurs (`GUFO_PROJET=gufo-banc`, conteneur
+`gufo-banc`, `GUFO_RESTART=no`, `.env` séparé), sur le même port.
 
 ## Moteur conteneurisé (`runtime/`)
 

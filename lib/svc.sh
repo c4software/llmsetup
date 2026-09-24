@@ -1,5 +1,5 @@
 # lib/svc.sh - sourcé par setup-llm.sh (ne pas exécuter directement)
-# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → help
+# Ordre de source : common → svc → models → ini → compose → preload → setup → runtime → bench → bench-parallel → bench-cache → bench-load → bench-agentic → spec → service → gufo → help
 
 # =============================================================================
 # Pilotage du service - couche unique au-dessus de docker compose
@@ -53,6 +53,21 @@ _svc_installed() {
 _svc_is_active() {
   command -v docker >/dev/null 2>&1 || return 1
   [[ "$(docker inspect -f '{{.State.Running}}' "$SERVICE_NAME" 2>/dev/null || true)" == "true" ]]
+}
+
+# _gufo_actif - gufo tient-il SERVER_PORT à la place du service ? Les deux ne
+# peuvent pas coexister (même port, un seul GPU) : --start et --restart
+# refusent tant qu'il tourne, --gufo-off le retire et relance le service.
+_gufo_actif() {
+  command -v docker >/dev/null 2>&1 || return 1
+  [[ "$(docker inspect -f '{{.State.Running}}' "$GUFO_CONTENEUR" 2>/dev/null || true)" == "true" ]]
+}
+
+_gufo_refuse() {
+  if _gufo_actif; then
+    error "gufo tient :$SERVER_PORT (conteneur $GUFO_CONTENEUR) - ./setup-llm.sh --gufo-off pour revenir au service"
+  fi
+  return 0
 }
 
 # _svc_wait_ready [timeout=300] - attendre que le routeur réponde.
@@ -153,6 +168,7 @@ _svc_logs() {
 # seul et connu, et c'est ce qui rend la garde sans objet.
 cmd_start() {
   [[ -f "$CONFIG_DIR/models.ini" ]] || error "Config introuvable - lance d'abord --setup"
+  _gufo_refuse
   _compose_check || error "Le service ne peut pas démarrer ici (voir ci-dessus)."
 
   load_preload_conf
@@ -175,6 +191,7 @@ cmd_stop() {
 }
 
 cmd_restart() {
+  _gufo_refuse
   info "Redémarrage de $SERVICE_NAME (.env régénéré, conteneur recréé)..."
   _svc_restart || error "Redémarrage de $SERVICE_NAME en échec - ./setup-llm.sh --logs --tail 50"
   info "✅ $SERVICE_NAME redémarré et prêt sur $SPEC_TEST_URL."
@@ -196,6 +213,10 @@ cmd_status() {
       warn "$SERVICE_NAME en marche mais /health ne répond pas encore (préchargement ?)."
       warn "  Suivre : ./setup-llm.sh --logs -f"
     fi
+  elif _gufo_actif; then
+    info "gufo tient :$SERVER_PORT à la place du service (conteneur $GUFO_CONTENEUR) :"
+    info "  $(curl -s "$SPEC_TEST_URL/v1/models" 2>/dev/null | head -c 200)"
+    info "  Retour au service : ./setup-llm.sh --gufo-off"
   else
     warn "$SERVICE_NAME n'est pas en marche - ./setup-llm.sh --start"
   fi
