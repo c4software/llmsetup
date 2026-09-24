@@ -212,7 +212,7 @@ Pistes, par ordre de faisabilité :
 3. Attendre un routeur ou un aiguillage multi-modèle en amont (rien de suivi à
    ce jour).
 
-### Sessions réelles (Claude Code via le proxy, puis omp, 24/09/2026 au soir)
+### Sessions réelles (Claude Code via le proxy, omp, pi, 24/09/2026 au soir)
 
 Gufo Flash-Next sur `:8009` avec cache disque, cinq minutes d'usage réel,
 42 tours principaux, contexte de 19,5k à 61,2k tokens :
@@ -233,6 +233,20 @@ Gufo Flash-Next sur `:8009` avec cache disque, cinq minutes d'usage réel,
 - 6 requêtes sur 50 rejetées en `unsupported_field` : le proxy traduit les
   `stop_sequences` Anthropic en `stop`, que gufo refuse (reproduit, issue
   [#260](https://github.com/gufo-org/gufo/issues/260)).
+
+Comparaison des trois clients sur le même gufo (Flash-Next, cache disque) :
+
+| Session réelle | Claude Code via le proxy | omp (direct) | pi (direct) |
+|---|---|---|---|
+| Tours, contexte | 42, de 19,5k à 61,2k | 9, de 22,1k à 34,1k | 16, de 3,1k à 22,0k |
+| Reprise | disque, avant-dernier tour | RAM, tour précédent | RAM, tour précédent |
+| Prompt repris | 92,7 % | 86,2 % | 91,0 % |
+| Tokens recalculés deux fois | 64k sur 125k | 40 sur 34k | 7 sur 19k |
+| Premier tour (prompt système) | 16,7 s | 16,8 s (22k tokens) | 2,4 s (3,1k tokens) |
+| Premier token ensuite, médiane | 2,7 s | 1,0 s | **0,8 s** (0,3 à 3,0) |
+| Attente cumulée / génération | 150 / 122 s | 28 / 83 s | **18 / 97 s** |
+| Décode, médiane | 53 t/s | 40 t/s | 50 t/s |
+| Requêtes rejetées | 6 sur 50 (`stop`) | 0 | 0 |
 
 Aucune session équivalente n'a été jouée sur le service : pas de comparaison
 directe pour cet usage.
