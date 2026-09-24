@@ -281,7 +281,8 @@ Tout est conservé sur bigchuck dans `~/llm/gufo-test` (hors du dépôt, hors de
   (`PASSES=3` par défaut, garde-temps d'une heure). Première série : il
   lance gufo sur `:8090` **sans** cache disque.
 - `serve-8009.sh` : met gufo à la place du service sur `:8009`
-  (`gufo 27b` ou `gufo flashnext`, nom exposé = section habituelle, cache
+  (`gufo 27b` ou `gufo flashnext`, nom exposé `qwen3.8-27b` ou
+  `qwen3.8-flash-next`, distinct des sections du service, cache
   disque dans `~/llm/gufo-test/cache`, 16 Gio, staging 8 Gio),
   `service` pour revenir, `logs` pour suivre les requêtes. La seconde série
   agentique a été jouée contre lui (conteneur pi lancé à la main, sorties
