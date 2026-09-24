@@ -10,6 +10,24 @@ Trois séries de mesures cohabitent ici et ne se comparent jamais entre elles :
 le paquet Arch (`bNNNNN`), le fork strix-llama.cpp (`strix-<commit>`) et, depuis
 le 18/09/2026, l'image ROCm du service (`strix-<engine>+r<rocm>`).
 
+## gufo face au service (24/09/2026)
+
+Évaluation de gufo (moteur HIP spécialisé Strix Halo, MIT, v0.1.0, commit
+`9cad139`) sur ses trois modèles de texte, tous dans le parc, contre l'image
+`strix-8c1c282+r7dda3ac`. Détail complet, protocole, tickets amont et reprise
+des mesures dans [`docs/GUFO.md`](GUFO.md).
+
+- Banc HTTP, 27B à fichiers identiques : prefill 547 contre 263 t/s (+108 %),
+  décode 48,9 contre 35,7 (+37 %). Flash-Next et DeepSeek sur des quants
+  différentes (gufo refuse les nôtres) : prefill +69 % et +212 %.
+- Boucle agentique pi, 16/16 partout : 27B 56 contre 57 s par passe, Flash-Next
+  39 contre 44 s, DeepSeek 90 contre 116 s. L'avance fond parce que gufo ne
+  reprend pas le préfixe commun d'une nouvelle conversation (14 ratés sur 16,
+  30 % du prompt recalculé contre 8 % au service sur le 27B).
+- Verdict : pas de remplacement du service. Issue amont
+  [#259](https://github.com/gufo-org/gufo/issues/259) ouverte sur le cache.
+  Banc et GGUF de référence conservés sur bigchuck dans `~/llm/gufo-test`.
+
 ## Flash-Next face à halogen-flash-server, micro-lot et n-gram (22/09/2026)
 
 Journée de comparaison sur bigchuck, image `strix-8c1c282+r7dda3ac`, ROCm0,
