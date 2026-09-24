@@ -254,9 +254,17 @@ Comparaison des trois clients sur le même gufo (Flash-Next, cache disque) :
 | Décode, médiane | 53 t/s | 46 t/s | 40 t/s | 50 t/s |
 | Requêtes rejetées | 6 sur 50 (`stop`) | 0 | 0 | 0 |
 
-Reste un coût propre à `--sessions 1` : une requête annexe de Claude Code
-(titre, 770 tokens) prend la place de la conversation en RAM, et le tour
-suivant repart du disque (2,3 s au lieu d'environ 0,5 s).
+Avec `--sessions 1`, une requête annexe de Claude Code (titre, 770 tokens)
+prend la place de la conversation en RAM, et le tour suivant repart du disque
+(2,3 s au lieu d'environ 0,5 s). Avec `--sessions 2` (défaut de
+`serve-8009.sh` depuis le 24/09/2026), la seconde session coûte 7 Gio sur
+Flash-Next (100,4 Gio de GPU contre 93,4, 26,7 Gio de RAM encore libres) et
+règle le problème : même scénario Claude Code, 11 tours de suivi sur 11 repris
+depuis la RAM, aucun depuis le disque, y compris après une requête annexe de
+29,8k tokens ; une petite requête annexe tourne en parallèle du tour principal
+(`batch_width=2`) ; décode inchangé (46 t/s). Changer la configuration du
+serveur vide le cache disque (le prompt système de Claude Code repart en
+`no_checkpoint`) : la fixer une fois pour toutes.
 
 Aucune session équivalente n'a été jouée sur le service : pas de comparaison
 directe pour cet usage.
@@ -331,7 +339,8 @@ Tout est conservé sur bigchuck dans `~/llm/gufo-test` (hors du dépôt, hors de
   (`PASSES=3` par défaut, garde-temps d'une heure). Première série : il
   lance gufo sur `:8090` **sans** cache disque.
 - `serve-8009.sh` : met gufo à la place du service sur `:8009`
-  (`gufo 27b` ou `gufo flashnext`, nom exposé `qwen3.8-27b` ou
+  (`gufo 27b` ou `gufo flashnext`, 2 sessions par défaut, `SESSIONS=N` pour
+  changer, nom exposé `qwen3.8-27b` ou
   `qwen3.8-flash-next`, distinct des sections du service, cache
   disque dans `~/llm/gufo-test/cache`, 16 Gio, staging 8 Gio),
   `service` pour revenir, `logs` pour suivre les requêtes. La seconde série
