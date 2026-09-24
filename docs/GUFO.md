@@ -134,6 +134,19 @@ Première série, sans cache disque (pour mémoire) :
 | temps en prefill / décode | 63 / 101 s | 30 / 82 s | **92 / 179 s** | 102 / 255 s |
 | prefill / décode réels (t/s) | 438 / 45,9 | 897 / 50,7 | **300 / 31,1** | 111 / 26,3 |
 
+Lire les débits agentiques avec prudence : le prefill « réel » est une
+moyenne dominée par de minuscules morceaux, puisque presque tout vient du
+cache. Gufo sur Flash-Next (cache disque) : 37 requêtes de moins de 100
+tokens recalculés à 131 t/s en moyenne (le coût fixe de la requête domine),
+9 de 100 à 499 tokens à 470 t/s, 3 de 500 à 1 999 tokens à 1 172 t/s. Le
+temps passé en prefill (16 s sur tout le run) dit plus que le débit moyen.
+Le décode de Flash-Next (51 t/s) est son régime normal (parc : 46,7 au
+`--bench`) ; le 27B dense s'en approche (46 t/s) grâce aux blocs de 7 tokens
+de DFlash 2, bien acceptés sur du code. Identité des modèles vérifiée pour
+chaque passage (fichier chargé par gufo, modèle demandé par pi), et appel
+froid de 1 542 tokens côté service à 597 t/s sur Flash-Next contre 295 sur
+le 27B, le rapport attendu.
+
 L'appel froid n'est pas comparable : côté service, il comprend le chargement
 du modèle à la demande (9,7 s, 21,6 s, 86 s), alors que gufo était déjà chargé.
 Sur DeepSeek, le service a généré 20 % de tokens en plus (6,7k contre 5,6k) :
