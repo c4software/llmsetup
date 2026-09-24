@@ -212,6 +212,26 @@ Pistes, par ordre de faisabilité :
 3. Attendre un routeur ou un aiguillage multi-modèle en amont (rien de suivi à
    ce jour).
 
+### Session réelle (Claude Code via le proxy, 24/09/2026 au soir)
+
+Gufo Flash-Next sur `:8009` avec cache disque, cinq minutes d'usage réel,
+42 tours principaux, contexte de 19,5k à 61,2k tokens :
+
+- 92,7 % du prompt repris, premier token en 2,7 s en médiane (5,4 s pour
+  90 % des tours), décode 53 t/s (acceptance MTP 85 %) sans baisse avec le
+  contexte ;
+- 150 s cumulées d'attente du premier token contre 122 s de génération, pour
+  deux raisons propres à gufo : chaque tour repart du point de reprise de
+  l'avant-dernier tour (64k des 125k tokens recalculés l'étaient déjà au tour
+  précédent, un gros résultat d'outil se paie deux fois), et toutes les
+  reprises viennent du disque, aucune de la RAM (1,4 s minimum par tour) ;
+- 6 requêtes sur 50 rejetées en `unsupported_field` : le proxy traduit les
+  `stop_sequences` Anthropic en `stop`, que gufo refuse (reproduit, issue
+  [#260](https://github.com/gufo-org/gufo/issues/260)).
+
+Aucune session équivalente n'a été jouée sur le service : pas de comparaison
+directe pour cet usage.
+
 ## Récupérer ses optimisations dans le service
 
 Légalement possible (MIT, mention de copyright), techniquement coûteux : les
@@ -253,7 +273,8 @@ Publié le 24/09/2026 sous le compte c4software :
 
 | Ticket | Sujet | État au 24/09/2026 |
 |---|---|---|
-| #259 | reprise d'un préfixe commun entre conversations | ouvert (le nôtre) ; contournement : `--cache-disk` + staging relevé |
+| #259 | reprise d'un préfixe commun entre conversations | ouvert (le nôtre) ; contournement : `--cache-disk` + staging relevé ; session réelle : reprise d'un tour en retard, reprises toujours depuis le disque |
+| #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | ouvert (le nôtre) |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert, confirmé par un second utilisateur |
 | #239 | n-gram (prompt lookup) | résultat négatif en greedy, clôture proposée |
 | #255 | GEMM W8A8 du prefill Flash-Next, +5 % (pwilkin) | non reproduit : débordement propre à clang 23 |
