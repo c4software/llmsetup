@@ -326,38 +326,36 @@ raisonnement.
 
 ## Reprendre les mesures
 
-Tout est conservé sur bigchuck dans `~/llm/gufo-test` (hors du dépôt, hors de
-`~/models`, qui n'est monté qu'en lecture seule) :
+Les scripts sont versionnés dans [`runtime-gufo/`](../runtime-gufo/README.md)
+(lançables depuis un clone, chemins relatifs au dépôt) ; les données restent
+hors du dépôt et hors de `~/models`, dans `GUFO_DATA` (défaut
+`~/llm/gufo-test` sur bigchuck, déjà peuplé) :
 
-- `run.sh` + `mesure.py` : banc HTTP.
-  `./run.sh gufo <cas>...` arrête le service et le relance à la sortie ;
-  `./run.sh llama <cas>...` mesure la section du service. Cas : `27b`,
-  `27b-q4km`, `flashnext`, `flashnext-unsloth`, `flashnext-large-ub`,
-  `deepseek`, `deepseek-antirez` (`flashnext` et `deepseek` côté gufo
-  échouent au chargement, cf. plus haut).
-- `agentic.sh` : boucle pi, mêmes cas et même convention
-  (`PASSES=3` par défaut, garde-temps d'une heure). Première série : il
-  lance gufo sur `:8090` **sans** cache disque.
-- `serve-8009.sh` : met gufo à la place du service sur `:8009`
-  (`gufo 27b` ou `gufo flashnext`, 2 sessions par défaut, `SESSIONS=N` pour
-  changer, nom exposé `qwen3.8-27b` ou
-  `qwen3.8-flash-next`, distinct des sections du service, cache
-  disque dans `~/llm/gufo-test/cache`, 16 Gio, staging 8 Gio),
-  `service` pour revenir, `logs` pour suivre les requêtes. Le dernier lancé
-  repart seul au démarrage de bigchuck : gufo en `--restart unless-stopped`,
-  le service par le `restart: unless-stopped` de son compose (l'autre est
-  arrêté volontairement ou supprimé à chaque bascule). La seconde série
-  agentique a été jouée contre lui (conteneur pi lancé à la main, sorties
-  `resultats/agentic/*-diskcache.*`).
-- `resultats/` : `resultats.tsv` (banc HTTP), `chargements.tsv`,
+- `runtime-gufo/serve-8009.sh gufo [27b|flashnext]` / `service` / `logs` :
+  gufo à la place du service sur `:8009` (2 sessions par défaut, `SESSIONS=N`
+  pour changer, nom exposé `qwen3.8-27b` ou `qwen3.8-flash-next`, cache disque
+  16 Gio, staging 8 Gio). Le dernier lancé repart seul au démarrage de
+  bigchuck : gufo en `--restart unless-stopped`, le service par le
+  `restart: unless-stopped` de son compose (l'autre est arrêté volontairement
+  ou supprimé à chaque bascule).
+- `runtime-gufo/telecharger.sh image|flashnext|deepseek|27b-q4km|tout` :
+  image et GGUF de référence aux révisions épinglées par gufo (Flash-Next
+  UD-Q4_K_XL unsloth `38bb39e`, 104 Go ; DeepSeek IQ2XXS antirez `1cd7b56`,
+  87 Go, et DSpark `e7f0403`, 6 Go ; drafter DFlash 2 Q4_K_M `2d9571f`,
+  1,1 Go). Déjà présents sur bigchuck (192 Go dans `GUFO_DATA/models`).
+- `runtime-gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
+  (`bench/mesure.py`), gufo sur `:8090` en 1 session sans cache disque, le
+  service arrêté puis relancé par trap. Cas gufo : `27b`, `27b-q4km`,
+  `flashnext`, `deepseek` ; cas service : `27b`, `flashnext`,
+  `flashnext-large-ub`, `deepseek`.
+- `runtime-gufo/bench/agentic.sh gufo|llama <cas>...` : boucle pi de
+  `bench-agentic/`, gufo avec cache disque (réglage de la seconde série),
+  1 session par défaut, `PASSES=3`, garde-temps d'une heure.
+- `GUFO_DATA/resultats/` : `resultats.tsv` (banc HTTP), `chargements.tsv`,
   `reponses/` (textes générés), journaux gufo, `agentic/` (sorties pi et
-  journaux gufo par requête).
-- `models/` (192 Go) : les GGUF de référence de gufo, téléchargés le
-  24/09/2026 aux révisions épinglées par gufo : Flash-Next UD-Q4_K_XL
-  unsloth (`38bb39e`, 4 shards, 104 Go), DeepSeek IQ2XXS antirez
-  (`1cd7b56`, 87 Go) et DSpark (`e7f0403`, 6 Go), drafter DFlash 2 Q4_K_M du
-  27B (`2d9571f`, 1,1 Go).
-- Image `ghcr.io/gufo-org/toolboxes/gufo-runtime:latest` (8,3 Go).
+  journaux gufo par requête). Les mesures du 24/09/2026 y sont, y compris
+  celles faites avant le versionnement (étiquettes `gufo-flashnext-unsloth`,
+  `gufo-deepseek-antirez`, `*-diskcache.*`).
 
 ### Paramètres de `serve-8009.sh` et leur origine
 
@@ -374,16 +372,15 @@ comparable au service ; aucune n'est un réglage interne du moteur.
 | échantillonnage | temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 | glouton, aucun filtre | aucun | Qwen officiel, profil instruct (fiche du modèle, guide unsloth), celui des sections nothink du service ; surchargeable par requête |
 | `--think` | off | gabarit du modèle (raisonnement, effort xhigh) | non indiqué | nous : équivalent des sections nothink |
 | `--cache-disk` | activé, 16 Gio | désactivé (4 Gio si activé) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations (mesuré) |
-| `--cache-disk-staging-bytes` | 8 Gio | 512 Mio | non utilisé | nous : sinon les points de reprise du 27B sont abandonnés dès ~5k tokens (mesuré) |
+| `--cache-disk-staging-bytes` | 8 Gio | 512 Mio | non utilisé | nous : sinon les points de reprise du 27B sont abandonnés dès ~4,5k tokens (mesuré) |
 | spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
 | fichiers | Flash-Next UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q8_0 | | UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q4_K_M | gufo, sauf le drafter du 27B pris dans le parc (Q8_0, mesuré identique au Q4_K_M) |
 
 Les chiffres agentiques avec cache disque ont été mesurés avec ces réglages ;
 gufo « nu » (sans cache disque) était à égalité avec le service sur le 27B.
 
-Pour rejouer contre une nouvelle version de gufo : `docker pull` de l'image,
-puis `./run.sh gufo 27b` (banc HTTP) et, pour l'agentique, `./serve-8009.sh
-gufo 27b` suivi du conteneur pi pointé sur `:8009` (`agentic.sh` n'active pas
-le cache disque). Ce sont les deux mesures
-qui comparent les moteurs à fichiers identiques ; les chiffres du service
+Pour rejouer contre une nouvelle version de gufo : `runtime-gufo/telecharger.sh
+image`, puis `runtime-gufo/bench/run.sh gufo 27b` et
+`runtime-gufo/bench/agentic.sh gufo 27b`. Ce sont les deux mesures qui
+comparent les moteurs à fichiers identiques ; les chiffres du service
 ci-dessus sont la référence du 24/09/2026.

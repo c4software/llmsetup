@@ -465,6 +465,12 @@ dans `AGENTS.md`.
 
 Les scripts shell pointent sur `http://bigchuck:8009` par défaut (surchargeable par variable d'environnement).
 
+Le moteur alternatif gufo (évalué le 24/09/2026, `docs/GUFO.md`) a ses propres
+scripts dans `runtime-gufo/` : `serve-8009.sh` le met à la place du service
+sur `:8009` (et `service` pour revenir), `telecharger.sh` récupère son image
+et ses GGUF, `bench/` le mesure contre le service. Voir
+`runtime-gufo/README.md`.
+
 ## FAQ
 
 **Un modèle échoue au chargement, ROCm0 a disparu.**

@@ -469,6 +469,20 @@ avant la mesure) : prefill et décode à 0 / 16k / 32k (64k sur demande), KV
 en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 `logs/bench-depth.log` + `.tsv`.
 
+## gufo, hors du service (`runtime-gufo/`)
+
+Moteur alternatif évalué le 24/09/2026 (`docs/GUFO.md`), jamais intégré au
+service ni à `setup-llm.sh` : un modèle par processus, GGUF imposés.
+`runtime-gufo/serve-8009.sh` le met à la place du service sur `:8009` (arrêt
+et relance par `setup-llm.sh --stop` / `--start`, conteneur `gufo-8009` en
+`docker run`, aucun `docker compose` du service) ; `telecharger.sh` récupère
+l'image et les GGUF de référence ; `bench/run.sh` (banc HTTP,
+`bench/mesure.py`) et `bench/agentic.sh` (boucle pi de `bench-agentic/`) le
+mesurent contre le service, sur `:8090`, service arrêté puis relancé par trap.
+`commun.sh` porte les chemins, l'image et les arguments par modèle. Données
+dans `GUFO_DATA` (défaut `~/llm/gufo-test`), hors du dépôt et de `~/models`.
+Détail : `runtime-gufo/README.md`.
+
 ## Moteur conteneurisé (`runtime/`)
 
 Dossier **versionné**, consommé par `lib/runtime.sh` et par personne d'autre.
