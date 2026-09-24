@@ -227,9 +227,15 @@ Gufo Flash-Next sur `:8009` avec cache disque, cinq minutes d'usage réel,
   même session avec omp (OpenAI en direct, sans proxy) reprend le tour
   précédent entier depuis la RAM, 40 tokens seulement recalculés deux fois
   sur 34k, premier token en 1,0 s en médiane (0,5 à 3,9 s), 28 s d'attente
-  cumulée pour 83 s de génération. C'est le proxy Anthropic vers OpenAI qui
-  réécrit le dernier tour de l'assistant, et gufo repart alors du dernier
-  point de reprise qui correspond ;
+  cumulée pour 83 s de génération. Cause trouvée dans le proxy
+  (llm-proxy) : un rappel `system` de Claude Code (`<total_tokens>…`) qui
+  fermait la requête était reporté, au tour suivant, après le résultat
+  d'outil d'après, donc le préfixe divergeait juste avant la dernière
+  génération. Corrigé dans llm-proxy (commit du 24/09/2026, rappel gardé à sa
+  place) : sur le même scénario Claude Code, tours de suivi repris en RAM,
+  43 à 150 tokens recalculés au lieu de 1 800 à 1 960, premier token en 0,3 à
+  0,5 s au lieu de 1,8 à 2,1 s. Le même proxy retire désormais `stop` pour
+  gufo (option `anthropic_drop_fields`) ;
 - 6 requêtes sur 50 rejetées en `unsupported_field` : le proxy traduit les
   `stop_sequences` Anthropic en `stop`, que gufo refuse (reproduit, issue
   [#260](https://github.com/gufo-org/gufo/issues/260)).
