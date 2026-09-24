@@ -212,7 +212,7 @@ Pistes, par ordre de faisabilité :
 3. Attendre un routeur ou un aiguillage multi-modèle en amont (rien de suivi à
    ce jour).
 
-### Session réelle (Claude Code via le proxy, 24/09/2026 au soir)
+### Sessions réelles (Claude Code via le proxy, puis omp, 24/09/2026 au soir)
 
 Gufo Flash-Next sur `:8009` avec cache disque, cinq minutes d'usage réel,
 42 tours principaux, contexte de 19,5k à 61,2k tokens :
@@ -220,11 +220,16 @@ Gufo Flash-Next sur `:8009` avec cache disque, cinq minutes d'usage réel,
 - 92,7 % du prompt repris, premier token en 2,7 s en médiane (5,4 s pour
   90 % des tours), décode 53 t/s (acceptance MTP 85 %) sans baisse avec le
   contexte ;
-- 150 s cumulées d'attente du premier token contre 122 s de génération, pour
-  deux raisons propres à gufo : chaque tour repart du point de reprise de
-  l'avant-dernier tour (64k des 125k tokens recalculés l'étaient déjà au tour
-  précédent, un gros résultat d'outil se paie deux fois), et toutes les
-  reprises viennent du disque, aucune de la RAM (1,4 s minimum par tour) ;
+- 150 s cumulées d'attente du premier token contre 122 s de génération :
+  chaque tour repartait du point de reprise de l'avant-dernier tour (64k des
+  125k tokens recalculés l'étaient déjà), et toutes les reprises venaient du
+  disque (1,4 s minimum par tour). Ce n'est **pas** un défaut de gufo : la
+  même session avec omp (OpenAI en direct, sans proxy) reprend le tour
+  précédent entier depuis la RAM, 40 tokens seulement recalculés deux fois
+  sur 34k, premier token en 1,0 s en médiane (0,5 à 3,9 s), 28 s d'attente
+  cumulée pour 83 s de génération. C'est le proxy Anthropic vers OpenAI qui
+  réécrit le dernier tour de l'assistant, et gufo repart alors du dernier
+  point de reprise qui correspond ;
 - 6 requêtes sur 50 rejetées en `unsupported_field` : le proxy traduit les
   `stop_sequences` Anthropic en `stop`, que gufo refuse (reproduit, issue
   [#260](https://github.com/gufo-org/gufo/issues/260)).
@@ -273,7 +278,7 @@ Publié le 24/09/2026 sous le compte c4software :
 
 | Ticket | Sujet | État au 24/09/2026 |
 |---|---|---|
-| #259 | reprise d'un préfixe commun entre conversations | ouvert (le nôtre) ; contournement : `--cache-disk` + staging relevé ; session réelle : reprise d'un tour en retard, reprises toujours depuis le disque |
+| #259 | reprise d'un préfixe commun entre conversations | ouvert (le nôtre) ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | ouvert (le nôtre) |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert, confirmé par un second utilisateur |
 | #239 | n-gram (prompt lookup) | résultat négatif en greedy, clôture proposée |
