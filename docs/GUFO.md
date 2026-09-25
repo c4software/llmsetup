@@ -336,6 +336,16 @@ Vérifié le 25/09/2026 : `parler` sous pi en 10,6 s pour tout le tour,
 `generer_image` 512² en 20 étapes sous omp en 90 s pour tout le tour (bascule
 vers Qwen-Image, puis retour à Flash-Next pour la réponse).
 
+Variante `Qwen-Image-2.1-heretic` (encodeur de texte « abliterated »
+catplusplus/Qwen21_Text_Encoder_Heretic, seul candidat compatible sur HF : les
+versions « uncensored » sont des GGUF ou des formats ComfyUI, que gufo ne lit
+pas), essayée le 25/09/2026 : chargement et temps identiques à l'officiel
+(9 s en 512², 20 étapes). Sur 4 prompts à graine fixe (un témoin neutre, et
+volley de plage, bikini, gymnaste, les cas où la fiche annonce des vêtements
+ajoutés ou des poses figées), les images sont quasi identiques (écart RMS de
+2 % sur le témoin) et l'officiel ne montre aucun des défauts annoncés. Pas de
+gain constaté ; images dans `~/llm/gufo-test/resultats/heretic/`.
+
 ## Récupérer ses optimisations dans le service
 
 Légalement possible (MIT, mention de copyright), techniquement coûteux : les
