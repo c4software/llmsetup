@@ -7,8 +7,12 @@
 # gufo (docs/GUFO.md) ne sert qu'un modèle par processus et n'accepte que ses
 # propres GGUF : il ne s'intègre pas au routeur, il PREND SA PLACE sur le port.
 # Même schéma que le service : compose versionné (runtime-gufo/
-# docker-compose.yml, un service par modèle, sélectionné par profil) et .env
-# généré ici, dans GUFO_DATA, avec les seules valeurs machine. Un seul moteur
+# docker-compose.yml) et .env généré ici, dans GUFO_DATA, avec les seules
+# valeurs machine. gufo démarre toujours derrière llama-swap
+# (runtime-gufo/gufo-llama-swap.yaml, seule description des lignes de
+# commande) : le client choisit le modèle par le champ « model », llama-swap
+# arrête un processus gufo pour lancer l'autre ; --gufo [modèle] ne choisit
+# que le modèle préchargé. Un seul moteur
 # à la fois (même port, un GPU) : --gufo arrête le service, --gufo-off
 # supprime gufo (compose down) et relance le service, --start et --restart du
 # service refusent tant que gufo tourne (_gufo_refuse, lib/svc.sh). Le dernier
@@ -24,7 +28,7 @@
 #   GUFO_PORT      port hôte (défaut SERVER_PORT)
 #   GUFO_RESTART   politique de redémarrage (défaut unless-stopped)
 #   GUFO_PROJET    projet compose (défaut gufo) ; GUFO_CONTENEUR (lib/common.sh)
-#   GUFO_PRECHARGE modèle chargé au démarrage du routeur (défaut qwen3.8-flash-next)
+#   GUFO_PRECHARGE modèle préchargé (défaut qwen3.8-flash-next ; --gufo <modèle>)
 #   GUFO_ENV_FILE  .env écrit (défaut GUFO_DATA/.env)
 # =============================================================================
 
@@ -34,12 +38,31 @@ GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
 GUFO_IMAGE="${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime:latest}"
 GUFO_PROJET="${GUFO_PROJET:-gufo}"
 GUFO_ENV_FILE="${GUFO_ENV_FILE:-$GUFO_DATA/.env}"
-GUFO_MODELES=(27b flashnext routeur 27b-q4km deepseek)
+# Noms courts acceptés par --gufo, et le modèle de gufo-llama-swap.yaml qu'ils
+# désignent (le nom complet est accepté aussi).
+declare -A GUFO_MODELES=(
+  [27b]=qwen3.8-27b
+  [flashnext]=qwen3.8-flash-next
+  [deepseek]=deepseek-v4-flash
+)
 
-# generate_gufo_env <modèle> - le .env de runtime-gufo/docker-compose.yml, sur
-# stdout. Échoue (sans rien écrire) si un groupe GPU manque.
+# _gufo_nom <court|complet> - le nom de modèle de gufo-llama-swap.yaml, ou
+# échec si inconnu.
+_gufo_nom() {
+  local k
+  [[ -n "${1:-}" ]] || return 1
+  [[ -n "${GUFO_MODELES[$1]:-}" ]] && { echo "${GUFO_MODELES[$1]}"; return 0; }
+  for k in "${!GUFO_MODELES[@]}"; do
+    [[ "${GUFO_MODELES[$k]}" == "$1" ]] && { echo "$1"; return 0; }
+  done
+  return 1
+}
+
+# generate_gufo_env [modèle préchargé] - le .env de runtime-gufo/
+# docker-compose.yml, sur stdout. Échoue (sans rien écrire) si un groupe GPU
+# manque.
 generate_gufo_env() {
-  local modele="$1" gid_render gid_video
+  local precharge="${1:-${GUFO_PRECHARGE:-qwen3.8-flash-next}}" gid_render gid_video
   gid_render="$(_compose_gid render)" || return 1
   gid_video="$(_compose_gid video)" || return 1
   cat <<ENV
@@ -48,7 +71,6 @@ generate_gufo_env() {
 # Usage manuel : cd $GUFO_DATA && docker compose ps | logs -f
 COMPOSE_FILE=$GUFO_COMPOSE_FILE
 COMPOSE_PROJECT_NAME=$GUFO_PROJET
-COMPOSE_PROFILES=$modele
 GUFO_IMAGE=$GUFO_IMAGE
 GUFO_CONTENEUR=$GUFO_CONTENEUR
 GUFO_RESTART=${GUFO_RESTART:-unless-stopped}
@@ -56,7 +78,7 @@ GUFO_PORT=${GUFO_PORT:-$SERVER_PORT}
 GUFO_SESSIONS=${GUFO_SESSIONS:-2}
 GUFO_RUNTIME_DIR=$GUFO_DIR
 GUFO_ROUTEUR_IMAGE=gufo-routeur:latest
-GUFO_PRECHARGE=${GUFO_PRECHARGE:-qwen3.8-flash-next}
+GUFO_PRECHARGE=$precharge
 SVC_UID=$(id -u)
 SVC_GID=$(id -g)
 GID_RENDER=$gid_render
@@ -67,15 +89,14 @@ ENV
 }
 
 # _gufo_compose [args compose...] - docker compose sur le compose de gufo et
-# SON .env (projet, profil, valeurs machine).
+# SON .env (projet, valeurs machine).
 _gufo_compose() {
   docker compose --project-directory "$GUFO_DATA" --env-file "$GUFO_ENV_FILE" \
     -f "$GUFO_COMPOSE_FILE" "$@"
 }
 
-# _gufo_wait_ready [timeout=600] - /health de gufo, ou échec rapide si le
-# conteneur est sorti (fichier absent, format refusé…). Flash-Next à froid :
-# ~80 s.
+# _gufo_wait_ready [timeout=600] - /health de llama-swap, ou échec rapide si
+# le conteneur est sorti.
 _gufo_wait_ready() {
   local timeout="${1:-600}" t=0 port="${GUFO_PORT:-$SERVER_PORT}"
   until curl -sf "http://localhost:$port/health" >/dev/null 2>&1; do
@@ -90,23 +111,25 @@ _gufo_wait_ready() {
   return 0
 }
 
-# _gufo_wait_precharge - routeur : llama-swap répond tout de suite, le modèle
+# _gufo_wait_precharge <modèle> - llama-swap répond tout de suite, le modèle
 # préchargé suit ; /upstream/<modèle>/health attend qu'il soit prêt (et le
-# charge s'il ne l'est pas).
+# charge s'il ne l'est pas). Flash-Next ou DeepSeek à froid : ~80 s.
 _gufo_wait_precharge() {
-  local port="${GUFO_PORT:-$SERVER_PORT}" m="${GUFO_PRECHARGE:-qwen3.8-flash-next}"
-  info "  routeur prêt, chargement de $m..."
+  local port="${GUFO_PORT:-$SERVER_PORT}" m="$1"
+  info "  llama-swap prêt, chargement de $m..."
   curl -sf -m 600 "http://localhost:$port/upstream/$m/health" >/dev/null 2>&1 \
     || { warn "$m n'a pas répondu par le routeur."; docker logs --tail 20 "$GUFO_CONTENEUR" 2>&1 | sed 's/^/  /' >&2 || true; return 1; }
   return 0
 }
 
-# cmd_gufo [modèle] - arrête le service, lance gufo sur le port (modèle 27b
-# par défaut). Échec : gufo retiré et service relancé, jamais un port vide.
+# cmd_gufo [modèle préchargé] - arrête le service, lance gufo derrière
+# llama-swap sur le port (Flash-Next préchargé par défaut ; 27b, flashnext,
+# deepseek ou le nom complet). Échec : gufo retiré et service relancé, jamais
+# un port vide.
 cmd_gufo() {
-  local modele="${1:-27b}" m ok=0
-  for m in "${GUFO_MODELES[@]}"; do [[ "$m" == "$modele" ]] && ok=1; done
-  (( ok )) || error "Modèle gufo inconnu : '$modele' (${GUFO_MODELES[*]})"
+  local modele
+  modele="$(_gufo_nom "${1:-${GUFO_PRECHARGE:-qwen3.8-flash-next}}")" \
+    || error "Modèle gufo inconnu : '${1:-}' (${!GUFO_MODELES[*]}, ou ${GUFO_MODELES[*]})"
   command -v docker >/dev/null 2>&1 || error "docker introuvable"
   docker image inspect "$GUFO_IMAGE" >/dev/null 2>&1 \
     || error "Image $GUFO_IMAGE absente - ./setup-llm.sh --gufo-download image"
@@ -116,14 +139,14 @@ cmd_gufo() {
   generate_gufo_env "$modele" > "$tmp" || { rm -f "$tmp"; error ".env de gufo non généré (groupes GPU)"; }
   mv -f "$tmp" "$GUFO_ENV_FILE"
 
-  info "gufo '$modele' à la place du service sur :${GUFO_PORT:-$SERVER_PORT} (données : $GUFO_DATA)"
+  info "gufo (llama-swap, $modele préchargé) à la place du service sur :${GUFO_PORT:-$SERVER_PORT} (données : $GUFO_DATA)"
   cmd_stop
-  # down d'abord : un autre profil (autre modèle) tient peut-être le conteneur ;
-  # puis le nom lui-même, au cas où un gufo aurait été lancé hors compose.
+  # down d'abord (gufo déjà lancé, autre préchargement), puis le nom lui-même,
+  # au cas où un gufo aurait été lancé hors compose.
   _gufo_compose down --remove-orphans >/dev/null 2>&1 || true
   docker rm -f "$GUFO_CONTENEUR" >/dev/null 2>&1 || true
   _gufo_compose up -d || { _gufo_compose down >/dev/null 2>&1 || true; cmd_start; error "compose up de gufo en échec, service relancé"; }
-  if ! _gufo_wait_ready || { [[ "$modele" == routeur ]] && ! _gufo_wait_precharge; }; then
+  if ! _gufo_wait_ready || ! _gufo_wait_precharge "$modele"; then
     _gufo_compose down >/dev/null 2>&1 || true
     cmd_start
     error "gufo n'a pas démarré, service relancé"
@@ -146,13 +169,13 @@ cmd_gufo_off() {
 
 # cmd_gufo_logs - requêtes de gufo au fil de l'eau (une ligne par requête).
 cmd_gufo_logs() {
-  _gufo_actif || error "gufo ne tourne pas - ./setup-llm.sh --gufo [${GUFO_MODELES[*]}]"
+  _gufo_actif || error "gufo ne tourne pas - ./setup-llm.sh --gufo [${!GUFO_MODELES[*]}]"
   docker logs -f "$GUFO_CONTENEUR" 2>&1 | grep --line-buffered "event=completed"
 }
 
-# cmd_gufo_download <image|flashnext|deepseek|27b-q4km|all> - image et GGUF de
+# cmd_gufo_download <image|flashnext|deepseek|all> - image et GGUF de
 # référence, dans GUFO_DATA/models.
 cmd_gufo_download() {
-  [[ -n "${1:-}" ]] || error "--gufo-download attend : image, flashnext, deepseek, 27b-q4km ou all"
+  [[ -n "${1:-}" ]] || error "--gufo-download attend : image, flashnext, deepseek ou all"
   GUFO_DATA="$GUFO_DATA" GUFO_IMAGE="$GUFO_IMAGE" "$GUFO_DIR/download.sh" "$1"
 }

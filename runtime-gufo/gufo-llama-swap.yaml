@@ -1,0 +1,141 @@
+# =============================================================================
+# llama-swap : routeur de modèles gufo (runtime-gufo/docker-compose.yml)
+#
+# gufo démarre toujours derrière llama-swap. Le client choisit le modèle par le
+# champ « model », comme avec le routeur llama-server du service : llama-swap
+# lance « gufo serve llm » pour ce modèle et arrête le précédent. Aucune paire
+# ne tient en mémoire (Flash-Next ~100 Gio en 2 sessions, DeepSeek ~104 Gio,
+# 27B ~45 Gio, 124 Gio en tout) : groupe exclusif, un seul modèle à la fois.
+# Bascule mesurée le 25/09/2026 : vers le 27B 64,6 s, vers Flash-Next 31,4 s.
+# Clients agentiques : faire pointer TOUS leurs rôles (principal et tâches
+# annexes, le « Haiku » de Claude Code) sur le même modèle, sinon chaque
+# requête annexe déclenche une bascule.
+#
+# Fichier VERSIONNÉ, SEULE description des lignes de commande de gufo, sans
+# valeur machine : chemins, sessions et modèle préchargé viennent de
+# l'environnement du conteneur (${env.VAR}, posé par le compose depuis le .env
+# que génère ./setup-llm.sh --gufo). Lu au démarrage : un changement demande
+# ./setup-llm.sh --gufo, qui recrée le conteneur. Validation :
+# llama-swap -config gufo-llama-swap.yaml -validate (avec les variables posées).
+#
+# Réglages communs (macro gufo) et leur origine, détaillés dans docs/GUFO.md
+# (« Paramètres de gufo et leur origine ») :
+#   --context 262144      contexte natif, celui du service (défaut gufo 4096)
+#   --sessions N          2 par défaut : la seconde évite qu'une requête annexe
+#                         du client (titre, résumé) évince la conversation
+#                         principale de la RAM (+7 Gio)
+#   --max-tokens 32768    défaut gufo 128 : un client qui n'envoie pas
+#                         max_tokens serait coupé
+#   --cache-disk …        seul chemin qui reprend le préfixe commun de deux
+#                         conversations ; staging 8 Gio car au défaut de
+#                         512 Mio les points de reprise du 27B sont abandonnés
+#                         en silence dès ~4,5k tokens. Changer la
+#                         configuration rend ce cache inutilisable. Partagé
+#                         entre les modèles (l'identité du cache inclut le
+#                         modèle), 16 Gio en tout.
+# =============================================================================
+
+# Flash-Next ou DeepSeek à froid : ~80 s ; marge pour un disque chargé.
+healthCheckTimeout: 300
+
+# Jamais de messages « chargement en cours » dans le champ de raisonnement :
+# un client agentique les prendrait pour du contenu.
+sendLoadingState: false
+
+# Journaux de llama-swap ET de gufo sur la sortie du conteneur :
+# ./setup-llm.sh --gufo-logs y lit les lignes event=completed de gufo.
+logToStdout: "both"
+
+# Pas de déchargement sur inactivité : le dernier modèle reste servi, comme
+# le routeur du service avec son préchargement.
+globalTTL: 0
+
+macros:
+  # Partie commune de la ligne de commande de gufo, qui écoute en local sur le
+  # port que llama-swap lui attribue.
+  "gufo": >-
+    gufo serve llm --host 127.0.0.1 --port ${PORT}
+    --context 262144 --sessions ${env.GUFO_SESSIONS} --max-tokens 32768
+    --cache-disk ${env.GUFO_DATA}/cache --cache-disk-bytes 17179869184
+    --cache-disk-staging-bytes 8589934592
+  # Échantillonnage officiel Qwen, profil instruct (sections nothink du
+  # service) ; défauts serveur, un client peut les surcharger par requête.
+  "qwen": >-
+    --temperature 0.7 --top-k 20 --top-p 0.8 --min-p 0.0
+    --presence-penalty 1.5 --think off
+  # Échantillonnage de la section deepseek-v4-flash du service. Raisonnement
+  # laissé au gabarit du modèle (gufo n'a pas de budget de raisonnement).
+  "deepseek": >-
+    --temperature 1.0 --top-k 40 --top-p 0.95 --min-p 0.0
+
+# Le nom de modèle EST le --served-model-name de gufo : llama-swap transmet la
+# requête avec ce nom, gufo répond 404 model_not_found sinon. stop (OpenAI) et
+# stop_sequences (Anthropic) sont retirés : gufo les refuse en 400
+# unsupported_field (gufo-org/gufo#260), la requête serait perdue.
+models:
+  # Qwen3.8-27B, fichiers du parc (./setup-llm.sh --setup) : cible UD-Q4_K_XL,
+  # drafter DFlash 2 Q8_0 (adaptatif, 7 tokens max, défauts gufo).
+  "qwen3.8-27b":
+    name: "Qwen3.8-27B (gufo, DFlash 2)"
+    cmd: >-
+      ${gufo} --served-model-name qwen3.8-27b
+      --model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-UD-Q4_K_XL.gguf
+      --speculative dflash2
+      --dflash-model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q8_0.gguf
+      ${qwen}
+    checkEndpoint: /health
+    filters:
+      stripParams: "stop, stop_sequences"
+
+  # Qwen3.8-Flash-Next : cible UD-Q4_K_XL unsloth (--gufo-download flashnext ;
+  # gufo refuse le fine-tune Signal AP-Q4_K_XL du parc, tenseur IQ4_NL), tête
+  # MTP shared Q8_0 et mmproj BF16 du parc.
+  "qwen3.8-flash-next":
+    name: "Qwen3.8-Flash-Next (gufo, MTP)"
+    cmd: >-
+      ${gufo} --served-model-name qwen3.8-flash-next
+      --model ${env.GUFO_DATA}/models/qwen3.8-flash-next/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
+      --speculative mtp
+      --mtp-model ${env.MODELS_BASE}/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+      --mmproj ${env.MODELS_BASE}/qwen3.8-flash-next/mmproj-BF16.gguf
+      ${qwen}
+    checkEndpoint: /health
+    filters:
+      stripParams: "stop, stop_sequences"
+
+  # DeepSeek V4 Flash : seule quant acceptée par gufo, IQ2XXS d'antirez +
+  # support DSpark (--gufo-download deepseek ; l'UD-IQ3_XXS du parc est
+  # refusé). Plus légère que celle du service : un comptage raté à 26k tokens
+  # le 24/09/2026, justesse à surveiller. 16/16 en boucle agentique pi.
+  "deepseek-v4-flash":
+    name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
+    cmd: >-
+      ${gufo} --served-model-name deepseek-v4-flash
+      --model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
+      --speculative dspark
+      --dspark-model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-DSpark-support-0731.gguf
+      ${deepseek}
+    checkEndpoint: /health
+    filters:
+      stripParams: "stop, stop_sequences"
+
+routing:
+  router:
+    use: group
+    settings:
+      groups:
+        gufo:
+          # Un seul membre à la fois (swap), et il décharge tout autre groupe.
+          swap: true
+          exclusive: true
+          members:
+            - "qwen3.8-27b"
+            - "qwen3.8-flash-next"
+            - "deepseek-v4-flash"
+
+hooks:
+  on_startup:
+    # Modèle chargé au démarrage du conteneur : GUFO_PRECHARGE du .env
+    # (./setup-llm.sh --gufo [modèle], qwen3.8-flash-next par défaut).
+    preload:
+      - "${env.GUFO_PRECHARGE}"

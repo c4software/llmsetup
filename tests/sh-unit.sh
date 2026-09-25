@@ -813,15 +813,16 @@ else
 fi
 
 # (i) gufo, moteur alternatif sur le port du service (lib/gufo.sh,
-#     runtime-gufo/docker-compose.yml). Le .env porte les valeurs machine
-#     (uid:gid de l'hôte, gid NUMÉRIQUES, profil = modèle) ; le compose rendu
-#     par le vrai docker compose n'active que le modèle choisi, tourne sous
-#     l'utilisateur de l'hôte et ne laisse aucune variable ; --start du service
-#     refuse tant que gufo tient le port.
+#     runtime-gufo/docker-compose.yml, toujours derrière llama-swap). Le .env
+#     porte les valeurs machine (uid:gid de l'hôte, gid NUMÉRIQUES, modèle
+#     préchargé) ; le compose rendu par le vrai docker compose tourne sous
+#     l'utilisateur de l'hôte, lance llama-swap et ne laisse aucune variable ;
+#     gufo-llama-swap.yaml est cohérent ; --start du service refuse tant que
+#     gufo tient le port.
 mkdir -p "$SVC/repo/runtime-gufo"
 cp "$REPO_DIR/runtime-gufo/docker-compose.yml" "$SVC/repo/runtime-gufo/"
-GENV="$(_run_svc 'generate_gufo_env flashnext')"
-for attendu in "COMPOSE_PROFILES=flashnext" "COMPOSE_PROJECT_NAME=gufo" "GUFO_CONTENEUR=gufo-8009" \
+GENV="$(_run_svc 'generate_gufo_env qwen3.8-flash-next')"
+for attendu in "GUFO_PRECHARGE=qwen3.8-flash-next" "COMPOSE_PROJECT_NAME=gufo" "GUFO_CONTENEUR=gufo-8009" \
                "GUFO_RESTART=unless-stopped" "GUFO_PORT=8009" "GUFO_SESSIONS=2" \
                "GID_RENDER=303" "GID_VIDEO=986" "SVC_UID=$(id -u)"; do
   if grep -qxF -- "$attendu" <<<"$GENV"; then
@@ -830,58 +831,62 @@ for attendu in "COMPOSE_PROFILES=flashnext" "COMPOSE_PROJECT_NAME=gufo" "GUFO_CO
     echo "[FAIL] gufo env : ligne absente : $attendu"; rc=1
   fi
 done
-GENV_BANC="$(_run_svc 'generate_gufo_env 27b' "GUFO_PORT=8090 GUFO_RESTART=no GUFO_SESSIONS=1 GUFO_PROJET=gufo-banc")"
+GENV_BANC="$(_run_svc 'generate_gufo_env qwen3.8-27b' "GUFO_PORT=8090 GUFO_RESTART=no GUFO_SESSIONS=1 GUFO_PROJET=gufo-banc")"
 if grep -qx "GUFO_PORT=8090" <<<"$GENV_BANC" && grep -qx "GUFO_RESTART=no" <<<"$GENV_BANC" \
-   && grep -qx "COMPOSE_PROJECT_NAME=gufo-banc" <<<"$GENV_BANC"; then
-  echo "[OK]   gufo env : réglages du banc (port, redémarrage, projet) surchargeables"
+   && grep -qx "COMPOSE_PROJECT_NAME=gufo-banc" <<<"$GENV_BANC" && grep -qx "GUFO_PRECHARGE=qwen3.8-27b" <<<"$GENV_BANC"; then
+  echo "[OK]   gufo env : réglages du banc (port, redémarrage, projet, préchargé) surchargeables"
 else
   echo "[FAIL] gufo env : les surcharges du banc ne passent pas"; rc=1
 fi
+# Noms acceptés par --gufo : courts et complets, tout le reste refusé.
+if [[ "$(_run_svc '_gufo_nom 27b; _gufo_nom deepseek-v4-flash')" == $'qwen3.8-27b\ndeepseek-v4-flash' ]] \
+   && ! _run_svc '_gufo_nom routeur' >/dev/null && ! _run_svc '_gufo_nom ""' >/dev/null; then
+  echo "[OK]   gufo : noms de modèle courts et complets reconnus, inconnus refusés"
+else
+  echo "[FAIL] gufo : résolution des noms de modèle"; rc=1
+fi
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   GD="$SVC/gufo-data"; mkdir -p "$GD"
-  for m in 27b flashnext routeur 27b-q4km deepseek; do
-    sed "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=$m|; s|^GUFO_DATA=.*|GUFO_DATA=$GD|" <<<"$GENV" > "$GD/.env"
-    if out="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config 2>&1)" \
-       && svcs="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config --services 2>&1)"; then
-      if [[ "$svcs" == "$m" ]] && grep -qF "user: $(id -u):$(id -g)" <<<"$out" \
-         && grep -qF "container_name: gufo-8009" <<<"$out" && ! grep -q '\${' <<<"$out"; then
-        echo "[OK]   gufo compose : profil $m seul, utilisateur de l'hôte, aucune variable non résolue"
-      else
-        echo "[FAIL] gufo compose : rendu inattendu pour $m (services : $svcs)"; rc=1
-      fi
+  sed "s|^GUFO_DATA=.*|GUFO_DATA=$GD|" <<<"$GENV" > "$GD/.env"
+  if out="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config 2>&1)"; then
+    if grep -qF "user: $(id -u):$(id -g)" <<<"$out" && grep -qF "container_name: gufo-8009" <<<"$out" \
+       && grep -qF "/usr/local/bin/llama-swap" <<<"$out" && grep -qF "GUFO_PRECHARGE: qwen3.8-flash-next" <<<"$out" \
+       && grep -qF "gufo-llama-swap.yaml" <<<"$out" && ! grep -q '\${' <<<"$out"; then
+      echo "[OK]   gufo compose : llama-swap, utilisateur de l'hôte, préchargé, aucune variable non résolue"
     else
-      echo "[FAIL] gufo compose : refusé par docker compose pour $m : $out"; rc=1
+      echo "[FAIL] gufo compose : rendu inattendu"; rc=1
     fi
-  done
+  else
+    echo "[FAIL] gufo compose : refusé par docker compose : $out"; rc=1
+  fi
 else
   echo "[SKIP] gufo compose : docker compose absent"
 fi
-# Routeur (llama-swap devant gufo) : chaque modèle de llama-swap.yaml porte le
-# même nom que son --served-model-name (sinon gufo répond 404), les mêmes
-# fichiers que le profil compose du même modèle, retire stop et stop_sequences
-# (#260) ; les deux sont dans un groupe exclusif ; llama-swap épinglé par somme.
-LSY="$(cat "$REPO_DIR/runtime-gufo/llama-swap.yaml")"
-YMLG="$(cat "$REPO_DIR/runtime-gufo/docker-compose.yml")"
-for m in qwen3.8-27b qwen3.8-flash-next; do
+# gufo-llama-swap.yaml : chaque modèle porte le même nom que son
+# --served-model-name (sinon gufo répond 404), retire stop et stop_sequences
+# (#260), ne pointe que sous le parc ou GUFO_DATA ; groupe exclusif ; chaque
+# nom court de lib/gufo.sh existe ; llama-swap épinglé par somme.
+LSY="$(cat "$REPO_DIR/runtime-gufo/gufo-llama-swap.yaml")"
+for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash; do
   bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
-  if grep -q -- "--served-model-name $m" <<<"$bloc" && grep -q 'stripParams: "stop, stop_sequences"' <<<"$bloc"; then
-    echo "[OK]   routeur : $m nommé comme gufo le sert, stop et stop_sequences retirés"
+  if grep -q -- "--served-model-name $m" <<<"$bloc" && grep -q 'stripParams: "stop, stop_sequences"' <<<"$bloc" \
+     && ! grep -oE '[^ ]+\.gguf' <<<"$bloc" | grep -vqE '^\$\{env\.(MODELS_BASE|GUFO_DATA)\}/'; then
+    echo "[OK]   llama-swap : $m nommé comme gufo le sert, stop retiré, fichiers sous le parc ou GUFO_DATA"
   else
-    echo "[FAIL] routeur : bloc $m incohérent dans llama-swap.yaml"; rc=1
+    echo "[FAIL] llama-swap : bloc $m incohérent dans gufo-llama-swap.yaml"; rc=1
   fi
-  for f in $(grep -o '[A-Za-z0-9._-]*\.gguf' <<<"$bloc"); do
-    grep -qF "$f" <<<"$YMLG" || { echo "[FAIL] routeur : $f absent des profils du compose"; rc=1; }
-  done
+  grep -qF "\"$m\"" <<<"$(awk '/members:/{f=1;next} f' <<<"$LSY")" \
+    || { echo "[FAIL] llama-swap : $m hors du groupe exclusif"; rc=1; }
 done
 if grep -q 'swap: true' <<<"$LSY" && grep -q 'exclusive: true' <<<"$LSY"; then
-  echo "[OK]   routeur : groupe exclusif, un seul modèle chargé à la fois"
+  echo "[OK]   llama-swap : groupe exclusif, un seul modèle chargé à la fois"
 else
-  echo "[FAIL] routeur : groupe non exclusif dans llama-swap.yaml"; rc=1
+  echo "[FAIL] llama-swap : groupe non exclusif"; rc=1
 fi
 if grep -qE '^ADD --checksum=sha256:[0-9a-f]{64}' "$REPO_DIR/runtime-gufo/Dockerfile.routeur"; then
-  echo "[OK]   routeur : binaire llama-swap vérifié par SHA-256"
+  echo "[OK]   llama-swap : binaire vérifié par SHA-256"
 else
-  echo "[FAIL] routeur : llama-swap non épinglé par somme dans Dockerfile.routeur"; rc=1
+  echo "[FAIL] llama-swap : binaire non épinglé par somme dans Dockerfile.routeur"; rc=1
 fi
 echo true > "$SVC/etat/running"
 if out="$(_run_svc '_gufo_refuse')"; then
@@ -899,5 +904,5 @@ else
 fi
 echo true > "$SVC/etat/running"
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd), gufo (.env, compose par profil, routeur llama-swap cohérent, refus de --start) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd), gufo (.env, compose llama-swap, configuration llama-swap cohérente, noms de modèle, refus de --start) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
 exit "$rc"

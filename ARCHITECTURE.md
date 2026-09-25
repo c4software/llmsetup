@@ -472,34 +472,34 @@ en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 ## gufo, à la place du service (`lib/gufo.sh`, `runtime-gufo/`)
 
 Moteur alternatif évalué le 24/09/2026 (`docs/GUFO.md`), jamais intégré au
-routeur : un modèle par processus, GGUF imposés. Il PREND LA PLACE du service
-sur `SERVER_PORT` (8009), les deux étant exclusifs (même port, un GPU). Même
-schéma que le service : compose versionné `runtime-gufo/docker-compose.yml`
-(un service par modèle, sélectionné par profil ; partie commune de la ligne de
-commande dans l'entrypoint, partie propre au modèle dans `command`), `.env`
-généré par `lib/gufo.sh` dans `GUFO_DATA` (défaut `~/llm/gufo-test`, hors du
-dépôt et de `~/models`) avec les seules valeurs machine : uid:gid de l'hôte,
-gid NUMÉRIQUES de render et video, chemins, port, sessions, politique de
-redémarrage, `COMPOSE_FILE` et `COMPOSE_PROFILES` (usage manuel :
-`cd ~/llm/gufo-test && docker compose ps`). Commandes : `--gufo [modèle]`
-(`.env`, arrêt du service, `compose down` puis `up -d`, attente de `/health` ;
-en cas d'échec gufo est retiré et le service relancé), `--gufo-off` (`compose
-down` puis `--start`), `--gufo-logs`, `--gufo-download` (délègue à
-`runtime-gufo/download.sh`). Garde : `--start` et `--restart` refusent tant
-que le conteneur `GUFO_CONTENEUR` (`gufo-8009`) tourne (`_gufo_refuse`,
-`lib/svc.sh`) ; `--status` dit quand c'est gufo qui répond. Le dernier moteur
-lancé repart seul au démarrage (`restart: unless-stopped` des deux côtés,
-l'autre étant arrêté ou supprimé). Les bancs `runtime-gufo/bench/run.sh`
-(HTTP, `bench/mesure.py`) et `bench/agentic.sh` (boucle pi) lancent gufo par
-`--gufo` avec leurs propres valeurs (`GUFO_PROJET=gufo-banc`, conteneur
-`gufo-banc`, `GUFO_RESTART=no`, `.env` séparé), sur le même port. Le profil
-`routeur` met llama-swap devant gufo (`runtime-gufo/Dockerfile.routeur`, image
-de gufo plus le binaire llama-swap épinglé par SHA-256 ; configuration
-versionnée `runtime-gufo/llama-swap.yaml`, valeurs machine en `${env.VAR}`) :
-le client choisit `qwen3.8-27b` ou `qwen3.8-flash-next`, llama-swap arrête un
-processus gufo pour lancer l'autre (groupe exclusif), précharge
-`GUFO_PRECHARGE` et retire `stop` / `stop_sequences` ; `--gufo routeur`
-attend `/upstream/<préchargé>/health`.
+routeur du service : un modèle par processus, GGUF imposés. Il PREND LA PLACE
+du service sur `SERVER_PORT` (8009), les deux étant exclusifs (même port, un
+GPU), et démarre TOUJOURS derrière llama-swap : le client choisit
+`qwen3.8-27b`, `qwen3.8-flash-next` ou `deepseek-v4-flash` par le champ
+`model`, llama-swap arrête un processus gufo pour lancer l'autre (groupe
+exclusif), précharge `GUFO_PRECHARGE` et retire `stop` / `stop_sequences`.
+Même schéma que le service : compose versionné `runtime-gufo/docker-compose.yml`
+(un service, image `runtime-gufo/Dockerfile.routeur` = gufo plus le binaire
+llama-swap épinglé par SHA-256), configuration versionnée
+`runtime-gufo/gufo-llama-swap.yaml` (SEULE description des lignes de commande
+de gufo, valeurs machine en `${env.VAR}`), `.env` généré par `lib/gufo.sh`
+dans `GUFO_DATA` (défaut `~/llm/gufo-test`, hors du dépôt et de `~/models`)
+avec les seules valeurs machine : uid:gid de l'hôte, gid NUMÉRIQUES de render
+et video, chemins, port, sessions, politique de redémarrage, modèle
+préchargé, `COMPOSE_FILE` (usage manuel : `cd ~/llm/gufo-test && docker
+compose ps`). Commandes : `--gufo [modèle préchargé]` (`.env`, arrêt du
+service, `compose down` puis `up -d`, attente de `/health` puis de
+`/upstream/<préchargé>/health` ; en cas d'échec gufo est retiré et le service
+relancé), `--gufo-off` (`compose down` puis `--start`), `--gufo-logs`,
+`--gufo-download` (délègue à `runtime-gufo/download.sh`). Garde : `--start` et
+`--restart` refusent tant que le conteneur `GUFO_CONTENEUR` (`gufo-8009`)
+tourne (`_gufo_refuse`, `lib/svc.sh`) ; `--status` dit quand c'est gufo qui
+répond. Le dernier moteur lancé repart seul au démarrage (`restart:
+unless-stopped` des deux côtés, l'autre étant arrêté ou supprimé). Les bancs
+`runtime-gufo/bench/run.sh` (HTTP, `bench/mesure.py`) et `bench/agentic.sh`
+(boucle pi) lancent gufo par `--gufo <cas>` avec leurs propres valeurs
+(`GUFO_PROJET=gufo-banc`, conteneur `gufo-banc`, `GUFO_RESTART=no`, `.env`
+séparé), sur le même port.
 
 ## Moteur conteneurisé (`runtime/`)
 

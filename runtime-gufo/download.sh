@@ -8,10 +8,10 @@
 #   runtime-gufo/download.sh image       docker pull de l'image (8,3 Go)
 #   runtime-gufo/download.sh flashnext   Flash-Next UD-Q4_K_XL unsloth, 4 shards (≈ 104 Go)
 #   runtime-gufo/download.sh deepseek    DeepSeek V4 Flash IQ2XXS antirez + DSpark (≈ 93 Go)
-#   runtime-gufo/download.sh 27b-q4km    drafter DFlash 2 Q4_K_M du 27B (1,1 Go ; le Q8_0 du parc suffit)
-#   runtime-gufo/download.sh all         image, flashnext, deepseek et 27b-q4km
+#   runtime-gufo/download.sh all         image, flashnext et deepseek
 #
-# Le 27B, la tête MTP et le mmproj de Flash-Next viennent du parc
+# Le 27B (cible et drafter DFlash 2 Q8_0), la tête MTP et le mmproj de
+# Flash-Next viennent du parc
 # (./setup-llm.sh --setup) : rien à télécharger pour eux. hf ne re-télécharge
 # pas un fichier déjà présent.
 set -euo pipefail
@@ -34,16 +34,13 @@ telecharge() {
       hf download antirez/deepseek-v4-gguf \
         --revision e7f04037032990db0346398d249baf9fb9df1ccc \
         DeepSeek-V4-Flash-DSpark-support-0731.gguf --local-dir "$DL" ;;
-    27b-q4km)
-      hf download z-lab/Qwen3.8-27B-DFlash2-GGUF Qwen3.8-27B-DFlash2-Q4_K_M.gguf \
-        --revision 2d9571f8ce46e151f61c6499c99dee6079e1d610 --local-dir "$DL" ;;
     *) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2 ;;
   esac
 }
 
 mkdir -p "$DL"
 if [[ "${1:-}" == all ]]; then
-  for quoi in image flashnext deepseek 27b-q4km; do telecharge "$quoi"; done
+  for quoi in image flashnext deepseek; do telecharge "$quoi"; done
 else
   telecharge "${1:-}"
 fi

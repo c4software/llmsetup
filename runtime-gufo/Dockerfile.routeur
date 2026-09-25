@@ -1,18 +1,18 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# gufo + llama-swap : l'image du profil « routeur » de runtime-gufo/
+# gufo + llama-swap : l'image du service de runtime-gufo/docker-compose.yml
 #
 # gufo ne sert qu'un modèle par processus ; sa documentation renvoie à
 # llama-swap (https://github.com/mostlygeek/llama-swap, MIT) pour exposer
 # plusieurs processus sous une même URL. Cette image ajoute le binaire
 # llama-swap à l'image de gufo : llama-swap écoute sur le port publié et lance
 # lui-même « gufo serve llm » pour le modèle demandé par le client, en
-# déchargeant le précédent (llama-swap.yaml). Pas de socket docker, rien sur
+# déchargeant le précédent (gufo-llama-swap.yaml). Pas de socket docker, rien sur
 # l'hôte : tout vit dans ce conteneur, avec les mêmes périphériques que gufo.
 #
-# Construite par « docker compose up » (bloc build du service routeur de
-# docker-compose.yml) quand elle manque ; ./setup-llm.sh --gufo routeur la
-# reconstruit si ce fichier change de révision (build --pull=never).
+# Construite par « docker compose up » (bloc build, pull_policy: build : les
+# couches en cache rendent la reconstruction immédiate quand rien ne change)
+# à chaque ./setup-llm.sh --gufo.
 # Version et somme SHA-256 épinglées : une nouvelle version de llama-swap est
 # un changement de ce fichier, jamais un effet de bord.
 # =============================================================================

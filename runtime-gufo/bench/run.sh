@@ -8,7 +8,8 @@
 #                                              arrêté et relancé à la sortie (trap)
 #   runtime-gufo/bench/run.sh llama <cas>...   la section équivalente du service
 #
-# Cas gufo : 27b, 27b-q4km, flashnext, deepseek (services de runtime-gufo/docker-compose.yml)
+# Cas gufo : 27b, flashnext, deepseek (modèles de runtime-gufo/gufo-llama-swap.yaml,
+# gufo lancé derrière llama-swap, le modèle du cas préchargé)
 # Cas llama : 27b, flashnext, flashnext-large-ub, deepseek
 #
 # Réglage gufo de ce banc : celui du compose (cache disque compris), 1 session
@@ -39,6 +40,15 @@ fin() {
 }
 trap fin EXIT
 
+modele_gufo() {  # cas -> modèle de gufo-llama-swap.yaml
+  case "$1" in
+    27b) echo qwen3.8-27b ;;
+    flashnext) echo qwen3.8-flash-next ;;
+    deepseek) echo deepseek-v4-flash ;;
+    *) echo "cas inconnu : $1" >&2; return 2 ;;
+  esac
+}
+
 section() {  # cas -> section du models.ini
   case "$1" in
     27b*) echo qwen3.8-27b-dflash-nothink ;;
@@ -51,6 +61,7 @@ section() {  # cas -> section du models.ini
 
 run_gufo() {
   local cas="$1" label="gufo-$1" t0 t1 nom_modele
+  modele_gufo "$cas" >/dev/null || return 1
   if ! ((STOPPE)); then
     # Port à libérer : le service, et un éventuel gufo d'usage réel (projet
     # gufo, conteneur gufo-8009). Le banc rend la main au service à la fin.
@@ -66,7 +77,7 @@ run_gufo() {
   t1=$(date +%s.%N)
   printf '%s\t%s\tchargement %.1f s\n' "$(date +%FT%T)" "$label" \
     "$(awk -v a="$t0" -v b="$t1" 'BEGIN{print b-a}')" | tee -a "$RES/chargements.tsv"
-  nom_modele="$(curl -s "localhost:$PORT/v1/models" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')"
+  nom_modele="$(modele_gufo "$cas")"
   python3 "$DEPOT/runtime-gufo/bench/mesure.py" "http://localhost:$PORT" "$nom_modele" "$label" "$RES" "$DEPOT/prompts" || true
   printf '%s\t%s\tmémoire utilisée %s Mio\n' "$(date +%FT%T)" "$label" \
     "$(free -m | awk '/^Mem/{print $3}')" | tee -a "$RES/chargements.tsv"

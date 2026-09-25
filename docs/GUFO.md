@@ -274,11 +274,12 @@ directe pour cet usage.
 
 gufo ne sert qu'un modèle par processus et renvoie à llama-swap
 (https://github.com/mostlygeek/llama-swap, MIT) pour exposer plusieurs
-processus sous une même URL. `./setup-llm.sh --gufo routeur` le fait :
+processus sous une même URL. `./setup-llm.sh --gufo` le fait toujours :
 llama-swap (v257, épinglé par SHA-256, dans une image dérivée de celle de gufo,
 sans socket docker) écoute sur `:8009` et lance `gufo serve llm` pour le modèle
-demandé, avec les mêmes lignes de commande que les profils du compose. Le
-client choisit `qwen3.8-27b` ou `qwen3.8-flash-next` par le champ `model`,
+demandé (lignes de commande dans `runtime-gufo/gufo-llama-swap.yaml`). Le
+client choisit `qwen3.8-27b`, `qwen3.8-flash-next` ou `deepseek-v4-flash`
+(IQ2XXS d'antirez, justesse à surveiller) par le champ `model`,
 comme avec le routeur llama-server du service.
 
 | Mesure du 25/09/2026, bigchuck | Résultat |
@@ -362,23 +363,23 @@ bancs sont versionnés dans [`runtime-gufo/`](../runtime-gufo/README.md). Les
 données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
 (défaut `~/llm/gufo-test` sur bigchuck, déjà peuplé) :
 
-- `./setup-llm.sh --gufo routeur` : llama-swap devant gufo, le client choisit
-  le 27B ou Flash-Next (section « Routeur » ci-dessus).
-- `./setup-llm.sh --gufo [27b|flashnext]` : gufo à la place du service sur
-  `:8009` (compose `runtime-gufo/docker-compose.yml`, `.env` généré dans
+- `./setup-llm.sh --gufo [flashnext|27b|deepseek]` : gufo, toujours derrière
+  llama-swap (section « Routeur » ci-dessus), à la place du service sur
+  `:8009`, l'argument choisissant le modèle préchargé (compose
+  `runtime-gufo/docker-compose.yml`, `.env` généré dans
   `GUFO_DATA`, 2 sessions par défaut, `GUFO_SESSIONS=N` pour changer, nom
   exposé `qwen3.8-27b` ou `qwen3.8-flash-next`, cache disque 16 Gio, staging
   8 Gio, utilisateur de l'hôte). `--gufo-off` pour revenir au service,
   `--gufo-logs` pour suivre les requêtes. Le dernier lancé repart seul au
   démarrage de bigchuck ; `--start` du service refuse tant que gufo tourne.
-- `./setup-llm.sh --gufo-download image|flashnext|deepseek|27b-q4km|all`
+- `./setup-llm.sh --gufo-download image|flashnext|deepseek|all`
   (`runtime-gufo/download.sh`) : image et GGUF de référence aux révisions
   épinglées par gufo (Flash-Next UD-Q4_K_XL unsloth `38bb39e`, 104 Go ;
   DeepSeek IQ2XXS antirez `1cd7b56`, 87 Go, et DSpark `e7f0403`, 6 Go ;
-  drafter DFlash 2 Q4_K_M `2d9571f`, 1,1 Go). Déjà présents sur bigchuck.
+  plus le drafter DFlash 2 Q4_K_M `2d9571f` (1,1 Go) téléchargé pour la
+  comparaison au Q8_0, sans suite). Déjà présents sur bigchuck.
 - `runtime-gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
-  (`bench/mesure.py`). Cas gufo : `27b`, `27b-q4km`, `flashnext`,
-  `deepseek` ; cas service : `27b`, `flashnext`, `flashnext-large-ub`,
+  (`bench/mesure.py`). Cas gufo : `27b`, `flashnext`, `deepseek` ; cas service : `27b`, `flashnext`, `flashnext-large-ub`,
   `deepseek`.
 - `runtime-gufo/bench/agentic.sh gufo|llama <cas>...` : boucle pi de
   `bench-agentic/`, `PASSES=3`, garde-temps d'une heure.
@@ -400,7 +401,7 @@ usage minimal (4 096 tokens de contexte, 128 générés, glouton) et ses propres
 mesures tournent en glouton. Les valeurs ci-dessous visent un usage agentique
 comparable au service ; aucune n'est un réglage interne du moteur.
 
-| Paramètre | `runtime-gufo/docker-compose.yml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
+| Paramètre | `runtime-gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
 |---|---|---|---|---|
 | `--context` | 262144 | 4096 | 32768 | nous : contexte natif, celui du service |
 | `--sessions` | 2 | non documenté | 2 | gufo et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
