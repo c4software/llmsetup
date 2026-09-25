@@ -78,6 +78,10 @@ macros:
 # requête avec ce nom, gufo répond 404 model_not_found sinon. Pour les LLM,
 # stop (OpenAI) et stop_sequences (Anthropic) sont retirés : gufo les refuse en
 # 400 unsupported_field (gufo-org/gufo#260), la requête serait perdue.
+# capabilities.context : llama-swap n'interroge pas gufo sur son contexte, et
+# sans lui /v1/models n'en publie aucun ; le proxy (qui lit meta.n_ctx) n'en
+# transmet alors pas, et l'extension pi/omp retombe sur 128K. Doit rester égal
+# au --context de la macro gufo.
 models:
   # Qwen3.8-27B, fichiers du parc (./setup-llm.sh --setup) : cible UD-Q4_K_XL,
   # drafter DFlash 2 Q8_0 (adaptatif, 7 tokens max, défauts gufo).
@@ -90,6 +94,8 @@ models:
       --dflash-model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q8_0.gguf
       ${qwen}
     checkEndpoint: /health
+    capabilities:
+      context: 262144
     filters:
       stripParams: "stop, stop_sequences"
 
@@ -106,6 +112,8 @@ models:
       --mmproj ${env.MODELS_BASE}/qwen3.8-flash-next/mmproj-BF16.gguf
       ${qwen}
     checkEndpoint: /health
+    capabilities:
+      context: 262144
     filters:
       stripParams: "stop, stop_sequences"
 
@@ -124,6 +132,8 @@ models:
       --dspark-model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-DSpark-support-0731.gguf
       ${deepseek}
     checkEndpoint: /health
+    capabilities:
+      context: 262144
     filters:
       stripParams: "stop, stop_sequences"
 
