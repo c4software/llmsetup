@@ -1,7 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 
 // Trois outils pour pi et omp (le modèle les appelle) et leurs commandes
@@ -28,8 +29,11 @@ const TAILLE_IMAGE = process.env.GUFO_IMAGE_SIZE ?? "512x512";
 const MODELE_VOIX = process.env.GUFO_TTS_MODEL ?? "bigchuck/qwen3-tts-12hz-1.7b-customvoice";
 // Voix décrite en langage naturel (champ instructions) : variante VoiceDesign.
 const MODELE_VOIX_DECRITE = process.env.GUFO_TTS_DESIGN_MODEL ?? "bigchuck/qwen3-tts-12hz-1.7b-voice-design";
-// Lecteur audio : pw-play (PipeWire), sinon paplay ou aplay via la variable.
-const LECTEUR = process.env.GUFO_PLAYER ?? "pw-play";
+// Lecteur audio : lit le PCM brut (16 bits signé, mono, 24 kHz) sur son entrée
+// standard, au fil de la synthèse. Autres lecteurs possibles par la variable :
+// "paplay --raw --rate=24000 --channels=1 --format=s16le" ou
+// "aplay -q -f S16_LE -r 24000 -c 1".
+const LECTEUR = (process.env.GUFO_PLAYER ?? "pw-play --raw --rate 24000 --channels 1 --format s16 -").split(/\s+/);
 
 // Corps JSON, ou FormData (multipart, édition d'image : fetch pose lui-même
 // le Content-Type et sa frontière).
@@ -45,12 +49,14 @@ async function post(chemin: string, corps: unknown, signal: AbortSignal | undefi
   return res;
 }
 
-function jouer(fichier: string, signal: AbortSignal | undefined): Promise<void> {
-  return new Promise((ok, ko) => {
-    const p = spawn(LECTEUR, [fichier], { stdio: "ignore", signal });
-    p.on("error", ko);
-    p.on("exit", (code) => (code === 0 ? ok() : ko(new Error(`${LECTEUR} a rendu ${code}`))));
-  });
+// En-tête WAV (44 octets) d'un PCM 16 bits mono 24 kHz de n octets.
+function enteteWav(n: number): Buffer {
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0); h.writeUInt32LE(36 + n, 4); h.write("WAVEfmt ", 8);
+  h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(24000, 24); h.writeUInt32LE(48000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
+  h.write("data", 36); h.writeUInt32LE(n, 40);
+  return h;
 }
 
 function texte(t: string, details: Record<string, unknown> = {}) {
@@ -128,29 +134,44 @@ async function modifierImage(params: any, cwd: string, signal?: AbortSignal) {
   return { chemin, secondes: Number(((Date.now() - t0) / 1000).toFixed(1)) };
 }
 
-// Synthétise et joue le texte ; rend la durée d'audio et le WAV gardé (ou null).
+// Synthétise et joue le texte EN FLUX : gufo envoie le PCM au fil de la
+// génération (un WAV n'arrive qu'à la fin, pour son en-tête de durée), le
+// lecteur le joue dès le premier morceau. Mesuré le 25/09/2026 via le proxy :
+// premier son en 0,5 s contre 6 s en WAV pour 8,4 s d'audio. Rend la durée
+// d'audio et le WAV gardé (ou null).
 async function parler(params: any, cwd: string, signal?: AbortSignal) {
   const res = await post("/v1/audio/speech", {
     input: params.texte,
     language: params.langue ?? "French",
-    response_format: "wav",
+    response_format: "pcm",
     ...(params.description_voix
       ? { model: MODELE_VOIX_DECRITE, instructions: params.description_voix }
       : { model: MODELE_VOIX, voice: params.voix ?? "aiden" }),
   }, signal, 300_000);
-  const wav = Buffer.from(await res.arrayBuffer());
-  const chemin = params.chemin
-    ? resolve(cwd, params.chemin)
-    : resolve(process.env.XDG_RUNTIME_DIR ?? "/tmp", `gufo-voix-${process.pid}.wav`);
-  await mkdir(dirname(chemin), { recursive: true });
-  await writeFile(chemin, wav);
-  try {
-    await jouer(chemin, signal);
-  } finally {
-    if (!params.chemin) await rm(chemin, { force: true });
+  const p = spawn(LECTEUR[0], LECTEUR.slice(1), { stdio: ["pipe", "ignore", "ignore"], signal });
+  const fin = new Promise<void>((ok, ko) => {
+    p.on("error", ko);
+    p.on("exit", (code) => (code === 0 ? ok() : ko(new Error(`${LECTEUR[0]} a rendu ${code}`))));
+  });
+  fin.catch(() => {}); // lecteur mort en cours de flux : l'erreur remonte par le await final
+  p.stdin.on("error", () => {});
+  const morceaux: Buffer[] = [];
+  let n = 0;
+  for await (const c of res.body as any) {
+    const b = Buffer.from(c);
+    n += b.length;
+    if (params.chemin) morceaux.push(b);
+    if (p.stdin.writable && !p.stdin.write(b)) await Promise.race([once(p.stdin, "drain"), fin]);
   }
-  const duree = Number(((wav.length - 44) / 48000).toFixed(1)); // PCM 16 bits mono 24 kHz
-  return { duree, wav: params.chemin ? chemin : null };
+  p.stdin.end();
+  await fin;
+  let wav: string | null = null;
+  if (params.chemin) {
+    wav = resolve(cwd, params.chemin);
+    await mkdir(dirname(wav), { recursive: true });
+    await writeFile(wav, Buffer.concat([enteteWav(n), ...morceaux]));
+  }
+  return { duree: Number((n / 48000).toFixed(1)), wav };
 }
 
 export default function (pi: ExtensionAPI) {
@@ -211,7 +232,7 @@ export default function (pi: ExtensionAPI) {
     label: "Voix (gufo)",
     description:
       "Lit un texte à voix haute sur les haut-parleurs de l'utilisateur (Qwen3-TTS sur gufo). " +
-      "Rapide (environ 2,5 fois le temps réel). Garder des phrases courtes.",
+      "Lu en flux : premier son en environ 0,5 s, synthèse 2,5 fois plus rapide que le temps réel.",
     parameters: {
       type: "object",
       properties: {
