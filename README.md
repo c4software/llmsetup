@@ -466,8 +466,9 @@ dans `AGENTS.md`.
 Les scripts shell pointent sur `http://bigchuck:8009` par défaut (surchargeable par variable d'environnement).
 
 Le moteur alternatif gufo (évalué le 24/09/2026, `docs/GUFO.md`) se pilote
-depuis ce point d'entrée : `./setup-llm.sh --gufo [27b|flashnext]` le met à la
-place du service sur `:8009`, `--gufo-off` revient au service, `--gufo-logs`
+depuis ce point d'entrée : `./setup-llm.sh --gufo [27b|flashnext|routeur]` le
+met à la place du service sur `:8009` (`routeur` : llama-swap devant gufo, le
+client choisit le 27B ou Flash-Next), `--gufo-off` revient au service, `--gufo-logs`
 suit ses requêtes, `--gufo-download <quoi>` récupère son image et ses GGUF.
 Compose, téléchargement et bancs dans `runtime-gufo/` (voir
 `runtime-gufo/README.md`).

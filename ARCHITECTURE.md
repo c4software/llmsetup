@@ -492,7 +492,14 @@ lancé repart seul au démarrage (`restart: unless-stopped` des deux côtés,
 l'autre étant arrêté ou supprimé). Les bancs `runtime-gufo/bench/run.sh`
 (HTTP, `bench/mesure.py`) et `bench/agentic.sh` (boucle pi) lancent gufo par
 `--gufo` avec leurs propres valeurs (`GUFO_PROJET=gufo-banc`, conteneur
-`gufo-banc`, `GUFO_RESTART=no`, `.env` séparé), sur le même port.
+`gufo-banc`, `GUFO_RESTART=no`, `.env` séparé), sur le même port. Le profil
+`routeur` met llama-swap devant gufo (`runtime-gufo/Dockerfile.routeur`, image
+de gufo plus le binaire llama-swap épinglé par SHA-256 ; configuration
+versionnée `runtime-gufo/llama-swap.yaml`, valeurs machine en `${env.VAR}`) :
+le client choisit `qwen3.8-27b` ou `qwen3.8-flash-next`, llama-swap arrête un
+processus gufo pour lancer l'autre (groupe exclusif), précharge
+`GUFO_PRECHARGE` et retire `stop` / `stop_sequences` ; `--gufo routeur`
+attend `/upstream/<préchargé>/health`.
 
 ## Moteur conteneurisé (`runtime/`)
 

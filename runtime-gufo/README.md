@@ -16,9 +16,21 @@ Sur la machine du service (bigchuck), le service déjà installé
 ```bash
 ./setup-llm.sh --gufo-download image       # l'image de gufo (8,3 Go)
 ./setup-llm.sh --gufo-download flashnext   # Flash-Next UD-Q4_K_XL (104 Go), seulement pour flashnext
-./setup-llm.sh --gufo 27b                  # ou : --gufo flashnext
+./setup-llm.sh --gufo routeur              # 27B et Flash-Next, le client choisit
 ./setup-llm.sh --gufo-off                  # retour au service
 ```
+
+`--gufo 27b` ou `--gufo flashnext` servent un seul modèle ; `--gufo routeur`
+met **llama-swap** devant gufo (la voie que gufo recommande) : le client
+choisit `qwen3.8-27b` ou `qwen3.8-flash-next` par le champ `model`, comme avec
+le routeur du service, et llama-swap arrête un gufo pour lancer l'autre. Un
+seul modèle est chargé à la fois (145 Gio ne tiennent pas dans 124) ;
+Flash-Next est préchargé (`GUFO_PRECHARGE`). Mesuré sur bigchuck le
+25/09/2026 : bascule vers le 27B 64,6 s, retour vers Flash-Next 31,4 s,
+relais sans coût (décode vu du client 47,4 t/s contre 47,6 mesurés par
+gufo). Les clients agentiques doivent faire pointer tous leurs rôles
+(principal et tâches annexes, le « Haiku » de Claude Code) sur le même
+modèle, sinon chaque requête annexe déclenche une bascule.
 
 Le 27B tourne avec les fichiers du parc, rien d'autre à télécharger.
 `./setup-llm.sh --status` dit qui tient le port, `--gufo-logs` suit les
@@ -29,6 +41,8 @@ requêtes de gufo.
 | Fichier | Rôle |
 |---|---|
 | `docker-compose.yml` | La description de gufo, versionnée : un service par modèle (`27b`, `flashnext`, `27b-q4km`, `deepseek`) sélectionné par profil, ligne de commande complète, utilisateur de l'hôte, `restart: ${GUFO_RESTART}`. Aucune valeur machine : tout vient du `.env` |
+| `Dockerfile.routeur` | Image du profil `routeur` : celle de gufo plus le binaire llama-swap, épinglé par version et SHA-256 ; construite par compose quand elle manque |
+| `llama-swap.yaml` | Configuration du routeur, versionnée, sans valeur machine (`${env.VAR}`) : mêmes lignes de commande que les profils `27b` et `flashnext`, groupe exclusif, préchargement, `stop` et `stop_sequences` retirés pour tous les clients (gufo#260) |
 | `download.sh image\|flashnext\|deepseek\|27b-q4km\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --gufo-download`) |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
@@ -69,6 +83,10 @@ eux-mêmes `GUFO_PROJET=gufo-banc`, `GUFO_CONTENEUR=gufo-banc`,
   à la fin.
 - Garder la configuration de gufo stable : la changer (`GUFO_SESSIONS`…) rend
   son cache disque inutilisable.
-- Le proxy (llm-proxy) doit retirer `stop` des requêtes Anthropic pour gufo
-  (`anthropic_drop_fields = ["stop"]` sous le backend), à enlever au retour
-  du service (gufo-org/gufo#260).
+- `stop` : gufo le refuse (gufo-org/gufo#260). Le routeur le retire lui-même
+  pour tous les clients ; avec `--gufo 27b` ou `flashnext`, c'est au proxy
+  (llm-proxy, `anthropic_drop_fields = ["stop"]`) de le faire, à enlever au
+  retour du service.
+- Modifier `llama-swap.yaml` demande de relancer `--gufo routeur` (lu au
+  démarrage) ; garder ses lignes de commande identiques à celles des profils
+  du compose (vérifié par `tests/sh-unit.sh`).

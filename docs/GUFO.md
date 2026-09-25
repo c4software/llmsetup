@@ -270,6 +270,36 @@ serveur vide le cache disque (le prompt système de Claude Code repart en
 Aucune session équivalente n'a été jouée sur le service : pas de comparaison
 directe pour cet usage.
 
+## Routeur : basculer entre le 27B et Flash-Next par le client
+
+gufo ne sert qu'un modèle par processus et renvoie à llama-swap
+(https://github.com/mostlygeek/llama-swap, MIT) pour exposer plusieurs
+processus sous une même URL. `./setup-llm.sh --gufo routeur` le fait :
+llama-swap (v257, épinglé par SHA-256, dans une image dérivée de celle de gufo,
+sans socket docker) écoute sur `:8009` et lance `gufo serve llm` pour le modèle
+demandé, avec les mêmes lignes de commande que les profils du compose. Le
+client choisit `qwen3.8-27b` ou `qwen3.8-flash-next` par le champ `model`,
+comme avec le routeur llama-server du service.
+
+| Mesure du 25/09/2026, bigchuck | Résultat |
+|---|---|
+| Relais par llama-swap | sans coût : décode vu du client 47,4 t/s contre 47,6 mesurés par gufo |
+| Bascule Flash-Next vers 27B (arrêt de l'un, chargement de l'autre) | 64,6 s avant le premier token |
+| Bascule 27B vers Flash-Next | 31,4 s |
+| Modèle déjà chargé | premier token en 0,3 s |
+| Requête avec `stop` | acceptée (retiré par llama-swap, gufo#260) |
+| Mémoire | un seul modèle chargé à la fois (99 Gio avec Flash-Next) |
+
+Limites :
+
+- un seul des deux modèles à la fois (100 Gio + 45 Gio ne tiennent pas) :
+  chaque bascule coûte 30 à 65 s, les fichiers ne restant pas tous en cache ;
+- les rôles d'un client agentique (principal, tâches annexes) doivent viser le
+  même modèle, sinon chaque requête annexe déclenche une bascule ;
+- les autres modèles du parc restent sur le service : llama-swap ne peut pas
+  piloter le routeur llama-server (autre image) sans la socket docker, que le
+  dépôt s'interdit, et les deux ne tiennent pas ensemble en mémoire.
+
 ## Récupérer ses optimisations dans le service
 
 Légalement possible (MIT, mention de copyright), techniquement coûteux : les
@@ -332,6 +362,8 @@ bancs sont versionnés dans [`runtime-gufo/`](../runtime-gufo/README.md). Les
 données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
 (défaut `~/llm/gufo-test` sur bigchuck, déjà peuplé) :
 
+- `./setup-llm.sh --gufo routeur` : llama-swap devant gufo, le client choisit
+  le 27B ou Flash-Next (section « Routeur » ci-dessus).
 - `./setup-llm.sh --gufo [27b|flashnext]` : gufo à la place du service sur
   `:8009` (compose `runtime-gufo/docker-compose.yml`, `.env` généré dans
   `GUFO_DATA`, 2 sessions par défaut, `GUFO_SESSIONS=N` pour changer, nom
