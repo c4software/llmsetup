@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 
 // Deux outils pour pi et omp (le modèle les appelle) et leurs commandes
 // directes, sans passer par le modèle : /image [LxH] <prompt> et
-// /parler <texte>. Générer une image et parler, par gufo
+// /parler [voix décrite] <texte>. Générer une image et parler, par gufo
 // (runtime-gufo/, docs/GUFO.md) derrière le proxy (llm-proxy, routage au
 // préfixe « bigchuck/ »). Copier dans ~/.pi/agent/extensions et
 // ~/.omp/agent/extensions.
@@ -145,13 +145,15 @@ export default function (pi: ExtensionAPI) {
 
   // Commandes directes : ni le modèle ni la conversation ne sont touchés
   // (/image décharge quand même le LLM côté gufo, groupe « gros »).
+  // /parler [voix décrite] <texte> : la description entre crochets passe par
+  // VoiceDesign, sans crochets c'est la voix intégrée par défaut.
   pi.registerCommand("parler", {
-    description: "Lit le texte à voix haute (gufo) : /parler <texte>",
+    description: "Lit le texte à voix haute (gufo) : /parler [voix décrite] <texte>",
     handler: async (args: string, ctx: any) => {
-      const t = (args ?? "").trim();
-      if (!t) return ctx.ui.notify("Usage : /parler <texte>", "warning");
+      const m = (args ?? "").trim().match(/^(?:\[([^\]]+)\]\s*)?([\s\S]+)$/);
+      if (!m) return ctx.ui.notify("Usage : /parler [voix décrite] <texte>", "warning");
       try {
-        const r = await parler({ texte: t }, ctx.cwd);
+        const r = await parler({ texte: m[2], ...(m[1] ? { description_voix: m[1].trim() } : {}) }, ctx.cwd);
         ctx.ui.notify(`Dit (${r.duree} s d'audio).`, "info");
       } catch (e) {
         ctx.ui.notify(`parler : ${(e as Error).message}`, "error");
