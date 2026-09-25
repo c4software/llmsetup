@@ -6,7 +6,8 @@
 # lance « gufo serve llm » pour ce modèle et arrête le précédent. Aucune paire
 # ne tient en mémoire (Flash-Next ~100 Gio en 2 sessions, DeepSeek ~104 Gio,
 # 27B ~45 Gio, 124 Gio en tout) : groupe exclusif, un seul modèle à la fois.
-# Bascule mesurée le 25/09/2026 : vers le 27B 64,6 s, vers Flash-Next 31,4 s.
+# Bascule mesurée le 25/09/2026 : vers le 27B 64,6 s, vers Flash-Next 31,4 à
+# 32,9 s, vers DeepSeek 70,4 s.
 # Clients agentiques : faire pointer TOUS leurs rôles (principal et tâches
 # annexes, le « Haiku » de Claude Code) sur le même modèle, sinon chaque
 # requête annexe déclenche une bascule.
@@ -107,6 +108,8 @@ models:
   # support DSpark (--gufo-download deepseek ; l'UD-IQ3_XXS du parc est
   # refusé). Plus légère que celle du service : un comptage raté à 26k tokens
   # le 24/09/2026, justesse à surveiller. 16/16 en boucle agentique pi.
+  # Mesuré le 25/09/2026 : répond sans raisonnement par défaut (la section
+  # du service raisonne, budget 6 144 tokens).
   "deepseek-v4-flash":
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-

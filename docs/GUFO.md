@@ -287,6 +287,7 @@ comme avec le routeur llama-server du service.
 | Relais par llama-swap | sans coût : décode vu du client 47,4 t/s contre 47,6 mesurés par gufo |
 | Bascule Flash-Next vers 27B (arrêt de l'un, chargement de l'autre) | 64,6 s avant le premier token |
 | Bascule 27B vers Flash-Next | 31,4 s |
+| Bascule Flash-Next vers DeepSeek (IQ2XXS) | 70,4 s, réponse juste ; sans raisonnement par défaut (le gabarit d'antirez répond directement, là où la section du service raisonne avec un budget de 6 144 tokens) |
 | Modèle déjà chargé | premier token en 0,3 s |
 | Requête avec `stop` | acceptée (retiré par llama-swap, gufo#260) |
 | Mémoire | un seul modèle chargé à la fois (99 Gio avec Flash-Next) |
