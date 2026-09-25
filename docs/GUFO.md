@@ -302,6 +302,29 @@ Limites :
   piloter le routeur llama-server (autre image) sans la socket docker, que le
   dépôt s'interdit, et les deux ne tiennent pas ensemble en mémoire.
 
+## Audio et image, derrière le même llama-swap
+
+gufo sert aussi la synthèse vocale (Qwen3-TTS 12Hz 1.7B, trois variantes), la
+transcription (Qwen3-ASR 1.7B) et la génération d'images (Qwen-Image-2.1, BF16,
+licence non commerciale), sous les routes OpenAI audio et images. Mêmes
+`gufo-llama-swap.yaml` et `./setup-llm.sh --gufo` : la voix et la
+transcription sont chargées À CÔTÉ du modèle de texte (groupes persistants),
+Qwen-Image partage le groupe exclusif des LLM.
+
+| Mesure du 25/09/2026, bigchuck (Flash-Next préchargé) | Résultat |
+|---|---|
+| Synthèse (CustomVoice, voix intégrée « aiden ») | 6,5 s d'audio en 2,6 s, soit 2,5 fois le temps réel ; chargement quasi nul (2,9 s au premier appel) |
+| Transcription du WAV produit | 3,2 s chargement compris ; texte fidèle, noms propres approximés (« Big Jack », « Guffaw », « Lama Swap ») |
+| Flash-Next + voix + transcription chargés ensemble | 110 Gio utilisés, 14 Gio libres ; Flash-Next répond toujours en 0,4 s |
+| Image 512², 20 étapes | 16,3 s, bascule depuis Flash-Next comprise |
+| Image 1024², 40 étapes (défaut) | 90,2 s, image conforme à la demande |
+| Retour à Flash-Next après une image | 38,0 s ; voix et transcription restées chargées |
+
+Limites : 14 Gio de marge seulement avec Flash-Next, la voix et la
+transcription chargés (DeepSeek laisse un peu plus, le 27B beaucoup plus) ;
+une image coûte la bascule du LLM dans les deux sens ; le flux WebSocket de la
+synthèse passe par `/upstream/<modèle>/`, pas par une route de llama-swap.
+
 ## Récupérer ses optimisations dans le service
 
 Légalement possible (MIT, mention de copyright), techniquement coûteux : les

@@ -139,6 +139,8 @@ models:
   #   voice-design voix décrite en texte (« instructions »)
   #   base         clonage : audio de référence et sa transcription par requête
   # Mesuré par gufo : 2,54 fois le temps réel, 201 ms avant le premier son.
+  # Mesuré ici le 25/09/2026 : 2,5 fois le temps réel ; Flash-Next + voix +
+  # transcription chargés ensemble = 110 Gio, 14 Gio libres.
   "qwen3-tts-12hz-1.7b-customvoice":
     name: "Qwen3-TTS 1.7B CustomVoice (gufo)"
     cmd: >-
@@ -176,8 +178,9 @@ models:
   # Qwen-Image-2.1 : génération et édition (jusqu'à 10 références), sortie PNG
   # en base64, 1024² et 40 étapes par défaut. Licence Qwen Research, non
   # commerciale. Dans le groupe « gros » : une image décharge le LLM en cours
-  # (et le LLM suivant décharge Qwen-Image). Temps de génération non encore
-  # publiés par gufo.
+  # (et le LLM suivant décharge Qwen-Image). Temps de génération non publiés
+  # par gufo ; mesuré ici le 25/09/2026 : 1024² en 40 étapes 90 s, 512² en
+  # 20 étapes 16 s, retour à Flash-Next 38 s.
   "Qwen-Image-2.1":
     name: "Qwen-Image-2.1 (gufo)"
     cmd: >-

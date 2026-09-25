@@ -46,7 +46,10 @@ les routes OpenAI habituelles :
 | `Qwen-Image-2.1` | `/v1/images/generations`, `/v1/images/edits` | groupe « gros » avec les LLM : une image décharge le LLM en cours, et l'inverse |
 
 Le flux WebSocket de la synthèse (`/v1/audio/speech/stream`) n'est pas une
-route de llama-swap : `/upstream/<modèle>/v1/audio/speech/stream`.
+route de llama-swap : `/upstream/<modèle>/v1/audio/speech/stream`. Mesuré le
+25/09/2026 : synthèse 2,5 fois le temps réel, transcription fidèle en 3 s,
+image 1024² en 90 s ; Flash-Next, voix et transcription ensemble laissent
+14 Gio libres (détail dans `docs/GUFO.md`).
 
 Le 27B tourne avec les fichiers du parc, rien d'autre à télécharger.
 `./setup-llm.sh --status` dit qui tient le port, `--gufo-logs` suit les
