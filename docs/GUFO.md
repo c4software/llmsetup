@@ -323,7 +323,10 @@ Qwen-Image partage le groupe exclusif des LLM.
 Limites : 14 Gio de marge seulement avec Flash-Next, la voix et la
 transcription chargés (DeepSeek laisse un peu plus, le 27B beaucoup plus) ;
 une image coûte la bascule du LLM dans les deux sens ; le flux WebSocket de la
-synthèse passe par `/upstream/<modèle>/`, pas par une route de llama-swap.
+synthèse passe par `/upstream/<modèle>/`, pas par une route de llama-swap ;
+voix et transcription déchargées après 60 s sans requête et limitées à une
+file matérielle, sinon le GPU reste occupé à 100 % au repos (#272, section
+« Suivi en amont »).
 
 Depuis les clients, par le proxy (`http://llmproxy`, modèles préfixés
 `bigchuck/`) : llm-proxy relaie la synthèse, la génération et l'édition
@@ -396,13 +399,50 @@ Publié le 24/09/2026 sous le compte c4software :
   temp 0,7 et gain lié à un pool persistant, donc conception différente, à
   suivre dans un ticket séparé.
 
+Publié le 25/09/2026 :
+
+- [#272](https://github.com/gufo-org/gufo/issues/272) : bigchuck ventilait en
+  permanence au repos (GPU occupé à 100 %, ~30 W contre ~4 W, 50 °C), jamais
+  vu avec le service. Ouvert d'abord contre la voix, renommé après enquête :
+  le GPU reste occupé dès que plus de 8 files de calcul matérielles sont
+  ouvertes, tous processus confondus. Le LLM en ouvre 5, la voix et la
+  transcription 4 chacune (défaut HIP), donc LLM + un serveur audio = 9 ; le
+  simple chargement suffit, sans requête. Démarche détaillée dans le
+  commentaire du ticket : état du processus (threads endormis, pas
+  d'éviction), lecture du code (aucune boucle, tout synchronisé), sondes
+  ctypes isolées (HIP, rocBLAS, copie des poids : 0 %), réglages du runtime
+  un par un (seul `GPU_MAX_HW_QUEUES` change le résultat, seuil sur le total
+  des files). Mesures :
+
+  | Chargés (Flash-Next résident, 5 files) | Files de calcul | GPU au repos |
+  |---|---|---|
+  | LLM seul | 5 | 0 % |
+  | + voix, défaut | 9 | 100 % |
+  | + voix, `GPU_MAX_HW_QUEUES=2` | 8 | 0 % |
+  | + voix, `GPU_MAX_HW_QUEUES=1` | 7 | 0 % |
+  | + transcription, défaut / `=1` | 9 / 7 | 100 % / 0 % |
+  | + voix et transcription, `=1` toutes deux | 9 | 100 % |
+
+  Vitesse inchangée avec `GPU_MAX_HW_QUEUES=1` (synthèse 2,23 à 2,28 s,
+  transcription 0,45 s, avant comme après). Contournement en place depuis le
+  commit e7cc120 (`runtime-gufo/gufo-llama-swap.yaml`) : `GPU_MAX_HW_QUEUES=1`
+  et `ttl: 60` sur la voix et la transcription ; vérifié après redéploiement
+  (LLM + voix au repos : 0 %, voix déchargée au bout de 60 s). À surveiller :
+  une correction côté gufo (serveurs audio sur une seule file par défaut,
+  limite documentée, 5 files du LLM à justifier) permettrait de retirer le
+  `env` et le `ttl`. Le 27B et DeepSeek n'ont pas été comptés (le LLM
+  pourrait ouvrir un autre nombre de files). Rejoué le même soir après mise à
+  jour et redémarrage de bigchuck (noyau 7.2.5 vers 7.2.7-1-cachyos,
+  `linux-firmware-amdgpu` 20260916) : toujours là (LLM + voix sans
+  contournement, 5 + 4 files : 99 à 100 % ; avec, 5 + 2 : 0 à 1 %).
+
 À surveiller :
 
 | Ticket | Sujet | État au 25/09/2026 |
 |---|---|---|
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
-| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre) ; contournement : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée |
+| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), renommé après enquête, démarche de test en commentaire ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916 ; à retirer si gufo limite ses files |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | ouvert (le nôtre) |
 | #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert, confirmé par un second utilisateur |
