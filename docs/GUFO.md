@@ -345,6 +345,7 @@ Publié le 24/09/2026 sous le compte c4software :
 |---|---|---|
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | ouvert (le nôtre) |
+| #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert, confirmé par un second utilisateur |
 | #239 | n-gram (prompt lookup) | résultat négatif en greedy, clôture proposée |
 | #255 | GEMM W8A8 du prefill Flash-Next, +5 % (pwilkin) | non reproduit : débordement propre à clang 23 |
@@ -377,8 +378,9 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   (`runtime-gufo/download.sh`) : image et GGUF de référence aux révisions
   épinglées par gufo (Flash-Next UD-Q4_K_XL unsloth `38bb39e`, 104 Go ;
   DeepSeek IQ2XXS antirez `1cd7b56`, 87 Go, et DSpark `e7f0403`, 6 Go ;
-  plus le drafter DFlash 2 Q4_K_M `2d9571f` (1,1 Go) téléchargé pour la
-  comparaison au Q8_0, sans suite). Déjà présents sur bigchuck.
+  le drafter DFlash 2 Q4_K_M `2d9571f`, 1,1 Go, téléchargé pour la
+  comparaison au Q8_0, mesuré identique et supprimé le 25/09/2026). Présents
+  sur bigchuck (191 Go dans `GUFO_DATA/models`).
 - `runtime-gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
   (`bench/mesure.py`). Cas gufo : `27b`, `flashnext`, `deepseek` ; cas service : `27b`, `flashnext`, `flashnext-large-ub`,
   `deepseek`.
