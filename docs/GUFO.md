@@ -325,6 +325,17 @@ transcription chargés (DeepSeek laisse un peu plus, le 27B beaucoup plus) ;
 une image coûte la bascule du LLM dans les deux sens ; le flux WebSocket de la
 synthèse passe par `/upstream/<modèle>/`, pas par une route de llama-swap.
 
+Depuis les clients, par le proxy (`http://llmproxy`, modèles préfixés
+`bigchuck/`) : llm-proxy relaie la synthèse, la génération et l'édition
+d'image, route les corps multipart (transcription, édition) d'après leur
+champ `model` et sert `GET /v1/audio/voices` (commit bcaf63e du proxy).
+Pour pi et omp, l'extension `tools/gufo-media.ts` ajoute deux outils :
+`generer_image` (PNG dans le dossier de travail) et `parler` (lecture par
+`pw-play`, voix intégrée ou décrite, cette dernière par VoiceDesign).
+Vérifié le 25/09/2026 : `parler` sous pi en 10,6 s pour tout le tour,
+`generer_image` 512² en 20 étapes sous omp en 90 s pour tout le tour (bascule
+vers Qwen-Image, puis retour à Flash-Next pour la réponse).
+
 ## Récupérer ses optimisations dans le service
 
 Légalement possible (MIT, mention de copyright), techniquement coûteux : les

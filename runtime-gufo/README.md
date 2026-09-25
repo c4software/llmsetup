@@ -51,6 +51,10 @@ route de llama-swap : `/upstream/<modèle>/v1/audio/speech/stream`. Mesuré le
 image 1024² en 90 s ; Flash-Next, voix et transcription ensemble laissent
 14 Gio libres (détail dans `docs/GUFO.md`).
 
+Par le proxy (`http://llmproxy`), les mêmes modèles sont préfixés
+`bigchuck/` ; pour pi et omp, `tools/gufo-media.ts` ajoute les outils
+`generer_image` et `parler`.
+
 Le 27B tourne avec les fichiers du parc, rien d'autre à télécharger.
 `./setup-llm.sh --status` dit qui tient le port, `--gufo-logs` suit les
 requêtes de gufo.
