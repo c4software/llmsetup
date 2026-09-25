@@ -402,6 +402,7 @@ Publié le 24/09/2026 sous le compte c4software :
 |---|---|---|
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
+| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre) ; contournement : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | ouvert (le nôtre) |
 | #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert, confirmé par un second utilisateur |

@@ -9,8 +9,10 @@
 #     tient en mémoire (Flash-Next ~100 Gio en 2 sessions, DeepSeek ~93 Gio,
 #     27B ~45 Gio, Qwen-Image 33 Go de poids BF16, 124 Gio en tout) ;
 #   - « voix » : les trois variantes de Qwen3-TTS, une à la fois, à côté du
-#     gros modèle, jamais déchargées par lui ;
-#   - « transcription » : Qwen3-ASR, à côté de tout, jamais déchargé.
+#     gros modèle, jamais déchargées par lui, déchargées après 60 s sans
+#     requête (gufo-org/gufo#272) ;
+#   - « transcription » : Qwen3-ASR, à côté de tout, jamais déchargé par un
+#     autre modèle, déchargé après 60 s sans requête (même raison).
 # Bascule mesurée le 25/09/2026 : vers le 27B 64,6 s, vers Flash-Next 31,4 à
 # 32,9 s, vers DeepSeek 70,4 s.
 # Clients agentiques : faire pointer TOUS leurs rôles (principal et tâches
@@ -53,7 +55,8 @@ sendLoadingState: false
 logToStdout: "both"
 
 # Pas de déchargement sur inactivité : le dernier modèle reste servi, comme
-# le routeur du service avec son préchargement.
+# le routeur du service avec son préchargement. Exception : les voix (ttl
+# propre, voir Qwen3-TTS plus bas) et la transcription.
 globalTTL: 0
 
 macros:
@@ -151,6 +154,15 @@ models:
   # Mesuré par gufo : 2,54 fois le temps réel, 201 ms avant le premier son.
   # Mesuré ici le 25/09/2026 : 2,5 fois le temps réel ; Flash-Next + voix +
   # transcription chargés ensemble = 110 Gio, 14 Gio libres.
+  # GPU_MAX_HW_QUEUES=1 et ttl 60, voix ET transcription (gufo-org/gufo#272,
+  # mesuré le 25/09/2026, gufo 98641a6) : au-delà de 8 files de calcul
+  # matérielles, tous processus confondus, le GPU reste occupé à 100 % au repos
+  # (~30 W contre ~4 W, 50 °C, ventilateurs jamais arrêtés). Chaque serveur
+  # gufo en ouvre 4 à 5 par défaut (le LLM 5, la voix 4) : LLM + voix = 9.
+  # GPU_MAX_HW_QUEUES=1 ramène la voix et la transcription à 2 (synthèse et
+  # transcription aussi rapides : 2,23 à 2,28 s, 0,45 s), mais LLM + voix +
+  # transcription font encore 9 : le ttl décharge celui des deux qui ne sert
+  # plus. Rechargement en moins d'une seconde (332 à 1236 ms).
   "qwen3-tts-12hz-1.7b-customvoice":
     name: "Qwen3-TTS 1.7B CustomVoice (gufo)"
     cmd: >-
@@ -158,6 +170,9 @@ models:
       --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-CustomVoice
       --served-model-name qwen3-tts-12hz-1.7b-customvoice
     checkEndpoint: /health
+    env:
+      - "GPU_MAX_HW_QUEUES=1"
+    ttl: 60
 
   "qwen3-tts-12hz-1.7b-voice-design":
     name: "Qwen3-TTS 1.7B VoiceDesign (gufo)"
@@ -166,6 +181,9 @@ models:
       --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign
       --served-model-name qwen3-tts-12hz-1.7b-voice-design
     checkEndpoint: /health
+    env:
+      - "GPU_MAX_HW_QUEUES=1"
+    ttl: 60
 
   "qwen3-tts-12hz-1.7b-base":
     name: "Qwen3-TTS 1.7B Base, clonage de voix (gufo)"
@@ -174,9 +192,12 @@ models:
       --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-Base
       --served-model-name qwen3-tts-12hz-1.7b-base
     checkEndpoint: /health
+    env:
+      - "GPU_MAX_HW_QUEUES=1"
+    ttl: 60
 
   # Qwen3-ASR 1.7B : WAV jusqu'à 30 min, découpé en morceaux, décodage glouton.
-  # Mesuré par gufo : 15,27 fois le temps réel.
+  # Mesuré par gufo : 15,27 fois le temps réel. env et ttl : voir Qwen3-TTS.
   "qwen3-asr-1.7b":
     name: "Qwen3-ASR 1.7B (gufo)"
     cmd: >-
@@ -184,6 +205,9 @@ models:
       --model ${env.GUFO_DATA}/models/Qwen3-ASR-1.7B
       --served-model-name qwen3-asr-1.7b
     checkEndpoint: /health
+    env:
+      - "GPU_MAX_HW_QUEUES=1"
+    ttl: 60
 
   # Qwen-Image-2.1 : génération et édition (jusqu'à 10 références), sortie PNG
   # en base64, 1024² et 40 étapes par défaut. Licence Qwen Research, non

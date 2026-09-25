@@ -42,8 +42,8 @@ les routes OpenAI habituelles :
 
 | Modèle (`model`) | Route | Chargement |
 |---|---|---|
-| `qwen3-tts-12hz-1.7b-customvoice`, `-voice-design`, `-base` | `/v1/audio/speech`, `/v1/audio/voices` | groupe « voix » : une variante à la fois, À CÔTÉ du modèle de texte, jamais déchargée par lui |
-| `qwen3-asr-1.7b` | `/v1/audio/transcriptions` | groupe « transcription » : à côté de tout, jamais déchargé |
+| `qwen3-tts-12hz-1.7b-customvoice`, `-voice-design`, `-base` | `/v1/audio/speech`, `/v1/audio/voices` | groupe « voix » : une variante à la fois, À CÔTÉ du modèle de texte, jamais déchargée par lui ; déchargée après 60 s sans requête (gufo-org/gufo#272) |
+| `qwen3-asr-1.7b` | `/v1/audio/transcriptions` | groupe « transcription » : à côté de tout, jamais déchargé par un autre modèle ; déchargé après 60 s sans requête (gufo-org/gufo#272) |
 | `Qwen-Image-2.1-heretic` (encodeur de texte « abliterated ») | `/v1/images/generations`, `/v1/images/edits` | groupe « gros » avec les LLM : une image décharge le LLM en cours, et l'inverse |
 
 Le flux WebSocket de la synthèse (`/v1/audio/speech/stream`) n'est pas une
