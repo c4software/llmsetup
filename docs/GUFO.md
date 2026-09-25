@@ -381,7 +381,14 @@ Publié le 24/09/2026 sous le compte c4software :
   deux commentaires : c'était en grande partie une configuration (`--cache-disk`
   absent, staging trop petit pour le 27B), chiffres agentiques à l'appui. Restent
   trois points pour gufo : limite de staging qui coupe en silence, préfixes
-  partagés réservés au disque, période d'apprentissage.
+  partagés réservés au disque, période d'apprentissage. Réponse du mainteneur
+  le 25/09/2026 : journal quand une sauvegarde dépasse le staging, défaut de
+  512 Mio revu (idéalement déduit du modèle) et documentation de
+  `--cache-disk` en une seule modification ; `--sessions 2` documenté pour les
+  clients agentiques ; préfixes partagés en RAM et apprentissage déplacés
+  dans [#267](https://github.com/gufo-org/gufo/issues/267) ; identité du cache
+  disque (nombre de sessions ?) à examiner. Notre réponse : prêts à rejouer la
+  même boucle agentique sur les deux correctifs.
 - [#239](https://github.com/gufo-org/gufo/issues/239) : deux commentaires sur
   le n-gram. Le même jour, un contributeur y a publié un résultat négatif :
   recherche dans le prompt en complément de la MTP, greedy, +0,2 à 1,1 %
@@ -391,9 +398,10 @@ Publié le 24/09/2026 sous le compte c4software :
 
 À surveiller :
 
-| Ticket | Sujet | État au 24/09/2026 |
+| Ticket | Sujet | État au 25/09/2026 |
 |---|---|---|
-| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé |
+| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 |
+| #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | ouvert (le nôtre) |
 | #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert, confirmé par un second utilisateur |
