@@ -13,9 +13,9 @@
 #   runtime-gufo/download.sh qwen-image  Qwen-Image-2.1 BF16, pipeline complet (≈ 33,1 Go ;
 #                                        licence Qwen Research, non commerciale)
 #   runtime-gufo/download.sh qwen-image-heretic
-#                                        variante à encodeur « abliterated » (≈ 16,3 Go,
-#                                        après qwen-image ; hors de all, à l'essai)
-#   runtime-gufo/download.sh all         tout ce qui précède, sauf qwen-image-heretic
+#                                        encodeur « abliterated » (≈ 16,3 Go, après
+#                                        qwen-image) : la seule variante servie
+#   runtime-gufo/download.sh all         tout ce qui précède
 #
 # Le 27B (cible et drafter DFlash 2 Q8_0), la tête MTP et le mmproj de
 # Flash-Next viennent du parc
@@ -96,7 +96,7 @@ PY
 
 mkdir -p "$DL"
 if [[ "${1:-}" == all ]]; then
-  for quoi in image flashnext deepseek tts asr qwen-image; do telecharge "$quoi"; done
+  for quoi in image flashnext deepseek tts asr qwen-image qwen-image-heretic; do telecharge "$quoi"; done
 else
   telecharge "${1:-}"
 fi

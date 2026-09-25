@@ -20,7 +20,7 @@ import { dirname, resolve } from "node:path";
 
 const ENDPOINT = process.env.LLM_PROXY_URL ?? "http://llmproxy";
 const API_KEY = process.env.LLM_PROXY_KEY ?? "unused";
-const MODELE_IMAGE = process.env.GUFO_IMAGE_MODEL ?? "bigchuck/Qwen-Image-2.1";
+const MODELE_IMAGE = process.env.GUFO_IMAGE_MODEL ?? "bigchuck/Qwen-Image-2.1-heretic";
 // 512x512 : ~16 s en 20 étapes, 4 fois plus rapide que 1024x1024 (défaut de gufo).
 const TAILLE_IMAGE = process.env.GUFO_IMAGE_SIZE ?? "512x512";
 const MODELE_VOIX = process.env.GUFO_TTS_MODEL ?? "bigchuck/qwen3-tts-12hz-1.7b-customvoice";

@@ -20,6 +20,7 @@ Sur la machine du service (bigchuck), le service déjà installé
 ./setup-llm.sh --gufo-download tts         # synthèse vocale, trois variantes (13,5 Go), si voulu
 ./setup-llm.sh --gufo-download asr         # transcription (4,7 Go), si voulu
 ./setup-llm.sh --gufo-download qwen-image  # génération d'images (33 Go, licence non commerciale), si voulu
+./setup-llm.sh --gufo-download qwen-image-heretic  # son encodeur « abliterated » (16,3 Go), la variante servie
 ./setup-llm.sh --gufo                      # Flash-Next préchargé ; ou --gufo 27b, --gufo deepseek
 ./setup-llm.sh --gufo-off                  # retour au service
 ```
@@ -43,7 +44,7 @@ les routes OpenAI habituelles :
 |---|---|---|
 | `qwen3-tts-12hz-1.7b-customvoice`, `-voice-design`, `-base` | `/v1/audio/speech`, `/v1/audio/voices` | groupe « voix » : une variante à la fois, À CÔTÉ du modèle de texte, jamais déchargée par lui |
 | `qwen3-asr-1.7b` | `/v1/audio/transcriptions` | groupe « transcription » : à côté de tout, jamais déchargé |
-| `Qwen-Image-2.1` | `/v1/images/generations`, `/v1/images/edits` | groupe « gros » avec les LLM : une image décharge le LLM en cours, et l'inverse |
+| `Qwen-Image-2.1-heretic` (encodeur de texte « abliterated ») | `/v1/images/generations`, `/v1/images/edits` | groupe « gros » avec les LLM : une image décharge le LLM en cours, et l'inverse |
 
 Le flux WebSocket de la synthèse (`/v1/audio/speech/stream`) n'est pas une
 route de llama-swap : `/upstream/<modèle>/v1/audio/speech/stream`. Mesuré le

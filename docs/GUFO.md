@@ -345,6 +345,12 @@ volley de plage, bikini, gymnaste, les cas où la fiche annonce des vêtements
 ajoutés ou des poses figées), les images sont quasi identiques (écart RMS de
 2 % sur le témoin) et l'officiel ne montre aucun des défauts annoncés. Pas de
 gain constaté ; images dans `~/llm/gufo-test/resultats/heretic/`.
+Seuls 54 tenseurs sur 749 diffèrent (`o_proj` et `down_proj` des couches 9 à
+35 du langage, signature d'une abliteration) ; vision, transformer et VAE
+sont identiques bit à bit. Retenue malgré tout comme SEULE variante servie
+(choix du 25/09/2026, sans banc de régression : texte dans l'image, prompts
+complexes et édition non vérifiés) ; `bigchuck/Qwen-Image-2.1-heretic` par le
+proxy, défaut de `tools/gufo-media.ts`.
 
 ## Récupérer ses optimisations dans le service
 

@@ -181,19 +181,15 @@ models:
   # (et le LLM suivant décharge Qwen-Image). Temps de génération non publiés
   # par gufo ; mesuré ici le 25/09/2026 : 1024² en 40 étapes 90 s, 512² en
   # 20 étapes 16 s, retour à Flash-Next 38 s.
-  "Qwen-Image-2.1":
-    name: "Qwen-Image-2.1 (gufo)"
-    cmd: >-
-      gufo serve image --host 127.0.0.1 --port ${PORT}
-      --model ${env.GUFO_DATA}/models/Qwen-Image-2.1
-      --served-model-name Qwen-Image-2.1
-    checkEndpoint: /health
-
-  # Variante À L'ESSAI (25/09/2026) : même pipeline, encodeur de texte
-  # « abliterated » (catplusplus/Qwen21_Text_Encoder_Heretic) ; d'après sa
-  # fiche, l'encodeur d'origine dévie le conditionnement sur les sujets
-  # « sensibles » (vêtements ajoutés, poses figées). Dossier monté par
-  # download.sh qwen-image-heretic.
+  # Seule variante servie depuis le 25/09/2026 : même pipeline, encodeur de
+  # texte « abliterated » (catplusplus/Qwen21_Text_Encoder_Heretic, 54
+  # tenseurs sur 749 : o_proj et down_proj des couches 9 à 35 du langage ;
+  # vision, transformer et VAE identiques bit à bit). D'après sa fiche,
+  # l'encodeur d'origine dévie le conditionnement sur les sujets « sensibles »
+  # (vêtements ajoutés, poses figées). Mêmes temps ; images quasi identiques à
+  # l'officiel sur 4 prompts à graine fixe, régression non mesurée au-delà
+  # (texte dans l'image, prompts complexes, édition). Dossier monté par
+  # download.sh qwen-image-heretic, qui lie le pipeline officiel.
   "Qwen-Image-2.1-heretic":
     name: "Qwen-Image-2.1, encodeur Heretic (gufo)"
     cmd: >-
@@ -216,7 +212,6 @@ routing:
             - "qwen3.8-27b"
             - "qwen3.8-flash-next"
             - "deepseek-v4-flash"
-            - "Qwen-Image-2.1"
             - "Qwen-Image-2.1-heretic"
         voix:
           # Une variante à la fois ; ne décharge pas le gros modèle

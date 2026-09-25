@@ -140,7 +140,7 @@ Commandes :
                            sur :$SERVER_PORT (docs/GUFO.md), toujours derrière
                            llama-swap : le client choisit qwen3.8-27b,
                            qwen3.8-flash-next, deepseek-v4-flash ou
-                           Qwen-Image-2.1 (un seul chargé à la fois, bascule
+                           Qwen-Image-2.1-heretic (un seul chargé à la fois, bascule
                            automatique), plus la synthèse vocale Qwen3-TTS
                            (trois variantes) et la transcription Qwen3-ASR,
                            chargées à côté. [modèle] =

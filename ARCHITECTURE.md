@@ -477,7 +477,7 @@ du service sur `SERVER_PORT` (8009), les deux étant exclusifs (même port, un
 GPU), et démarre TOUJOURS derrière llama-swap : le client choisit
 `qwen3.8-27b`, `qwen3.8-flash-next` ou `deepseek-v4-flash` par le champ
 `model`, llama-swap arrête un processus gufo pour lancer l'autre (groupe
-« gros », exclusif, avec Qwen-Image-2.1), précharge `GUFO_PRECHARGE` et
+« gros », exclusif, avec Qwen-Image-2.1-heretic), précharge `GUFO_PRECHARGE` et
 retire `stop` / `stop_sequences`. Il sert aussi la synthèse vocale Qwen3-TTS
 (trois variantes, groupe « voix ») et la transcription Qwen3-ASR (groupe
 « transcription »), persistantes et chargées à côté du gros modèle.

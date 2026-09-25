@@ -892,7 +892,7 @@ done
 # transcription persistantes, jamais déchargées par un gros modèle.
 grp() { awk -v g="        $1:" '$0==g{f=1;next} f&&/^        [a-z]/{f=0} f' <<<"$LSY"; }
 if grep -q 'exclusive: true' <<<"$(grp gros)" && grep -q 'swap: true' <<<"$(grp gros)" \
-   && grep -q '"Qwen-Image-2.1"' <<<"$(grp gros)" \
+   && grep -q '"Qwen-Image-2.1-heretic"' <<<"$(grp gros)" \
    && grep -q 'persistent: true' <<<"$(grp voix)" && grep -q 'exclusive: false' <<<"$(grp voix)" \
    && grep -q 'persistent: true' <<<"$(grp transcription)"; then
   echo "[OK]   llama-swap : gros exclusifs (LLM, Qwen-Image), voix et transcription persistantes"
