@@ -24,6 +24,7 @@
 #   GUFO_PORT      port hôte (défaut SERVER_PORT)
 #   GUFO_RESTART   politique de redémarrage (défaut unless-stopped)
 #   GUFO_PROJET    projet compose (défaut gufo) ; GUFO_CONTENEUR (lib/common.sh)
+#   GUFO_PRECHARGE modèle chargé au démarrage du routeur (défaut qwen3.8-flash-next)
 #   GUFO_ENV_FILE  .env écrit (défaut GUFO_DATA/.env)
 # =============================================================================
 
@@ -33,7 +34,7 @@ GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
 GUFO_IMAGE="${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime:latest}"
 GUFO_PROJET="${GUFO_PROJET:-gufo}"
 GUFO_ENV_FILE="${GUFO_ENV_FILE:-$GUFO_DATA/.env}"
-GUFO_MODELES=(27b flashnext 27b-q4km deepseek)
+GUFO_MODELES=(27b flashnext routeur 27b-q4km deepseek)
 
 # generate_gufo_env <modèle> - le .env de runtime-gufo/docker-compose.yml, sur
 # stdout. Échoue (sans rien écrire) si un groupe GPU manque.
@@ -53,6 +54,9 @@ GUFO_CONTENEUR=$GUFO_CONTENEUR
 GUFO_RESTART=${GUFO_RESTART:-unless-stopped}
 GUFO_PORT=${GUFO_PORT:-$SERVER_PORT}
 GUFO_SESSIONS=${GUFO_SESSIONS:-2}
+GUFO_RUNTIME_DIR=$GUFO_DIR
+GUFO_ROUTEUR_IMAGE=gufo-routeur:latest
+GUFO_PRECHARGE=${GUFO_PRECHARGE:-qwen3.8-flash-next}
 SVC_UID=$(id -u)
 SVC_GID=$(id -g)
 GID_RENDER=$gid_render
@@ -86,6 +90,17 @@ _gufo_wait_ready() {
   return 0
 }
 
+# _gufo_wait_precharge - routeur : llama-swap répond tout de suite, le modèle
+# préchargé suit ; /upstream/<modèle>/health attend qu'il soit prêt (et le
+# charge s'il ne l'est pas).
+_gufo_wait_precharge() {
+  local port="${GUFO_PORT:-$SERVER_PORT}" m="${GUFO_PRECHARGE:-qwen3.8-flash-next}"
+  info "  routeur prêt, chargement de $m..."
+  curl -sf -m 600 "http://localhost:$port/upstream/$m/health" >/dev/null 2>&1 \
+    || { warn "$m n'a pas répondu par le routeur."; docker logs --tail 20 "$GUFO_CONTENEUR" 2>&1 | sed 's/^/  /' >&2 || true; return 1; }
+  return 0
+}
+
 # cmd_gufo [modèle] - arrête le service, lance gufo sur le port (modèle 27b
 # par défaut). Échec : gufo retiré et service relancé, jamais un port vide.
 cmd_gufo() {
@@ -108,7 +123,7 @@ cmd_gufo() {
   _gufo_compose down --remove-orphans >/dev/null 2>&1 || true
   docker rm -f "$GUFO_CONTENEUR" >/dev/null 2>&1 || true
   _gufo_compose up -d || { _gufo_compose down >/dev/null 2>&1 || true; cmd_start; error "compose up de gufo en échec, service relancé"; }
-  if ! _gufo_wait_ready; then
+  if ! _gufo_wait_ready || { [[ "$modele" == routeur ]] && ! _gufo_wait_precharge; }; then
     _gufo_compose down >/dev/null 2>&1 || true
     cmd_start
     error "gufo n'a pas démarré, service relancé"

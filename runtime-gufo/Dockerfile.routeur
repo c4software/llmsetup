@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1.7
+# =============================================================================
+# gufo + llama-swap : l'image du profil « routeur » de runtime-gufo/
+#
+# gufo ne sert qu'un modèle par processus ; sa documentation renvoie à
+# llama-swap (https://github.com/mostlygeek/llama-swap, MIT) pour exposer
+# plusieurs processus sous une même URL. Cette image ajoute le binaire
+# llama-swap à l'image de gufo : llama-swap écoute sur le port publié et lance
+# lui-même « gufo serve llm » pour le modèle demandé par le client, en
+# déchargeant le précédent (llama-swap.yaml). Pas de socket docker, rien sur
+# l'hôte : tout vit dans ce conteneur, avec les mêmes périphériques que gufo.
+#
+# Construite par « docker compose up » (bloc build du service routeur de
+# docker-compose.yml) quand elle manque ; ./setup-llm.sh --gufo routeur la
+# reconstruit si ce fichier change de révision (build --pull=never).
+# Version et somme SHA-256 épinglées : une nouvelle version de llama-swap est
+# un changement de ce fichier, jamais un effet de bord.
+# =============================================================================
+
+ARG GUFO_IMAGE=ghcr.io/gufo-org/toolboxes/gufo-runtime:latest
+
+FROM alpine:3.20 AS llama-swap
+ARG LLAMA_SWAP_VERSION=257
+ADD --checksum=sha256:939cf1ddf9bd2a9859bf67b01f63469ea2a60454e40e24f19325887ad73ffe79 \
+    https://github.com/mostlygeek/llama-swap/releases/download/v${LLAMA_SWAP_VERSION}/llama-swap_${LLAMA_SWAP_VERSION}_linux_amd64.tar.gz \
+    /tmp/llama-swap.tar.gz
+RUN tar -xzf /tmp/llama-swap.tar.gz -C /tmp llama-swap \
+ && install -m 0755 /tmp/llama-swap /llama-swap
+
+FROM ${GUFO_IMAGE}
+COPY --from=llama-swap /llama-swap /usr/local/bin/llama-swap
+LABEL org.opencontainers.image.title="gufo-routeur" \
+      llm-setup.llama-swap.version="257"

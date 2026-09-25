@@ -839,7 +839,7 @@ else
 fi
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   GD="$SVC/gufo-data"; mkdir -p "$GD"
-  for m in 27b flashnext 27b-q4km deepseek; do
+  for m in 27b flashnext routeur 27b-q4km deepseek; do
     sed "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=$m|; s|^GUFO_DATA=.*|GUFO_DATA=$GD|" <<<"$GENV" > "$GD/.env"
     if out="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config 2>&1)" \
        && svcs="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config --services 2>&1)"; then
@@ -855,6 +855,33 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   done
 else
   echo "[SKIP] gufo compose : docker compose absent"
+fi
+# Routeur (llama-swap devant gufo) : chaque modèle de llama-swap.yaml porte le
+# même nom que son --served-model-name (sinon gufo répond 404), les mêmes
+# fichiers que le profil compose du même modèle, retire stop et stop_sequences
+# (#260) ; les deux sont dans un groupe exclusif ; llama-swap épinglé par somme.
+LSY="$(cat "$REPO_DIR/runtime-gufo/llama-swap.yaml")"
+YMLG="$(cat "$REPO_DIR/runtime-gufo/docker-compose.yml")"
+for m in qwen3.8-27b qwen3.8-flash-next; do
+  bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
+  if grep -q -- "--served-model-name $m" <<<"$bloc" && grep -q 'stripParams: "stop, stop_sequences"' <<<"$bloc"; then
+    echo "[OK]   routeur : $m nommé comme gufo le sert, stop et stop_sequences retirés"
+  else
+    echo "[FAIL] routeur : bloc $m incohérent dans llama-swap.yaml"; rc=1
+  fi
+  for f in $(grep -o '[A-Za-z0-9._-]*\.gguf' <<<"$bloc"); do
+    grep -qF "$f" <<<"$YMLG" || { echo "[FAIL] routeur : $f absent des profils du compose"; rc=1; }
+  done
+done
+if grep -q 'swap: true' <<<"$LSY" && grep -q 'exclusive: true' <<<"$LSY"; then
+  echo "[OK]   routeur : groupe exclusif, un seul modèle chargé à la fois"
+else
+  echo "[FAIL] routeur : groupe non exclusif dans llama-swap.yaml"; rc=1
+fi
+if grep -qE '^ADD --checksum=sha256:[0-9a-f]{64}' "$REPO_DIR/runtime-gufo/Dockerfile.routeur"; then
+  echo "[OK]   routeur : binaire llama-swap vérifié par SHA-256"
+else
+  echo "[FAIL] routeur : llama-swap non épinglé par somme dans Dockerfile.routeur"; rc=1
 fi
 echo true > "$SVC/etat/running"
 if out="$(_run_svc '_gufo_refuse')"; then
@@ -872,5 +899,5 @@ else
 fi
 echo true > "$SVC/etat/running"
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd), gufo (.env, compose par profil, refus de --start) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd), gufo (.env, compose par profil, routeur llama-swap cohérent, refus de --start) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
 exit "$rc"

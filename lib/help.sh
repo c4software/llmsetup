@@ -138,7 +138,9 @@ Commandes :
   --logs [-f] [--tail N]   Journaux du conteneur (docker compose logs)
   --gufo [modèle]          Met le moteur alternatif gufo à la place du service
                            sur :$SERVER_PORT (docs/GUFO.md) : 27b (défaut), flashnext,
-                           27b-q4km, deepseek. Compose runtime-gufo/, .env
+                           routeur (llama-swap : le client choisit qwen3.8-27b
+                           ou qwen3.8-flash-next, bascule automatique, un seul
+                           chargé à la fois), 27b-q4km, deepseek. Compose runtime-gufo/, .env
                            généré dans GUFO_DATA (défaut ~/llm/gufo-test),
                            2 sessions (GUFO_SESSIONS). Le dernier lancé, gufo
                            ou service, repart seul au démarrage

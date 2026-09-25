@@ -14,9 +14,12 @@
 #   cd ~/llm/gufo-test && docker compose ps | logs -f
 #
 # Un service par modèle, sélectionné par PROFIL (COMPOSE_PROFILES) : un seul à
-# la fois, même nom de conteneur, même port. Pilotage : ./setup-llm.sh --gufo
-# <modèle> | --gufo-off | --gufo-logs (jamais « compose restart » : --gufo
-# régénère le .env puis recrée le conteneur).
+# la fois, même nom de conteneur, même port. Plus le profil « routeur » :
+# llama-swap devant gufo (Dockerfile.routeur, llama-swap.yaml), le client
+# choisit le modèle par le champ « model » et la bascule 27B / Flash-Next se
+# fait seule, comme avec le routeur llama-server du service. Pilotage :
+# ./setup-llm.sh --gufo <modèle|routeur> | --gufo-off | --gufo-logs (jamais
+# « compose restart » : --gufo régénère le .env puis recrée le conteneur).
 #
 # Réglages communs (entrypoint ci-dessous) et leur origine, détaillés dans
 # docs/GUFO.md (« Paramètres de gufo et leur origine ») :
@@ -209,3 +212,39 @@ services:
       - "0.95"
       - "--min-p"
       - "0.0"
+
+  # Routeur : llama-swap devant gufo, pour basculer entre le 27B et Flash-Next
+  # par le champ « model » du client (llama-swap.yaml : un modèle à la fois,
+  # préchargement GUFO_PRECHARGE, stop et stop_sequences retirés). Image
+  # dérivée de celle de gufo (Dockerfile.routeur, llama-swap épinglé par
+  # version et SHA-256), construite par compose quand elle manque ou que le
+  # Dockerfile change (pull_policy: build, couches en cache).
+  routeur:
+    <<: *gufo
+    profiles: ["routeur"]
+    image: ${GUFO_ROUTEUR_IMAGE:?}
+    pull_policy: build
+    build:
+      context: ${GUFO_RUNTIME_DIR:?}
+      dockerfile: Dockerfile.routeur
+      args:
+        GUFO_IMAGE: ${GUFO_IMAGE:?}
+    # Valeurs lues par llama-swap.yaml (${env.VAR}).
+    environment:
+      MODELS_BASE: ${MODELS_BASE:?}
+      GUFO_DATA: ${GUFO_DATA:?}
+      GUFO_SESSIONS: ${GUFO_SESSIONS:?}
+      GUFO_PRECHARGE: ${GUFO_PRECHARGE:?}
+    # Les volumes de gufo, plus la configuration de llama-swap (versionnée,
+    # lue au démarrage : un changement demande --gufo routeur, qui recrée).
+    volumes:
+      - "${MODELS_BASE:?}:${MODELS_BASE:?}:ro"
+      - "${GUFO_DATA:?}/models:${GUFO_DATA:?}/models:ro"
+      - "${GUFO_DATA:?}/cache:${GUFO_DATA:?}/cache:rw"
+      - "${GUFO_RUNTIME_DIR:?}/llama-swap.yaml:/etc/llama-swap/config.yaml:ro"
+    entrypoint:
+      - "/usr/local/bin/llama-swap"
+      - "-config"
+      - "/etc/llama-swap/config.yaml"
+      - "-listen"
+      - ":8080"
