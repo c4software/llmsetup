@@ -3,9 +3,14 @@
 #
 # gufo démarre toujours derrière llama-swap. Le client choisit le modèle par le
 # champ « model », comme avec le routeur llama-server du service : llama-swap
-# lance « gufo serve llm » pour ce modèle et arrête le précédent. Aucune paire
-# ne tient en mémoire (Flash-Next ~100 Gio en 2 sessions, DeepSeek ~104 Gio,
-# 27B ~45 Gio, 124 Gio en tout) : groupe exclusif, un seul modèle à la fois.
+# lance le serveur gufo de ce modèle (« gufo serve llm|tts|asr|image ») et
+# arrête ce qui doit l'être. Trois groupes (routing, en bas du fichier) :
+#   - « gros » : les LLM et Qwen-Image, un seul à la fois ; aucune paire ne
+#     tient en mémoire (Flash-Next ~100 Gio en 2 sessions, DeepSeek ~93 Gio,
+#     27B ~45 Gio, Qwen-Image 33 Go de poids BF16, 124 Gio en tout) ;
+#   - « voix » : les trois variantes de Qwen3-TTS, une à la fois, à côté du
+#     gros modèle, jamais déchargées par lui ;
+#   - « transcription » : Qwen3-ASR, à côté de tout, jamais déchargé.
 # Bascule mesurée le 25/09/2026 : vers le 27B 64,6 s, vers Flash-Next 31,4 à
 # 32,9 s, vers DeepSeek 70,4 s.
 # Clients agentiques : faire pointer TOUS leurs rôles (principal et tâches
@@ -70,9 +75,9 @@ macros:
     --temperature 1.0 --top-k 40 --top-p 0.95 --min-p 0.0
 
 # Le nom de modèle EST le --served-model-name de gufo : llama-swap transmet la
-# requête avec ce nom, gufo répond 404 model_not_found sinon. stop (OpenAI) et
-# stop_sequences (Anthropic) sont retirés : gufo les refuse en 400
-# unsupported_field (gufo-org/gufo#260), la requête serait perdue.
+# requête avec ce nom, gufo répond 404 model_not_found sinon. Pour les LLM,
+# stop (OpenAI) et stop_sequences (Anthropic) sont retirés : gufo les refuse en
+# 400 unsupported_field (gufo-org/gufo#260), la requête serait perdue.
 models:
   # Qwen3.8-27B, fichiers du parc (./setup-llm.sh --setup) : cible UD-Q4_K_XL,
   # drafter DFlash 2 Q8_0 (adaptatif, 7 tokens max, défauts gufo).
@@ -122,19 +127,96 @@ models:
     filters:
       stripParams: "stop, stop_sequences"
 
+  # ── Audio et image : autres serveurs de gufo (voir docs/models/ de gufo) ──
+  # Poids BF16 safetensors dans GUFO_DATA/models (--gufo-download tts, asr,
+  # qwen-image). Routes relayées par llama-swap : /v1/audio/speech,
+  # /v1/audio/voices, /v1/audio/transcriptions, /v1/images/generations et
+  # /v1/images/edits. Le flux WebSocket /v1/audio/speech/stream de la synthèse
+  # n'est pas une route de llama-swap : passer par /upstream/<modèle>/.
+
+  # Qwen3-TTS 12Hz 1.7B, trois variantes (une seule chargée à la fois) :
+  #   customvoice  voix intégrées au modèle (« voice »)
+  #   voice-design voix décrite en texte (« instructions »)
+  #   base         clonage : audio de référence et sa transcription par requête
+  # Mesuré par gufo : 2,54 fois le temps réel, 201 ms avant le premier son.
+  "qwen3-tts-12hz-1.7b-customvoice":
+    name: "Qwen3-TTS 1.7B CustomVoice (gufo)"
+    cmd: >-
+      gufo serve tts --host 127.0.0.1 --port ${PORT}
+      --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-CustomVoice
+      --served-model-name qwen3-tts-12hz-1.7b-customvoice
+    checkEndpoint: /health
+
+  "qwen3-tts-12hz-1.7b-voice-design":
+    name: "Qwen3-TTS 1.7B VoiceDesign (gufo)"
+    cmd: >-
+      gufo serve tts --host 127.0.0.1 --port ${PORT}
+      --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign
+      --served-model-name qwen3-tts-12hz-1.7b-voice-design
+    checkEndpoint: /health
+
+  "qwen3-tts-12hz-1.7b-base":
+    name: "Qwen3-TTS 1.7B Base, clonage de voix (gufo)"
+    cmd: >-
+      gufo serve tts --host 127.0.0.1 --port ${PORT}
+      --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-Base
+      --served-model-name qwen3-tts-12hz-1.7b-base
+    checkEndpoint: /health
+
+  # Qwen3-ASR 1.7B : WAV jusqu'à 30 min, découpé en morceaux, décodage glouton.
+  # Mesuré par gufo : 15,27 fois le temps réel.
+  "qwen3-asr-1.7b":
+    name: "Qwen3-ASR 1.7B (gufo)"
+    cmd: >-
+      gufo serve asr --host 127.0.0.1 --port ${PORT}
+      --model ${env.GUFO_DATA}/models/Qwen3-ASR-1.7B
+      --served-model-name qwen3-asr-1.7b
+    checkEndpoint: /health
+
+  # Qwen-Image-2.1 : génération et édition (jusqu'à 10 références), sortie PNG
+  # en base64, 1024² et 40 étapes par défaut. Licence Qwen Research, non
+  # commerciale. Dans le groupe « gros » : une image décharge le LLM en cours
+  # (et le LLM suivant décharge Qwen-Image). Temps de génération non encore
+  # publiés par gufo.
+  "Qwen-Image-2.1":
+    name: "Qwen-Image-2.1 (gufo)"
+    cmd: >-
+      gufo serve image --host 127.0.0.1 --port ${PORT}
+      --model ${env.GUFO_DATA}/models/Qwen-Image-2.1
+      --served-model-name Qwen-Image-2.1
+    checkEndpoint: /health
+
 routing:
   router:
     use: group
     settings:
       groups:
-        gufo:
-          # Un seul membre à la fois (swap), et il décharge tout autre groupe.
+        gros:
+          # Un seul membre à la fois (swap), et il décharge tout groupe non
+          # persistant.
           swap: true
           exclusive: true
           members:
             - "qwen3.8-27b"
             - "qwen3.8-flash-next"
             - "deepseek-v4-flash"
+            - "Qwen-Image-2.1"
+        voix:
+          # Une variante à la fois ; ne décharge pas le gros modèle
+          # (exclusive: false) et n'est pas déchargée par lui (persistent).
+          swap: true
+          exclusive: false
+          persistent: true
+          members:
+            - "qwen3-tts-12hz-1.7b-customvoice"
+            - "qwen3-tts-12hz-1.7b-voice-design"
+            - "qwen3-tts-12hz-1.7b-base"
+        transcription:
+          swap: false
+          exclusive: false
+          persistent: true
+          members:
+            - "qwen3-asr-1.7b"
 
 hooks:
   on_startup:

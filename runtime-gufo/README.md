@@ -17,6 +17,9 @@ Sur la machine du service (bigchuck), le service déjà installé
 ./setup-llm.sh --gufo-download image       # l'image de gufo (8,3 Go)
 ./setup-llm.sh --gufo-download flashnext   # Flash-Next UD-Q4_K_XL (104 Go), seulement pour flashnext
 ./setup-llm.sh --gufo-download deepseek    # DeepSeek IQ2XXS + DSpark (93 Go), si voulu
+./setup-llm.sh --gufo-download tts         # synthèse vocale, trois variantes (13,5 Go), si voulu
+./setup-llm.sh --gufo-download asr         # transcription (4,7 Go), si voulu
+./setup-llm.sh --gufo-download qwen-image  # génération d'images (33 Go, licence non commerciale), si voulu
 ./setup-llm.sh --gufo                      # Flash-Next préchargé ; ou --gufo 27b, --gufo deepseek
 ./setup-llm.sh --gufo-off                  # retour au service
 ```
@@ -33,6 +36,18 @@ gufo). Les clients agentiques doivent faire pointer tous leurs rôles
 (principal et tâches annexes, le « Haiku » de Claude Code) sur le même
 modèle, sinon chaque requête annexe déclenche une bascule.
 
+Au-delà du texte, le même llama-swap sert les autres modèles de gufo, sous
+les routes OpenAI habituelles :
+
+| Modèle (`model`) | Route | Chargement |
+|---|---|---|
+| `qwen3-tts-12hz-1.7b-customvoice`, `-voice-design`, `-base` | `/v1/audio/speech`, `/v1/audio/voices` | groupe « voix » : une variante à la fois, À CÔTÉ du modèle de texte, jamais déchargée par lui |
+| `qwen3-asr-1.7b` | `/v1/audio/transcriptions` | groupe « transcription » : à côté de tout, jamais déchargé |
+| `Qwen-Image-2.1` | `/v1/images/generations`, `/v1/images/edits` | groupe « gros » avec les LLM : une image décharge le LLM en cours, et l'inverse |
+
+Le flux WebSocket de la synthèse (`/v1/audio/speech/stream`) n'est pas une
+route de llama-swap : `/upstream/<modèle>/v1/audio/speech/stream`.
+
 Le 27B tourne avec les fichiers du parc, rien d'autre à télécharger.
 `./setup-llm.sh --status` dit qui tient le port, `--gufo-logs` suit les
 requêtes de gufo.
@@ -44,7 +59,7 @@ requêtes de gufo.
 | `docker-compose.yml` | Le conteneur, versionné : image gufo + llama-swap, périphériques GPU, utilisateur de l'hôte, volumes, `restart: ${GUFO_RESTART}`. Aucune valeur machine : tout vient du `.env` |
 | `Dockerfile.routeur` | L'image : celle de gufo plus le binaire llama-swap, épinglé par version et SHA-256 ; construite par compose |
 | `gufo-llama-swap.yaml` | La SEULE description des lignes de commande de gufo, modèle par modèle, versionnée, sans valeur machine (`${env.VAR}`) : réglages et leur origine, groupe exclusif, préchargement, `stop` et `stop_sequences` retirés pour tous les clients (gufo#260) |
-| `download.sh image\|flashnext\|deepseek\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --gufo-download`) |
+| `download.sh image\|flashnext\|deepseek\|tts\|asr\|qwen-image\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --gufo-download`) |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
 

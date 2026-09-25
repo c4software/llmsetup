@@ -139,8 +139,11 @@ Commandes :
   --gufo [modèle]          Met le moteur alternatif gufo à la place du service
                            sur :$SERVER_PORT (docs/GUFO.md), toujours derrière
                            llama-swap : le client choisit qwen3.8-27b,
-                           qwen3.8-flash-next ou deepseek-v4-flash, bascule
-                           automatique, un seul chargé à la fois. [modèle] =
+                           qwen3.8-flash-next, deepseek-v4-flash ou
+                           Qwen-Image-2.1 (un seul chargé à la fois, bascule
+                           automatique), plus la synthèse vocale Qwen3-TTS
+                           (trois variantes) et la transcription Qwen3-ASR,
+                           chargées à côté. [modèle] =
                            préchargé : flashnext (défaut), 27b, deepseek.
                            Compose runtime-gufo/, .env généré dans GUFO_DATA
                            (défaut ~/llm/gufo-test), 2 sessions
@@ -149,8 +152,8 @@ Commandes :
   --gufo-off               Supprime gufo et relance le service ; --start et
                            --restart refusent tant que gufo tient le port
   --gufo-logs              Requêtes de gufo au fil de l'eau
-  --gufo-download <quoi>   Image et GGUF de référence de gufo : image,
-                           flashnext, deepseek ou all
+  --gufo-download <quoi>   Image et poids de gufo : image, flashnext, deepseek,
+                           tts, asr, qwen-image ou all
   --migrate-off-systemd    TEMPORAIRE (migration) : arrête, désactive et supprime
                            l'ancienne unité systemd user $SERVICE_NAME, recharge
                            systemd et vérifie que le port $SERVER_PORT est

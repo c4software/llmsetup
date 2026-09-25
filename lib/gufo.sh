@@ -173,9 +173,9 @@ cmd_gufo_logs() {
   docker logs -f "$GUFO_CONTENEUR" 2>&1 | grep --line-buffered "event=completed"
 }
 
-# cmd_gufo_download <image|flashnext|deepseek|all> - image et GGUF de
+# cmd_gufo_download <image|flashnext|deepseek|tts|asr|qwen-image|all> - image et poids de
 # référence, dans GUFO_DATA/models.
 cmd_gufo_download() {
-  [[ -n "${1:-}" ]] || error "--gufo-download attend : image, flashnext, deepseek ou all"
+  [[ -n "${1:-}" ]] || error "--gufo-download attend : image, flashnext, deepseek, tts, asr, qwen-image ou all"
   GUFO_DATA="$GUFO_DATA" GUFO_IMAGE="$GUFO_IMAGE" "$GUFO_DIR/download.sh" "$1"
 }

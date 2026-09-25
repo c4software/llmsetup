@@ -469,7 +469,8 @@ Le moteur alternatif gufo (évalué le 24/09/2026, `docs/GUFO.md`) se pilote
 depuis ce point d'entrée : `./setup-llm.sh --gufo [flashnext|27b|deepseek]` le
 met à la place du service sur `:8009`, toujours derrière llama-swap (le client
 choisit le 27B, Flash-Next ou DeepSeek par le champ `model` ; l'argument
-choisit le modèle préchargé), `--gufo-off` revient au service, `--gufo-logs`
+choisit le modèle préchargé ; synthèse vocale, transcription et génération
+d'images de gufo sous les routes OpenAI audio et images), `--gufo-off` revient au service, `--gufo-logs`
 suit ses requêtes, `--gufo-download <quoi>` récupère son image et ses GGUF.
 Compose, téléchargement et bancs dans `runtime-gufo/` (voir
 `runtime-gufo/README.md`).

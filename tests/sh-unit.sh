@@ -875,13 +875,29 @@ for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash; do
   else
     echo "[FAIL] llama-swap : bloc $m incohérent dans gufo-llama-swap.yaml"; rc=1
   fi
-  grep -qF "\"$m\"" <<<"$(awk '/members:/{f=1;next} f' <<<"$LSY")" \
-    || { echo "[FAIL] llama-swap : $m hors du groupe exclusif"; rc=1; }
 done
-if grep -q 'swap: true' <<<"$LSY" && grep -q 'exclusive: true' <<<"$LSY"; then
-  echo "[OK]   llama-swap : groupe exclusif, un seul modèle chargé à la fois"
+# Tous les modèles (LLM, voix, transcription, image) : nom = --served-model-name,
+# et chacun dans un groupe (sinon llama-swap le laisse coexister avec tout).
+LSY_MODELES="$(awk '/^models:/{f=1;next} /^routing:/{f=0} f' <<<"$LSY")"
+avant=$rc
+for m in $(grep -oE '^  "[^"]+":' <<<"$LSY_MODELES" | tr -d ' ":'); do
+  bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
+  grep -q -- "--served-model-name $m\b" <<<"$bloc" \
+    || { echo "[FAIL] llama-swap : $m servi sous un autre nom"; rc=1; }
+  grep -qE "^            - \"$m\"$" <<<"$LSY" \
+    || { echo "[FAIL] llama-swap : $m dans aucun groupe"; rc=1; }
+done
+[[ $rc -eq $avant ]] && echo "[OK]   llama-swap : $(grep -cE '^  "[^"]+":' <<<"$LSY_MODELES") modèles, chacun nommé comme gufo le sert et rangé dans un groupe"
+# Groupes : les gros (LLM, Qwen-Image) exclusifs, un à la fois ; la voix et la
+# transcription persistantes, jamais déchargées par un gros modèle.
+grp() { awk -v g="        $1:" '$0==g{f=1;next} f&&/^        [a-z]/{f=0} f' <<<"$LSY"; }
+if grep -q 'exclusive: true' <<<"$(grp gros)" && grep -q 'swap: true' <<<"$(grp gros)" \
+   && grep -q '"Qwen-Image-2.1"' <<<"$(grp gros)" \
+   && grep -q 'persistent: true' <<<"$(grp voix)" && grep -q 'exclusive: false' <<<"$(grp voix)" \
+   && grep -q 'persistent: true' <<<"$(grp transcription)"; then
+  echo "[OK]   llama-swap : gros exclusifs (LLM, Qwen-Image), voix et transcription persistantes"
 else
-  echo "[FAIL] llama-swap : groupe non exclusif"; rc=1
+  echo "[FAIL] llama-swap : groupes gros / voix / transcription mal réglés"; rc=1
 fi
 if grep -qE '^ADD --checksum=sha256:[0-9a-f]{64}' "$REPO_DIR/runtime-gufo/Dockerfile.routeur"; then
   echo "[OK]   llama-swap : binaire vérifié par SHA-256"
@@ -904,5 +920,5 @@ else
 fi
 echo true > "$SVC/etat/running"
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd), gufo (.env, compose llama-swap, configuration llama-swap cohérente, noms de modèle, refus de --start) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd), gufo (.env, compose llama-swap, configuration llama-swap cohérente (LLM, voix, transcription, image, groupes), noms de modèle, refus de --start) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
 exit "$rc"
