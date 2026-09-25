@@ -12,7 +12,10 @@
 #   runtime-gufo/download.sh asr         Qwen3-ASR 1.7B BF16 (≈ 4,7 Go)
 #   runtime-gufo/download.sh qwen-image  Qwen-Image-2.1 BF16, pipeline complet (≈ 33,1 Go ;
 #                                        licence Qwen Research, non commerciale)
-#   runtime-gufo/download.sh all         tout ce qui précède
+#   runtime-gufo/download.sh qwen-image-heretic
+#                                        variante à encodeur « abliterated » (≈ 16,3 Go,
+#                                        après qwen-image ; hors de all, à l'essai)
+#   runtime-gufo/download.sh all         tout ce qui précède, sauf qwen-image-heretic
 #
 # Le 27B (cible et drafter DFlash 2 Q8_0), la tête MTP et le mmproj de
 # Flash-Next viennent du parc
@@ -57,6 +60,36 @@ telecharge() {
       hf download Qwen/Qwen-Image-2.1 \
         --revision b3179ad355be050328e483a9dfdd9e60cd62adfa \
         --local-dir "$DL/Qwen-Image-2.1" ;;
+    qwen-image-heretic)
+      # Encodeur Qwen3-VL de Qwen-Image passé par l'abliteration de Heretic
+      # (catplusplus, Apache-2.0) : mêmes 749 tenseurs BF16, lm_head en moins
+      # (inutile à l'encodage). Seuls ses poids servent : sa config.json est
+      # au format transformers 5 (rope_parameters), que gufo refuse ; la
+      # config officielle décrit la même architecture. gufo exige un index
+      # des tenseurs, écrit ici depuis l'en-tête du safetensors. Le reste du
+      # pipeline (transformer, VAE, processeur) : liens vers Qwen-Image-2.1.
+      local src="$DL/Qwen-Image-2.1" dst="$DL/Qwen-Image-2.1-heretic" f
+      [[ -f "$src/model_index.json" ]] || { echo "Qwen-Image-2.1 absent : download.sh qwen-image d'abord" >&2; exit 1; }
+      hf download catplusplus/Qwen21_Text_Encoder_Heretic \
+        --revision 7b004403c04dee95a18b959694a3cfdac5b28107 \
+        text_encoder/model.safetensors --local-dir "$DL/Qwen21_Text_Encoder_Heretic"
+      rm -rf "$dst"; mkdir -p "$dst/text_encoder"
+      for f in "$src"/*; do
+        [[ "$(basename "$f")" == text_encoder ]] || ln -s "$f" "$dst/"
+      done
+      ln -s "$src/text_encoder/config.json" "$src/text_encoder/generation_config.json" "$dst/text_encoder/"
+      ln -s "$DL/Qwen21_Text_Encoder_Heretic/text_encoder/model.safetensors" "$dst/text_encoder/"
+      python3 - "$dst/text_encoder" <<'PY'
+import json, struct, sys
+d = sys.argv[1]
+with open(f"{d}/model.safetensors", "rb") as f:
+    h = json.loads(f.read(struct.unpack("<Q", f.read(8))[0]))
+h.pop("__metadata__", None)
+with open(f"{d}/model.safetensors.index.json", "w") as f:
+    json.dump({"metadata": {}, "weight_map": {k: "model.safetensors" for k in sorted(h)}}, f, indent=1)
+print(f"index : {len(h)} tenseurs")
+PY
+      ;;
     *) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2 ;;
   esac
 }
