@@ -35,12 +35,16 @@
 #   --max-tokens 32768    défaut gufo 128 : un client qui n'envoie pas
 #                         max_tokens serait coupé
 #   --cache-disk …        seul chemin qui reprend le préfixe commun de deux
-#                         conversations ; staging 8 Gio car au défaut de
-#                         512 Mio les points de reprise du 27B sont abandonnés
-#                         en silence dès ~4,5k tokens. Changer la
-#                         configuration rend ce cache inutilisable. Partagé
-#                         entre les modèles (l'identité du cache inclut le
-#                         modèle), 16 Gio en tout.
+#                         conversations. Budgets aux défauts de gufo depuis
+#                         le 26/09/2026 (gufo-org/gufo#279, d9a84f1) :
+#                         rétention 8 Gio, staging automatique (au plus
+#                         1 Gio et 1/8 de la RAM disponible), un point de
+#                         reprise plus gros est refusé ET journalisé. Avant :
+#                         16 Gio et 8 Gio explicites, le défaut de 512 Mio
+#                         abandonnant en silence ceux du 27B dès ~4,5k
+#                         tokens. Changer la configuration rend ce cache
+#                         inutilisable. Partagé entre les modèles (l'identité
+#                         du cache inclut le modèle).
 # =============================================================================
 
 # Flash-Next ou DeepSeek à froid : ~80 s ; marge pour un disque chargé.
@@ -65,8 +69,7 @@ macros:
   "gufo": >-
     gufo serve llm --host 127.0.0.1 --port ${PORT}
     --context 262144 --sessions ${env.GUFO_SESSIONS} --max-tokens 32768
-    --cache-disk ${env.GUFO_DATA}/cache --cache-disk-bytes 17179869184
-    --cache-disk-staging-bytes 8589934592
+    --cache-disk ${env.GUFO_DATA}/cache
   # Échantillonnage officiel Qwen, profil instruct (sections nothink du
   # service) ; défauts serveur, un client peut les surcharger par requête.
   "qwen": >-
@@ -78,9 +81,9 @@ macros:
     --temperature 1.0 --top-k 40 --top-p 0.95 --min-p 0.0
 
 # Le nom de modèle EST le --served-model-name de gufo : llama-swap transmet la
-# requête avec ce nom, gufo répond 404 model_not_found sinon. Pour les LLM,
-# stop (OpenAI) et stop_sequences (Anthropic) sont retirés : gufo les refuse en
-# 400 unsupported_field (gufo-org/gufo#260), la requête serait perdue.
+# requête avec ce nom, gufo répond 404 model_not_found sinon. stop (OpenAI)
+# et stop_sequences (Anthropic) passent tels quels : gufo les gère depuis le
+# 25/09/2026 (gufo-org/gufo#260, 9854ca5) ; ils étaient retirés ici avant.
 # capabilities.context : llama-swap n'interroge pas gufo sur son contexte, et
 # sans lui /v1/models n'en publie aucun ; le proxy (qui lit meta.n_ctx) n'en
 # transmet alors pas, et l'extension pi/omp retombe sur 128K. Doit rester égal
@@ -99,8 +102,6 @@ models:
     checkEndpoint: /health
     capabilities:
       context: 262144
-    filters:
-      stripParams: "stop, stop_sequences"
 
   # Qwen3.8-Flash-Next : cible UD-Q4_K_XL unsloth (--gufo-download flashnext ;
   # gufo refuse le fine-tune Signal AP-Q4_K_XL du parc, tenseur IQ4_NL), tête
@@ -117,8 +118,6 @@ models:
     checkEndpoint: /health
     capabilities:
       context: 262144
-    filters:
-      stripParams: "stop, stop_sequences"
 
   # DeepSeek V4 Flash : seule quant acceptée par gufo, IQ2XXS d'antirez +
   # support DSpark (--gufo-download deepseek ; l'UD-IQ3_XXS du parc est
@@ -137,8 +136,6 @@ models:
     checkEndpoint: /health
     capabilities:
       context: 262144
-    filters:
-      stripParams: "stop, stop_sequences"
 
   # ── Audio et image : autres serveurs de gufo (voir docs/models/ de gufo) ──
   # Poids BF16 safetensors dans GUFO_DATA/models (--gufo-download tts, asr,

@@ -14,8 +14,8 @@
 # gufo lancé derrière llama-swap, le modèle du cas préchargé)
 # Cas llama : 27b, flashnext, flashnext-large-ub, deepseek
 #
-# Réglage gufo de ce banc : celui du compose (cache disque et staging relevé,
-# seconde série du 24/09/2026), 1 session (SESSIONS=N pour changer), port
+# Réglage gufo de ce banc : celui du compose (cache disque ; staging relevé à
+# 8 Gio pour la seconde série du 24/09/2026, défauts de gufo depuis le 26/09), 1 session (SESSIONS=N pour changer), port
 # 8009 (celui du service, exclusifs), sans redémarrage automatique. Un gufo
 # d'usage réel est retiré au départ ; le service est relancé à la fin.
 # Sans cache disque, gufo ne reprend pas le préfixe commun des nouvelles

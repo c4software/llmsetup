@@ -66,7 +66,7 @@ requêtes de gufo.
 |---|---|
 | `docker-compose.yml` | Le conteneur, versionné : image gufo + llama-swap, périphériques GPU, utilisateur de l'hôte, volumes, `restart: ${GUFO_RESTART}`. Aucune valeur machine : tout vient du `.env` |
 | `Dockerfile.routeur` | L'image : celle de gufo plus le binaire llama-swap, épinglé par version et SHA-256 ; construite par compose |
-| `gufo-llama-swap.yaml` | La SEULE description des lignes de commande de gufo, modèle par modèle, versionnée, sans valeur machine (`${env.VAR}`) : réglages et leur origine, groupe exclusif, préchargement, `stop` et `stop_sequences` retirés pour tous les clients (gufo#260) |
+| `gufo-llama-swap.yaml` | La SEULE description des lignes de commande de gufo, modèle par modèle, versionnée, sans valeur machine (`${env.VAR}`) : réglages et leur origine, groupe exclusif, préchargement |
 | `download.sh image\|flashnext\|deepseek\|tts\|asr\|qwen-image\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --gufo-download`) |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
@@ -89,7 +89,7 @@ dans `GUFO_DATA`, par défaut `~/llm/gufo-test` :
 
 - `.env` (usage réel) et `banc.env` (bancs) : générés ;
 - `models/` : GGUF de référence de gufo (`--gufo-download`) ;
-- `cache/` : cache disque de gufo (16 Gio au plus) ;
+- `cache/` : cache disque de gufo (8 Gio au plus, défaut de gufo) ;
 - `resultats/` : sorties des bancs.
 
 Variables : `GUFO_DATA`, `GUFO_IMAGE`, `GUFO_SESSIONS` (défaut 2 ; `SESSIONS`
@@ -107,9 +107,8 @@ eux-mêmes `GUFO_PROJET=gufo-banc`, `GUFO_CONTENEUR=gufo-banc`,
   à la fin.
 - Garder la configuration de gufo stable : la changer (`GUFO_SESSIONS`…) rend
   son cache disque inutilisable.
-- `stop` : gufo le refuse (gufo-org/gufo#260) ; llama-swap le retire pour
-  tous les clients, le correctif du proxy (`anthropic_drop_fields`) n'est
-  plus nécessaire pour gufo.
+- `stop` et `stop_sequences` : gérés par gufo depuis le 25/09/2026
+  (gufo-org/gufo#260), transmis tels quels ; llama-swap ne les retire plus.
 - Modifier `gufo-llama-swap.yaml` demande de relancer `--gufo` (lu au
-  démarrage) ; `tests/sh-unit.sh` en vérifie la cohérence (noms, `stop`,
+  démarrage) ; `tests/sh-unit.sh` en vérifie la cohérence (noms, `stop` transmis,
   groupe exclusif).
