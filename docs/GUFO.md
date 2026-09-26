@@ -440,7 +440,7 @@ Publié le 25/09/2026 :
 
 | Ticket | Sujet | État au 26/09/2026 |
 |---|---|---|
-| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio ; à signaler dans #259 |
+| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée, signalé dans #259 |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
 | #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), renommé après enquête, démarche de test en commentaire ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916 ; à retirer si gufo limite ses files |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | **fermé** le 25/09 (le nôtre) : `stop` et `stop_sequences` pris en charge (9854ca5, 363d6a1) ; le retrait de `stop` par llm-proxy et llama-swap devient inutile une fois l'image montée |
@@ -456,10 +456,37 @@ Publié le 25/09/2026 :
 Image `gufo-runtime:latest` republiée le 26/09/2026 (`20260926T093925`,
 `sha256:09507c0…`, commit d9a84f1 ou plus récent) : contient #255, #257, #260
 et #279, déployée sur bigchuck le même jour (`stop` vérifié en OpenAI et en
-Anthropic, jusqu'au proxy), bancs de « Reprendre les mesures » pas encore
-rejoués. Le staging automatique de #279 (1 Gio) ne suffit pas à notre usage :
-au redémarrage, 11 points de reprise Flash-Next de 1,39 à 1,50 Go refusés ;
-staging gardé à 8 Gio, rétention passée au défaut de 8 Gio. Défauts de contexte natifs depuis
+Anthropic, jusqu'au proxy). Le staging automatique de #279 (1 Gio) ne suffit
+pas à notre usage : au redémarrage, 11 points de reprise Flash-Next de 1,39 à
+1,50 Go refusés ; staging gardé à 8 Gio, rétention passée au défaut de 8 Gio.
+
+Remesure du 26/09/2026 (gufo d9a84f1, staging 8 Gio, rétention 8 Gio, 27B et
+Flash-Next seulement, mêmes bancs, 1 session), contre la référence gufo du
+24/09 :
+
+| gufo, 26/09 contre 24/09 | Qwen3.8-27B | Flash-Next |
+|---|---|---|
+| prefill, prompt court (t/s) | 560 contre 548 | 1 462 contre 1 391, soit +5 % |
+| prefill à 52k (t/s) | 506 contre 502 | 1 379 contre 1 363 |
+| décode, prose (t/s) | 43,7 contre 49,0, soit -11 % (acceptance DFlash 64,6 à 69,7 % contre 68,6 à 71,2 %) | non mesurable (arrêt avant 200 tokens) |
+| décode, code (t/s) | 66,1 contre 65,8 (acceptance 97 à 98 %) | 61,8 contre 61,6 |
+| justesse, cache au tour 2 | OK, 100 % | OK, 100 % |
+| boucle agentique, médiane par passe | 16/16, 41,3 s contre 40 s | 16/16, 29,9 s contre 31 s |
+| prompt repris (disque / RAM / ratés) | 90,2 % (12 / 34 / 3) contre 90 % | 88,8 % (11 / 34 / 4) contre 91 % |
+| temps en prefill / décode, tout le run | 28 / 94 s contre 28 / 90 s | 23 / 78 s contre 16 / 71 s |
+
+- Aucun point de reprise refusé pendant les boucles agentiques (36 écrits
+  sur le 27B) : le staging de 8 Gio tient.
+- La baisse du décode en prose du 27B suit celle de l'acceptance, pas la
+  vitesse du moteur : à acceptance quasi totale (code), le décode est
+  inchangé. Échantillonnage à temp 0,7, texte généré différent d'une version
+  à l'autre ; à confirmer sur plus de passes avant d'y voir une régression.
+- Prefill Flash-Next +5 % à prompt court, cohérent avec #255 (GEMM W8A8).
+- Flash-Next agentique : première passe à 47 s (cache disque neuf, période
+  d'apprentissage), les deux suivantes à 29,9 et 28,7 s.
+- Les journaux agentiques bruts de la première série du 24/09 (sans cache
+  disque, `agentic/gufo-27b.*` et `gufo-flashnext.*`) ont été écrasés par
+  cette remesure ; leurs chiffres restent dans ce document. Défauts de contexte natifs depuis
 d5fd781, sans effet chez nous (`--context` explicite).
 
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
