@@ -35,16 +35,20 @@
 #   --max-tokens 32768    défaut gufo 128 : un client qui n'envoie pas
 #                         max_tokens serait coupé
 #   --cache-disk …        seul chemin qui reprend le préfixe commun de deux
-#                         conversations. Budgets aux défauts de gufo depuis
-#                         le 26/09/2026 (gufo-org/gufo#279, d9a84f1) :
-#                         rétention 8 Gio, staging automatique (au plus
-#                         1 Gio et 1/8 de la RAM disponible), un point de
-#                         reprise plus gros est refusé ET journalisé. Avant :
-#                         16 Gio et 8 Gio explicites, le défaut de 512 Mio
-#                         abandonnant en silence ceux du 27B dès ~4,5k
-#                         tokens. Changer la configuration rend ce cache
-#                         inutilisable. Partagé entre les modèles (l'identité
-#                         du cache inclut le modèle).
+#                         conversations. Rétention au défaut de gufo (8 Gio
+#                         depuis gufo-org/gufo#279, d9a84f1 ; 16 Gio
+#                         explicites avant le 26/09/2026). Staging 8 Gio,
+#                         non préalloué depuis #279 : le défaut automatique
+#                         (au plus 1 Gio) refusait le 26/09/2026 les points
+#                         de reprise de nos sessions Flash-Next (1,39 à
+#                         1,50 Go, contextes de 40 à 60k tokens) et
+#                         refuserait ceux du 27B dès ~8k tokens (165 Mo +
+#                         0,1 Mo par token, le prompt système de Claude Code
+#                         seul ~2,1 Go). Refus journalisés depuis #279
+#                         (reason=staging_capacity). Changer la
+#                         configuration rend ce cache inutilisable. Partagé
+#                         entre les modèles (l'identité du cache inclut le
+#                         modèle).
 # =============================================================================
 
 # Flash-Next ou DeepSeek à froid : ~80 s ; marge pour un disque chargé.
@@ -69,7 +73,7 @@ macros:
   "gufo": >-
     gufo serve llm --host 127.0.0.1 --port ${PORT}
     --context 262144 --sessions ${env.GUFO_SESSIONS} --max-tokens 32768
-    --cache-disk ${env.GUFO_DATA}/cache
+    --cache-disk ${env.GUFO_DATA}/cache --cache-disk-staging-bytes 8589934592
   # Échantillonnage officiel Qwen, profil instruct (sections nothink du
   # service) ; défauts serveur, un client peut les surcharger par requête.
   "qwen": >-
