@@ -17,7 +17,9 @@ agentiques ci-dessous donnent les deux séries.
 
 - Moteur HIP écrit à la main pour gfx1151, sous licence MIT, v0.1.0, testé au
   commit `9cad139` (image `ghcr.io/gufo-org/toolboxes/gufo-runtime:latest`,
-  ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck).
+  ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
+  commit `d9a84f1` le 26/09/2026 (27B et Flash-Next, section « Suivi en
+  amont »).
 - Ce n'est pas un llama.cpp : noyaux spécialisés par modèle et par forme de
   matrice, dont une partie est adaptée de llama.cpp / ggml (MIT, cf. leur
   `THIRD_PARTY_NOTICES.md`), ainsi que de ds4 (antirez) pour DeepSeek.
@@ -235,8 +237,9 @@ Gufo Flash-Next sur `:8009` avec cache disque, cinq minutes d'usage réel,
   génération. Corrigé dans llm-proxy (commit du 24/09/2026, rappel gardé à sa
   place) : sur le même scénario Claude Code, tours de suivi repris en RAM,
   43 à 150 tokens recalculés au lieu de 1 800 à 1 960, premier token en 0,3 à
-  0,5 s au lieu de 1,8 à 2,1 s. Le même proxy retire désormais `stop` pour
-  gufo (option `anthropic_drop_fields`) ;
+  0,5 s au lieu de 1,8 à 2,1 s. Le même proxy a retiré `stop` pour gufo
+  (option `anthropic_drop_fields`) jusqu'à la correction de #260 : option
+  supprimée le 26/09/2026 (commit 588776f du proxy) ;
 - 6 requêtes sur 50 rejetées en `unsupported_field` : le proxy traduit les
   `stop_sequences` Anthropic en `stop`, que gufo refuse (reproduit, issue
   [#260](https://github.com/gufo-org/gufo/issues/260)).
@@ -289,7 +292,7 @@ comme avec le routeur llama-server du service.
 | Bascule 27B vers Flash-Next | 31,4 s |
 | Bascule Flash-Next vers DeepSeek (IQ2XXS) | 70,4 s, réponse juste ; sans raisonnement par défaut (le gabarit d'antirez répond directement, là où la section du service raisonne avec un budget de 6 144 tokens) |
 | Modèle déjà chargé | premier token en 0,3 s |
-| Requête avec `stop` | acceptée (retiré par llama-swap, gufo#260) |
+| Requête avec `stop` | acceptée ; retiré par llama-swap jusqu'au 26/09/2026, transmis depuis (gufo#260 corrigé, arrêt vérifié en OpenAI et en Anthropic) |
 | Mémoire | un seul modèle chargé à la fois (99 Gio avec Flash-Next) |
 
 Limites :
@@ -440,10 +443,11 @@ Publié le 25/09/2026 :
 
 | Ticket | Sujet | État au 26/09/2026 |
 |---|---|---|
-| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée, signalé dans #259 |
+| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
 | #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), renommé après enquête, démarche de test en commentaire ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916 ; à retirer si gufo limite ses files |
-| #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | **fermé** le 25/09 (le nôtre) : `stop` et `stop_sequences` pris en charge (9854ca5, 363d6a1) ; le retrait de `stop` par llm-proxy et llama-swap devient inutile une fois l'image montée |
+| #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | **fermé** le 25/09 (le nôtre) : `stop` et `stop_sequences` pris en charge (9854ca5, 363d6a1) ; retrait de `stop` supprimé le 26/09 dans llama-swap (`stripParams`) et dans llm-proxy (588776f) |
+| #268 | défauts serveur trop bas pour un usage agentique (`--max-tokens` 128, staging 512 Mio), ouvert par un utilisateur | ouvert : `--max-tokens` corrigé par #276 (défaut -1, jusqu'à EOS) ; contexte natif par défaut (d5fd781) ; staging laissé ouvert malgré #279 |
 | #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
 | #248 | suite de conversation ratée quand la réflexion est active | ouvert ; le 25/09, un utilisateur montre que c'est un effet de l'absence de `--cache-disk` (99,9 % repris avec, y compris après redémarrage) ; reste #266 (budget de `max_tokens` consommé par le raisonnement) |
 | #239 | n-gram (prompt lookup) | résultat négatif en greedy, clôture proposée |
@@ -486,8 +490,8 @@ Flash-Next seulement, mêmes bancs, 1 session), contre la référence gufo du
   d'apprentissage), les deux suivantes à 29,9 et 28,7 s.
 - Les journaux agentiques bruts de la première série du 24/09 (sans cache
   disque, `agentic/gufo-27b.*` et `gufo-flashnext.*`) ont été écrasés par
-  cette remesure ; leurs chiffres restent dans ce document. Défauts de contexte natifs depuis
-d5fd781, sans effet chez nous (`--context` explicite).
+  cette remesure ; leurs chiffres restent dans ce document.
+- Résultat et refus du staging à 1 Gio publiés dans #259 le 26/09/2026.
 
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
@@ -534,21 +538,26 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
 
 ### Paramètres de gufo et leur origine
 
-Gufo n'a pas de réglage de production « officiel » : ses défauts visent un
-usage minimal (4 096 tokens de contexte, 128 générés, glouton) et ses propres
-mesures tournent en glouton. Les valeurs ci-dessous visent un usage agentique
-comparable au service ; aucune n'est un réglage interne du moteur.
+Gufo n'a pas de réglage de production « officiel ». Jusqu'au 25/09/2026, ses
+défauts visaient un usage minimal (4 096 tokens de contexte, 128 générés) ;
+depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
+(contexte natif, génération jusqu'à EOS). L'échantillonnage reste glouton et
+ses propres mesures tournent en glouton. Les valeurs ci-dessous visent un
+usage agentique comparable au service ; aucune n'est un réglage interne du
+moteur. Confrontées le 26/09/2026 à `docs/SERVER.md` et aux guides des modèles
+de gufo (commit d9a84f1) et à `gufo serve llm --help` de l'image déployée.
 
 | Paramètre | `runtime-gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
 |---|---|---|---|---|
-| `--context` | 262144 | 4096 | 32768 | nous : contexte natif, celui du service |
-| `--sessions` | 2 | non documenté | 2 | gufo et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
-| `--max-tokens` | 32768 | 128 | non indiqué | nous : à 128, un client qui n'envoie pas `max_tokens` serait coupé |
+| `--context` | 262144 | contexte natif depuis d5fd781 (4096 avant) | 32768 | nous : contexte natif, celui du service ; redondant depuis d5fd781 (chargement : `context_tokens=262144`), gardé explicite parce que `capabilities.context` doit lui rester égal |
+| `--sessions` | 2 | 1 | 2 | gufo (guides du 27B et de Flash-Next) et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
+| `--max-tokens` | 32768 | -1 (jusqu'à EOS) depuis #276 (128 avant) | non indiqué | nous : à 128, un client qui n'envoie pas `max_tokens` était coupé. Désormais un plafond plus strict que gufo et que le service (llama.cpp à -1, aucun `n-predict` dans le ini) |
 | échantillonnage | temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 | glouton, aucun filtre | aucun | Qwen officiel, profil instruct (fiche du modèle, guide unsloth), celui des sections nothink du service ; surchargeable par requête |
 | `--think` | off | gabarit du modèle (raisonnement, effort xhigh) | non indiqué | nous : équivalent des sections nothink |
-| `--cache-disk` | activé, 8 Gio (défaut) | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations (mesuré) ; 16 Gio explicites jusqu'au 26/09/2026 |
-| `--cache-disk-staging-bytes` | 8 Gio | automatique depuis #279 : au plus 1 Gio et 1/8 de la RAM disponible (512 Mio fixes avant) | non utilisé | nous : au défaut, les points de reprise du 27B sont refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; non préalloué |
+| `--cache-disk` | activé, 8 Gio (défaut) | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations (mesuré) ; 16 Gio explicites jusqu'au 26/09/2026. `docs/SERVER.md` : le 27B à contexte long demande plus que les défauts pour la rétention comme pour le staging |
+| `--cache-disk-staging-bytes` | 8 Gio | automatique depuis #279 : au plus 1 Gio et 1/8 de la RAM disponible (512 Mio fixes avant) | non utilisé | nous : au défaut, les points de reprise du 27B sont refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; non préalloué. Valeur que `docs/SERVER.md` recommande désormais pour Flash-Next à contexte plein |
 | spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
+| `--max-pending-per-client` | inchangé (4) | 4 | non indiqué | gufo ; derrière llama-swap, toutes les requêtes viennent de 127.0.0.1, donc 4 en file au plus pour tous les clients réunis (aucun rejet vu à ce jour) |
 | fichiers | Flash-Next UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q8_0 | | UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q4_K_M | gufo, sauf le drafter du 27B pris dans le parc (Q8_0, mesuré identique au Q4_K_M) |
 
 Les chiffres agentiques avec cache disque ont été mesurés avec ces réglages ;
