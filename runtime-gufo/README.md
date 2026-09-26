@@ -89,7 +89,7 @@ dans `GUFO_DATA`, par défaut `~/llm/gufo-test` :
 
 - `.env` (usage réel) et `banc.env` (bancs) : générés ;
 - `models/` : GGUF de référence de gufo (`--gufo-download`) ;
-- `cache/` : cache disque de gufo (8 Gio au plus, défaut de gufo) ;
+- `cache/` : cache disque de gufo (16 Gio au plus) ;
 - `resultats/` : sorties des bancs.
 
 Variables : `GUFO_DATA`, `GUFO_IMAGE`, `GUFO_SESSIONS` (défaut 2 ; `SESSIONS`

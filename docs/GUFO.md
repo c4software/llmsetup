@@ -462,7 +462,10 @@ Image `gufo-runtime:latest` republiée le 26/09/2026 (`20260926T093925`,
 et #279, déployée sur bigchuck le même jour (`stop` vérifié en OpenAI et en
 Anthropic, jusqu'au proxy). Le staging automatique de #279 (1 Gio) ne suffit
 pas à notre usage : au redémarrage, 11 points de reprise Flash-Next de 1,39 à
-1,50 Go refusés ; staging gardé à 8 Gio, rétention passée au défaut de 8 Gio.
+1,50 Go refusés ; staging gardé à 8 Gio. Rétention passée au défaut de 8 Gio
+pour la remesure ci-dessous, puis remise à 16 Gio le même jour, et
+`--max-tokens 32768` retiré (défaut -1 de #276) : voir « Paramètres de gufo et
+leur origine ».
 
 Remesure du 26/09/2026 (gufo d9a84f1, staging 8 Gio, rétention 8 Gio, 27B et
 Flash-Next seulement, mêmes bancs, 1 session), contre la référence gufo du
@@ -509,8 +512,8 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   `:8009`, l'argument choisissant le modèle préchargé (compose
   `runtime-gufo/docker-compose.yml`, `.env` généré dans
   `GUFO_DATA`, 2 sessions par défaut, `GUFO_SESSIONS=N` pour changer, nom
-  exposé `qwen3.8-27b` ou `qwen3.8-flash-next`, cache disque 8 Gio (défaut de
-  gufo), staging 8 Gio, utilisateur de l'hôte). `--gufo-off` pour revenir au service,
+  exposé `qwen3.8-27b` ou `qwen3.8-flash-next`, cache disque 16 Gio, staging
+  8 Gio, utilisateur de l'hôte). `--gufo-off` pour revenir au service,
   `--gufo-logs` pour suivre les requêtes. Le dernier lancé repart seul au
   démarrage de bigchuck ; `--start` du service refuse tant que gufo tourne.
 - `./setup-llm.sh --gufo-download image|flashnext|deepseek|all`
@@ -551,10 +554,10 @@ de gufo (commit d9a84f1) et à `gufo serve llm --help` de l'image déployée.
 |---|---|---|---|---|
 | `--context` | 262144 | contexte natif depuis d5fd781 (4096 avant) | 32768 | nous : contexte natif, celui du service ; redondant depuis d5fd781 (chargement : `context_tokens=262144`), gardé explicite parce que `capabilities.context` doit lui rester égal |
 | `--sessions` | 2 | 1 | 2 | gufo (guides du 27B et de Flash-Next) et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
-| `--max-tokens` | 32768 | -1 (jusqu'à EOS) depuis #276 (128 avant) | non indiqué | nous : à 128, un client qui n'envoie pas `max_tokens` était coupé. Désormais un plafond plus strict que gufo et que le service (llama.cpp à -1, aucun `n-predict` dans le ini) |
+| `--max-tokens` | non posé (-1, jusqu'à EOS) | -1 depuis #276 (128 avant) | non indiqué | gufo, comme le service (llama.cpp à -1, aucun `n-predict` dans le ini) ; 32768 explicite jusqu'au 26/09/2026, quand le défaut de 128 coupait un client sans `max_tokens` |
 | échantillonnage | temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 | glouton, aucun filtre | aucun | Qwen officiel, profil instruct (fiche du modèle, guide unsloth), celui des sections nothink du service ; surchargeable par requête |
 | `--think` | off | gabarit du modèle (raisonnement, effort xhigh) | non indiqué | nous : équivalent des sections nothink |
-| `--cache-disk` | activé, 8 Gio (défaut) | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations (mesuré) ; 16 Gio explicites jusqu'au 26/09/2026. `docs/SERVER.md` : le 27B à contexte long demande plus que les défauts pour la rétention comme pour le staging |
+| `--cache-disk` | activé, 16 Gio | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations (mesuré) ; 16 Gio car partagé entre les modèles et un point de reprise Flash-Next de session réelle pèse 1,5 Go (8 Gio en garde environ 5), et `docs/SERVER.md` demande plus que les défauts pour le 27B à contexte long. Passé au défaut de 8 Gio le matin du 26/09/2026, remis à 16 Gio le jour même |
 | `--cache-disk-staging-bytes` | 8 Gio | automatique depuis #279 : au plus 1 Gio et 1/8 de la RAM disponible (512 Mio fixes avant) | non utilisé | nous : au défaut, les points de reprise du 27B sont refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; non préalloué. Valeur que `docs/SERVER.md` recommande désormais pour Flash-Next à contexte plein |
 | spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
 | `--max-pending-per-client` | inchangé (4) | 4 | non indiqué | gufo ; derrière llama-swap, toutes les requêtes viennent de 127.0.0.1, donc 4 en file au plus pour tous les clients réunis (aucun rejet vu à ce jour) |

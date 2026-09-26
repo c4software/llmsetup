@@ -28,16 +28,24 @@
 #
 # Réglages communs (macro gufo) et leur origine, détaillés dans docs/GUFO.md
 # (« Paramètres de gufo et leur origine ») :
-#   --context 262144      contexte natif, celui du service (défaut gufo 4096)
+#   --context 262144      contexte natif, celui du service ; défaut de gufo
+#                         depuis d5fd781 (4096 avant), gardé explicite car
+#                         capabilities.context doit lui rester égal
 #   --sessions N          2 par défaut : la seconde évite qu'une requête annexe
 #                         du client (titre, résumé) évince la conversation
 #                         principale de la RAM (+7 Gio)
-#   --max-tokens 32768    défaut gufo 128 : un client qui n'envoie pas
-#                         max_tokens serait coupé
+#   (pas de --max-tokens) défaut de gufo -1 depuis gufo-org/gufo#276 :
+#                         jusqu'à EOS, comme le service (aucun n-predict).
+#                         32768 explicite jusqu'au 26/09/2026, contre le
+#                         défaut de 128 qui coupait les clients sans
+#                         max_tokens
 #   --cache-disk …        seul chemin qui reprend le préfixe commun de deux
-#                         conversations. Rétention au défaut de gufo (8 Gio
-#                         depuis gufo-org/gufo#279, d9a84f1 ; 16 Gio
-#                         explicites avant le 26/09/2026). Staging 8 Gio,
+#                         conversations. Rétention 16 Gio, le double du
+#                         défaut de gufo (8 Gio depuis gufo-org/gufo#279) :
+#                         partagée entre les modèles, un point de reprise
+#                         Flash-Next de session réelle pèse 1,5 Go, et
+#                         docs/SERVER.md de gufo demande plus que les défauts
+#                         pour le 27B à contexte long. Staging 8 Gio,
 #                         non préalloué depuis #279 : le défaut automatique
 #                         (au plus 1 Gio) refusait le 26/09/2026 les points
 #                         de reprise de nos sessions Flash-Next (1,39 à
@@ -72,8 +80,9 @@ macros:
   # port que llama-swap lui attribue.
   "gufo": >-
     gufo serve llm --host 127.0.0.1 --port ${PORT}
-    --context 262144 --sessions ${env.GUFO_SESSIONS} --max-tokens 32768
-    --cache-disk ${env.GUFO_DATA}/cache --cache-disk-staging-bytes 8589934592
+    --context 262144 --sessions ${env.GUFO_SESSIONS}
+    --cache-disk ${env.GUFO_DATA}/cache --cache-disk-bytes 17179869184
+    --cache-disk-staging-bytes 8589934592
   # Échantillonnage officiel Qwen, profil instruct (sections nothink du
   # service) ; défauts serveur, un client peut les surcharger par requête.
   "qwen": >-
