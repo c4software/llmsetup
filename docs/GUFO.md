@@ -15,11 +15,13 @@ agentiques ci-dessous donnent les deux séries.
 
 ## Ce qu'est gufo
 
-- Moteur HIP écrit à la main pour gfx1151, sous licence MIT, v0.1.0, testé au
-  commit `9cad139` (image `ghcr.io/gufo-org/toolboxes/gufo-runtime:latest`,
-  ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
-  commit `d9a84f1` le 26/09/2026 (27B et Flash-Next, section « Suivi en
-  amont »).
+- Moteur HIP écrit à la main pour gfx1151, sous licence MIT, testé au
+  commit `9cad139` (image `ghcr.io/gufo-org/toolboxes/gufo-runtime:latest`
+  du 24/09, ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck),
+  remesuré au commit `d9a84f1` le 26/09/2026 et sur la release v0.1.1 le
+  28/09/2026 (27B et Flash-Next, section « Suivi en amont »). Les deux
+  premières mesures précèdent toute release : la v0.1.0 n'est publiée que le
+  28/09/2026.
 - Ce n'est pas un llama.cpp : noyaux spécialisés par modèle et par forme de
   matrice, dont une partie est adaptée de llama.cpp / ggml (MIT, cf. leur
   `THIRD_PARTY_NOTICES.md`), ainsi que de ds4 (antirez) pour DeepSeek.
@@ -443,19 +445,20 @@ Publié le 25/09/2026 :
 
 | Ticket | Sujet | État au 26/09/2026 |
 |---|---|---|
-| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé |
+| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
-| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), renommé après enquête, démarche de test en commentaire ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916 ; à retirer si gufo limite ses files |
+| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), **pris en charge** le 28/09 (fedeizzo, étiquette `triaged`) ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916. Leur piste : le chargement des poids ouvre 16 flux (`kReaders = 16`, `weight_upload.cpp`) et HIP garderait les files matérielles derrière eux pour toute la vie du processus ; `GPU_MAX_HW_QUEUES` fixé par gufo est leur dernier choix. Ils demandent : coût en débit (LLM avec 9 files contre 5), décompte des files par phase (avant, pendant, après le chargement) et effet de `--sessions N` ; à retirer si gufo limite ses files |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | **fermé** le 25/09 (le nôtre) : `stop` et `stop_sequences` pris en charge (9854ca5, 363d6a1) ; retrait de `stop` supprimé le 26/09 dans llama-swap (`stripParams`) et dans llm-proxy (588776f) |
-| #268 | défauts serveur trop bas pour un usage agentique (`--max-tokens` 128, staging 512 Mio), ouvert par un utilisateur | ouvert : `--max-tokens` corrigé par #276 (défaut -1, jusqu'à EOS) ; contexte natif par défaut (d5fd781) ; staging laissé ouvert malgré #279 |
+| #268 | défauts serveur trop bas pour un usage agentique (`--max-tokens` 128, staging 512 Mio), ouvert par un utilisateur | **fermé** le 26/09 avec #279 : `--max-tokens` corrigé par #276 (défaut -1, jusqu'à EOS), contexte natif par défaut (d5fd781), staging automatique (1 Gio au plus, trop peu pour nous) |
 | #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
-| #248 | suite de conversation ratée quand la réflexion est active | ouvert ; le 25/09, un utilisateur montre que c'est un effet de l'absence de `--cache-disk` (99,9 % repris avec, y compris après redémarrage) ; reste #266 (budget de `max_tokens` consommé par le raisonnement) |
+| #248 | suite de conversation ratée quand la réflexion est active | **fermé** le 27/09 par la PR #281 (c362049, dans v0.1.1) : point de reprise posé avant l'ouverture de la réponse de l'assistant, plus un point sur le prompt entier pour les relances à l'identique ; la PR note que le raté se reproduisait **aussi en `--think off`** (notre réglage) quand le client retire ou interrompt une réponse ; reste #266 (budget de `max_tokens` consommé par le raisonnement) |
 | #239 | n-gram (prompt lookup) | résultat négatif en greedy, clôture proposée |
 | #255 | GEMM W8A8 du prefill Flash-Next, +5 % (pwilkin) | **mergé** le 25/09 (98641a6) |
 | #228 | ROCm 10 | verdict gufo : rester sur ROCm 7.2.3 (décode -5 % en ROCm 10) |
 | #200 | runtime HRX + noyaux Loom | ouvert depuis août, +3,6 % de prefill 27B |
 | #257 | outils mal formés tolérés (clients agentiques) | **mergé** le 25/09 (bec9787) |
 | #256 | format HGN de halogen (spécification en salle blanche) | **fermé** le 25/09 : refusé (pas de concurrence avec halogen) |
+| #299 | PR : Qwen3.6-35B-A3B (`qwen35moe`, GDN + MoE 256 experts, MTP, DFlash 2), par slimsami, ouverte le 27/09 | **suivie à la demande de l'utilisateur** (28/09) : même architecture qu'Ornith-1.5-35B-A3B, notre modèle agentique par défaut (fine-tune de Qwen3.6-35B-A3B). Annoncé sur UD-Q6_K_XL : prefill 1 790 à 2 702 t/s contre 1 057 à 1 202 pour llama.cpp Vulkan, DFlash 2 à 83,3 t/s en glouton ; MTP pas encore branché dans `gufo serve`. À vérifier si elle est mergée : notre Ornith est en Q4_K_M (la PR ne cite que Q6_K et Q8_0 pour les experts), et gufo refuse les quants hors de ses formats |
 
 Image `gufo-runtime:latest` republiée le 26/09/2026 (`20260926T093925`,
 `sha256:09507c0…`, commit d9a84f1 ou plus récent) : contient #255, #257, #260
@@ -495,6 +498,45 @@ Flash-Next seulement, mêmes bancs, 1 session), contre la référence gufo du
   disque, `agentic/gufo-27b.*` et `gufo-flashnext.*`) ont été écrasés par
   cette remesure ; leurs chiffres restent dans ce document.
 - Résultat et refus du staging à 1 Gio publiés dans #259 le 26/09/2026.
+
+### Release v0.1.1 (28/09/2026)
+
+gufo publie des versions depuis le 28/09/2026 : v0.1.0 (`06ed62f`, simple mise
+en place de la publication) puis v0.1.1 (`b0f8673`) le même jour. Les images
+portent désormais des tags de version (`0.1.1`, `0.1`, `latest` pour la
+dernière stable, `edge` et `sha-…` pour la branche principale), en plus des
+tags datés d'avant (`20260926T093925`, `20260927T101849`). Contenu depuis
+d9a84f1, pour ce qui nous touche : #281 (points de reprise Qwen, ferme #248),
+#301 (reprise des requêtes annulées), #288 (borne du prompt rendu calculée
+sur le contexte de la session), #292 (attention clairsemée de Flash-Next),
+#294 (découpage en tokens des prompts Qwen proportionnel à leur longueur),
+#284 et 30392d5 (arguments d'outils Qwen), #293 (plus de contrôle de
+`general.basename`) ; à côté : sortie JSON contrainte (#283), complétions
+brutes pour banc (#286), journal de progression optionnel (#289).
+
+Choix du 28/09/2026 :
+
+- **Image épinglée** sur `gufo-runtime:0.1.1` (`sha256:2e7ffbd…`) au lieu de
+  `latest`, dans `lib/gufo.sh` (`GUFO_IMAGE`), `runtime-gufo/download.sh` et
+  `runtime-gufo/Dockerfile.routeur` : comme pour le service, une image est
+  une série de mesures, la version ne bouge plus toute seule. Monter de
+  version = changer ces trois lignes, `--gufo-download image`, remesurer.
+- **Suivi en amont par un script** : `tools/gufo-amont.sh` (lecture seule,
+  `gh api`) affiche releases, images publiées, commits récents et l'état des
+  tickets du tableau ci-dessus (ses `| #NNN |` sont la liste suivie) et de
+  ceux que nous avons ouverts ; `ticket <n> [k]` lit un ticket ou une PR et
+  ses commentaires. Autorisé dans `.claude/settings.local.json`, pour que
+  l'agent n'improvise plus de commandes `gh`.
+- **PR #299 suivie** (Qwen3.6-35B-A3B, l'architecture d'Ornith) : voir le
+  tableau.
+- **DeepSeek non remesuré** (choix de l'utilisateur) : seuls le 27B (fichiers
+  identiques au service) et Flash-Next sont rejoués.
+- **Remesure** : banc HTTP (`run.sh gufo 27b flashnext`), boucle agentique
+  avec cache disque (réglage d'usage), puis la même boucle **sans** cache
+  disque, pour vérifier dans notre scénario l'affirmation de #259 (reprise
+  des préfixes partagés sans disque). Journaux bruts dans
+  `GUFO_DATA/resultats/agentic/2026-09-28-0.1.1/` (`avant/` garde ceux du
+  26/09). Résultats : à compléter.
 
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
@@ -566,7 +608,9 @@ de gufo (commit d9a84f1) et à `gufo serve llm --help` de l'image déployée.
 Les chiffres agentiques avec cache disque ont été mesurés avec ces réglages ;
 gufo « nu » (sans cache disque) était à égalité avec le service sur le 27B.
 
-Pour rejouer contre une nouvelle version de gufo : `runtime-gufo/download.sh
+Pour suivre l'amont : `tools/gufo-amont.sh` (état), `tools/gufo-amont.sh
+ticket <n>` (un ticket, une PR). Pour rejouer contre une nouvelle version de
+gufo : monter `GUFO_IMAGE` (section « Release v0.1.1 »), `runtime-gufo/download.sh
 image`, puis `runtime-gufo/bench/run.sh gufo 27b` et
 `runtime-gufo/bench/agentic.sh gufo 27b`. Ce sont les deux mesures qui
 comparent les moteurs à fichiers identiques ; les chiffres du service

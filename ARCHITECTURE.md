@@ -477,8 +477,8 @@ du service sur `SERVER_PORT` (8009), les deux étant exclusifs (même port, un
 GPU), et démarre TOUJOURS derrière llama-swap : le client choisit
 `qwen3.8-27b`, `qwen3.8-flash-next` ou `deepseek-v4-flash` par le champ
 `model`, llama-swap arrête un processus gufo pour lancer l'autre (groupe
-« gros », exclusif, avec Qwen-Image-2.1-heretic), précharge `GUFO_PRECHARGE` et
-retire `stop` / `stop_sequences`. Il sert aussi la synthèse vocale Qwen3-TTS
+« gros », exclusif, avec Qwen-Image-2.1-heretic) et précharge `GUFO_PRECHARGE`
+(`stop` / `stop_sequences` transmis depuis le 26/09/2026, gufo#260). Il sert aussi la synthèse vocale Qwen3-TTS
 (trois variantes, groupe « voix ») et la transcription Qwen3-ASR (groupe
 « transcription »), persistantes et chargées à côté du gros modèle.
 Même schéma que le service : compose versionné `runtime-gufo/docker-compose.yml`
@@ -502,7 +502,10 @@ unless-stopped` des deux côtés, l'autre étant arrêté ou supprimé). Les ban
 `runtime-gufo/bench/run.sh` (HTTP, `bench/mesure.py`) et `bench/agentic.sh`
 (boucle pi) lancent gufo par `--gufo <cas>` avec leurs propres valeurs
 (`GUFO_PROJET=gufo-banc`, conteneur `gufo-banc`, `GUFO_RESTART=no`, `.env`
-séparé), sur le même port.
+séparé), sur le même port. Image de gufo épinglée par sa version publiée
+(`GUFO_IMAGE` de `lib/gufo.sh`, `gufo-runtime:0.1.1` depuis le 28/09/2026,
+jamais `latest`) ; `tools/gufo-amont.sh` (lecture seule, `gh api`) affiche
+releases, images, commits et l'état des tickets suivis dans `docs/GUFO.md`.
 
 ## Moteur conteneurisé (`runtime/`)
 
