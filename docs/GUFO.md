@@ -447,7 +447,7 @@ Publié le 25/09/2026 :
 |---|---|---|
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
-| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), **pris en charge** le 28/09 (fedeizzo, étiquette `triaged`) ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916, et en v0.1.1. Leur piste : le chargement des poids ouvre 16 flux (`kReaders = 16`, `weight_upload.cpp`) et HIP garderait les files matérielles derrière eux pour toute la vie du processus ; `GPU_MAX_HW_QUEUES` fixé par gufo est leur dernier choix. Ils demandent : coût en débit (LLM avec 9 files contre 5), décompte des files par phase (avant, pendant, après le chargement) et effet de `--sessions N` ; mesuré le 28/09 (section « #272 : les trois questions du mainteneur ») : aucun coût en débit, files prises d'un coup au démarrage sans pic pendant le chargement, `--sessions` sans effet ; réponse publiée le 28/09 avec les relevés bruts (gist) ; à retirer si gufo limite ses files |
+| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), **pris en charge** le 28/09 (fedeizzo, étiquette `triaged`) ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916, et en v0.1.1. Leur piste : le chargement des poids ouvre 16 flux (`kReaders = 16`, `weight_upload.cpp`) et HIP garderait les files matérielles derrière eux pour toute la vie du processus ; `GPU_MAX_HW_QUEUES` fixé par gufo est leur dernier choix. Ils demandent : coût en débit (LLM avec 9 files contre 5), décompte des files par phase (avant, pendant, après le chargement) et effet de `--sessions N` ; mesuré le 28/09 (section « #272 : les trois questions du mainteneur ») : aucun coût en débit, files prises d'un coup au démarrage sans pic pendant le chargement, `--sessions` sans effet ; réponse publiée le 28/09 avec les relevés bruts (gist) ; correctif proposé dans la PR #317 (plafond par serveur : LLM 3 files, voix et transcription 2), testée le 28/09 sur bigchuck (section « #272 : test de la PR #317 ») : 7 files pour texte + voix + transcription, GPU au repos, débit inchangé ; résultat publié le 28/09 ; contournement à retirer quand une release contient la PR |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | **fermé** le 25/09 (le nôtre) : `stop` et `stop_sequences` pris en charge (9854ca5, 363d6a1) ; retrait de `stop` supprimé le 26/09 dans llama-swap (`stripParams`) et dans llm-proxy (588776f) |
 | #268 | défauts serveur trop bas pour un usage agentique (`--max-tokens` 128, staging 512 Mio), ouvert par un utilisateur | **fermé** le 26/09 avec #279 : `--max-tokens` corrigé par #276 (défaut -1, jusqu'à EOS), contexte natif par défaut (d5fd781), staging automatique (1 Gio au plus, trop peu pour nous) |
 | #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
@@ -632,6 +632,49 @@ https://gist.github.com/c4software/301eb249e8948cf31086a3e753311d9e).
   chargement. Le budget ne dépend pas de ce réglage.
 - `GPU_MAX_HW_QUEUES=1` ramène la voix et la transcription à 2 files
   (4 par défaut) ; le LLM en a une de plus que les serveurs audio (5).
+
+### #272 : test de la PR #317 (28/09/2026)
+
+PR [#317](https://github.com/gufo-org/gufo/pull/317) (fedeizzo, commit
+`e7e7312`) : chaque serveur compte les files déjà prises sur la machine
+(`/sys/class/kfd`) et fixe lui-même `GPU_MAX_HW_QUEUES` avant de charger
+(LLM 2, voix et transcription 1, image et vidéo au défaut), jamais relevé,
+jamais contre celui de l'opérateur, avertissement et démarrage quand même si
+la machine est pleine. Pas d'image publiée pour la PR : `nix build` du commit
+dans un conteneur `nixos/nix` jetable sur bigchuck (store dans le volume
+Docker `gufo-nix`, ROCm 7.2.3 du cache Nix, `gufo diagnose` en PASS), binaire
+lancé dans ce même conteneur, gufo d'usage réel coupé le temps du test.
+Même protocole que ci-dessus, **sans** notre `GPU_MAX_HW_QUEUES=1` ; script
+et relevés dans `GUFO_DATA/resultats/317-2026-09-28/` (`test-317.sh`,
+`serve-*.log`). Résultat publié dans #272 le 28/09/2026
+(https://github.com/gufo-org/gufo/issues/272#issuecomment-5876144656).
+
+| Chargés | Files de calcul (total) | GPU au repos | Journal de gufo | Prefill (t/s) | Décode (t/s) |
+|---|---|---|---|---|---|
+| LLM seul | 3 | 0 % | `observed=0 expected=3 cap=2` | 1 354 à 1 374 (1 160 à froid) | 56,3 à 61,3 |
+| + voix | 3 + 2 = 5 | 0 % | `observed=3 expected=2 cap=1` | 1 363 à 1 382 | 56,4 à 61,2 |
+| + transcription | 3 + 2 + 2 = 7 | 0 % | `observed=5 expected=2 cap=1` | 1 356 à 1 387 | 55,6 à 63,3 |
+| voix relancée avec `GPU_MAX_HW_QUEUES=4` | 3 + 2 + 4 = 9 | 100 % | `expected=unknown cap=operator` (INFO seulement) | | |
+| 4e serveur (voix) sur 7 files | 7 + 2 | | `queue_budget_exceeded` (WARN) | | |
+
+- **Ça marche** : le parc texte, voix et transcription tient à 7 files et
+  le GPU reste au repos, sans réglage de notre part ; débit identique à la
+  v0.1.1 à 5 files (1 344 à 1 390 et 56,3 à 63,1). Chaque serveur prend ses
+  files au démarrage et n'en change plus.
+- **Réglage de l'opérateur** : respecté, mais un dépassement qu'il provoque
+  n'est signalé qu'en INFO (`expected=unknown`), sans le WARN
+  `queue_budget_exceeded` (le serveur ne sait pas combien il en ouvrira).
+- **Machine pleine** : WARN émis puis chargement tenté, comme annoncé. Le 4e
+  serveur est ensuite mort faute de mémoire (Flash-Next et trois serveurs
+  audio : le noyau refuse les mappages, `SVM mapping failed, exceeds resident
+  system memory limit`), sans aucune ligne d'erreur dans son journal après
+  `load_started`. Limite de notre parc, pas de la PR.
+- Synthèse et transcription non rejouées (la PR les mesure : durées et
+  sorties identiques à 1 et 4 files).
+- Contournement (`GPU_MAX_HW_QUEUES=1`, `ttl: 60`) conservé jusqu'à une
+  release qui contient la PR ; il reste compatible (réglage de l'opérateur
+  respecté, 2 files comme la PR). Le `ttl` devient inutile pour les files,
+  pas forcément pour la mémoire.
 
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
