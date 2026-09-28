@@ -642,7 +642,8 @@ PR [#317](https://github.com/gufo-org/gufo/pull/317) (fedeizzo, commit
 jamais contre celui de l'opérateur, avertissement et démarrage quand même si
 la machine est pleine. Pas d'image publiée pour la PR : `nix build` du commit
 dans un conteneur `nixos/nix` jetable sur bigchuck (store dans le volume
-Docker `gufo-nix`, ROCm 7.2.3 du cache Nix, `gufo diagnose` en PASS), binaire
+Docker `gufo-nix`, supprimé après le test avec l'image `nixos/nix`, ROCm 7.2.3
+du cache Nix, `gufo diagnose` en PASS), binaire
 lancé dans ce même conteneur, gufo d'usage réel coupé le temps du test.
 Même protocole que ci-dessus, **sans** notre `GPU_MAX_HW_QUEUES=1` ; script
 et relevés dans `GUFO_DATA/resultats/317-2026-09-28/` (`test-317.sh`,
