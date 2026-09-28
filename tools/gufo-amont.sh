@@ -16,6 +16,11 @@
 #                                       date (AAAA-MM-JJ, défaut : 7 jours)
 #   tools/gufo-amont.sh images [n]      n dernières images gufo-runtime et
 #                                       leurs tags (défaut 10)
+#   tools/gufo-amont.sh diff <de> [à]   documentation changée entre deux
+#                                       révisions (tag ou commit, à = dernière
+#                                       release) : liste, puis le détail des
+#                                       fichiers de réglage (SERVER.md, CLI.md,
+#                                       guides des modèles, CHANGELOG.md)
 #
 # Tickets suivis : les « | #NNN | » du tableau « À surveiller » de
 # docs/GUFO.md, seule liste à tenir ; les tickets ouverts par l'utilisateur gh
@@ -57,6 +62,17 @@ release() {
   fi
 }
 
+diff() {
+  local de="${1:?révision de départ (tag ou commit)}" a="${2:-}"
+  [[ -n "$a" ]] || a="$(gh release view -R "$REPO" --json tagName -q .tagName)"
+  echo "== Documentation changée, $de...$a"
+  gh api "repos/$REPO/compare/$de...$a" \
+    -q '.files[] | select(.filename | test("\\.md$")) | "\(.status)  \(.filename)  +\(.additions) -\(.deletions)"'
+  echo
+  gh api "repos/$REPO/compare/$de...$a" \
+    -q '.files[] | select(.filename | test("^(docs/SERVER|docs/CLI|CHANGELOG)\\.md$|^docs/models/[^/]+/(README|QUALITY|EXPERIMENTS)\\.md$")) | "######## \(.filename)\n\(.patch // "(diff trop gros, voir GitHub)")\n"'
+}
+
 ticket() {
   local n="${1:?numéro de ticket}" k="${2:-0}"
   gh api "repos/$REPO/issues/$n" \
@@ -93,6 +109,6 @@ etat() {
 
 cmd="${1:-etat}"; shift || true
 case "$cmd" in
-  etat|ticket|release|commits|images) "$cmd" "$@" ;;
+  etat|ticket|release|commits|images|diff) "$cmd" "$@" ;;
   *) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2 ;;
 esac

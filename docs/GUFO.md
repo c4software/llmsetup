@@ -520,7 +520,8 @@ Choix du 28/09/2026 :
   `latest`, dans `lib/gufo.sh` (`GUFO_IMAGE`), `runtime-gufo/download.sh` et
   `runtime-gufo/Dockerfile.routeur` : comme pour le service, une image est
   une série de mesures, la version ne bouge plus toute seule. Monter de
-  version = changer ces trois lignes, `--gufo-download image`, remesurer.
+  version : « Checklist de montée de version » (section « Reprendre les
+  mesures »), questions à l'utilisateur avant d'appliquer.
 - **Suivi en amont par un script** : `tools/gufo-amont.sh` (lecture seule,
   `gh api`) affiche releases, images publiées, commits récents et l'état des
   tickets du tableau ci-dessus (ses `| #NNN |` sont la liste suivie) et de
@@ -590,7 +591,20 @@ depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
 ses propres mesures tournent en glouton. Les valeurs ci-dessous visent un
 usage agentique comparable au service ; aucune n'est un réglage interne du
 moteur. Confrontées le 26/09/2026 à `docs/SERVER.md` et aux guides des modèles
-de gufo (commit d9a84f1) et à `gufo serve llm --help` de l'image déployée.
+de gufo (commit d9a84f1) et à `gufo serve llm --help` de l'image déployée, puis
+le 28/09/2026 à v0.1.1 (diff de la documentation d9a84f1...v0.1.1 et des deux
+`--help`) : aucune recommandation de réglage nouvelle, défauts du cache disque
+inchangés (8 Gio, staging automatique au plus 1 Gio), une seule option
+ajoutée, `--log-progress` (journal de progression du prefill et du décode,
+diagnostic seulement, non posée). Trois points de `docs/SERVER.md` nous
+touchent sans rien changer à la configuration : le point de reprise Qwen
+avant la réponse de l'assistant vaut désormais avec la réflexion coupée
+(notre `--think off`), un second point sur le prompt entier est pris sur le
+même budget d'instantanés (à surveiller : refus de staging ou rétention qui
+tourne plus vite), et le prompt rendu est borné à 128 octets par token de
+contexte (32 Mio à 262 144, une raison de plus de garder `--context`
+explicite). `/v1/models` de gufo publie désormais `context_length`, mais
+llama-swap sert sa propre liste : `capabilities.context` reste nécessaire.
 
 | Paramètre | `runtime-gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
 |---|---|---|---|---|
@@ -608,10 +622,73 @@ de gufo (commit d9a84f1) et à `gufo serve llm --help` de l'image déployée.
 Les chiffres agentiques avec cache disque ont été mesurés avec ces réglages ;
 gufo « nu » (sans cache disque) était à égalité avec le service sur le 27B.
 
-Pour suivre l'amont : `tools/gufo-amont.sh` (état), `tools/gufo-amont.sh
-ticket <n>` (un ticket, une PR). Pour rejouer contre une nouvelle version de
-gufo : monter `GUFO_IMAGE` (section « Release v0.1.1 »), `runtime-gufo/download.sh
-image`, puis `runtime-gufo/bench/run.sh gufo 27b` et
+### Checklist de montée de version
+
+À dérouler dans l'ordre à chaque nouvelle release de gufo. Règle : **les
+étapes 1 à 3 ne font que lire ; rien n'est appliqué (épinglage, réglage,
+contournement retiré, modèle remesuré ou non) sans question posée à
+l'utilisateur et réponse reçue**, une question par décision, avec la mesure
+ou la ligne de documentation qui la motive. La version mesurée en dernier
+est celle de `GUFO_IMAGE` dans `lib/gufo.sh`.
+
+1. **Ce qui a changé** (lecture) :
+   - `tools/gufo-amont.sh` : releases, images publiées, commits, tickets
+     suivis (ceux du tableau « À surveiller », plus les nôtres) ;
+   - `tools/gufo-amont.sh release <tag>` et le `CHANGELOG.md` amont ;
+   - `tools/gufo-amont.sh ticket <n> 3` pour chaque ticket suivi qui a bougé,
+     et chaque PR mergée qui touche le cache, le serveur, le 27B ou
+     Flash-Next ;
+   - repérer les tickets fermés, les questions qu'on nous pose (à noter
+     pour l'étape 8) et les PR suivies (#299 : Ornith).
+2. **Nouvelles recommandations de réglage** (lecture) :
+   - `tools/gufo-amont.sh diff <version épinglée> <nouvelle>` : `docs/SERVER.md`,
+     `docs/CLI.md`, guides et `QUALITY.md` / `EXPERIMENTS.md` des modèles ;
+   - `gufo serve llm --help` des deux images, comparé (`docker run --rm
+     --entrypoint gufo <image> serve llm --help`, sur bigchuck) : options
+     ajoutées, retirées, défauts changés ;
+   - confronter au tableau « Paramètres de gufo et leur origine » : chaque
+     ligne tient-elle encore (défauts du cache disque et du staging,
+     `--context`, `--sessions`, `--max-tokens`, échantillonnage, `--think`) ?
+3. **Contournements encore utiles ?** (lecture) : staging 8 Gio (#259, #279),
+   `GPU_MAX_HW_QUEUES=1` et `ttl: 60` sur la voix et la transcription
+   (#272), `capabilities.context` de llama-swap, GGUF refusés (Flash-Next
+   Signal en `IQ4_NL`, DeepSeek UD-IQ3_XXS, Ornith Q4_K_M si #299 est
+   mergée).
+4. **Questions à l'utilisateur**, avant tout changement : monter de version
+   ou non ; quels modèles remesurer (DeepSeek n'est plus remesuré depuis le
+   28/09/2026 sauf demande) ; chaque réglage ou contournement que les étapes
+   2 et 3 proposent de changer ; la machine est-elle libre (les bancs
+   coupent le service et gufo d'usage réel).
+5. **Appliquer ce qui a été accepté** : `GUFO_IMAGE` de `lib/gufo.sh`,
+   `runtime-gufo/download.sh` et `runtime-gufo/Dockerfile.routeur` (même
+   version aux trois endroits), réglages dans
+   `runtime-gufo/gufo-llama-swap.yaml` avec leur commentaire d'origine ;
+   `./tests/sh-unit.sh`, `bash -n`, commit qui dit pourquoi, push ; sur
+   bigchuck `git pull --ff-only` puis `./setup-llm.sh --gufo-download image`.
+6. **Remesurer**, un GPU donc en séquence, sur les modèles retenus :
+   - `runtime-gufo/bench/run.sh gufo 27b flashnext` : justesse d'abord
+     (aiguilles, `sanity`), puis prefill court et à 52k, décode prose et
+     code, cache au tour 2, mémoire, temps de chargement ;
+   - `runtime-gufo/bench/agentic.sh gufo 27b flashnext` : 16/16, temps par
+     passe, part du cache (disque / RAM / ratés) ;
+   - sauvegarder avant les journaux bruts de `resultats/agentic/`, que le
+     banc écrase (`resultats/agentic/<date>-<version>/`).
+7. **Lire les journaux**, pas seulement les débits : refus de staging
+   (`reason=staging_capacity`), `cache_miss_reason`, points de reprise écrits,
+   premier token des petites requêtes (un coût fixe par requête ne se voit
+   pas à 52k), acceptance du spéculatif (une baisse de décode en prose peut
+   venir d'elle et non du moteur).
+8. **Documenter et répondre** : section de la release dans « Suivi en amont »
+   (contenu, choix, tableau contre la mesure précédente), tableau
+   « À surveiller », tableau des paramètres (date de confrontation) ;
+   réponses aux tickets où l'on nous a posé une question, **rédigées puis
+   montrées à l'utilisateur avant publication**.
+9. **Remettre l'usage réel** : `./setup-llm.sh --gufo flashnext` (ou le
+   modèle d'avant), `/v1/models`, une requête avec `stop` par le proxy, voix
+   et transcription si elles servent.
+
+Pour rejouer contre une nouvelle version de gufo sans la checklist complète :
+`runtime-gufo/download.sh image`, puis `runtime-gufo/bench/run.sh gufo 27b` et
 `runtime-gufo/bench/agentic.sh gufo 27b`. Ce sont les deux mesures qui
 comparent les moteurs à fichiers identiques ; les chiffres du service
 ci-dessus sont la référence du 24/09/2026.
