@@ -70,6 +70,8 @@ requêtes de gufo.
 | `download.sh image\|flashnext\|deepseek\|tts\|asr\|qwen-image\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --gufo-download`) |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
+| `bench/remesure.sh [cas...]` | Remesure après une montée de version (checklist de `docs/GUFO.md`) : `run.sh` puis `agentic.sh` sur gufo (défaut 27b flashnext), `SANS_CACHE=1` pour la même boucle sans `--cache-disk`, journaux agentiques rangés dans `resultats/agentic/<date>-<version>/` (`avant/`, `avec-cache/`, `sans-cache/`), bilan par `bench/journal.py`, gufo d'usage réel relancé s'il tournait |
+| `bench/journal.py <journal>...` | Bilan d'un journal gufo : sources du cache et ratés, prompt repris, temps en prefill et en décode, premier token des petites requêtes, acceptance, points de reprise écrits ou refusés |
 
 Le `.env` est généré par `./setup-llm.sh --gufo` (`lib/gufo.sh`) dans
 `GUFO_DATA`, comme celui du service dans `~/models`. Il porte `COMPOSE_FILE`

@@ -502,7 +502,9 @@ unless-stopped` des deux côtés, l'autre étant arrêté ou supprimé). Les ban
 `runtime-gufo/bench/run.sh` (HTTP, `bench/mesure.py`) et `bench/agentic.sh`
 (boucle pi) lancent gufo par `--gufo <cas>` avec leurs propres valeurs
 (`GUFO_PROJET=gufo-banc`, conteneur `gufo-banc`, `GUFO_RESTART=no`, `.env`
-séparé), sur le même port. Image de gufo épinglée par sa version publiée
+séparé), sur le même port ; `bench/remesure.sh` les enchaîne après une
+montée de version (option `SANS_CACHE=1`, journaux rangés par version, bilan
+par `bench/journal.py`). Image de gufo épinglée par sa version publiée
 (`GUFO_IMAGE` de `lib/gufo.sh`, `gufo-runtime:0.1.1` depuis le 28/09/2026,
 jamais `latest`) ; `tools/gufo-amont.sh` (lecture seule, `gh api`) affiche
 releases, images, commits et l'état des tickets suivis dans `docs/GUFO.md`.

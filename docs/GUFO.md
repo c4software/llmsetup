@@ -445,7 +445,7 @@ Publié le 25/09/2026 :
 
 | Ticket | Sujet | État au 28/09/2026 |
 |---|---|---|
-| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») |
+| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
 | #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), **pris en charge** le 28/09 (fedeizzo, étiquette `triaged`) ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916. Leur piste : le chargement des poids ouvre 16 flux (`kReaders = 16`, `weight_upload.cpp`) et HIP garderait les files matérielles derrière eux pour toute la vie du processus ; `GPU_MAX_HW_QUEUES` fixé par gufo est leur dernier choix. Ils demandent : coût en débit (LLM avec 9 files contre 5), décompte des files par phase (avant, pendant, après le chargement) et effet de `--sessions N` ; à retirer si gufo limite ses files |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | **fermé** le 25/09 (le nôtre) : `stop` et `stop_sequences` pris en charge (9854ca5, 363d6a1) ; retrait de `stop` supprimé le 26/09 dans llama-swap (`stripParams`) et dans llm-proxy (588776f) |
@@ -722,14 +722,19 @@ est celle de `GUFO_IMAGE` dans `lib/gufo.sh`.
    `runtime-gufo/gufo-llama-swap.yaml` avec leur commentaire d'origine ;
    `./tests/sh-unit.sh`, `bash -n`, commit qui dit pourquoi, push ; sur
    bigchuck `git pull --ff-only` puis `./setup-llm.sh --gufo-download image`.
-6. **Remesurer**, un GPU donc en séquence, sur les modèles retenus :
+6. **Remesurer**, un GPU donc en séquence, sur les modèles retenus, en une
+   commande : `nohup runtime-gufo/bench/remesure.sh 27b flashnext >
+   ~/llm/gufo-test/remesure.log 2>&1 &` (`SANS_CACHE=1` pour ajouter la
+   boucle sans cache disque), qui enchaîne :
    - `runtime-gufo/bench/run.sh gufo 27b flashnext` : justesse d'abord
      (aiguilles, `sanity`), puis prefill court et à 52k, décode prose et
      code, cache au tour 2, mémoire, temps de chargement ;
    - `runtime-gufo/bench/agentic.sh gufo 27b flashnext` : 16/16, temps par
      passe, part du cache (disque / RAM / ratés) ;
-   - sauvegarder avant les journaux bruts de `resultats/agentic/`, que le
-     banc écrase (`resultats/agentic/<date>-<version>/`).
+   - la copie des journaux bruts de `resultats/agentic/`, que le banc
+     écrase, dans `resultats/agentic/<date>-<version>/` (`avant/` = la
+     remesure précédente), puis leur bilan par `runtime-gufo/bench/journal.py`
+     et la relance de gufo d'usage réel.
 7. **Lire les journaux**, pas seulement les débits : refus de staging
    (`reason=staging_capacity`), `cache_miss_reason`, points de reprise écrits,
    premier token des petites requêtes (un coût fixe par requête ne se voit
