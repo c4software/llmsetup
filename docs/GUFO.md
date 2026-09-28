@@ -443,7 +443,7 @@ Publié le 25/09/2026 :
 
 À surveiller :
 
-| Ticket | Sujet | État au 26/09/2026 |
+| Ticket | Sujet | État au 28/09/2026 |
 |---|---|---|
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
@@ -537,7 +537,64 @@ Choix du 28/09/2026 :
   disque, pour vérifier dans notre scénario l'affirmation de #259 (reprise
   des préfixes partagés sans disque). Journaux bruts dans
   `GUFO_DATA/resultats/agentic/2026-09-28-0.1.1/` (`avant/` garde ceux du
-  26/09). Résultats : à compléter.
+  26/09).
+
+Remesure du 28/09/2026 (gufo 0.1.1 `b0f8673`, staging 8 Gio, rétention
+16 Gio, 1 session), contre celle du 26/09 (d9a84f1). Débits du banc HTTP à
+l'horloge du client, médianes des trois passes ; agentique relu dans le
+journal de gufo, requête par requête :
+
+| gufo, 0.1.1 contre 26/09 | Qwen3.8-27B | Flash-Next |
+|---|---|---|
+| prefill, prompt court (t/s) | 524 contre 560 | 1 307 contre 1 444, soit **-9,5 %** (premier token 1,05 s contre 0,95) |
+| prefill à 6,5k (t/s) | 585 | 1 381 contre 1 411 |
+| prefill à 52k (t/s) | 505 contre 506 | 1 379 contre 1 379 |
+| décode, prose (t/s) | 47,2 contre 43,7 (acceptance à surveiller, voir 26/09) | non mesurable (arrêt avant 200 tokens) |
+| décode, code (t/s) | 65,5 contre 66,1 | 62,2 contre 61,8 |
+| justesse, aiguilles, cache au tour 2 | OK, 100 % | OK, 100 % |
+| mémoire (relevé `free`) | 52 Gio | 95 Gio |
+| boucle agentique, médiane par passe | 16/16, **38,8 s** contre 41,3 s | 16/16, 30,4 s contre 29,9 s |
+| prompt repris (RAM / disque / ratés) | **92,9 %** (35 / 12 / 3) contre 90,2 % | **92,6 %** (36 / 12 / 3) contre 88,8 % |
+| tokens recalculés, tout le run | **6,2k** contre 8,4k | **6,6k** contre 9,4k |
+| temps en prefill / décode, tout le run | **17** / 95 s contre 28 / 94 s | **11** / 79 s contre 23 / 78 s |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | **212 ms** contre 346 | **172 ms** contre 236 |
+| acceptance du spéculatif (réponses de plus de 20 tokens) | 71,4 % contre 71,0 % | 85,7 % contre 86,5 % |
+| points de reprise écrits / refusés par le staging | 61 / 0 (36 / 0 le 26/09) | 42 / 0 |
+
+- Le gain de v0.1.1 est dans le cache, pas dans le moteur : un tiers de
+  tokens recalculés en moins et un prefill agentique divisé par 1,6 à 2,
+  conformes à #281 (point de reprise avant la réponse de l'assistant, y
+  compris en `--think off`) et #301. Le 27B y gagne 6 % de temps ; sur
+  Flash-Next, les 12 s de prefill gagnées sur tout le run disparaissent
+  dans la variation du décode d'une passe à l'autre (création de 15,0 à
+  21,5 s selon la passe, temp 0,7).
+- Second point de reprise par requête (#281) : 61 écritures au lieu de 36
+  sur le 27B, aucune refusée, le staging de 8 Gio tient.
+- Prefill à prompt court de Flash-Next en baisse de 9,5 % (27B : -6 %),
+  inchangé à 52k : un coût fixe d'environ 0,1 s par requête neuve, sans
+  doute la copie du point de reprise supplémentaire. Invisible en
+  agentique, où les petites requêtes répondent au contraire plus vite.
+  Le gain de #292 annoncé par gufo (décode sans spéculatif +6,7 % à 32k)
+  n'est pas mesuré par ce banc (décode à contexte court, MTP actif).
+
+Même boucle **sans** cache disque (macro sans `--cache-disk`, le temps du
+run), pour vérifier l'affirmation portée dans #259 :
+
+| gufo 0.1.1, agentique | 27B avec cache disque | 27B sans | Flash-Next avec | Flash-Next sans |
+|---|---|---|---|---|
+| médiane par passe | **38,8 s** | 50,5 s (56 s le 24/09) | **30,4 s** | 34,2 s (39 s le 24/09) |
+| prompt repris | **92,9 %** | 71,6 % | **92,6 %** | 70,6 % |
+| tokens recalculés | **6,2k** | 24,9k | **6,6k** | 24,8k |
+| temps en prefill | **17 s** | 53 s | **11 s** | 24 s |
+| ratés `prefix_changed` | 2 | 14 | 2 | 14 |
+
+Sans cache disque, les 14 débuts de conversation sont toujours recalculés en
+entier (1 508 ou 1 517 tokens communs avec un point de reprise en RAM,
+aucun repris), exactement comme le 24/09 : le préfixe commun de deux
+conversations DIFFÉRENTES ne se reprend toujours que par le disque (#267
+ouvert). Le test cité dans #259 rejouait la même conversation, cas qui
+marchait déjà. Le cache disque reste indispensable ; configuration
+inchangée.
 
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
