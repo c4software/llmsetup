@@ -447,7 +447,7 @@ Publié le 25/09/2026 :
 |---|---|---|
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
-| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), **pris en charge** le 28/09 (fedeizzo, étiquette `triaged`) ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916. Leur piste : le chargement des poids ouvre 16 flux (`kReaders = 16`, `weight_upload.cpp`) et HIP garderait les files matérielles derrière eux pour toute la vie du processus ; `GPU_MAX_HW_QUEUES` fixé par gufo est leur dernier choix. Ils demandent : coût en débit (LLM avec 9 files contre 5), décompte des files par phase (avant, pendant, après le chargement) et effet de `--sessions N` ; à retirer si gufo limite ses files |
+| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), **pris en charge** le 28/09 (fedeizzo, étiquette `triaged`) ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916, et en v0.1.1. Leur piste : le chargement des poids ouvre 16 flux (`kReaders = 16`, `weight_upload.cpp`) et HIP garderait les files matérielles derrière eux pour toute la vie du processus ; `GPU_MAX_HW_QUEUES` fixé par gufo est leur dernier choix. Ils demandent : coût en débit (LLM avec 9 files contre 5), décompte des files par phase (avant, pendant, après le chargement) et effet de `--sessions N` ; mesuré le 28/09 (section « #272 : les trois questions du mainteneur ») : aucun coût en débit, files prises d'un coup au démarrage sans pic pendant le chargement, `--sessions` sans effet ; à retirer si gufo limite ses files |
 | #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | **fermé** le 25/09 (le nôtre) : `stop` et `stop_sequences` pris en charge (9854ca5, 363d6a1) ; retrait de `stop` supprimé le 26/09 dans llama-swap (`stripParams`) et dans llm-proxy (588776f) |
 | #268 | défauts serveur trop bas pour un usage agentique (`--max-tokens` 128, staging 512 Mio), ouvert par un utilisateur | **fermé** le 26/09 avec #279 : `--max-tokens` corrigé par #276 (défaut -1, jusqu'à EOS), contexte natif par défaut (d5fd781), staging automatique (1 Gio au plus, trop peu pour nous) |
 | #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
@@ -571,9 +571,11 @@ journal de gufo, requête par requête :
 - Second point de reprise par requête (#281) : 61 écritures au lieu de 36
   sur le 27B, aucune refusée, le staging de 8 Gio tient.
 - Prefill à prompt court de Flash-Next en baisse de 9,5 % (27B : -6 %),
-  inchangé à 52k : un coût fixe d'environ 0,1 s par requête neuve, sans
-  doute la copie du point de reprise supplémentaire. Invisible en
-  agentique, où les petites requêtes répondent au contraire plus vite.
+  inchangé à 52k : un coût fixe d'environ 0,1 s par requête neuve.
+  L'instantané du point de reprise n'en explique qu'une partie (24 à 44 ms
+  par requête, `cache_snapshot_ms` des `timings`, mesuré le même jour).
+  Invisible en agentique, où les petites requêtes répondent au contraire
+  plus vite.
   Le gain de #292 annoncé par gufo (décode sans spéculatif +6,7 % à 32k)
   n'est pas mesuré par ce banc (décode à contexte court, MTP actif).
 
@@ -595,6 +597,39 @@ conversations DIFFÉRENTES ne se reprend toujours que par le disque (#267
 ouvert). Le test cité dans #259 rejouait la même conversation, cas qui
 marchait déjà. Le cache disque reste indispensable ; configuration
 inchangée.
+
+### #272 : les trois questions du mainteneur (28/09/2026)
+
+Mesuré sur gufo 0.1.1, Flash-Next résident (2 sessions), serveurs audio
+lancés à la main dans le conteneur (`docker exec … gufo serve tts|asr`, hors
+llama-swap), files lues dans `/sys/class/kfd/kfd/proc/<pid>/queues/*/type`
+toutes les 0,2 s (0 = calcul, 1 = SDMA), `gpu_busy_percent` en moyenne sur
+10 s. Script et relevés dans `GUFO_DATA/resultats/272-2026-09-28/`.
+
+| Chargés | Files de calcul (total) | GPU au repos | Prefill Flash-Next, prompt de 1,6k (t/s) | Décode (t/s) |
+|---|---|---|---|---|
+| LLM seul (deux séries) | 5 | 0 % | 1 344 à 1 390 | 56,3 à 63,1 |
+| + voix, défaut | 5 + 4 = 9 | 100 % | 1 375 à 1 388 | 57,2 à 64,5 |
+| + transcription, défaut | 5 + 4 = 9 | 100 % | 1 370 à 1 387 | 59,6 à 66,1 |
+| + voix, `GPU_MAX_HW_QUEUES=1` | 5 + 2 = 7 | 0 % | | |
+| + transcription, `GPU_MAX_HW_QUEUES=1` | 5 + 2 = 7 | 0 % | | |
+
+- **Débit** : aucun coût mesurable à 9 files. Prefill et décode restent
+  dans la plage du LLM seul ; le décode suit l'acceptance MTP (318 à 345
+  brouillons acceptés sur 400 tokens), pas le nombre de files. Le coût est
+  la consommation au repos (~30 W), pas l'inférence.
+- **Par phase** : chaque serveur prend toutes ses files d'un coup au
+  démarrage, dans la demi-seconde où son processus apparaît (LLM : 0, puis
+  2, puis 5 en 0,4 s ; voix et transcription : 0 puis 4), et n'en prend
+  jamais davantage pendant le chargement des poids (80 s pour Flash-Next) ni
+  après. Pas de pic au-dessus du régime établi, ce qui est compatible avec
+  un pool de HIP plafonné à `GPU_MAX_HW_QUEUES` qui absorbe les 16 flux de
+  chargement (non vérifié en réduisant `kReaders`, ce qui demande un
+  build).
+- **`--sessions`** : 5 files en 1 comme en 2 sessions, pendant et après le
+  chargement. Le budget ne dépend pas de ce réglage.
+- `GPU_MAX_HW_QUEUES=1` ramène la voix et la transcription à 2 files
+  (4 par défaut) ; le LLM en a une de plus que les serveurs audio (5).
 
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
