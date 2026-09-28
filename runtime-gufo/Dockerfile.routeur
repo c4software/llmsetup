@@ -14,10 +14,12 @@
 # couches en cache rendent la reconstruction immédiate quand rien ne change)
 # à chaque ./setup-llm.sh --gufo.
 # Version et somme SHA-256 épinglées : une nouvelle version de llama-swap est
-# un changement de ce fichier, jamais un effet de bord.
+# un changement de ce fichier, jamais un effet de bord. Même règle pour gufo,
+# dont la version vient du .env (GUFO_IMAGE, épinglée dans lib/gufo.sh) ; le
+# défaut ci-dessous ne sert qu'à un build à la main.
 # =============================================================================
 
-ARG GUFO_IMAGE=ghcr.io/gufo-org/toolboxes/gufo-runtime:latest
+ARG GUFO_IMAGE=ghcr.io/gufo-org/toolboxes/gufo-runtime:0.1.1
 
 FROM alpine:3.20 AS llama-swap
 ARG LLAMA_SWAP_VERSION=257
