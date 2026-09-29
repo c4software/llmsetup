@@ -83,15 +83,20 @@ macros:
     --context 262144 --sessions ${env.GUFO_SESSIONS}
     --cache-disk ${env.GUFO_DATA}/cache --cache-disk-bytes 17179869184
     --cache-disk-staging-bytes 8589934592
-  # Échantillonnage officiel Qwen, profil instruct (sections nothink du
-  # service) ; défauts serveur, un client peut les surcharger par requête.
+  # Qwen sans raisonnement (sections nothink du service). Échantillonnage
+  # officiel Qwen laissé à gufo depuis la 0.2.0 (gufo-org/gufo#282) : profil
+  # sans raisonnement 0,7 / top-p 0,8 / top-k 20 / presence 1,5, exactement nos
+  # valeurs explicites d'avant (--temperature 0.7 --top-k 20 --top-p 0.8
+  # --min-p 0.0 --presence-penalty 1.5) ; une requête qui active le
+  # raisonnement reçoit le profil avec raisonnement (1,0 / 0,95 / 20 / 0)
+  # au lieu de nos 0,7 figés. Un client surcharge chaque valeur par requête.
   "qwen": >-
-    --temperature 0.7 --top-k 20 --top-p 0.8 --min-p 0.0
-    --presence-penalty 1.5 --think off
-  # Échantillonnage de la section deepseek-v4-flash du service. Raisonnement
-  # laissé au gabarit du modèle (gufo n'a pas de budget de raisonnement).
-  "deepseek": >-
-    --temperature 1.0 --top-k 40 --top-p 0.95 --min-p 0.0
+    --think off
+  # DeepSeek : aucune macro depuis la 0.2.0 (gufo-org/gufo#282). Profil agentic
+  # officiel 0731 de gufo (temp 1,0, top-p 0,95, top-k 0) et raisonnement par
+  # défaut, effort high, comme la section du service. Avant : temp 1,0,
+  # top-k 40, top-p 0,95, min-p 0 (la section du service) et réponse sans
+  # raisonnement (défaut du gabarit en 0.1.1).
 
 # Le nom de modèle EST le --served-model-name de gufo : llama-swap transmet la
 # requête avec ce nom, gufo répond 404 model_not_found sinon. stop (OpenAI)
@@ -136,8 +141,9 @@ models:
   # support DSpark (--gufo-download deepseek ; l'UD-IQ3_XXS du parc est
   # refusé). Plus légère que celle du service : un comptage raté à 26k tokens
   # le 24/09/2026, justesse à surveiller. 16/16 en boucle agentique pi.
-  # Mesuré le 25/09/2026 : répond sans raisonnement par défaut (la section
-  # du service raisonne, budget 6 144 tokens).
+  # Mesuré le 25/09/2026 (0.1.1 et avant) : répondait sans raisonnement par
+  # défaut. Depuis la 0.2.0, raisonne par défaut (effort high), comme la
+  # section du service (budget 6 144 tokens) ; non remesuré.
   "deepseek-v4-flash":
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-
@@ -145,7 +151,6 @@ models:
       --model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
       --speculative dspark
       --dspark-model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-DSpark-support-0731.gguf
-      ${deepseek}
     checkEndpoint: /health
     capabilities:
       context: 262144
@@ -173,6 +178,11 @@ models:
   # transcription aussi rapides : 2,23 à 2,28 s, 0,45 s), mais LLM + voix +
   # transcription font encore 9 : le ttl décharge celui des deux qui ne sert
   # plus. Rechargement en moins d'une seconde (332 à 1236 ms).
+  # Depuis la 0.2.0 (gufo-org/gufo#317, qui ferme #272), gufo plafonne lui-même
+  # GPU_MAX_HW_QUEUES : LLM 2 (3 files), voix et transcription 1 (2 files),
+  # soit 7 files pour les trois ; notre env, identique, est retiré. ttl 60
+  # gardé : Qwen-Image reste au défaut du runtime (jusqu'à 5 files), et
+  # Qwen-Image + voix + transcription ferait encore 9 files.
   "qwen3-tts-12hz-1.7b-customvoice":
     name: "Qwen3-TTS 1.7B CustomVoice (gufo)"
     cmd: >-
@@ -180,8 +190,6 @@ models:
       --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-CustomVoice
       --served-model-name qwen3-tts-12hz-1.7b-customvoice
     checkEndpoint: /health
-    env:
-      - "GPU_MAX_HW_QUEUES=1"
     ttl: 60
 
   "qwen3-tts-12hz-1.7b-voice-design":
@@ -191,8 +199,6 @@ models:
       --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign
       --served-model-name qwen3-tts-12hz-1.7b-voice-design
     checkEndpoint: /health
-    env:
-      - "GPU_MAX_HW_QUEUES=1"
     ttl: 60
 
   "qwen3-tts-12hz-1.7b-base":
@@ -202,12 +208,10 @@ models:
       --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-Base
       --served-model-name qwen3-tts-12hz-1.7b-base
     checkEndpoint: /health
-    env:
-      - "GPU_MAX_HW_QUEUES=1"
     ttl: 60
 
   # Qwen3-ASR 1.7B : WAV jusqu'à 30 min, découpé en morceaux, décodage glouton.
-  # Mesuré par gufo : 15,27 fois le temps réel. env et ttl : voir Qwen3-TTS.
+  # Mesuré par gufo : 15,27 fois le temps réel. ttl : voir Qwen3-TTS.
   "qwen3-asr-1.7b":
     name: "Qwen3-ASR 1.7B (gufo)"
     cmd: >-
@@ -215,8 +219,6 @@ models:
       --model ${env.GUFO_DATA}/models/Qwen3-ASR-1.7B
       --served-model-name qwen3-asr-1.7b
     checkEndpoint: /health
-    env:
-      - "GPU_MAX_HW_QUEUES=1"
     ttl: 60
 
   # Qwen-Image-2.1 : génération et édition (jusqu'à 10 références), sortie PNG

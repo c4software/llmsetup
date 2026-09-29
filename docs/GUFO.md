@@ -441,23 +441,16 @@ Publié le 25/09/2026 :
   `linux-firmware-amdgpu` 20260916) : toujours là (LLM + voix sans
   contournement, 5 + 4 files : 99 à 100 % ; avec, 5 + 2 : 0 à 1 %).
 
-À surveiller :
+À surveiller (tickets ouverts seulement : un ticket fermé sort du tableau,
+ce qu'il a changé reste dans la section de sa release) :
 
-| Ticket | Sujet | État au 28/09/2026 |
+| Ticket | Sujet | État au 29/09/2026 |
 |---|---|---|
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
-| #272 | GPU occupé à 100 % au repos (~30 W, ventilateurs) dès que plus de 8 files de calcul matérielles sont ouvertes, tous processus confondus : LLM (5) + voix ou transcription (4) | ouvert (le nôtre), **pris en charge** le 28/09 (fedeizzo, étiquette `triaged`) ; contournement en place (e7cc120) : `GPU_MAX_HW_QUEUES=1` (2 files) et `ttl: 60` sur la voix et la transcription, sans perte de vitesse mesurée ; toujours reproduit en noyau 7.2.7 et firmware 20260916, et en v0.1.1. Leur piste : le chargement des poids ouvre 16 flux (`kReaders = 16`, `weight_upload.cpp`) et HIP garderait les files matérielles derrière eux pour toute la vie du processus ; `GPU_MAX_HW_QUEUES` fixé par gufo est leur dernier choix. Ils demandent : coût en débit (LLM avec 9 files contre 5), décompte des files par phase (avant, pendant, après le chargement) et effet de `--sessions N` ; mesuré le 28/09 (section « #272 : les trois questions du mainteneur ») : aucun coût en débit, files prises d'un coup au démarrage sans pic pendant le chargement, `--sessions` sans effet ; réponse publiée le 28/09 avec les relevés bruts (gist) ; correctif proposé dans la PR #317 (plafond par serveur : LLM 3 files, voix et transcription 2), testée le 28/09 sur bigchuck (section « #272 : test de la PR #317 ») : 7 files pour texte + voix + transcription, GPU au repos, débit inchangé ; résultat publié le 28/09 ; contournement à retirer quand une release contient la PR |
-| #260 | `stop` refusé (les `stop_sequences` Anthropic traduites par un proxy) | **fermé** le 25/09 (le nôtre) : `stop` et `stop_sequences` pris en charge (9854ca5, 363d6a1) ; retrait de `stop` supprimé le 26/09 dans llama-swap (`stripParams`) et dans llm-proxy (588776f) |
-| #268 | défauts serveur trop bas pour un usage agentique (`--max-tokens` 128, staging 512 Mio), ouvert par un utilisateur | **fermé** le 26/09 avec #279 : `--max-tokens` corrigé par #276 (défaut -1, jusqu'à EOS), contexte natif par défaut (d5fd781), staging automatique (1 Gio au plus, trop peu pour nous) |
-| #263 | n-gram persistant autonome, à la llama.cpp `ngram-mod`, en option (le nôtre, issu de #239 ; mesure indépendante : ×1,6 à chaud) | ouvert |
-| #248 | suite de conversation ratée quand la réflexion est active | **fermé** le 27/09 par la PR #281 (c362049, dans v0.1.1) : point de reprise posé avant l'ouverture de la réponse de l'assistant, plus un point sur le prompt entier pour les relances à l'identique ; la PR note que le raté se reproduisait **aussi en `--think off`** (notre réglage) quand le client retire ou interrompt une réponse ; reste #266 (budget de `max_tokens` consommé par le raisonnement) |
-| #239 | n-gram (prompt lookup) | résultat négatif en greedy, clôture proposée |
-| #255 | GEMM W8A8 du prefill Flash-Next, +5 % (pwilkin) | **mergé** le 25/09 (98641a6) |
+| #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée ; porte aussi le pool persistant de #263 depuis le 28/09 |
 | #228 | ROCm 10 | verdict gufo : rester sur ROCm 7.2.3 (décode -5 % en ROCm 10) |
 | #200 | runtime HRX + noyaux Loom | ouvert depuis août, +3,6 % de prefill 27B |
-| #257 | outils mal formés tolérés (clients agentiques) | **mergé** le 25/09 (bec9787) |
-| #256 | format HGN de halogen (spécification en salle blanche) | **fermé** le 25/09 : refusé (pas de concurrence avec halogen) |
 | #299 | PR : Qwen3.6-35B-A3B (`qwen35moe`, GDN + MoE 256 experts, MTP, DFlash 2), par slimsami, ouverte le 27/09 | **suivie à la demande de l'utilisateur** (28/09) : même architecture qu'Ornith-1.5-35B-A3B, notre modèle agentique par défaut (fine-tune de Qwen3.6-35B-A3B). Annoncé sur UD-Q6_K_XL : prefill 1 790 à 2 702 t/s contre 1 057 à 1 202 pour llama.cpp Vulkan, DFlash 2 à 83,3 t/s en glouton ; MTP pas encore branché dans `gufo serve`. À vérifier si elle est mergée : notre Ornith est en Q4_K_M (la PR ne cite que Q6_K et Q8_0 pour les experts), et gufo refuse les quants hors de ses formats |
 
 Image `gufo-runtime:latest` republiée le 26/09/2026 (`20260926T093925`,
@@ -677,6 +670,52 @@ et relevés dans `GUFO_DATA/resultats/317-2026-09-28/` (`test-317.sh`,
   respecté, 2 files comme la PR). Le `ttl` devient inutile pour les files,
   pas forcément pour la mémoire.
 
+### Release v0.2.0 (29/09/2026)
+
+v0.2.0 (`992113b`, image `gufo-runtime:0.2.0`), publiée le 29/09/2026.
+Contenu depuis v0.1.1 :
+
+- **#282, échantillonnage officiel par défaut** (au lieu du glouton) :
+  Qwen3.8 27B et Flash-Next avec raisonnement temp 1,0 / top-p 0,95 /
+  top-k 20 / presence 0, sans raisonnement 0,7 / 0,8 / 20 / 1,5 ; DeepSeek
+  profil agentic 0731, 1,0 / 0,95 / top-k 0. Priorité requête > option du
+  serveur > profil, champ par champ ; une option du serveur non posée suit
+  le profil du mode de raisonnement effectif. **DeepSeek raisonne désormais
+  par défaut**, effort `high` (`xhigh` ramené à `high`) ; Qwen reste en
+  raisonnement `xhigh` par défaut. `gufo bench` reste glouton.
+- **#317, plafond des files matérielles** (ferme notre #272) : `serve llm`
+  2 (3 files), `serve tts` et `serve asr` 1 (2 files), image et vidéo au
+  défaut du runtime (jusqu'à 5) ; recensement des files déjà prises par tous
+  les processus (`/sys/class/kfd`), plafond seulement abaissé, jamais
+  relevé ; un `GPU_MAX_HW_QUEUES` de l'opérateur est respecté ; événements
+  `queue_budget` et `queue_budget_exceeded` dans le journal.
+- **#314** : noms d'outils à point ou espace de noms (`github.create_issue`)
+  de nouveau acceptés (refusés en 0.1.0 et 0.1.1 par une règle venue avec
+  #283).
+
+`gufo serve llm --help` des deux images comparé sur bigchuck : seuls les
+défauts de `--temperature`, `--top-k`, `--top-p`, `--presence-penalty` et
+`--think` changent (« model/thinking preset »), aucune option ajoutée ou
+retirée ; `serve tts --help` identique. Défauts du cache disque et du staging
+inchangés. En amont, `inference_backend_gpu_test` (prefill Qwen concurrent)
+échoue sur la branche principale, déjà avant la release selon le mainteneur.
+
+Choix du 29/09/2026 (questions posées, réponses de l'utilisateur) :
+
+- **Image épinglée** sur `gufo-runtime:0.2.0`.
+- **Macro `qwen` réduite à `--think off`** : nos valeurs explicites étaient
+  exactement le profil sans raisonnement de gufo. Même comportement par
+  défaut ; une requête qui active le raisonnement reçoit désormais le profil
+  avec raisonnement (1,0 / 0,95) au lieu de nos 0,7 figés.
+- **Macro `deepseek` retirée** : profil de gufo (top-k 0 au lieu de 40) et
+  raisonnement par défaut, comme la section du service. Non remesuré.
+- **`GPU_MAX_HW_QUEUES=1` retiré** de la voix et de la transcription
+  (gufo pose la même valeur) ; **`ttl: 60` gardé** : Qwen-Image (jusqu'à
+  5 files) + voix + transcription ferait encore 9 files.
+- **Remesure** : 27B et Flash-Next (`remesure.sh 27b flashnext`) ; nos bancs
+  fixent température et raisonnement dans chaque requête (`mesure.py`), le
+  changement de défauts ne les touche pas.
+
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
 raisonnement.
@@ -725,8 +764,9 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
 Gufo n'a pas de réglage de production « officiel ». Jusqu'au 25/09/2026, ses
 défauts visaient un usage minimal (4 096 tokens de contexte, 128 générés) ;
 depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
-(contexte natif, génération jusqu'à EOS). L'échantillonnage reste glouton et
-ses propres mesures tournent en glouton. Les valeurs ci-dessous visent un
+(contexte natif, génération jusqu'à EOS) ; depuis v0.2.0 (#282),
+l'échantillonnage suit les profils officiels des modèles (glouton avant), ses
+propres bancs restant en glouton. Les valeurs ci-dessous visent un
 usage agentique comparable au service ; aucune n'est un réglage interne du
 moteur. Confrontées le 26/09/2026 à `docs/SERVER.md` et aux guides des modèles
 de gufo (commit d9a84f1) et à `gufo serve llm --help` de l'image déployée, puis
@@ -743,14 +783,19 @@ tourne plus vite), et le prompt rendu est borné à 128 octets par token de
 contexte (32 Mio à 262 144, une raison de plus de garder `--context`
 explicite). `/v1/models` de gufo publie désormais `context_length`, mais
 llama-swap sert sa propre liste : `capabilities.context` reste nécessaire.
+Confrontées le 29/09/2026 à v0.2.0 (diff 0.1.1...0.2.0 et des deux
+`--help`) : échantillonnage et raisonnement par défaut changés (#282), nos
+valeurs Qwen explicites retirées (identiques au profil sans raisonnement),
+macro DeepSeek retirée ; aucune option ajoutée ou retirée, cache disque et
+staging inchangés.
 
 | Paramètre | `runtime-gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
 |---|---|---|---|---|
 | `--context` | 262144 | contexte natif depuis d5fd781 (4096 avant) | 32768 | nous : contexte natif, celui du service ; redondant depuis d5fd781 (chargement : `context_tokens=262144`), gardé explicite parce que `capabilities.context` doit lui rester égal |
 | `--sessions` | 2 | 1 | 2 | gufo (guides du 27B et de Flash-Next) et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
 | `--max-tokens` | non posé (-1, jusqu'à EOS) | -1 depuis #276 (128 avant) | non indiqué | gufo, comme le service (llama.cpp à -1, aucun `n-predict` dans le ini) ; 32768 explicite jusqu'au 26/09/2026, quand le défaut de 128 coupait un client sans `max_tokens` |
-| échantillonnage | temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 | glouton, aucun filtre | aucun | Qwen officiel, profil instruct (fiche du modèle, guide unsloth), celui des sections nothink du service ; surchargeable par requête |
-| `--think` | off | gabarit du modèle (raisonnement, effort xhigh) | non indiqué | nous : équivalent des sections nothink |
+| échantillonnage | non posé (profil de gufo) ; temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 explicites pour Qwen, temp 1,0, top-k 40, top-p 0,95 pour DeepSeek jusqu'au 29/09/2026 | profil officiel du modèle depuis v0.2.0 (#282) : Qwen sans raisonnement 0,7 / 0,8 / 20 / 1,5, avec 1,0 / 0,95 / 20 / 0 ; DeepSeek 1,0 / 0,95 / top-k 0 ; glouton avant | aucun | gufo, depuis v0.2.0 : Qwen officiel, profil instruct, celui des sections nothink du service et de nos anciennes valeurs ; surchargeable par requête |
+| `--think` | off pour Qwen, non posé pour DeepSeek | raisonnement : Qwen effort xhigh, DeepSeek effort high depuis v0.2.0 (sans raisonnement avant) | non indiqué | nous : équivalent des sections nothink pour Qwen ; DeepSeek raisonne comme la section du service |
 | `--cache-disk` | activé, 16 Gio | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations (mesuré) ; 16 Gio car partagé entre les modèles et un point de reprise Flash-Next de session réelle pèse 1,5 Go (8 Gio en garde environ 5), et `docs/SERVER.md` demande plus que les défauts pour le 27B à contexte long. Passé au défaut de 8 Gio le matin du 26/09/2026, remis à 16 Gio le jour même |
 | `--cache-disk-staging-bytes` | 8 Gio | automatique depuis #279 : au plus 1 Gio et 1/8 de la RAM disponible (512 Mio fixes avant) | non utilisé | nous : au défaut, les points de reprise du 27B sont refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; non préalloué. Valeur que `docs/SERVER.md` recommande désormais pour Flash-Next à contexte plein |
 | spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
@@ -788,10 +833,10 @@ est celle de `GUFO_IMAGE` dans `lib/gufo.sh`.
      ligne tient-elle encore (défauts du cache disque et du staging,
      `--context`, `--sessions`, `--max-tokens`, échantillonnage, `--think`) ?
 3. **Contournements encore utiles ?** (lecture) : staging 8 Gio (#259, #279),
-   `GPU_MAX_HW_QUEUES=1` et `ttl: 60` sur la voix et la transcription
-   (#272), `capabilities.context` de llama-swap, GGUF refusés (Flash-Next
-   Signal en `IQ4_NL`, DeepSeek UD-IQ3_XXS, Ornith Q4_K_M si #299 est
-   mergée).
+   `ttl: 60` sur la voix et la transcription (#272, pour Qwen-Image au
+   défaut du runtime depuis v0.2.0), `capabilities.context` de llama-swap,
+   GGUF refusés (Flash-Next Signal en `IQ4_NL`, DeepSeek UD-IQ3_XXS, Ornith
+   Q4_K_M si #299 est mergée).
 4. **Questions à l'utilisateur**, avant tout changement : monter de version
    ou non ; quels modèles remesurer (DeepSeek n'est plus remesuré depuis le
    28/09/2026 sauf demande) ; chaque réglage ou contournement que les étapes
@@ -823,7 +868,8 @@ est celle de `GUFO_IMAGE` dans `lib/gufo.sh`.
    venir d'elle et non du moteur).
 8. **Documenter et répondre** : section de la release dans « Suivi en amont »
    (contenu, choix, tableau contre la mesure précédente), tableau
-   « À surveiller », tableau des paramètres (date de confrontation) ;
+   « À surveiller » (tickets fermés retirés), tableau des paramètres (date
+   de confrontation) ;
    réponses aux tickets où l'on nous a posé une question, **rédigées puis
    montrées à l'utilisateur avant publication**.
 9. **Remettre l'usage réel** : `./setup-llm.sh --gufo flashnext` (ou le

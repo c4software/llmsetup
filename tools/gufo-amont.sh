@@ -36,9 +36,11 @@ command -v gh >/dev/null 2>&1 || { echo "ERREUR : gh introuvable" >&2; exit 2; }
 
 _image_epinglee() { sed -n 's/^GUFO_IMAGE="\${GUFO_IMAGE:-\(.*\)}"$/\1/p' "$SCRIPT_DIR/lib/gufo.sh"; }
 
+# Nos tickets : ouverts seulement. Un ticket suivi qui se ferme reste visible
+# (fermé) tant que sa ligne est dans le tableau de docs/GUFO.md, qui la retire.
 _tickets_suivis() {
   { sed -n 's/^| #\([0-9]\{1,\}\) |.*/\1/p' "$DOC"
-    gh api "repos/$REPO/issues?creator=$(gh api user -q .login)&state=all&per_page=50" \
+    gh api "repos/$REPO/issues?creator=$(gh api user -q .login)&state=open&per_page=50" \
       -q '.[].number' 2>/dev/null || true
   } | sort -un
 }
