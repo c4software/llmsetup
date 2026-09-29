@@ -93,10 +93,9 @@ macros:
   "qwen": >-
     --think off
   # DeepSeek : aucune macro depuis la 0.2.0 (gufo-org/gufo#282). Profil agentic
-  # officiel 0731 de gufo (temp 1,0, top-p 0,95, top-k 0) et raisonnement par
-  # défaut, effort high, comme la section du service. Avant : temp 1,0,
-  # top-k 40, top-p 0,95, min-p 0 (la section du service) et réponse sans
-  # raisonnement (défaut du gabarit en 0.1.1).
+  # officiel 0731 de gufo (temp 1,0, top-p 0,95, top-k 0). Avant : temp 1,0,
+  # top-k 40, top-p 0,95, min-p 0 (la section du service). --think off posé
+  # dans sa ligne de commande (voir le modèle plus bas).
 
 # Le nom de modèle EST le --served-model-name de gufo : llama-swap transmet la
 # requête avec ce nom, gufo répond 404 model_not_found sinon. stop (OpenAI)
@@ -141,9 +140,12 @@ models:
   # support DSpark (--gufo-download deepseek ; l'UD-IQ3_XXS du parc est
   # refusé). Plus légère que celle du service : un comptage raté à 26k tokens
   # le 24/09/2026, justesse à surveiller. 16/16 en boucle agentique pi.
-  # Mesuré le 25/09/2026 (0.1.1 et avant) : répondait sans raisonnement par
-  # défaut. Depuis la 0.2.0, raisonne par défaut (effort high), comme la
-  # section du service (budget 6 144 tokens) ; non remesuré.
+  # --think off : la 0.2.0 le fait raisonner par défaut (effort high, sans
+  # budget, là où la section du service plafonne à 6 144 tokens). Mesuré le
+  # 29/09/2026 en boucle agentique pi : 128,7 s par passe contre 90 s sans
+  # raisonnement le 24/09 (et 116 s pour le service), 61 % de tokens générés
+  # en plus ; retour au comportement d'avant la 0.2.0 (docs/GUFO.md, release
+  # v0.2.0). Un client peut réactiver le raisonnement par requête.
   "deepseek-v4-flash":
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-
@@ -151,6 +153,7 @@ models:
       --model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
       --speculative dspark
       --dspark-model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-DSpark-support-0731.gguf
+      --think off
     checkEndpoint: /health
     capabilities:
       context: 262144

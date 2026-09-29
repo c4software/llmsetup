@@ -708,7 +708,8 @@ Choix du 29/09/2026 (questions posées, réponses de l'utilisateur) :
   défaut ; une requête qui active le raisonnement reçoit désormais le profil
   avec raisonnement (1,0 / 0,95) au lieu de nos 0,7 figés.
 - **Macro `deepseek` retirée** : profil de gufo (top-k 0 au lieu de 40) et
-  raisonnement par défaut, comme la section du service. Non remesuré.
+  raisonnement par défaut, comme la section du service ; raisonnement coupé
+  le même jour après la remesure (plus bas).
 - **`GPU_MAX_HW_QUEUES=1` retiré** de la voix et de la transcription
   (gufo pose la même valeur) ; **`ttl: 60` gardé** : Qwen-Image (jusqu'à
   5 files) + voix + transcription ferait encore 9 files.
@@ -782,6 +783,9 @@ mesure que le moteur ; la boucle pi, elle, raisonne (défaut de gufo) :
   11 % de plus que le service (116 s le 24/09, raisonnement à budget de
   6 144 tokens) : gufo n'a pas de budget, l'effort `high` raisonne plus
   longtemps.
+- Décision de l'utilisateur, le même jour : **`--think off` pour DeepSeek**
+  (retour au comportement d'avant la 0.2.0) ; un client peut réactiver le
+  raisonnement par requête.
 
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
@@ -862,7 +866,7 @@ staging inchangés.
 | `--sessions` | 2 | 1 | 2 | gufo (guides du 27B et de Flash-Next) et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
 | `--max-tokens` | non posé (-1, jusqu'à EOS) | -1 depuis #276 (128 avant) | non indiqué | gufo, comme le service (llama.cpp à -1, aucun `n-predict` dans le ini) ; 32768 explicite jusqu'au 26/09/2026, quand le défaut de 128 coupait un client sans `max_tokens` |
 | échantillonnage | non posé (profil de gufo) ; temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 explicites pour Qwen, temp 1,0, top-k 40, top-p 0,95 pour DeepSeek jusqu'au 29/09/2026 | profil officiel du modèle depuis v0.2.0 (#282) : Qwen sans raisonnement 0,7 / 0,8 / 20 / 1,5, avec 1,0 / 0,95 / 20 / 0 ; DeepSeek 1,0 / 0,95 / top-k 0 ; glouton avant | aucun | gufo, depuis v0.2.0 : Qwen officiel, profil instruct, celui des sections nothink du service et de nos anciennes valeurs ; surchargeable par requête |
-| `--think` | off pour Qwen, non posé pour DeepSeek | raisonnement : Qwen effort xhigh, DeepSeek effort high depuis v0.2.0 (sans raisonnement avant) | non indiqué | nous : équivalent des sections nothink pour Qwen ; DeepSeek raisonne comme la section du service |
+| `--think` | off | raisonnement : Qwen effort xhigh, DeepSeek effort high depuis v0.2.0 (sans raisonnement avant) | non indiqué | nous : équivalent des sections nothink pour Qwen ; pour DeepSeek, raisonnement sans budget mesuré à +43 % de temps en agentique le 29/09/2026 (non posé entre la montée en 0.2.0 et cette mesure) |
 | `--cache-disk` | activé, 16 Gio | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations (mesuré) ; 16 Gio car partagé entre les modèles et un point de reprise Flash-Next de session réelle pèse 1,5 Go (8 Gio en garde environ 5), et `docs/SERVER.md` demande plus que les défauts pour le 27B à contexte long. Passé au défaut de 8 Gio le matin du 26/09/2026, remis à 16 Gio le jour même |
 | `--cache-disk-staging-bytes` | 8 Gio | automatique depuis #279 : au plus 1 Gio et 1/8 de la RAM disponible (512 Mio fixes avant) | non utilisé | nous : au défaut, les points de reprise du 27B sont refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; non préalloué. Valeur que `docs/SERVER.md` recommande désormais pour Flash-Next à contexte plein |
 | spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
