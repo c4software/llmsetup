@@ -716,6 +716,39 @@ Choix du 29/09/2026 (questions posées, réponses de l'utilisateur) :
   fixent température et raisonnement dans chaque requête (`mesure.py`), le
   changement de défauts ne les touche pas.
 
+Remesure du 29/09/2026 (gufo 0.2.0 `992113b`, mêmes réglages de cache,
+1 session), contre celle du 28/09 (0.1.1). Journaux bruts dans
+`GUFO_DATA/resultats/agentic/2026-09-29-0.2.0/` (`avant/` y garde la boucle
+sans cache disque du 28/09, pas la boucle avec cache, comparée ici à la
+section v0.1.1) :
+
+| gufo, 0.2.0 contre 0.1.1 | Qwen3.8-27B | Flash-Next |
+|---|---|---|
+| prefill, prompt court (t/s) | 528 contre 524 | 1 300 contre 1 307 |
+| prefill à 6,5k (t/s) | 594 contre 585 | 1 399 contre 1 381 |
+| prefill à 52k (t/s) | 508 contre 505 | 1 395 contre 1 379 |
+| décode, prose (t/s) | 44,1 contre 47,2 (passes de 43,6 à 50,3) | non mesurable (arrêt avant 200 tokens) |
+| décode, code (t/s) | 66,3 contre 65,5 | 61,4 contre 62,2 |
+| justesse, aiguilles, cache au tour 2 | OK, 100 % | OK, 100 % |
+| mémoire (relevé `free`) | 53 Gio contre 52 | 97 Gio contre 95 |
+| boucle agentique, médiane par passe | 16/16, 40,0 s contre 38,8 s | 16/16, 31,4 s contre 30,4 s |
+| prompt repris (RAM / disque / ratés) | 92,7 % (36 / 12 / 3) contre 92,9 % | 92,2 % (34 / 12 / 3) contre 92,6 % |
+| tokens recalculés, tout le run | 6,6k contre 6,2k | 6,6k contre 6,6k |
+| temps en prefill / décode, tout le run | 18 / 98 s contre 17 / 95 s | 11 / 78 s contre 11 / 79 s |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 210 ms contre 212 | 164 ms contre 172 |
+| acceptance du spéculatif (réponses de plus de 20 tokens) | 69,9 % contre 71,4 % | 84,6 % contre 85,7 % |
+| points de reprise écrits / refusés par le staging | 58 / 0 contre 61 / 0 | 44 / 0 contre 42 / 0 |
+
+- Rien ne bouge au-delà du bruit, ce qu'attend une release qui ne touche ni
+  les noyaux ni le cache. `mesure.py` fixe la température de chaque requête
+  (0 ou 0,7, comme avant) ; `bench-agentic/` n'en fixe aucune pour pi, qui
+  reçoit donc, sauf valeur propre à pi, le profil sans raisonnement de gufo,
+  identique à notre ancienne macro.
+- Les passes agentiques restent dominées par le scénario `stats.js` (27B :
+  17,7 à 28,1 s selon la passe, l'agent y corrige parfois son propre test) :
+  écart de médiane de 1 s, dans la variation d'une passe à l'autre.
+- Aucun point de reprise refusé, le staging de 8 Gio tient toujours.
+
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
 raisonnement.
