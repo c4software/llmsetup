@@ -749,6 +749,40 @@ section v0.1.1) :
   écart de médiane de 1 s, dans la variation d'une passe à l'autre.
 - Aucun point de reprise refusé, le staging de 8 Gio tient toujours.
 
+DeepSeek remesuré le même jour à la demande de l'utilisateur
+(`remesure.sh deepseek`), pour le raisonnement désormais actif par défaut.
+Référence : la mesure du 24/09 (gufo d9a84f1 ou antérieur, sans raisonnement,
+sans cache disque ; aucune mesure DeepSeek avec cache disque avant celle-ci).
+Le banc HTTP coupe le raisonnement dans chaque requête (`mesure.py`) : il ne
+mesure que le moteur ; la boucle pi, elle, raisonne (défaut de gufo) :
+
+| gufo DeepSeek V4 Flash (IQ2XXS antirez, DSpark) | 0.2.0 (29/09) | 24/09 |
+|---|---|---|
+| prefill, prompt court (t/s) | 417 | 402 |
+| prefill à 42k (t/s) | 464 | 457 |
+| décode, prose / code (t/s) | 33,6 / 37,1 | 34,1 / 38,3 |
+| justesse, aiguilles, cache au tour 2 | OK (comptage à 26k juste), 100 % | **KO** (comptage à 26k : 1 au lieu de 8) |
+| mémoire (relevé `free`) | 104 Gio | 104 Gio |
+| boucle agentique, médiane par passe | 16/16, **128,7 s** (raisonnement, cache disque) | 16/16, 90 s (sans raisonnement, sans cache disque) ; service 116 s |
+| tokens générés, tout le run | 9,0k, soit **+61 %** | 5,6k (service 6,7k) |
+| temps en prefill / décode, tout le run | 51 / 331 s | 92 / 179 s |
+| décode réel (t/s) | 27,3 | 31,1 |
+| prompt repris (RAM / disque / ratés) | 88,9 % (37 / 12 / 3) | 70 % (sans cache disque) |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 574 ms | non relevé |
+| acceptance du spéculatif (réponses de plus de 20 tokens) | 73,0 % | non relevé |
+| points de reprise écrits / refusés par le staging | 72 / 0 | sans objet |
+
+- Moteur inchangé (banc HTTP à ±3 %), et le comptage à 26k qui avait
+  échoué une fois le 24/09 est juste cette fois : la quant IQ2XXS n'est pas
+  condamnée, sans être blanchie sur une seule mesure.
+- Le raisonnement par défaut coûte cher en agentique : 61 % de tokens
+  générés en plus, un décode presque doublé en temps (331 s contre 179 s)
+  qu'aucun gain de prefill (cache disque : 51 s contre 92 s) ne rattrape.
+  Passes à 140, 129 et 114 s, soit 43 % de plus que sans raisonnement et
+  11 % de plus que le service (116 s le 24/09, raisonnement à budget de
+  6 144 tokens) : gufo n'a pas de budget, l'effort `high` raisonne plus
+  longtemps.
+
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
 raisonnement.
