@@ -18,8 +18,9 @@ agentiques ci-dessous donnent les deux séries.
 - Moteur HIP écrit à la main pour gfx1151, sous licence MIT, testé au
   commit `9cad139` (image `ghcr.io/gufo-org/toolboxes/gufo-runtime:latest`
   du 24/09, ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck),
-  remesuré au commit `d9a84f1` le 26/09/2026 et sur la release v0.1.1 le
-  28/09/2026 (27B et Flash-Next, section « Suivi en amont »). Les deux
+  remesuré au commit `d9a84f1` le 26/09/2026, sur la release v0.1.1 le
+  28/09/2026 (27B et Flash-Next) et sur la v0.2.0 le 29/09/2026 (27B,
+  Flash-Next et DeepSeek), voir « Suivi en amont ». Les deux
   premières mesures précèdent toute release : la v0.1.0 n'est publiée que le
   28/09/2026.
 - Ce n'est pas un llama.cpp : noyaux spécialisés par modèle et par forme de
@@ -197,15 +198,17 @@ premier moteur qui bat le service sur son propre terrain.
 Il ne le remplace pas pour autant, faute de :
 
 - quants libres : le fine-tune Signal de Flash-Next et notre quant DeepSeek
-  sont refusés, DeepSeek passe en IQ2XXS (un comptage raté, justesse non
-  établie) ;
+  sont refusés, DeepSeek passe en IQ2XXS (comptage à 26k raté le 24/09,
+  juste le 29/09 : justesse non établie sur une seule mesure) ;
 - routeur : un modèle par processus, donc pas de bascule entre modèles, de
   WebUI ni de préchargement, et tout l'outillage du dépôt (`models.ini`,
   `--spec-tune`, `qualif-modele.sh`) serait à refaire ;
 - n-gram : le service décode le code répété 58 % plus vite sur Flash-Next
   (banc HTTP) ; en agentique, gufo gagne quand même ;
-- budget de raisonnement, et stabilité (v0.1.0, commits quotidiens, deux
-  contributeurs principaux).
+- budget de raisonnement, et stabilité (trois releases en trois jours,
+  v0.1.0 le 28/09 à v0.3.0 le 30/09/2026, deux contributeurs principaux ;
+  nouveaux modèles et quants gelés en amont jusqu'à un produit stable, cf.
+  #299).
 
 Pistes, par ordre de faisabilité :
 
@@ -444,14 +447,14 @@ Publié le 25/09/2026 :
 À surveiller (tickets ouverts seulement : un ticket fermé sort du tableau,
 ce qu'il a changé reste dans la section de sa release) :
 
-| Ticket | Sujet | État au 29/09/2026 |
+| Ticket | Sujet | État au 30/09/2026 |
 |---|---|---|
-| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) |
+| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) ; le 30/09, le mainteneur confirme les quatre points sur f783fed (27B, `--sessions 4`) : au défaut, staging de 1 Gio contre des points de reprise de 1,85 Go à 24,5k tokens, **tous** refusés, cache disque inerte ; staging 8 Gio : 24,9k tokens repris en 1,8 s contre ~50 s à froid ; préfixe commun repris seulement à partir de la 5e conversation ; `--sessions 1` : une requête annexe évince la conversation (0,23 s à 5,3 s) ; le manque est le niveau RAM (suite dans #331) ; aucun correctif annoncé |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
-| #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée ; porte aussi le pool persistant de #263 depuis le 28/09 |
+| #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée, puis jugé « worth experimenting » par le mainteneur (25/09), après les premiers bugs ; porte aussi le pool persistant de #263 depuis le 28/09 |
 | #228 | ROCm 10 | verdict gufo : rester sur ROCm 7.2.3 (décode -5 % en ROCm 10) |
 | #200 | runtime HRX + noyaux Loom | ouvert depuis août, +3,6 % de prefill 27B |
-| #299 | PR : Qwen3.6-35B-A3B (`qwen35moe`, GDN + MoE 256 experts, MTP, DFlash 2), par slimsami, ouverte le 27/09 | **suivie à la demande de l'utilisateur** (28/09) : même architecture qu'Ornith-1.5-35B-A3B, notre modèle agentique par défaut (fine-tune de Qwen3.6-35B-A3B). Annoncé sur UD-Q6_K_XL : prefill 1 790 à 2 702 t/s contre 1 057 à 1 202 pour llama.cpp Vulkan, DFlash 2 à 83,3 t/s en glouton ; MTP pas encore branché dans `gufo serve`. À vérifier si elle est mergée : notre Ornith est en Q4_K_M (la PR ne cite que Q6_K et Q8_0 pour les experts), et gufo refuse les quants hors de ses formats |
+| #299 | PR : Qwen3.6-35B-A3B (`qwen35moe`, GDN + MoE 256 experts, MTP, DFlash 2), par slimsami, ouverte le 27/09 | **suivie à la demande de l'utilisateur** (28/09) : même architecture qu'Ornith-1.5-35B-A3B, notre modèle agentique par défaut (fine-tune de Qwen3.6-35B-A3B). Annoncé sur UD-Q6_K_XL : prefill 1 790 à 2 702 t/s contre 1 057 à 1 202 pour llama.cpp Vulkan, DFlash 2 à 83,3 t/s en glouton ; MTP pas encore branché dans `gufo serve`. À vérifier si elle est mergée : notre Ornith est en Q4_K_M (la PR ne cite que Q6_K et Q8_0 pour les experts), et gufo refuse les quants hors de ses formats ; le 30/09, **mise en attente par le mainteneur** : pas de nouveau modèle ni de nouvelle quant avant un produit stable avec les modèles actuels |
 
 Image `gufo-runtime:latest` republiée le 26/09/2026 (`20260926T093925`,
 `sha256:09507c0…`, commit d9a84f1 ou plus récent) : contient #255, #257, #260
@@ -790,6 +793,15 @@ mesure que le moteur ; la boucle pi, elle, raisonne (défaut de gufo) :
 Rien n'est suivi en amont sur : d'autres quants (notre `IQ4_NL`), plusieurs
 modèles par serveur (« HTTP model replacement not implemented »), un budget de
 raisonnement.
+
+### Release v0.3.0 (30/09/2026)
+
+v0.3.0 (`fd1710b`, image `gufo-runtime:0.3.0`, aussi `latest`), publiée le
+30/09/2026. Contenu depuis v0.2.0 : une bannière de démarrage sur les
+commandes interactives de la CLI (#323) et un lien vers les forks dans le
+README (#327). Ni noyau, ni cache, ni serveur : image laissée épinglée sur
+`gufo-runtime:0.2.0` (choix de l'utilisateur, 30/09/2026), pas de
+remesure.
 
 ## Reprendre les mesures
 
