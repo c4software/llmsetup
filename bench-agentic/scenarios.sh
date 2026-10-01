@@ -20,6 +20,11 @@
 #   INSTANCE=i  numero de l'instance dans la salve parallele, ajoute a
 #               l'en-tete (« passe 2, instance 3 ») ; vide hors salve.
 #   PASSES=0    ne joue aucune passe (conteneur d'appel froid seul).
+# Et une de diagnostic :
+#   PI_SESSIONS=dir  garde les sessions pi (JSONL) dans dir (--session-dir)
+#               au lieu de --no-session : la transcription de chaque scénario,
+#               appels d'outils compris. Posé par runtime-gufo/bench/agentic.sh
+#               (PI_SESSIONS=1), qui monte dir depuis l'hôte.
 set -u
 cd /work
 fails=0
@@ -59,7 +64,13 @@ mesure() {
     printf "  %.1f s mur, prompt %d tok (+%d du cache, %.0f %%), généré %d tok, prefill %.0f t/s, décode %.1f t/s\n", mur, pt, pc, part, gt, pp, tg
     printf "TSV\t%s\t%s\t%s\t%.1f\t%d\t%d\t%d\t%.0f\t%.1f\n", ENVIRON["PASSE"], nom, v, mur, pt, pc, gt, pp, tg }'
 }
-run() { pi -p --no-session --provider local --model "$MODEL" "$@" 2>&1 | tail -n 20; }
+run() {
+  if [ -n "${PI_SESSIONS:-}" ]; then
+    pi -p --session-dir "$PI_SESSIONS" --provider local --model "$MODEL" "$@" 2>&1 | tail -n 20
+  else
+    pi -p --no-session --provider local --model "$MODEL" "$@" 2>&1 | tail -n 20
+  fi
+}
 
 version=$(pi --version 2>/dev/null | head -1)
 PASSES="${PASSES:-1}"

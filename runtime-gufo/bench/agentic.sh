@@ -9,6 +9,15 @@
 #                                                  arrêté et relancé à la sortie (trap)
 #   runtime-gufo/bench/agentic.sh llama <cas>...   la section équivalente du service
 #   PASSES=N …                                     nombre de passes (défaut 3)
+#   PI_SESSIONS=1 …                                garde les sessions pi (JSONL,
+#                                                  appels d'outils compris) dans
+#                                                  <label>.sessions/ à côté du .out
+#   DEBUG=1 …                                      gufo en journal debug : -v ajouté
+#                                                  à la macro gufo de
+#                                                  gufo-llama-swap.yaml le temps du
+#                                                  banc (copie restaurée par trap,
+#                                                  refusé si le fichier a des
+#                                                  modifications locales)
 #
 # Cas gufo : 27b, flashnext, deepseek (modèles de runtime-gufo/gufo-llama-swap.yaml,
 # gufo lancé derrière llama-swap, le modèle du cas préchargé)
@@ -36,8 +45,11 @@ PASSES="${PASSES:-3}"
 RES="$GUFO_DATA/resultats/agentic"
 mkdir -p "$RES"
 STOPPE=0
+YAML="$DEPOT/runtime-gufo/gufo-llama-swap.yaml"
+SAUVE=""
 
 fin() {
+  if [[ -n "$SAUVE" ]]; then cp -f "$SAUVE" "$YAML"; rm -f "$SAUVE"; fi
   GUFO_SANS_SERVICE=1 "$DEPOT/setup-llm.sh" --gufo-off >/dev/null 2>&1 || true
   if ((STOPPE)) && [[ "$(docker inspect -f '{{.State.Running}}' llama-server 2>/dev/null || true)" != true ]]; then
     "$DEPOT/setup-llm.sh" --start
@@ -66,8 +78,15 @@ section() {  # cas -> section du models.ini
 }
 
 pi_run() {  # modèle url sortie ; garde-temps : une boucle infinie ne bloque pas le GPU
+  local opts=() ses="${3%.out}.sessions"
+  if [[ "${PI_SESSIONS:-0}" == 1 ]]; then
+    rm -rf "$ses"; mkdir -p "$ses"
+    opts=(-v "$ses:/sessions" -e PI_SESSIONS=/sessions)
+  fi
+  # ${opts[@]+…} : un tableau vide sous set -u casse bash 4.3.
   MODEL="$1" PASSES="$PASSES" SERVER_URL="$2" \
-    timeout 3600 docker compose -f "$DEPOT/bench-agentic/docker-compose.yml" run --rm -T pi >"$3" 2>&1 || true
+    timeout 3600 docker compose -f "$DEPOT/bench-agentic/docker-compose.yml" run --rm -T \
+    ${opts[@]+"${opts[@]}"} pi >"$3" 2>&1 || true
   grep -v $'^TSV\t' "$3" | grep -E 'PASS|FAIL|Résumé|mur' || true
 }
 
@@ -103,6 +122,18 @@ run_llama() {
 moteur="${1:-}"; shift || true
 [[ "$moteur" == gufo || "$moteur" == llama ]] && (($# > 0)) \
   || { sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2; }
+if [[ "${DEBUG:-0}" == 1 ]]; then
+  if ! git -C "$DEPOT" diff --quiet -- runtime-gufo/gufo-llama-swap.yaml; then
+    echo "ERREUR : $YAML a des modifications locales, DEBUG=1 refusé" >&2
+    exit 2
+  fi
+  # -v existe dans toutes les versions de gufo : « Verbose logging » jusqu'en
+  # 0.3.0, raccourci de --log-level debug depuis 0.4.0.
+  SAUVE="$(mktemp "$GUFO_DATA/gufo-llama-swap.yaml.XXXXXX")"
+  cp -f "$YAML" "$SAUVE"
+  sed -i 's/^\(    gufo serve llm \)--host/\1-v --host/' "$YAML"
+  grep -q 'gufo serve llm -v --host' "$YAML" || { echo "ERREUR : -v non posé dans $YAML" >&2; exit 2; }
+fi
 for cas in "$@"; do
   case "$moteur" in
     gufo) run_gufo "$cas" || true ;;
