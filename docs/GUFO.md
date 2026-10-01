@@ -205,8 +205,9 @@ Il ne le remplace pas pour autant, faute de :
   `--spec-tune`, `qualif-modele.sh`) serait à refaire ;
 - n-gram : le service décode le code répété 58 % plus vite sur Flash-Next
   (banc HTTP) ; en agentique, gufo gagne quand même ;
-- budget de raisonnement, et stabilité (trois releases en trois jours,
-  v0.1.0 le 28/09 à v0.3.0 le 30/09/2026, deux contributeurs principaux ;
+- budget de raisonnement, et stabilité (quatre releases en quatre jours,
+  v0.1.0 le 28/09 à v0.4.0 le 01/10/2026, deux contributeurs principaux ;
+  la v0.4.0 régresse en boucle d'outils, #368 ;
   nouveaux modèles et quants gelés en amont jusqu'à un produit stable, cf.
   #299).
 
@@ -447,8 +448,9 @@ Publié le 25/09/2026 :
 À surveiller (tickets ouverts seulement : un ticket fermé sort du tableau,
 ce qu'il a changé reste dans la section de sa release) :
 
-| Ticket | Sujet | État au 30/09/2026 |
+| Ticket | Sujet | État au 01/10/2026 |
 |---|---|---|
+| #368 | v0.4.0 : boucle d'outils 20 à 40 % plus lente que la v0.2.0, acceptance en baisse sur les deux modèles, une boucle de répétition de 43 min sur Flash-Next | ouvert (le nôtre) le 01/10/2026, chiffres de la section « Release v0.4.0 » ; causes candidates non vérifiées : #324 (décodage contraint des appels d'outils), #332 (pénalités sur GPU, Flash-Next) ; proposé : journaux complets, rejeu en `--log-level debug` avec la transcription pi |
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) ; le 30/09, le mainteneur confirme les quatre points sur f783fed (27B, `--sessions 4`) : au défaut, staging de 1 Gio contre des points de reprise de 1,85 Go à 24,5k tokens, **tous** refusés, cache disque inerte ; staging 8 Gio : 24,9k tokens repris en 1,8 s contre ~50 s à froid ; préfixe commun repris seulement à partir de la 5e conversation ; `--sessions 1` : une requête annexe évince la conversation (0,23 s à 5,3 s) ; le manque est le niveau RAM (suite dans #331) ; aucun correctif annoncé |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
 | #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée, puis jugé « worth experimenting » par le mainteneur (25/09), après les premiers bugs ; porte aussi le pool persistant de #263 depuis le 28/09 |
@@ -803,6 +805,52 @@ README (#327). Ni noyau, ni cache, ni serveur : image laissée épinglée sur
 `gufo-runtime:0.2.0` (choix de l'utilisateur, 30/09/2026), pas de
 remesure.
 
+### Release v0.4.0 (01/10/2026), non retenue
+
+v0.4.0 (`6aa87fc`, image `gufo-runtime:0.4.0`, digest `e1bc3ee3bfe8`), publiée
+le 01/10/2026 à 11:39 UTC, image 22 min plus tard. Contenu depuis v0.3.0 :
+métriques en direct (#351), éviction du cache journalisée (#353),
+`--log-level` (#319), `return_progress` de llama-server (#344), appels
+d'outils natifs gardés en décodage contraint, `tool_choice: required` forcé au
+décodage et non plus vérifié après (#324), SSE maintenu pendant la génération
+(#334), relecture MTP de Flash-Next stable à travers le cache (#330 : les
+anciens points de reprise disque Flash-Next sont refusés puis reconstruits une
+fois), pénalités du glouton sur GPU et plages d'échantillonnage corrigées sur
+Flash-Next (#332 : +5 % de décode glouton court annoncé, sans effet attendu
+chez nous, qui échantillonnons), `docs/KV-CACHE.md` (#360).
+
+Montée faite (`7c98484`), remesurée le jour même sur le 27B et Flash-Next
+(`runtime-gufo/bench/remesure.sh`, journaux dans
+`resultats/agentic/2026-10-01-0.4.0/`, `avant/` = v0.2.0 du 29/09), puis
+**annulée** (`b758eb7`, choix de l'utilisateur) : gufo d'usage réel revenu en
+`gufo-runtime:0.2.0`. Même pi (image du 22/09, 0.87.0) pour les deux mesures.
+
+| Mesure | 27B v0.2.0 | 27B v0.4.0 | Flash-Next v0.2.0 | Flash-Next v0.4.0 |
+|---|---|---|---|---|
+| prefill 52k (t/s) | 508,3 | 504,6 | 1 395,5 | 1 370,5 |
+| décode code, banc HTTP (t/s) | ~66 | ~65 | ~61 | ~61 |
+| tour 2 sur 32k en cache (t/s) | 107,4 | 107,1 | 151,2 | 160,4 |
+| agentique PASS | 16/16 | 16/16 | 16/16 | 16/16 |
+| `creation`, passes 1/2/3 (s) | 18,5 / 17,7 / 28,1 | 25,1 / 22,8 / 33,1 | 16,4 / 15,3 / 17,7 | 23,1 / **2 563,7** / 19,5 |
+| `bugfix`, passes 1/2/3 (s) | 9,6 / 8,9 / 8,8 | 12,3 / 11,4 / 12,8 | 7,7 / 7,1 / 6,3 | 9,7 / 12,4 / 10,8 |
+| requêtes agentiques | 51 | 54 | 49 | 1 645 |
+| décode agentique (t/s) | 43,9 | 30,5 | 50,4 | 27,8 (boucle comprise) |
+| acceptance du spéculatif (médiane) | 69,9 % | 50,7 % | 84,6 % | 60,0 % |
+| points de reprise refusés (staging) | 0 | 0 | 0 | 296 |
+
+Lecture : le banc HTTP est inchangé au bruit près, la régression ne touche
+que les requêtes avec outils, sur les deux modèles (20 à 40 % de temps en
+plus, acceptance en baisse). Passe 2 de `creation` sur Flash-Next : environ
+1 600 requêtes presque identiques (14 à 15 tokens générés, prompt +241 tokens
+par tour), contexte monté à ~114k, compacté par pi, puis reparti, 43 min avant
+de finir en PASS ; la transcription pi n'est pas conservée par le banc, l'appel
+répété n'est pas connu. Au démarrage de Flash-Next, pendant ~45 s, chaque
+écriture de point de reprise prenait 2,1 à 2,7 s (0,1 à 0,2 s ensuite) et le
+prefill court tombait à 430-770 t/s (au lieu de ~1 300), pendant que les
+points de reprise v0.2.0 du cache disque étaient écartés. Ticket
+[#368](https://github.com/gufo-org/gufo/issues/368) publié le jour même avec
+ces chiffres et les fichiers (modèles et quants).
+
 ## Reprendre les mesures
 
 gufo se pilote depuis le point d'entrée du dépôt ; compose, téléchargement et
@@ -870,7 +918,13 @@ Confrontées le 29/09/2026 à v0.2.0 (diff 0.1.1...0.2.0 et des deux
 `--help`) : échantillonnage et raisonnement par défaut changés (#282), nos
 valeurs Qwen explicites retirées (identiques au profil sans raisonnement),
 macro DeepSeek retirée ; aucune option ajoutée ou retirée, cache disque et
-staging inchangés.
+staging inchangés. Confrontées le 01/10/2026 à v0.4.0 (diff 0.2.0...0.4.0
+et des deux `--help`) : une seule option ajoutée, `--log-level` (`-v` en
+devient le raccourci `debug`, `--log-progress` refusé en `warn`/`error`),
+aucun défaut changé ; la nouvelle `docs/KV-CACHE.md` confirme le staging
+(1 Gio sous un seul point de reprise du 27B à 24k tokens) et chiffre
+`--sessions` : le cache garde environ `--sessions` conversations, une de plus
+fait tomber la reprise d'environ 95 % à 0 %. Version non retenue (#368).
 
 | Paramètre | `runtime-gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
 |---|---|---|---|---|
