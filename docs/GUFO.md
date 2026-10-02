@@ -207,7 +207,8 @@ Il ne le remplace pas pour autant, faute de :
   (banc HTTP) ; en agentique, gufo gagne quand même ;
 - budget de raisonnement, et stabilité (quatre releases en quatre jours,
   v0.1.0 le 28/09 à v0.4.0 le 01/10/2026, deux contributeurs principaux ;
-  la v0.4.0 régresse en boucle d'outils, #368 ;
+  la v0.4.0 régresse en boucle d'outils, #368, la v0.5.0 corrige le
+  ralentissement mais pas la boucle de répétition de Flash-Next ;
   nouveaux modèles et quants gelés en amont jusqu'à un produit stable, cf.
   #299).
 
@@ -448,9 +449,9 @@ Publié le 25/09/2026 :
 À surveiller (tickets ouverts seulement : un ticket fermé sort du tableau,
 ce qu'il a changé reste dans la section de sa release) :
 
-| Ticket | Sujet | État au 01/10/2026 |
+| Ticket | Sujet | État au 02/10/2026 |
 |---|---|---|
-| #368 | v0.4.0 : boucle d'outils 20 à 40 % plus lente que la v0.2.0, acceptance en baisse sur les deux modèles, une boucle de répétition de 43 min sur Flash-Next | ouvert (le nôtre) le 01/10/2026, chiffres de la section « Release v0.4.0 » ; causes candidates non vérifiées : #324 (décodage contraint des appels d'outils), #332 (pénalités sur GPU, Flash-Next) ; journaux complets, rejeu debug (0.4.0 et 0.2.0, 5 passes) et sessions pi envoyés le 01/10/2026 à la demande du mainteneur ; ralentissement reproduit, boucle non |
+| #368 | v0.4.0 : boucle d'outils 20 à 40 % plus lente que la v0.2.0, acceptance en baisse sur les deux modèles, une boucle de répétition de 43 min sur Flash-Next | ouvert (le nôtre) le 01/10/2026, chiffres de la section « Release v0.4.0 » ; causes candidates non vérifiées : #324 (décodage contraint des appels d'outils), #332 (pénalités sur GPU, Flash-Next) ; journaux complets, rejeu debug (0.4.0 et 0.2.0, 5 passes) et sessions pi envoyés le 01/10/2026 à la demande du mainteneur ; ralentissement reproduit, boucle non ; fermé le 01/10/2026 par la PR #373 (v0.5.0) ; le 02/10/2026, ralentissement corrigé mais boucle revue en v0.5.0 (section « Release v0.5.0 »), commentaire publié, réouverture refusée par GitHub (fermé par une PR), à demander au mainteneur ; gardé ici malgré l'état fermé tant que la boucle n'est pas tranchée |
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) ; le 30/09, le mainteneur confirme les quatre points sur f783fed (27B, `--sessions 4`) : au défaut, staging de 1 Gio contre des points de reprise de 1,85 Go à 24,5k tokens, **tous** refusés, cache disque inerte ; staging 8 Gio : 24,9k tokens repris en 1,8 s contre ~50 s à froid ; préfixe commun repris seulement à partir de la 5e conversation ; `--sessions 1` : une requête annexe évince la conversation (0,23 s à 5,3 s) ; le manque est le niveau RAM (suite dans #331) ; aucun correctif annoncé |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
 | #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée, puis jugé « worth experimenting » par le mainteneur (25/09), après les premiers bugs ; porte aussi le pool persistant de #263 depuis le 28/09 |
@@ -870,6 +871,90 @@ et les décisions du cache, rien sur le décodage contraint. Journaux des deux
 séries et sessions pi (chemins de l'hôte masqués) publiés dans un gist secret,
 lien en commentaire de #368 le 01/10/2026.
 
+### Release v0.5.0 (02/10/2026), non retenue
+
+v0.5.0 (`23cacbb`, image `gufo-runtime:0.5.0`, digest `371a731c5286`),
+publiée le 02/10/2026 à 11:08 UTC. Contenu depuis v0.4.0 : schémas d'outils
+natifs et appels historiques préservés (#373, le correctif de #368 selon le
+mainteneur), marqueurs d'outils cités pendant le raisonnement laissés au
+raisonnement (#361), cache qui continue d'avancer quand la conversation
+grandit (#358), préfixes gardés après une édition de l'historique (#362),
+conversations en cache indépendantes des sessions d'exécution (#369),
+points de reprise qui avancent à peine sautés (#348, `reason=min_step`),
+`/v1/models` qui publie `input_modalities` (#367), WebP accepté (#352),
+bruit des éditions Qwen-Image lié aux pixels de référence (#377 : une
+édition à graine fixe diffère des versions précédentes).
+
+Recommandations de réglage (diff 0.4.0...0.5.0 de la documentation, `--help`
+0.2.0 et 0.5.0 comparés sur bigchuck) : une option ajoutée,
+`--cache-ram-bytes` (0 = automatique, au plus 32 Gio et la moitié de la RAM
+libre après chargement ; le budget RAM des instantanés existait déjà, il
+devient réglable), aucun défaut changé. `docs/SERVER.md` précise que
+`--sessions` borne le pool d'exécution, plus le nombre de conversations
+retenues (128 points de reprise, indépendants de `--sessions`), ce qui
+contredit la lecture de `docs/KV-CACHE.md` en 0.4.0 (« le cache garde environ
+`--sessions` conversations »).
+
+Banc d'abord (choix de l'utilisateur) : 0.5.0 passée par l'environnement
+(`GUFO_IMAGE`) aux bancs seulement, rien d'épinglé, gufo d'usage réel resté
+en 0.2.0. 27B et Flash-Next, DeepSeek non remesuré. Quatre séries
+agentiques : 1 session avec cache disque, 1 session sans cache disque
+(`SANS_CACHE=1`, cache RAM seul), 2 sessions avec cache disque, puis rejeu
+debug de Flash-Next en 2 sessions (`DEBUG=1 PI_SESSIONS=1`). Journaux dans
+`resultats/agentic/2026-10-02-0.5.0/` (`avec-cache/`, `sans-cache/`,
+`sessions2/`, `rejeu-debug-s2/`). Même pi (0.87.0) que les mesures de 0.2.0
+et 0.4.0.
+
+| Mesure | 27B v0.2.0 | 27B v0.4.0 | 27B v0.5.0 | Flash-Next v0.2.0 | Flash-Next v0.4.0 | Flash-Next v0.5.0 |
+|---|---|---|---|---|---|---|
+| prefill 52k (t/s) | 508,3 | 504,6 | 499,8 | 1 395,5 | 1 370,5 | 1 361,0 |
+| décode code, banc HTTP (t/s) | ~66 | ~65 | ~66 | ~61 | ~61 | 55 à 62 |
+| justesse (sanity, aiguilles 4k et 52k), tour 2 sur 32k | OK, 100 % | OK, 100 % | OK, 100 % | OK, 100 % | OK, 100 % | OK, 100 % |
+| agentique PASS (1 session, cache disque) | 16/16 | 16/16 | 16/16 | 16/16 | 16/16 | 16/16 |
+| `creation`, passes 1/2/3 (s) | 18,5 / 17,7 / 28,1 | 25,1 / 22,8 / 33,1 | 21,5 / 21,1 / 26,1 | 16,4 / 15,3 / 17,7 | 23,1 / **2 563,7** / 19,5 | 16,9 / 24,4 / 17,3 |
+| `bugfix`, passes 1/2/3 (s) | 9,6 / 8,9 / 8,8 | 12,3 / 11,4 / 12,8 | 9,4 / 10,0 / 9,7 | 7,7 / 7,1 / 6,3 | 9,7 / 12,4 / 10,8 | 7,5 / 6,8 / 7,4 |
+| requêtes agentiques | 51 | 54 | 51 | 49 | 1 645 | 51 |
+| décode agentique (t/s) | 43,9 | 30,5 | 42,3 | 50,4 | 27,8 (boucle comprise) | 44,7 |
+| acceptance du spéculatif (médiane) | 69,9 % | 50,7 % | 71,0 % | 84,6 % | 60,0 % | 85,7 % |
+| prompt repris du cache | 92,7 % | 90,4 % | 93,2 % | 92,2 % | 99,2 % | 93,3 % |
+| reprises disque / RAM | 12 / 36 | 12 / 39 | 2 / 46 | 12 / 34 | 10 / 1 623 | 2 / 46 |
+| points de reprise disque écrits | 58 | 37 | 3 (82 sautés, `min_step`) | 44 | 1 355 | 3 (67 sautés, `min_step`) |
+
+Séries complémentaires en v0.5.0 :
+
+| Série | 27B | Flash-Next |
+|---|---|---|
+| 1 session, sans cache disque | 16/16, repris 90,1 %, prefill 25 s (19 s avec disque), décode 41,2 t/s | 16/16, repris 89,9 %, prefill 12 s (11 s), décode 48,2 t/s |
+| 2 sessions, cache disque | 16/16, repris 98,2 %, décode 43,2 t/s | **boucle**, coupée par le garde-temps d'une heure (2 081 requêtes) |
+| 2 sessions, rejeu debug | non joué | 16/16, repris 96,3 %, décode 46,4 t/s, acceptance 82,3 % |
+
+Lecture :
+
+- **Ralentissement de #368 corrigé** : en boucle d'outils, décode et
+  acceptance du 27B reviennent au niveau de la 0.2.0 ; temps par passe au
+  bruit près.
+- **Boucle de répétition de Flash-Next toujours là** : une série sur quatre,
+  au même endroit qu'en 0.4.0 (`creation`, passe 2), en 2 sessions cette
+  fois (1 session en 0.4.0, donc rien ne la lie au nombre de sessions).
+  Requêtes identiques : 63 tokens générés (`finish=stop`), 33 recalculés,
+  prompt +96 tokens par tour, de ~4k à 104k tokens, acceptance ~93 %. Pas de
+  sortie seule en une heure (43 min en 0.4.0). La série n'était pas en debug
+  et le rejeu debug ne l'a pas reproduite : l'appel répété reste inconnu,
+  d'où la règle « validation toujours en debug » de la checklist.
+- **Cache surtout en RAM** : #348 saute presque tous les points de reprise
+  disque, la RAM reprend ce que le disque couvrait (reprise inchangée, 93 %).
+  Sans disque, 90 % : le disque rapporte encore quelques secondes de prefill
+  dans ce banc, qui ne mesure pas la reprise d'un préfixe commun entre
+  conversations distinctes (#259) ; contournement gardé.
+- **2 sessions** : reprise du 27B 98,2 % contre 93,2 % en 1 session (requêtes
+  annexes de pi plus évincées), réglage d'usage confirmé.
+- Décode agentique de Flash-Next à 44,7 t/s contre 50,4 en 0.2.0 (sans perte
+  d'acceptance) en 1 session, mais 46,4 t/s au rejeu : à reconfirmer à la
+  prochaine version, pas tranché.
+
+Choix du 02/10/2026 : 0.5.0 non retenue, `GUFO_IMAGE` reste en 0.2.0.
+Commentaire publié sur #368 avec ces chiffres ; il annonce une réouverture que GitHub a refusée (ticket fermé par une PR), à corriger en demande au mainteneur.
+
 ## Reprendre les mesures
 
 gufo se pilote depuis le point d'entrée du dépôt ; compose, téléchargement et
@@ -944,6 +1029,12 @@ aucun défaut changé ; la nouvelle `docs/KV-CACHE.md` confirme le staging
 (1 Gio sous un seul point de reprise du 27B à 24k tokens) et chiffre
 `--sessions` : le cache garde environ `--sessions` conversations, une de plus
 fait tomber la reprise d'environ 95 % à 0 %. Version non retenue (#368).
+Confrontées le 02/10/2026 à v0.5.0 (diff 0.4.0...0.5.0, `--help` 0.2.0 et
+0.5.0) : une option ajoutée, `--cache-ram-bytes` (budget RAM des instantanés,
+automatique par défaut, non posée), aucun défaut changé ; `--sessions` ne
+borne plus le nombre de conversations retenues (#369), nos 2 sessions restent
+mesurées utiles (section « Release v0.5.0 »). Version non retenue (boucle de
+#368).
 
 | Paramètre | `runtime-gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
 |---|---|---|---|---|
@@ -969,6 +1060,13 @@ contournement retiré, modèle remesuré ou non) sans question posée à
 l'utilisateur et réponse reçue**, une question par décision, avec la mesure
 ou la ligne de documentation qui la motive. La version mesurée en dernier
 est celle de `GUFO_IMAGE` dans `lib/gufo.sh`.
+
+Seconde règle (02/10/2026) : **toute validation se lance d'emblée en debug**
+(gufo `-v` et sessions pi gardées), jamais une série normale suivie d'un
+rejeu debug. Un incident rare (la boucle de #368, revue une fois sur
+plusieurs séries) ne se reproduit pas forcément : son transcript doit venir de
+la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
+`agentic.sh` pose `DEBUG=1 PI_SESSIONS=1`.
 
 1. **Ce qui a changé** (lecture) :
    - `tools/gufo-amont.sh` : releases, images publiées, commits, tickets
@@ -1007,7 +1105,9 @@ est celle de `GUFO_IMAGE` dans `lib/gufo.sh`.
 6. **Remesurer**, un GPU donc en séquence, sur les modèles retenus, en une
    commande : `nohup runtime-gufo/bench/remesure.sh 27b flashnext >
    ~/llm/gufo-test/remesure.log 2>&1 &` (`SANS_CACHE=1` pour ajouter la
-   boucle sans cache disque), qui enchaîne :
+   boucle sans cache disque ; boucles agentiques toujours en debug, gufo
+   `-v` et sessions pi gardées, par défaut depuis le 02/10/2026 pour ne pas
+   rejouer une série afin d'avoir le transcript d'un incident), qui enchaîne :
    - `runtime-gufo/bench/run.sh gufo 27b flashnext` : justesse d'abord
      (aiguilles, `sanity`), puis prefill court et à 52k, décode prose et
      code, cache au tour 2, mémoire, temps de chargement ;

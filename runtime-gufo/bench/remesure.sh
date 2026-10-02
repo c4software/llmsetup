@@ -11,7 +11,13 @@
 #   SANS_CACHE=1 …                            ajoute la boucle sans --cache-disk
 #   TAG=…                                     dossier des journaux (défaut :
 #                                             <date>-<version de GUFO_IMAGE>)
+#   DEBUG=0 / PI_SESSIONS=0 …                 sans gufo -v / sans transcript pi
 #   nohup runtime-gufo/bench/remesure.sh > ~/llm/gufo-test/remesure.log 2>&1 &
+#
+# Boucles agentiques TOUJOURS en debug (gufo -v) et sessions pi gardées
+# (<cas>.sessions/), par défaut depuis le 02/10/2026 : la boucle de #368 n'est
+# apparue qu'une fois sur plusieurs séries, et la rejouer pour en avoir le
+# transcript coûtait une seconde série (et ne la reproduit pas forcément).
 #
 # Cas : ceux de run.sh et agentic.sh (27b, flashnext, deepseek). DeepSeek
 # n'est plus remesuré depuis le 28/09/2026 sauf demande.
@@ -25,7 +31,8 @@
 # gufo de gufo-llama-swap.yaml le temps de la série (copie de sauvegarde,
 # restaurée par trap) : sert à vérifier une affirmation amont sur la reprise
 # des préfixes partagés sans disque (#259, #267). Refusé si le fichier a des
-# modifications locales. Rien n'est commité.
+# modifications locales. Rien n'est commité. agentic.sh refusant DEBUG=1 sur
+# un yaml modifié, le -v de cette série est posé ici, dans la même copie.
 set -euo pipefail
 DEPOT="$(realpath "$(dirname "$(realpath "$0")")/../..")"
 GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
@@ -33,6 +40,8 @@ YAML="$DEPOT/runtime-gufo/gufo-llama-swap.yaml"
 BENCH="$DEPOT/runtime-gufo/bench"
 A="$GUFO_DATA/resultats/agentic"
 (($# > 0)) || set -- 27b flashnext
+DEBUG="${DEBUG:-1}"
+export PI_SESSIONS="${PI_SESSIONS:-1}"
 
 image="${GUFO_IMAGE:-$(sed -n 's/^GUFO_IMAGE="\${GUFO_IMAGE:-\(.*\)}"$/\1/p' "$DEPOT/lib/gufo.sh")}"
 TAG="${TAG:-$(date +%F)-${image##*:}}"
@@ -84,7 +93,7 @@ echo "== $(date +%T) banc HTTP"
 "$BENCH/run.sh" gufo "${CAS[@]}"
 
 echo "== $(date +%T) boucle agentique, cache disque"
-"$BENCH/agentic.sh" gufo "${CAS[@]}"
+DEBUG="$DEBUG" "$BENCH/agentic.sh" gufo "${CAS[@]}"
 copie avec-cache "${CAS[@]}"
 
 if [[ "${SANS_CACHE:-0}" == 1 ]]; then
@@ -92,7 +101,11 @@ if [[ "${SANS_CACHE:-0}" == 1 ]]; then
   SAUVE="$(mktemp "$GUFO_DATA/gufo-llama-swap.yaml.XXXXXX")"
   cp -f "$YAML" "$SAUVE"
   sed -i '/--cache-disk /d; /--cache-disk-staging-bytes /d' "$YAML"
-  "$BENCH/agentic.sh" gufo "${CAS[@]}"
+  if [[ "$DEBUG" == 1 ]]; then
+    sed -i 's/^\(    gufo serve llm \)--host/\1-v --host/' "$YAML"
+    grep -q 'gufo serve llm -v --host' "$YAML" || { echo "ERREUR : -v non posé dans $YAML" >&2; exit 2; }
+  fi
+  DEBUG=0 "$BENCH/agentic.sh" gufo "${CAS[@]}"
   copie sans-cache "${CAS[@]}"
   fin; SAUVE=""
 fi
