@@ -451,7 +451,7 @@ ce qu'il a changé reste dans la section de sa release) :
 
 | Ticket | Sujet | État au 02/10/2026 |
 |---|---|---|
-| #388 | boucle de répétition de Flash-Next en boucle d'outils (v0.4.0 et v0.5.0, jamais vue en v0.2.0), suite de #368 | ouvert (le nôtre) le 02/10/2026 à la demande du mainteneur, #368 fermé (ralentissement corrigé par #373) ; chiffres des sections « Release v0.4.0 » et « Release v0.5.0 » ; aucun transcript de l'appel répété (séries sans debug, rejeux debug sans boucle) ; second rejeu debug lancé le 02/10/2026 (5 passes, 2 sessions) |
+| #388 | boucle de répétition de Flash-Next en boucle d'outils (v0.4.0 et v0.5.0, jamais vue en v0.2.0), suite de #368 | ouvert (le nôtre) le 02/10/2026 à la demande du mainteneur, #368 fermé (ralentissement corrigé par #373) ; boucle capturée en debug le soir même (section « Release v0.5.0 »), journaux et session pi dans un gist secret, commentaire publié le 02/10/2026 avec le mécanisme et une piste non vérifiée (pénalités, #332) |
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) ; le 30/09, le mainteneur confirme les quatre points sur f783fed (27B, `--sessions 4`) : au défaut, staging de 1 Gio contre des points de reprise de 1,85 Go à 24,5k tokens, **tous** refusés, cache disque inerte ; staging 8 Gio : 24,9k tokens repris en 1,8 s contre ~50 s à froid ; préfixe commun repris seulement à partir de la 5e conversation ; `--sessions 1` : une requête annexe évince la conversation (0,23 s à 5,3 s) ; le manque est le niveau RAM (suite dans #331) ; aucun correctif annoncé |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
 | #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée, puis jugé « worth experimenting » par le mainteneur (25/09), après les premiers bugs ; porte aussi le pool persistant de #263 depuis le 28/09 |
@@ -954,6 +954,32 @@ Lecture :
 
 Choix du 02/10/2026 : 0.5.0 non retenue, `GUFO_IMAGE` reste en 0.2.0.
 Commentaire publié sur #368 avec ces chiffres ; à la demande du mainteneur, la boucle est suivie dans un ticket à part, [#388](https://github.com/gufo-org/gufo/issues/388), ouvert le jour même.
+
+Chasse à la boucle le soir même, tout en debug (`-v`, sessions pi gardées),
+Flash-Next en 0.5.0, 2 sessions, 5 passes par série : deux rejeux sans
+boucle, puis une nuit de 10 séries au plus arrêtée à la première boucle
+(`resultats/agentic/2026-10-02-0.5.0/nuit/`), capturée en série 04, passe 4
+de `creation` : 2 578 s, ~230 requêtes en plus, sortie seule (comme les
+43 min de 0.4.0). Bilan Flash-Next : 0/2 séries en 0.2.0, 1/2 en 0.4.0, 2/9
+en 0.5.0 ; `-v` ne l'empêche pas. Mécanisme lu dans la session pi :
+
+1. `test.js` attend `median([4, 1, 7, 2]) === 4` (la bonne valeur est 3),
+   échec `3 !== 4`. Erreur banale, vue dans environ une session `creation` sur
+   cinq en 0.2.0, 0.4.0 et 0.5.0, d'ordinaire corrigée en un appel.
+2. Ici, « correction » vers 5,5, fausse aussi ; le modèle soupçonne alors
+   l'environnement (`md5sum`, `cat -A`, `require.resolve`, `env`, `1+2`).
+3. À partir de l'appel 80, scripts `/tmp/t1.js`, `/tmp/t2.js`... puis, vers
+   `t31`, recopie de l'appel précédent avec deux compteurs incrémentés (`t31`
+   à `t204`, `seq 1 5` à `seq 1 1650`), sortie identique à chaque fois, aucune
+   ligne de texte en 473 entrées.
+4. Après `t204`, l'assertion est réécrite (comparée à la moyenne des deux
+   éléments du milieu), le test passe.
+
+Piste non vérifiée, donnée comme telle dans #388 : une recopie de ce genre
+malgré presence 1,5 (`repeat_last_n=64` au journal) ferait penser à des
+pénalités qui ne voient plus les appels déjà présents dans le prompt depuis
+#332 (0.4.0). Journal `-v` et session pi, chemins de l'hôte masqués, dans un
+gist secret, lien en commentaire de #388 le 02/10/2026.
 
 ## Reprendre les mesures
 
