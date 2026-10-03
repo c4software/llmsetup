@@ -1,0 +1,1 @@
+Avant chaque appel d'outil qui modifie un fichier, écris une phrase courte qui dit ce que tu vas changer et pourquoi.

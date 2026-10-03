@@ -25,6 +25,12 @@
 #               au lieu de --no-session : la transcription de chaque scénario,
 #               appels d'outils compris. Posé par runtime-gufo/bench/agentic.sh
 #               (PI_SESSIONS=1), qui monte dir depuis l'hôte.
+#   PI_CONSIGNE=texte  ajoute texte au prompt système de pi
+#               (--append-system-prompt) pour tous les scénarios. Vide par
+#               défaut : les mesures de référence se font sans. Posé par
+#               runtime-gufo/bench/agentic.sh pour l'essai de gufo#388
+#               (prompts/pi-consigne-edit.txt) ; un run avec consigne n'est
+#               pas comparable aux runs sans.
 set -u
 cd /work
 fails=0
@@ -65,6 +71,7 @@ mesure() {
     printf "TSV\t%s\t%s\t%s\t%.1f\t%d\t%d\t%d\t%.0f\t%.1f\n", ENVIRON["PASSE"], nom, v, mur, pt, pc, gt, pp, tg }'
 }
 run() {
+  if [ -n "${PI_CONSIGNE:-}" ]; then set -- --append-system-prompt "$PI_CONSIGNE" "$@"; fi
   if [ -n "${PI_SESSIONS:-}" ]; then
     pi -p --session-dir "$PI_SESSIONS" --provider local --model "$MODEL" "$@" 2>&1 | tail -n 20
   else

@@ -12,6 +12,11 @@
 #   PI_SESSIONS=1 …                                garde les sessions pi (JSONL,
 #                                                  appels d'outils compris) dans
 #                                                  <label>.sessions/ à côté du .out
+#   PI_CONSIGNE=texte …                            texte ajouté au prompt système
+#                                                  de pi (scenarios.sh), par
+#                                                  exemple "$(cat prompts/pi-consigne-edit.txt)" ;
+#                                                  image pi à reconstruire si
+#                                                  scenarios.sh a changé
 #   DEBUG=1 …                                      gufo en journal debug : -v ajouté
 #                                                  à la macro gufo de
 #                                                  gufo-llama-swap.yaml le temps du
@@ -83,6 +88,7 @@ pi_run() {  # modèle url sortie ; garde-temps : une boucle infinie ne bloque pa
     rm -rf "$ses"; mkdir -p "$ses"
     opts=(-v "$ses:/sessions" -e PI_SESSIONS=/sessions)
   fi
+  if [[ -n "${PI_CONSIGNE:-}" ]]; then opts+=(-e "PI_CONSIGNE=$PI_CONSIGNE"); fi
   # ${opts[@]+…} : un tableau vide sous set -u casse bash 4.3.
   MODEL="$1" PASSES="$PASSES" SERVER_URL="$2" \
     timeout 3600 docker compose -f "$DEPOT/bench-agentic/docker-compose.yml" run --rm -T \

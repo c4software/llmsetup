@@ -260,6 +260,7 @@ fait l'échappement JSON — plus aucun texte pré-échappé dans le bash.
 | `bench-context.txt` | `_bench_one` | contexte réaliste du bench : cahier des charges du système que la tâche demande d'implémenter (long prefill varié ; taille réelle = `n=` de la passe 1) |
 | `bench-sanity.txt` | `_bench_sanity_one` | recopie exacte d'un code (`LAMPADAIRE-2719`) : contrôle de justesse du moteur, volontairement trivial pour ne tester que le backend, pas le modèle |
 | `bench-task.txt` | `_bench_one` | tâche de génération posée après le contexte (référence les sections du cahier des charges) |
+| `pi-consigne-edit.txt` | `runtime-gufo/bench/agentic.sh` (`PI_CONSIGNE`, à la demande) | phrase ajoutée au prompt système de pi pour l'essai de gufo#388 (écrire une phrase avant de modifier un fichier) ; absente des mesures de référence |
 
 **⚠ Comparabilité.** Modifier un de ces fichiers invalide les comparaisons
 avec les runs journalisés et la calibration n-max : après un changement de
