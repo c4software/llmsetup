@@ -336,6 +336,9 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   `gufo-deepseek-antirez`, `*-diskcache.*`). Le banc HTTP de cette journée
   tournait sans cache disque ; le compose l'active toujours, sans effet sur
   ce banc (préfixes aléatoires).
+- `GUFO_DATA/essais/` : scripts d'essai non versionnés et leurs journaux
+  (remesures, nuits de séries, essais de #388), regroupés le 03/10/2026 ;
+  seule trace de la façon dont chaque essai a été lancé.
 
 ### Paramètres de gufo et leur origine
 
