@@ -13,9 +13,9 @@
 #     docker compose -f bench-agentic/docker-compose.yml run --rm -T pi
 #
 # Les réponses en flux (SSE) passent au fil de l'eau. Corps en morceaux
-# (Transfer-Encoding: chunked) recomposé avant transmission. Pour l'arrêter
-# par son nom, viser « python3 .*capture.py » : un pkill -f sur le seul nom du
-# fichier tue aussi le shell ssh qui porte la commande.
+# (Transfer-Encoding: chunked) recomposé avant transmission. Pour l'arrêter,
+# passer par son port (ss -ltnp | grep :8019, puis kill du pid) : un pkill -f
+# ou un pgrep -f sur son nom atteint aussi le shell ssh qui porte la commande.
 import http.client, http.server, json, sys
 
 SORTIE = sys.argv[1]

@@ -452,7 +452,7 @@ ce qu'il a changé reste dans la section de sa release) :
 
 | Ticket | Sujet | État au 02/10/2026 |
 |---|---|---|
-| #388 | boucle de répétition de Flash-Next en boucle d'outils (vue en v0.4.0 et v0.5.0, puis en v0.2.0 aussi le 03/10/2026 : pas une régression), suite de #368 | ouvert (le nôtre) le 02/10/2026 à la demande du mainteneur, #368 fermé (ralentissement corrigé par #373) ; boucle capturée en debug le soir même (section « Release v0.5.0 »), journaux et session pi dans un gist secret, commentaire publié le 02/10/2026 avec le mécanisme et une piste non vérifiée (pénalités, #332) ; un tiers suggère `--think xhigh` (recommandé par Qwen pour le code) : écarté, le sujet est la régression à réglage égal (`--think off` identique en 0.2.0, sans boucle), réponse publiée dans ce sens ; le tiers donne ses réglages (raisonnement xhigh, presence 0, 1 session), d'où l'essai du 03/10/2026 : même banc en `--presence-penalty 0.0`, 0 boucle sur 20 séries contre 2 sur 9 en 1,5, décompte et journaux (gist secret) publiés le jour même ; témoin 0.2.0 en presence 1,5 le même jour : boucle en série 5 sur 5, annoncée dans #388 (le sujet devient le profil Qwen sans raisonnement, plus la version) ; un collaborateur (francescobozzo) envisage de désactiver la pénalité sans raisonnement si d'autres preuves arrivent ; ticket renommé (« tool-call loop with the no-think profile (presence penalty 1.5), all versions ») et commentaire final publié le 03/10/2026 : décompte du témoin, chiffres corrigés, rejeu de la première correction (la pénalité à 0 n'empêche pas la seconde valeur fausse), fermeture laissée au choix des mainteneurs |
+| #388 | boucle de répétition de Flash-Next en boucle d'outils (vue en v0.4.0 et v0.5.0, puis en v0.2.0 aussi le 03/10/2026 : pas une régression), suite de #368 | ouvert (le nôtre) le 02/10/2026 à la demande du mainteneur, #368 fermé (ralentissement corrigé par #373) ; boucle capturée en debug le soir même (section « Release v0.5.0 »), journaux et session pi dans un gist secret, commentaire publié le 02/10/2026 avec le mécanisme et une piste non vérifiée (pénalités, #332) ; un tiers suggère `--think xhigh` (recommandé par Qwen pour le code) : écarté, le sujet est la régression à réglage égal (`--think off` identique en 0.2.0, sans boucle), réponse publiée dans ce sens ; le tiers donne ses réglages (raisonnement xhigh, presence 0, 1 session), d'où l'essai du 03/10/2026 : même banc en `--presence-penalty 0.0`, 0 boucle sur 20 séries contre 2 sur 9 en 1,5, décompte et journaux (gist secret) publiés le jour même ; témoin 0.2.0 en presence 1,5 le même jour : boucle en série 5 sur 5, annoncée dans #388 (le sujet devient le profil Qwen sans raisonnement, plus la version) ; un collaborateur (francescobozzo) envisage de désactiver la pénalité sans raisonnement si d'autres preuves arrivent ; ticket renommé (« tool-call loop with the no-think profile (presence penalty 1.5), all versions ») et commentaire final publié le 03/10/2026 : décompte du témoin, chiffres corrigés, rejeu de la première correction (la pénalité à 0 n'empêche pas la seconde valeur fausse), fermeture laissée au choix des mainteneurs ; essai d'une consigne côté pi le même jour (section « Release v0.5.0 »), non publié |
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre), résumé en tête et dernier commentaire sur `--sessions` ; contournement : `--cache-disk` + staging relevé ; la reprise « un tour en retard » vue avec Claude Code vient du proxy (omp reprend depuis la RAM), commentaire corrigé ; plan du mainteneur le 25/09 : points 1 à 3 (staging) et `--sessions 2` documentés, le reste dans #267 ; le 26/09, point 1 corrigé par la PR #279 (d9a84f1 : staging automatique au plus petit de 1 Gio, 1/8 de la RAM disponible et de la rétention disque, rétention par défaut 8 Gio, instantanés refusés journalisés), point 2 : 1 Gio, seuil fixe reconnu imparfait ; le 26/09, 11 points de reprise Flash-Next réels de 1,39 à 1,50 Go refusés au défaut : staging gardé à 8 Gio, remesure agentique inchangée ; commentaire du 26/09 avec les refus et la remesure, suggestion d'un staging automatique déduit du modèle chargé ; le 26/09 au soir, un utilisateur affirme que sur l'image `20260926T093925` la reprise d'un préfixe partagé marche **sans** `--cache-disk` (6,3 s ramenées à 0,1 s), mais en rejouant trois fois la même requête, pas une nouvelle conversation après une autre : vérifié chez nous le 28/09 (section « Release v0.1.1 ») : faux pour une nouvelle conversation, 14 débuts recalculés sans disque ; commentaire publié le 28/09 avec la remesure v0.1.1 (cache repris 92,9 / 92,6 %) ; le 30/09, le mainteneur confirme les quatre points sur f783fed (27B, `--sessions 4`) : au défaut, staging de 1 Gio contre des points de reprise de 1,85 Go à 24,5k tokens, **tous** refusés, cache disque inerte ; staging 8 Gio : 24,9k tokens repris en 1,8 s contre ~50 s à froid ; préfixe commun repris seulement à partir de la 5e conversation ; `--sessions 1` : une requête annexe évince la conversation (0,23 s à 5,3 s) ; le manque est le niveau RAM (suite dans #331) ; aucun correctif annoncé |
 | #267 | préfixes partagés gardés en RAM sans `--cache-disk`, apprentissage compris (ouvert par le mainteneur, nos chiffres en appui) | ouvert ; latence depuis la RAM à mesurer, rien de promis |
 | #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée, puis jugé « worth experimenting » par le mainteneur (25/09), après les premiers bugs ; porte aussi le pool persistant de #263 depuis le 28/09 |
@@ -1123,11 +1123,62 @@ paramètre d'échantillonnage), rejouée 100 fois par bras sur gufo d'usage en
 Publié dans #388 le 03/10/2026 : décompte du témoin, corrections de chiffres,
 ce rejeu, et un second gist secret (session en boucle de la 0.2.0, archive des
 5 séries, requête et 300 réponses du rejeu). Rien de changé au réglage
-d'usage : `GUFO_IMAGE` reste en 0.2.0, profil Qwen laissé à gufo. La boucle
-n'étant pas une régression, elle n'est plus un motif pour rester en 0.2.0 ;
-restent, pour une montée de version, les autres points de la checklist.
-Pistes non mesurées : 10 séries 0.2.0 à presence 0,0, et un rappel côté
-client (prompt système de pi) demandant une phrase avant chaque correction.
+d'usage à ce stade. La boucle n'étant pas une régression, elle n'est plus un
+motif pour rester en 0.2.0. Piste non mesurée : 10 séries 0.2.0 à presence
+0,0.
+
+**Passage en 0.5.0 le 03/10/2026** (choix de l'utilisateur, version seule) :
+`GUFO_IMAGE` épinglée en `gufo-runtime:0.5.0` dans `lib/gufo.sh`,
+`runtime-gufo/download.sh` et `runtime-gufo/Dockerfile.routeur`, yaml
+inchangé (`--think off`, profil Qwen de gufo, cache disque et staging).
+Mesures de la 0.5.0 : le tableau du 02/10 ci-dessus. Vérifié sur bigchuck
+après bascule : `gufo version 0.5.0 (23cacbb)` dans le conteneur d'usage,
+`presence_penalty=1.5` au journal, une requête avec `stop` ; voix,
+transcription et image non revérifiées ce jour-là. Reste ouvert de la
+lecture du 02/10 : le décode agentique de Flash-Next (44,7 à 46,4 contre
+50,4 t/s en 0.2.0).
+
+Consigne côté client, le 03/10/2026 : une phrase ajoutée au prompt système
+de pi (`prompts/pi-consigne-edit.txt`, « Avant chaque appel d'outil qui
+modifie un fichier, écris une phrase courte qui dit ce que tu vas changer et
+pourquoi. », passée par `PI_CONSIGNE`, pi la place dans un bloc
+`<addendum>`). Deux mesures sur la 0.5.0, presence 1,5 :
+
+- **Rejeu** de la même requête (`bench/rejeu.py`, 100 fois par bras,
+  `resultats/388-rejeu-2026-10-03/consigne-0.5.0.jsonl`) :
+
+  | bras | correction juste (3) | fausse (5,5) sans texte | fausse (5,5) avec texte |
+  |---|---|---|---|
+  | sans consigne | 84 | 13 | 3 |
+  | avec consigne | 100 | 0 | 0 |
+
+  Avec la consigne, une phrase avant chaque edit (100 sur 100) et plus aucune
+  fausse correction. Sans, 16 % d'erreurs, du même ordre qu'en 0.2.0 ; trois
+  réponses écrivent une phrase et se trompent quand même (« trié :
+  [1,4,7,9...] -> (4+7)/2 ») : le texte n'est pas une garantie.
+- **Banc** : 10 séries (2 sessions, 5 passes, `-v`, sessions gardées,
+  `resultats/agentic/2026-10-03-0.5.0-consigne/`), 26/26 partout, 95 à 102
+  requêtes, aucune boucle (0 sur 10 contre 4 sur 17 sans consigne toutes
+  versions : Fisher p = 0,14, pas concluant seul). 19 sessions `creation`
+  sur 50 avec un test raté (6 sur 33 sans consigne), toutes rattrapées en 5 à
+  8 appels d'outils.
+
+  | médianes, 0.5.0 | sans consigne (7 séries sans boucle) | avec consigne (10 séries) |
+  |---|---|---|
+  | `outils` (s) | 2,6 | 4,35 |
+  | `edit` (s) | 3,5 | 4,5 |
+  | `creation` (s) | 16,5 | 26,95 |
+  | `bugfix` (s) | 7,1 | 9,1 |
+  | somme des quatre + `simple` (s) | 30,0 | 45,2 |
+  | tokens générés par requête | 29 | 44 |
+  | tokens générés par série | ~5 400 | ~9 600 |
+  | décode (t/s) | 49,9 | 46,8 |
+  | acceptance MTP | 81,5 % | 84,0 % |
+
+  La consigne coûte donc environ +50 % de temps par passe sur ce banc (plus
+  de texte, et plus de tests ratés au premier jet), contre x2,3 pour
+  `--think xhigh`. Non décidé : rien n'est posé dans la configuration d'usage
+  de pi, d'omp ni du proxy ; ces résultats ne sont pas publiés dans #388.
 
 ## Reprendre les mesures
 
