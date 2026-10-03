@@ -10,11 +10,15 @@
 #     motif          texte du résultat d'outil où la conversation est coupée
 #                    (le premier qui le contient, par exemple « 3 !== 4 ») :
 #                    la requête rejouée est celle que pi envoie juste après
-#     bras           nom=capture.jsonl[,presence=X] : l'enveloppe (prompt
+#     bras           nom=capture.jsonl[,champ=valeur...] : l'enveloppe (prompt
 #                    système, outils, paramètres) vient de la requête de
 #                    capture.jsonl (bench/capture.py) qui porte la même
-#                    consigne utilisateur que la session ; presence=X ajoute
-#                    presence_penalty à la requête (absent : profil du serveur)
+#                    consigne utilisateur que la session ; chaque champ=valeur
+#                    est ajouté tel quel à la requête (valeur lue en JSON,
+#                    sinon en texte), par exemple presence_penalty=0.0 ou
+#                    reasoning_effort=low (gufo active alors le raisonnement
+#                    pour cette requête) ; presence=X reste accepté pour
+#                    presence_penalty. Sans champ : profil du serveur.
 #   URL=http://127.0.0.1:8009 par défaut (variable d'environnement URL).
 #
 # Les bras sont alternés à chaque tour (pas de dérive d'un bras à l'autre),
@@ -53,7 +57,7 @@ if not coupe:
 bras = []
 for spec in sys.argv[5:]:
     nom, reste = spec.split("=", 1)
-    capture, _, opt = reste.partition(",presence=")
+    capture, *champs = reste.split(",")
     corps = [json.loads(l)["body"] for l in open(capture)]
     env = [b for b in corps if consigne in json.dumps(b["messages"][1], ensure_ascii=False)
            or consigne in str(b["messages"][1].get("content"))]
@@ -62,11 +66,16 @@ for spec in sys.argv[5:]:
     base = {k: v for k, v in env[-1].items() if k not in ("messages", "stream", "stream_options")}
     base["messages"] = env[-1]["messages"][:2] + suite
     base["stream"] = False
-    if opt:
-        base["presence_penalty"] = float(opt)
+    for champ in champs:
+        cle, valeur = champ.split("=", 1)
+        try:
+            valeur = json.loads(valeur)
+        except ValueError:
+            pass
+        base["presence_penalty" if cle == "presence" else cle] = valeur
     bras.append((nom, base))
 if not bras:
-    sys.exit("aucun bras (nom=capture.jsonl[,presence=X])")
+    sys.exit("aucun bras (nom=capture.jsonl[,champ=valeur...])")
 
 with open(sortie, "a") as f:
     for i in range(n):
