@@ -31,6 +31,14 @@
 #               runtime-gufo/bench/agentic.sh pour l'essai de gufo#388
 #               (prompts/pi-consigne-edit.txt) ; un run avec consigne n'est
 #               pas comparable aux runs sans.
+#   PI_GARDE=secondes  garde-temps PAR SCÉNARIO (défaut 300). Un scénario
+#               normal prend 3 à 30 s ; une boucle d'appels d'outils peut durer
+#               43 min puis s'en sortir seule, et le contrôle final la comptait
+#               PASS (gufo#388, 02 et 03/10/2026). Passé ce délai, pi est
+#               coupé, le scénario est compté FAIL quel que soit l'état des
+#               fichiers, et le banc passe à la suite. Ne touche à aucun
+#               prompt : les runs antérieurs restent comparables, sauf ceux
+#               qui contenaient une telle boucle.
 #   PI_THINKING=niveau  lance pi avec --thinking niveau (minimal, low, medium,
 #               high, xhigh, max) : le raisonnement est demandé par le client,
 #               sans toucher au serveur (entrypoint.sh déclare alors le modèle
@@ -39,7 +47,14 @@
 set -u
 cd /work
 fails=0
-pass() { printf '  \033[32mPASS\033[0m %s\n' "$1"; }
+# Marqueur du garde-temps : posé par run() quand pi est coupé (run tourne dans
+# un sous-shell, d'où un fichier et non une variable). pass() et mesure() le
+# lisent : un scénario coupé est FAIL même si ses fichiers sont bons.
+DEPASSE=/tmp/pi-garde-depasse
+pass() {
+  if [ -e "$DEPASSE" ]; then fail "garde-temps de ${PI_GARDE:-300} s dépassé - $1"; return; fi
+  printf '  \033[32mPASS\033[0m %s\n' "$1"
+}
 fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fails=$((fails + 1)); }
 
 # Compteurs cumulés de llama-server pour ce modèle :
@@ -67,6 +82,7 @@ snap() {
 # Chaque delta arrivée - départ donne la consommation du scénario seul.
 mesure() {
   nom="$1" verdict="$2" t0="$3"; shift 3
+  [ -e "$DEPASSE" ] && verdict=FAIL
   t1=$(date +%s.%N); s1=$(snap)
   echo "$* $s1 $t0 $t1" | awk -v nom="$nom" -v v="$verdict" '{
     pt=$6-$1; pc=$7-$2; gt=$8-$3; ps=$9-$4; gs=$10-$5; mur=$12-$11
@@ -79,10 +95,16 @@ run() {
   if [ -n "${PI_CONSIGNE:-}" ]; then set -- --append-system-prompt "$PI_CONSIGNE" "$@"; fi
   if [ -n "${PI_THINKING:-}" ]; then set -- --thinking "$PI_THINKING" "$@"; fi
   if [ -n "${PI_SESSIONS:-}" ]; then
-    pi -p --session-dir "$PI_SESSIONS" --provider local --model "$MODEL" "$@" 2>&1 | tail -n 20
+    set -- --session-dir "$PI_SESSIONS" "$@"
   else
-    pi -p --no-session --provider local --model "$MODEL" "$@" 2>&1 | tail -n 20
+    set -- --no-session "$@"
   fi
+  # Sortie dans un fichier : derrière un tube, le code 124 de timeout serait
+  # perdu (sh POSIX, pas de pipefail).
+  rm -f "$DEPASSE"
+  timeout "${PI_GARDE:-300}" pi -p --provider local --model "$MODEL" "$@" >/tmp/pi-sortie 2>&1
+  [ $? -eq 124 ] && : > "$DEPASSE"
+  tail -n 20 /tmp/pi-sortie
 }
 
 version=$(pi --version 2>/dev/null | head -1)
