@@ -31,6 +31,11 @@
 #               runtime-gufo/bench/agentic.sh pour l'essai de gufo#388
 #               (prompts/pi-consigne-edit.txt) ; un run avec consigne n'est
 #               pas comparable aux runs sans.
+#   PI_THINKING=niveau  lance pi avec --thinking niveau (minimal, low, medium,
+#               high, xhigh, max) : le raisonnement est demandé par le client,
+#               sans toucher au serveur (entrypoint.sh déclare alors le modèle
+#               capable de raisonner). Vide par défaut : mesures de référence
+#               sans raisonnement ; un run avec n'est pas comparable.
 set -u
 cd /work
 fails=0
@@ -72,6 +77,7 @@ mesure() {
 }
 run() {
   if [ -n "${PI_CONSIGNE:-}" ]; then set -- --append-system-prompt "$PI_CONSIGNE" "$@"; fi
+  if [ -n "${PI_THINKING:-}" ]; then set -- --thinking "$PI_THINKING" "$@"; fi
   if [ -n "${PI_SESSIONS:-}" ]; then
     pi -p --session-dir "$PI_SESSIONS" --provider local --model "$MODEL" "$@" 2>&1 | tail -n 20
   else

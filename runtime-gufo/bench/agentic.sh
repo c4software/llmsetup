@@ -17,6 +17,11 @@
 #                                                  exemple "$(cat prompts/pi-consigne-edit.txt)" ;
 #                                                  image pi à reconstruire si
 #                                                  scenarios.sh a changé
+#   PI_THINKING=low …                              pi lancé avec --thinking low
+#                                                  (ou minimal, medium…) : le
+#                                                  raisonnement vient du client,
+#                                                  le yaml de gufo reste en
+#                                                  --think off
 #   DEBUG=1 …                                      gufo en journal debug : -v ajouté
 #                                                  à la macro gufo de
 #                                                  gufo-llama-swap.yaml le temps du
@@ -89,6 +94,7 @@ pi_run() {  # modèle url sortie ; garde-temps : une boucle infinie ne bloque pa
     opts=(-v "$ses:/sessions" -e PI_SESSIONS=/sessions)
   fi
   if [[ -n "${PI_CONSIGNE:-}" ]]; then opts+=(-e "PI_CONSIGNE=$PI_CONSIGNE"); fi
+  if [[ -n "${PI_THINKING:-}" ]]; then opts+=(-e "PI_THINKING=$PI_THINKING"); fi
   # ${opts[@]+…} : un tableau vide sous set -u casse bash 4.3.
   MODEL="$1" PASSES="$PASSES" SERVER_URL="$2" \
     timeout 3600 docker compose -f "$DEPOT/bench-agentic/docker-compose.yml" run --rm -T \
