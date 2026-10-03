@@ -4,7 +4,7 @@
 # chaque POST dans un JSONL ({"path", "body"}), une ligne par requête. Sert à
 # obtenir l'enveloppe EXACTE d'un client (prompt système, outils, paramètres :
 # pi n'envoie aucun paramètre d'échantillonnage) pour la rejouer ensuite avec
-# bench/rejeu.py (docs/GUFO.md, gufo#388).
+# bench/rejeu.py (docs/HISTORIQUE-GUFO.md, gufo#388).
 #
 # Usage :
 #   runtime-gufo/bench/capture.py <sortie.jsonl> [port d'écoute, défaut 8019]

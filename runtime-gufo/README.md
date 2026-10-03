@@ -1,8 +1,9 @@
 # runtime-gufo : gufo à la place du service, et ses bancs
 
 [gufo](https://github.com/gufo-org/gufo) est un moteur HIP spécialisé
-Strix Halo, évalué contre le service le 24/09/2026 : mesures, verdict,
-paramètres et tickets amont dans [`docs/GUFO.md`](../docs/GUFO.md). En
+Strix Halo, évalué contre le service le 24/09/2026 : verdict, paramètres et
+tickets amont dans [`docs/GUFO.md`](../docs/GUFO.md), mesures datées dans
+[`docs/HISTORIQUE-GUFO.md`](../docs/HISTORIQUE-GUFO.md). En
 résumé : bien configuré, il fait le même travail agentique en 30 % de temps
 en moins sur le 27B et Flash-Next, mais il ne sert qu'un modèle par
 processus et n'accepte que ses propres GGUF. Il ne s'intègre pas au routeur
@@ -50,7 +51,7 @@ Le flux WebSocket de la synthèse (`/v1/audio/speech/stream`) n'est pas une
 route de llama-swap : `/upstream/<modèle>/v1/audio/speech/stream`. Mesuré le
 25/09/2026 : synthèse 2,5 fois le temps réel, transcription fidèle en 3 s,
 image 1024² en 90 s ; Flash-Next, voix et transcription ensemble laissent
-14 Gio libres (détail dans `docs/GUFO.md`).
+14 Gio libres (détail dans `docs/HISTORIQUE-GUFO.md`).
 
 Par le proxy (`http://llmproxy`), les mêmes modèles sont préfixés
 `bigchuck/` ; pour pi et omp, `tools/gufo-media.ts` ajoute les outils
@@ -72,7 +73,7 @@ requêtes de gufo.
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
 | `bench/remesure.sh [cas...]` | Remesure après une montée de version (checklist de `docs/GUFO.md`) : `run.sh` puis `agentic.sh` sur gufo (défaut 27b flashnext), `SANS_CACHE=1` pour la même boucle sans `--cache-disk`, journaux agentiques rangés dans `resultats/agentic/<date>-<version>/` (`avant/`, `avec-cache/`, `sans-cache/`), bilan par `bench/journal.py`, gufo d'usage réel relancé s'il tournait |
 | `bench/capture.py <sortie.jsonl> [port]` | Relais d'enregistrement : écoute sur `:8019`, transmet à `:8009` et garde le corps de chaque requête, pour avoir l'enveloppe exacte d'un client (prompt système, outils, paramètres) |
-| `bench/rejeu.py <session> <motif> <N> <sortie> <bras>...` | Rejoue N fois par bras la requête qu'une session pi envoie après un résultat d'outil donné, avec l'enveloppe capturée (`nom=capture.jsonl[,champ=valeur...]`, par exemple `presence_penalty=0.0` ou `reasoning_effort=low`), bras alternés ; décompte par bras de l'outil appelé, du texte émis et du `newText` (`docs/GUFO.md`, gufo#388) |
+| `bench/rejeu.py <session> <motif> <N> <sortie> <bras>...` | Rejoue N fois par bras la requête qu'une session pi envoie après un résultat d'outil donné, avec l'enveloppe capturée (`nom=capture.jsonl[,champ=valeur...]`, par exemple `presence_penalty=0.0` ou `reasoning_effort=low`), bras alternés ; décompte par bras de l'outil appelé, du texte émis et du `newText` (`docs/HISTORIQUE-GUFO.md`, gufo#388) |
 | `bench/journal.py <journal>...` | Bilan d'un journal gufo : sources du cache et ratés, prompt repris, temps en prefill et en décode, premier token des petites requêtes, acceptance, points de reprise écrits ou refusés |
 
 Le `.env` est généré par `./setup-llm.sh --gufo` (`lib/gufo.sh`) dans

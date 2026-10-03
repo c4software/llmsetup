@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Rejeu d'UNE requête d'une session pi, N fois par bras, pour compter ce que
-# le modèle répond à contexte strictement égal (docs/GUFO.md, gufo#388 : la
+# le modèle répond à contexte strictement égal (docs/HISTORIQUE-GUFO.md, gufo#388 : la
 # « première correction » après un test raté). Isole une décision du reste de
 # la boucle agentique : quelques minutes de GPU au lieu d'heures de séries.
 #

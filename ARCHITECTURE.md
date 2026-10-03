@@ -472,7 +472,8 @@ en q8_0 comme le service, tour simulé par profondeur et par device. Journal
 
 ## gufo, à la place du service (`lib/gufo.sh`, `runtime-gufo/`)
 
-Moteur alternatif évalué le 24/09/2026 (`docs/GUFO.md`), jamais intégré au
+Moteur alternatif évalué le 24/09/2026 (`docs/GUFO.md`, journal daté dans
+`docs/HISTORIQUE-GUFO.md`), jamais intégré au
 routeur du service : un modèle par processus, GGUF imposés. Il PREND LA PLACE
 du service sur `SERVER_PORT` (8009), les deux étant exclusifs (même port, un
 GPU), et démarre TOUJOURS derrière llama-swap : le client choisit

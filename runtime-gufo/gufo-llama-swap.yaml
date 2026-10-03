@@ -144,8 +144,8 @@ models:
   # budget, là où la section du service plafonne à 6 144 tokens). Mesuré le
   # 29/09/2026 en boucle agentique pi : 128,7 s par passe contre 90 s sans
   # raisonnement le 24/09 (et 116 s pour le service), 61 % de tokens générés
-  # en plus ; retour au comportement d'avant la 0.2.0 (docs/GUFO.md, release
-  # v0.2.0). Un client peut réactiver le raisonnement par requête.
+  # en plus ; retour au comportement d'avant la 0.2.0 (docs/HISTORIQUE-GUFO.md,
+  # release v0.2.0). Un client peut réactiver le raisonnement par requête.
   "deepseek-v4-flash":
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-
