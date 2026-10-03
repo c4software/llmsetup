@@ -1180,6 +1180,60 @@ pourquoi. », passée par `PI_CONSIGNE`, pi la place dans un bloc
   `--think xhigh`. Non décidé : rien n'est posé dans la configuration d'usage
   de pi, d'omp ni du proxy ; résultats publiés dans #388 le 03/10/2026.
 
+Raisonnement faible, le 03/10/2026 (idée de l'utilisateur), 0.5.0. gufo
+l'accepte par requête : `reasoning_effort: "low"` (ou `minimal`) active le
+raisonnement pour cette requête seule et bascule sur le profil Qwen avec
+raisonnement (`thinking=on temperature=1 presence_penalty=0` quand il est
+posé au serveur). **Règle de l'utilisateur : le niveau de raisonnement se
+règle côté client (pi, omp), au lancement ou par requête, jamais en modifiant
+la configuration du serveur**, qui reste en `--think off`.
+
+- **Rejeu** (`resultats/388-rejeu-2026-10-03/think-0.5.0.jsonl`, 100 fois
+  par bras, champ de requête seul) :
+
+  | bras | correction juste (3) | fausse (5,5) | tokens générés (médiane) | raisonnement (médiane) |
+  |---|---|---|---|---|
+  | sans raisonnement | 62 | 38 | 153 | 0 |
+  | `reasoning_effort: minimal` | 100 | 0 | 188 | 109 caractères |
+  | `reasoning_effort: low` | 100 | 0 | 192 | 122 caractères |
+
+  Le bras sans raisonnement donne 38 erreurs ici contre 16 au rejeu de la
+  consigne (même version, même requête) : écart inexpliqué, le taux « sans
+  rien » n'est pas stable d'un rejeu à l'autre (19, 27, 16, 38 sur 100 au fil
+  de la journée) ; seule la comparaison entre bras alternés d'un même rejeu
+  vaut.
+- **Banc, deux voies** : 6 séries avec la macro `qwen` passée à `--think on
+  --reasoning-effort low` le temps du banc (`resultats/agentic/2026-10-03-0.5.0-think-low/`,
+  arrêtées à 6 sur 10 à la demande de l'utilisateur : voie à ne plus
+  employer), puis 1 série par le client, `PI_THINKING=low` du banc (pi
+  `--thinking low`, modèle déclaré `reasoning: true` dans le `models.json`
+  généré, requêtes capturées avec `reasoning_effort: "low"`, journal du
+  serveur resté en `thinking=off presence_penalty=1.5`,
+  `resultats/agentic/2026-10-03-0.5.0-pi-thinking-low/`). 26/26 partout,
+  86 à 91 requêtes, aucune boucle en 7 séries. Un seul test raté au premier
+  jet sur 35 sessions `creation` (rattrapé en 6 appels), contre environ une
+  sur quatre sans raisonnement.
+
+  | médianes, 0.5.0 | sans raisonnement (7 séries) | consigne pi (10 séries) | low au serveur (6 séries) | low par pi (1 série) |
+  |---|---|---|---|---|
+  | `simple` (s) | 0,3 | 0,3 | 1,0 | 0,9 |
+  | `outils` (s) | 2,6 | 4,35 | 5,65 | 6,3 |
+  | `edit` (s) | 3,5 | 4,5 | 8,9 | 9,3 |
+  | `creation` (s) | 16,5 | 26,95 | 16,1 | 14,9 |
+  | `bugfix` (s) | 7,1 | 9,1 | 17,45 | 16,4 |
+  | somme des cinq (s) | 30,0 | 45,2 | 49,1 | 47,8 |
+  | tokens générés par série | ~5 400 | ~9 600 | ~10 300 | ~10 900 |
+  | tokens générés par requête | 29 | 44 | 84 | 86,5 |
+  | décode (t/s) | 49,9 | 46,8 | 44,5 | 44,5 |
+  | acceptance MTP | 81,5 % | 84,0 % | 79,5 % | 79,6 % |
+
+  Les deux voies donnent le même résultat. Le raisonnement faible coûte
+  environ +60 % de temps par passe (x2,3 pour `xhigh`), réparti autrement que
+  la consigne : `creation` n'est pas plus lent (moins de tests ratés), les
+  petites tâches (`edit`, `bugfix`) le sont 2,5 fois. Choix de l'utilisateur :
+  on s'arrête là pour le 03/10, le niveau low suffit ; rien n'est posé dans
+  la configuration d'usage, non publié dans #388.
+
 ## Reprendre les mesures
 
 gufo se pilote depuis le point d'entrée du dépôt ; compose, téléchargement et
