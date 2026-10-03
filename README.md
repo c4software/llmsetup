@@ -27,7 +27,12 @@ hors service (`llama-bench` des courbes de batch, `llama-server` jetable de
 est piloté par des fichiers de conf locaux à côté du script (non versionnés,
 propres à la machine). Le `models.ini` est généré, jamais édité.
 
-Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTORIQUE.md).
+Historique et campagnes de mesure détaillées : [docs/HISTORIQUE.md](docs/HISTORIQUE.md) pour le service llama.cpp, [docs/HISTORIQUE-GUFO.md](docs/HISTORIQUE-GUFO.md) pour gufo.
+
+Archive : blocs des sections retirées du parc (commentaire métier et corps ini,
+à recopier dans `lib/models.sh` pour ravoir une section), méthodes et
+procédures qui n'existent plus :
+[docs/SECTIONS-RETIREES.md](docs/SECTIONS-RETIREES.md).
 
 ## Prérequis
 
@@ -148,7 +153,7 @@ comparable à ce qui précède, d'où le bump à la main, commité avec sa raiso
 | `--bench-parallel [modèle] [n] [passes]` | Débit sous `n` requêtes simultanées (défaut : le `parallel` du modèle) : agrégé et décode par requête contre 1 requête ; montre ce que vaut `parallel = N` et la file d'attente au-delà |
 | `--bench-cache [modèle]` | Efficacité du cache de prompt sur le pattern agentic (contexte froid, tour suivant, édition au premier tiers, requête identique) : part du prompt servie du cache et prefill à chaque fois ; c'est la mesure de `cache-ram` / `ctx-checkpoints` / `cache-reuse` |
 | `--bench-sanity [modèle\|all]` | Recopie exacte d'un code (`prompts/bench-sanity.txt`, trivial pour ne tester que le backend) : complète le garde-fou anti-charabia, qui n'attrape pas un texte propre et faux. Première étape, **bloquante**, de `tools/qualif-modele.sh` |
-| `--bench-agentic [modèle] [passes] [N]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels). 3e argument `N` > 1 : chaque passe joue la suite seule puis à `N` boucles pi **simultanées** (orchestrateur + sous-agents), avec le facteur de débit de tâches et le décode agrégé |
+| `--bench-agentic [modèle] [passes] [N]` | Une vraie boucle de tool calls : pi (conteneur jetable, `bench-agentic/`) joue un appel froid (prompt système) puis N passes de 5 scénarios en direct sur llama-server ; par scénario PASS/passes et médianes (temps mur, prompt et part du cache, générés, prefill et décode t/s réels). 3e argument `N` > 1 : chaque passe joue la suite seule puis à `N` boucles pi **simultanées** (orchestrateur + sous-agents), avec le facteur de débit de tâches et le décode agrégé Garde-temps de 5 min par scénario (`PI_GARDE`, depuis le 03/10/2026) : au-delà, le scénario est FAIL et le banc continue, pour qu'une boucle d'appels d'outils qui finit par s'en sortir ne soit plus comptée PASS |
 | `--bench-load [modèle\|all]` | Temps de chargement + premier token après restart, puis TTFT à chaud : ce que coûte un modèle à la demande (base pour `preload.conf` et `--models-max`) |
 | `--bench-prefill [modèle] [tailles] [passes]` | Prefill à froid en profondeur, tel que servi par le routeur : une requête à contenu unique par taille (défaut `1000,4000,16000,32000,65000` tokens, 2 passes), cache de prompt refusé, passe exclue si le serveur en a quand même servi une part ou si la réponse est vide. C'est la mesure qui départage deux moteurs ou deux micro-lots, invisible au `--bench` de 1,4 k tokens |
 | `--image-build [--no-cache]` | Construit l'image du moteur **conteneurisé** (`runtime/`) sur les révisions épinglées dans les `ARG` de `runtime/Dockerfile.rocm-strix`. Raccourci vers `cd ~/models && docker compose build`, rien de plus. L'image remplacée perd son tag : `docker image prune` (sans `-a`) la retire, à la main. **C'est le moteur du service** : une image neuve n'est servie qu'au prochain `--restart` |
@@ -253,7 +258,8 @@ marche de noyau ggml, puis arbitrage réel des candidats sur
 moteur qui sert : les `size-m` retenus avant cette date l'ont été sur le fork
 Vulkan et n'ont pas été re-tracés. Formules, garde-fous et limites :
 ARCHITECTURE.md.
-Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md.
+Méthodes détaillées et exemples mesurés : docs/HISTORIQUE.md (la méthode de
+l'ancien `--bench-devices` est archivée dans docs/SECTIONS-RETIREES.md).
 
 ## Parc au 22/09/2026, moteur conteneurisé ROCm0
 
@@ -323,8 +329,9 @@ comparent pas à la décimale : le paquet Arch `llama-cpp` (`bNNNNN`, 21/08 au
 (`strix-0007bc6`, Vulkan0, 12 au 17/09/2026) et l'image ROCm du 18/09/2026. La
 table du fork, ligne par ligne, avec les écarts contre le paquet, n'est plus
 reprise ici : elle survit dans la colonne « contre le fork Vulkan0 » ci-dessus
-et, complète, dans `docs/HISTORIQUE.md` (« Résultats mesurés », « Paquet Arch
-contre fork : mesures » et « Passage au fork »). Le fork apportait le prefill
+et, complète, dans `docs/HISTORIQUE.md` (« Résultats mesurés », « Récapitulatif
+par modèle » pour la table et ses écarts, « Paquet Arch contre fork : mesures »
+pour le bilan et les notes, et « Passage au fork »). Le fork apportait le prefill
 sur tout le parc contre le paquet, les drafters externes (DFlash, DSpark), le
 graphe MTP `qwen4exp` et `ngram-on-disk` ; l'image garde cette dorsale, ces
 clés restent servies, et `ngram-on-disk` y est devenu l'alias déprécié de

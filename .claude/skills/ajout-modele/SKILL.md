@@ -488,8 +488,9 @@ Règles du tableau :
 - la dernière ligne dit ce qui est retenu et dans quel `.conf` ;
 - les mêmes chiffres vont, résumés, à trois endroits versionnés : le
   commentaire du bloc `lib/models.sh` (date, moteur, device, quant), la table
-  « Parc au <date> » du README, et la section « Paquet Arch contre fork »
-  de `docs/HISTORIQUE.md` quand la mesure oppose les deux séries ;
+  « Parc au <date> » du README, et les sections « Récapitulatif par modèle »
+  (table et écarts) et « Paquet Arch contre fork : mesures » (notes) de
+  `docs/HISTORIQUE.md` quand la mesure oppose les deux séries ;
 - mettre à jour la ligne du modèle dans `docs/perfs.tsv` (mêmes chiffres,
   point décimal) puis régénérer les figures du README :
   `python3 py/perf_graphs.py`. Les trois SVG de `docs/graphs/` se commitent

@@ -252,13 +252,15 @@ _GROUPE_EN_ATTENTE=""
 #  aucun download_hf. Le dossier devient ORPHELIN
 #  → ./setup-llm.sh --cleanup le purgera (non lancé). Commentaire métier,
 #  mesures et corps ini : docs/HISTORIQUE.md, « qwen3.5-9b remplacé par
-#  Ornith-1.5-9B (15/09/2026) »)
+#  Ornith-1.5-9B (15/09/2026) » pour les mesures, docs/SECTIONS-RETIREES.md
+#  pour le commentaire métier et le corps ini)
 # (retiré le 15/09/2026 avec la section laguna-s-2.1, jugée non utile dans
 #  l'usage réel : les 3 shards UD-Q4_K_XL (73,4 Go) et le drafter DFlash
 #  poolside BF16 (2,2 Go) de ~/models/laguna-s-2.1/, plus déclarés par aucun
 #  download_hf. Le dossier entier devient ORPHELIN
 #  → ./setup-llm.sh --cleanup le purgera (non lancé). Commentaire métier et
-#  mesures : docs/HISTORIQUE.md, « Laguna-S-2.1 retiré (15/09/2026) »)
+#  mesures : docs/HISTORIQUE.md, « Laguna-S-2.1 retiré (15/09/2026) » pour les
+#  mesures, docs/SECTIONS-RETIREES.md pour le commentaire métier et le corps ini)
 # (retiré le 16/09/2026 avec la section gpt-oss, jugée non utile dans l'usage
 #  réel : les 2 shards UD-Q4_K_XL (59 Go) de ~/models/gpt-oss/UD-Q4_K_XL/, plus
 #  déclarés par aucun download_hf. Le dossier entier devient ORPHELIN, avec les
@@ -267,7 +269,9 @@ _GROUPE_EN_ATTENTE=""
 #  → ./setup-llm.sh --cleanup purgera les shards (non lancé) ; les sous-dossiers
 #  non vides survivent au balayage, à retirer à la main.
 #  ~/llm/venv-convert (hors ~/models) n'est pas concerné. Commentaire métier,
-#  mesures et corps ini : docs/HISTORIQUE.md, « gpt-oss retiré (16/09/2026) »)
+#  mesures et corps ini : docs/HISTORIQUE.md, « gpt-oss retiré (16/09/2026) »
+#  pour les mesures, docs/SECTIONS-RETIREES.md pour le commentaire métier et le
+#  corps ini)
 # (retiré le 18/09/2026 avec la section lfm2.5-8b-a1b-nothink, en échec au
 #  --bench-agentic : LFM2.5-8B-A1B-Q8_0.gguf (9,0 Go) et son drafter DSpark
 #  LFM2.5-8B-A1B-DSpark-Q8_0.gguf (0,36 Go) de ~/models/lfm2.5-8b-a1b/, plus
@@ -275,7 +279,8 @@ _GROUPE_EN_ATTENTE=""
 #  au du -sh du 18/09/2026)
 #  → ./setup-llm.sh --cleanup le purgera (non lancé). Commentaire métier,
 #  mesures et corps ini : docs/HISTORIQUE.md, « lfm2.5-8b-a1b-nothink retiré
-#  (18/09/2026) »)
+#  (18/09/2026) » pour les mesures, docs/SECTIONS-RETIREES.md pour le
+#  commentaire métier et le corps ini)
 # (retraits antérieurs : docs/HISTORIQUE.md)
 KNOWN_FILES=()
 
@@ -379,7 +384,8 @@ download_hf ornith-1.5-9b "protoLabsAI/Ornith-1.5-9B-MTP-GGUF" \
 #   42,4 / 61,8 pour le 9b Qwen, quants différentes) : le remplacement se joue
 #   sur la qualité, pas sur la vitesse. Commentaire métier,
 #   mesures et corps ini de la section retirée : docs/HISTORIQUE.md,
-#   « qwen3.5-9b remplacé par Ornith-1.5-9B (15/09/2026) ». Le GGUF du 9b Qwen
+#   « qwen3.5-9b remplacé par Ornith-1.5-9B (15/09/2026) » pour les mesures,
+#   docs/SECTIONS-RETIREES.md pour le commentaire métier et le corps ini. Le GGUF du 9b Qwen
 #   (~/models/qwen3.5-9b-mtp/, 8,4 Go) devient ORPHELIN, --cleanup le purgera.
 # Fiche (model card HF ornith-ai + protoLabsAI, pas de guide unsloth) : post-train
 #   d'ornith-ai (ex deepreinforce-ai) sur Qwen3.5-9B, publié le 18/08/2026,
@@ -797,7 +803,8 @@ download_hf lfm2.5-2.6b "LiquidAI/LFM2.5-2.6B-DSpark-GGUF" \
 #   puis RETIRÉ le soir même : aucune concurrence n'a jamais été observée sur ce
 #   modèle au journal du service, et le drafter gagne en solo. Décision
 #   utilisateur : pas de parallel si perte de perf (mesures et détail de la
-#   variante dans docs/HISTORIQUE.md, « Variantes -parallel retirées »).
+#   variante dans docs/SECTIONS-RETIREES.md, « Variantes -parallel » ; décision
+#   dans docs/HISTORIQUE.md, « Variantes -parallel retirées »).
 # Sampling : reco llama.cpp officielle du model card GGUF (temp 0.1, top-k 50,
 #   repeat-penalty 1.1). Le blog transformers donne temp 0.2 / rep 1.05 —
 #   on suit la reco llama.cpp, plus déterministe, cohérente pour du tool calling.
@@ -1106,8 +1113,9 @@ download_hf qwen3.8-27b "z-lab/Qwen3.8-27B-DFlash2-GGUF" \
 #   349 / 21,7 t/s, acceptance 0,35 sur le fork strix-0007bc6 (contre
 #   215 / 12,1 au paquet b10433), jamais préchargée et moitié moins vite que
 #   cette section. Ses commentaires (reasoning-budget, spec-prefill essayé et
-#   retiré, DFlash 2 sur du raisonnement) sont dans docs/HISTORIQUE.md,
-#   section « Qwen3.8-27B thinking : section retirée le 13/09/2026 ». Pour la
+#   retiré, DFlash 2 sur du raisonnement) sont dans docs/SECTIONS-RETIREES.md
+#   (bloc complet et corps ini ; décision et mesures : docs/HISTORIQUE.md,
+#   section « Qwen3.8-27B thinking : section retirée le 13/09/2026 »). Pour la
 #   ravoir : sampling thinking (temp 1.0 / top-p 0.95 / min-p 0, sans
 #   presence-penalty), chat-template-kwargs reasoning_effort medium, spec-type
 #   draft-dflash seul (le n-gram n'apporte rien sur du raisonnement),
