@@ -55,7 +55,13 @@ pass() {
   if [ -e "$DEPASSE" ]; then fail "garde-temps de ${PI_GARDE:-300} s dépassé - $1"; return; fi
   printf '  \033[32mPASS\033[0m %s\n' "$1"
 }
-fail() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fails=$((fails + 1)); }
+fail() {
+  # Coupé par le garde-temps : le dire même quand les fichiers sont mauvais.
+  if [ -e "$DEPASSE" ]; then
+    case "$1" in garde-temps*) ;; *) set -- "garde-temps de ${PI_GARDE:-300} s dépassé - $1" ;; esac
+  fi
+  printf '  \033[31mFAIL\033[0m %s\n' "$1"; fails=$((fails + 1))
+}
 
 # Compteurs cumulés de llama-server pour ce modèle :
 #   prompt_tokens_total prompt_tokens_cached_total tokens_predicted_total
