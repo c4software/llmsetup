@@ -40,7 +40,18 @@
 #                         défaut de 128 qui coupait les clients sans
 #                         max_tokens
 #   --cache-disk …        seul chemin qui reprend le préfixe commun de deux
-#                         conversations. Rétention 16 Gio, le double du
+#                         conversations jusqu'à la 0.5.0. Depuis la 0.7.0
+#                         (gufo-org/gufo#386), la RAM l'apprend aussi (à la
+#                         deuxième conversation, repris à la troisième), sans
+#                         configuration. Gardé le 04/10/2026, non remesuré :
+#                         le cache RAM appartient au processus, donc perdu à
+#                         chaque redémarrage et à chaque bascule de modèle par
+#                         llama-swap ; docs/KV-CACHE.md de gufo le conseille
+#                         encore pour Flash-Next à 262144 de contexte en
+#                         2 sessions (budget RAM automatique 7,76 Go pour des
+#                         points de reprise de 5,70 Go à 200k tokens) ; le
+#                         retrait se décide sur la boucle SANS_CACHE=1 de
+#                         bench/remesure.sh. Rétention 16 Gio, le double du
 #                         défaut de gufo (8 Gio depuis gufo-org/gufo#279) :
 #                         partagée entre les modèles, un point de reprise
 #                         Flash-Next de session réelle pèse 1,5 Go, et

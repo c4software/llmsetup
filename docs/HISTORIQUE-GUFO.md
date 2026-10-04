@@ -15,6 +15,79 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.7.0 (04/10/2026), montée le jour même, remesure en attente
+
+Choix de l'utilisateur du 04/10/2026 : passage de la 0.5.0 à la 0.7.0 sans
+passer par la 0.6.0, `GUFO_IMAGE` épinglée en `gufo-runtime:0.7.0` dans
+`lib/gufo.sh`, `runtime-gufo/download.sh` et
+`runtime-gufo/Dockerfile.routeur`, yaml inchangé (`--think off`, 2 sessions,
+cache disque 16 Gio, staging 8 Gio). **Aucune mesure à ce stade** : la
+bascule sur bigchuck et la remesure (justesse puis banc complet, 27B et
+Flash-Next) restent à faire, cette entrée est à compléter avec leurs
+chiffres.
+
+v0.7.0 (`aedc129`, image `gufo-runtime:0.7.0`, digest `b280a3781e05`),
+publiée le 04/10/2026 à 11:09 UTC ; v0.6.0 (`cb46d63`, digest
+`31b86b99ac2d`) le 03/10/2026 à 10:26 UTC. Contenu depuis v0.5.0 :
+
+- 0.6.0 : préfixes en cours de prefill partagés entre requêtes concurrentes
+  (#382 : une requête froide attend le point de reprise d'une requête qui
+  partage au moins 512 tokens de plus avec elle ; rien n'attend en
+  `--sessions 1`), sortie avec `device_lost` quand le contexte GPU est perdu
+  (#390), message d'erreur d'un flux en échec (#385), chaînes JSON gardées à
+  la reprise d'un appel d'outil (#396), blocs `thinking` de la route Messages
+  (#380) ;
+- 0.7.0 : préfixe partagé appris dans le cache RAM (#386, ferme #267 :
+  appris à la deuxième conversation, repris à la troisième, sans
+  `--cache-disk`), `--cache-ram-bytes` explicite au-delà du budget
+  automatique, jusqu'à la RAM disponible moins 4 Gio (#384), `/slots` et
+  métriques au format llama.cpp (#389 : tokens repris du cache, secondes de
+  prefill et de décode), métriques des tours de vérification spéculative
+  (#403), perte du GPU détectée au repos et en-têtes de flux différés (#406),
+  sortie d'outil lue au format de la requête admise (#393), tours d'outils
+  rejoués repris du cache avec arguments typés ou en union (#404).
+
+Hors de la 0.7.0, mergés le 04/10/2026 après la release : #400 (cadrage des
+appels d'outils hors du contenu assistant) et #415 (échantillonnage).
+
+Confrontation des paramètres à la documentation amont :
+
+- **04/10/2026, v0.7.0** (diff 0.5.0...0.7.0 de la documentation ; `--help`
+  des deux images **non comparé**, à faire sur bigchuck) : aucune option
+  ajoutée ni défaut changé dans `docs/SERVER.md`. Trois points touchent nos
+  réglages, aucun appliqué :
+  - `--cache-disk` n'est plus le seul chemin de reprise d'un préfixe commun
+    (`docs/KV-CACHE.md`, « Learned divergence points » : « Without disk,
+    this needs no configuration »). Gardé : le cache RAM appartient au
+    processus, donc perdu à chaque redémarrage et à chaque bascule de modèle
+    par llama-swap (déduction, non mesuré), et `docs/KV-CACHE.md` conseille
+    encore `--cache-disk` avec un staging supérieur à la taille des points de
+    reprise pour Flash-Next à 262144 de contexte en 2 sessions (14,8 Go
+    libres après chargement, budget RAM automatique 7,76 Go pour des points
+    de reprise de 5,70 Go à 200k tokens : une seule conversation profonde
+    retenue). À trancher sur la boucle `SANS_CACHE=1` ;
+  - staging 8 Gio gardé : le défaut reste le plus petit de 1 Gio, un huitième
+    de la RAM disponible et le budget disque (#259 toujours ouvert) ;
+  - `--cache-ram-bytes` non posée : la ligne `snapshot_cache_configured` du
+    démarrage publie désormais `automatic_bytes` et `max_bytes`, à relever à
+    la remesure avant d'envisager une valeur.
+- À regarder à la remesure : `/health` répond 503 `device_lost` après une
+  perte du contexte GPU et gufo sort en statut 75 (`checkEndpoint: /health`
+  de llama-swap ; comportement de llama-swap sur cette sortie non vérifié) ;
+  les en-têtes d'un flux attendent l'admission de la requête, 5 s au plus.
+
+## Ticket #267 : fermé par #386 (03/10/2026)
+
+Fermé le 03/10/2026 à 10:35 UTC par la fusion de #386 (« Closes #267 »),
+livrée dans la 0.7.0. Chiffres de la PR (Flash-Next UD-Q4_K_XL en
+`--sessions 4`, prompt système partagé de 5,4k tokens, troisième et quatrième
+conversations) : 5 413 tokens repris au lieu de 4 096, premier token de
+1,30 s à 0,41 s sur des tâches courtes, 15,0 s contre 15,5 à 15,8 s sur des
+tâches de 18k tokens ; 27B en `--sessions 2` de 3,8 s à 0,60 s. Rien de
+mesuré chez nous. Un commentaire de relecture du 03/10 (jabata) signale un
+chemin d'éviction sous pression mémoire qui retire encore le préfixe
+partagé ; suite non lue.
+
 ## Ticket #259 : point d'étape du mainteneur (03/10/2026)
 
 Trois des quatre points sont corrigés : #369 est déjà dans la 0.5.0 que nous
