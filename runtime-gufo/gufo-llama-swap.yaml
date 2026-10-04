@@ -43,15 +43,17 @@
 #                         conversations jusqu'à la 0.5.0. Depuis la 0.7.0
 #                         (gufo-org/gufo#386), la RAM l'apprend aussi (à la
 #                         deuxième conversation, repris à la troisième), sans
-#                         configuration. Gardé le 04/10/2026, non remesuré :
+#                         configuration. Gardé après la remesure du
+#                         04/10/2026 (boucle pi sans disque : reprise 91,8 %
+#                         contre 93,6 % avec, 21 s de prefill contre 17 sur le
+#                         27B ; 90,1 % sans disque en 0.5.0) :
 #                         le cache RAM appartient au processus, donc perdu à
 #                         chaque redémarrage et à chaque bascule de modèle par
 #                         llama-swap ; docs/KV-CACHE.md de gufo le conseille
 #                         encore pour Flash-Next à 262144 de contexte en
 #                         2 sessions (budget RAM automatique 7,76 Go pour des
-#                         points de reprise de 5,70 Go à 200k tokens) ; le
-#                         retrait se décide sur la boucle SANS_CACHE=1 de
-#                         bench/remesure.sh. Rétention 16 Gio, le double du
+#                         points de reprise de 5,70 Go à 200k tokens).
+#                         Rétention 16 Gio, le double du
 #                         défaut de gufo (8 Gio depuis gufo-org/gufo#279) :
 #                         partagée entre les modèles, un point de reprise
 #                         Flash-Next de session réelle pèse 1,5 Go, et
