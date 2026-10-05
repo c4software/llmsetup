@@ -23,7 +23,7 @@
 #   GUFO_DATA      données hors dépôt et hors ~/models : models/ (GGUF de
 #                  référence), cache/ (cache disque), resultats/, .env
 #                  (défaut ~/llm/gufo-test)
-#   GUFO_IMAGE     image (défaut ghcr.io/gufo-org/toolboxes/gufo-runtime:0.7.1,
+#   GUFO_IMAGE     image (défaut ghcr.io/gufo-org/toolboxes/gufo-runtime:0.8.0,
 #                  épinglée : gufo publie des versions depuis le 28/09/2026 et
 #                  une image est une série de mesures, docs/GUFO.md)
 #   GUFO_SESSIONS  sessions (défaut 2)
@@ -37,7 +37,7 @@
 GUFO_DIR="$SCRIPT_DIR/runtime-gufo"
 GUFO_COMPOSE_FILE="$GUFO_DIR/docker-compose.yml"
 GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
-GUFO_IMAGE="${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime:0.7.1}"
+GUFO_IMAGE="${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime:0.8.0}"
 GUFO_PROJET="${GUFO_PROJET:-gufo}"
 GUFO_ENV_FILE="${GUFO_ENV_FILE:-$GUFO_DATA/.env}"
 # Noms courts acceptés par --gufo, et le modèle de gufo-llama-swap.yaml qu'ils

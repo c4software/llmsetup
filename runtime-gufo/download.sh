@@ -24,7 +24,7 @@
 # les révisions HF ci-dessous sont celles du 25/09/2026.
 set -euo pipefail
 GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
-IMG="${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime:0.7.1}"
+IMG="${GUFO_IMAGE:-ghcr.io/gufo-org/toolboxes/gufo-runtime:0.8.0}"
 DL="$GUFO_DATA/models"
 
 telecharge() {
