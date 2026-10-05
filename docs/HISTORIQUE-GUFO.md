@@ -106,9 +106,35 @@ journaux gufo dans `resultats/prefill-court-2026-10-05/`), cache disque plein
   coïncide avec un point de reprise de 330 Mo écrit en 2,3 à 3,2 s au lieu
   de 0,1 s ; sans `--cache-disk`, aucun ralentissement (C). Le banc de la
   passe montrait la même chose (2 273 puis 1 122, 321 et 221 ms).
-- **Non expliqué** : pourquoi le NVMe écrit par moments 20 à 30 fois plus
-  lentement (bras B2 entier, première requête de A1), ni l'écart de D (0.7.0 sans
-  cache disque, -9 % sur C, un seul bras).
+- **Le NVMe seul n'est pas lent** (YMTC PC41Q 2 To, btrfs `compress=zstd:1`,
+  `discard=async`, 41 % plein, 34 à 41 °C) : `essais/ecriture-disque.py`
+  reproduit l'écriture de gufo (fichier temporaire de 330 Mo, `fsync`,
+  `rename`, `fsync` du répertoire), 35 fois de suite sans gufo : 75 à 99 ms,
+  trois fois 157 à 363 ms, jamais plus, y compris après la suppression d'un
+  fichier de 6 Go.
+- **L'épisode du banc de la passe est le `fstrim` hebdomadaire** :
+  `fstrim.service` a tourné de 10:23:32 à 10:25:07 (1,1 Tio rendus, timer
+  rattrapé après le démarrage de bigchuck à 10:10), les requêtes lentes vont
+  de 10:23:43 à 10:25:08 et le prefill à 6,5k de 10:25:13 est rapide.
+- **Les deux épisodes de la sonde restent sans cause** (bras B2 entier,
+  11:40:39 à 11:41:01, et première écriture de A1 à 11:35:55) : rien dans le
+  journal système à ces instants. Sur les 5 095 écritures de plus de 100 Mo
+  des journaux gufo archivés (24/09 au 05/10), 30 passent sous 150 Mo/s
+  (médiane des autres : 1 328 Mo/s), toutes à 51 à 84 Mo/s, sur des
+  fichiers de 120 à 175 Mo, en rafales de 15 à 30 s dans la minute qui suit
+  un chargement de modèle : 26/09 à 11:11, 01/10 à 14:17, 04/10 à 13:26,
+  05/10. Débit constant qui ne ressemble pas à un disque saturé ; piste non
+  vérifiée : un coût côté gufo ou noyau juste après le chargement. À prendre
+  sur le fait (pression CPU, mémoire et E/S, threads de gufo, à la seconde,
+  pendant le banc HTTP).
+- **Non expliqué non plus** : l'écart de D (0.7.0 sans cache disque, -9 % sur
+  C, un seul bras).
+- **Chargement** : 78 à 86 s avec `--cache-disk`, 23 à 26 s sans (bras C et
+  D). L'écart est la phase `artifact_identity`, absente sans cache disque :
+  47 s pour le GGUF de 104 Go puis 10 s pour la tête MTP (bras B1), payées à
+  chaque chargement, donc à chaque bascule de modèle par llama-swap. Constat
+  de journal, non creusé (ni le code, ni un chargement à froid sans cache
+  disque).
 - **Portée** : prompts neufs de 1 à 2k tokens seulement (un seul lot, juste
   après l'écriture du point de reprise de la requête précédente). En boucle
   agentique, 3 points de reprise disque écrits par série et premier token
