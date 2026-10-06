@@ -9,14 +9,15 @@ dans `runtime-gufo/`, sans intégration au routeur du service. Le détail daté
 [`docs/HISTORIQUE-GUFO.md`](HISTORIQUE-GUFO.md) ; ce document n'en garde que
 la synthèse et ce qui sert au travail courant.
 
-État au 05/10/2026 :
+État au 06/10/2026 :
 
 - **Verdict** : bien configuré, gufo fait le même travail agentique que le
   service en 30 % de temps en moins sur le 27B et Flash-Next, sans le
   remplacer (section « Verdict »).
-- **En service** : image épinglée `gufo-runtime:0.8.0` depuis le 05/10/2026,
+- **En service** : image épinglée `gufo-runtime:0.8.1` depuis le 06/10/2026
+  (une ligne, `runtime-gufo/IMAGE`),
   remesurée le jour même sur Flash-Next seul, sans régression (0.1.1 le 28/09, 0.2.0 le 29/09, 0.4.0 montée puis
-  annulée le 01/10, 0.5.0 le 03/10, 0.7.0 le 04/10, 0.7.1 le 05/10 au matin), derrière llama-swap, en `--think off`, 2 sessions, cache disque 16 Gio et
+  annulée le 01/10, 0.5.0 le 03/10, 0.7.0 le 04/10, 0.7.1 le 05/10 au matin, 0.8.0 le 05/10), derrière llama-swap, en `--think off`, 2 sessions, cache disque 16 Gio et
   staging 8 Gio ; réglages dans « Paramètres de gufo et leur origine ».
 - **Tickets** : les ouverts sont dans le tableau « À surveiller ». Notre
   ticket #388 (boucle d'appels d'outils de Flash-Next) a été fermé le
@@ -32,6 +33,11 @@ la synthèse et ce qui sert au travail courant.
   pas la 0.7.1 (journal, « Prefill court en baisse au banc »).
 - **0.8.0** : `/v1/responses` compatible avec les clients OpenAI (#434),
   rien d'autre ; Flash-Next 16/16, au niveau de la 0.7.1.
+- **0.8.1** : appels d'outils en syntaxe native (#441) ; Flash-Next 16/16 sur
+  deux séries, débits au niveau de la 0.8.0. Première série à 91,2 % de
+  reprise (points de reprise disque de la 0.8.0 inutilisables, préfixe
+  changé), 98,4 % à la seconde. Une boucle de vérification sur `creation`
+  (forme de #388, 88,7 s, PASS).
 - **À vérifier à la prochaine release** : le défaut du staging (#259) ; le
   27B, pas remesuré depuis la 0.7.0 ; les `write_ms` du cache disque quand le
   prefill court du banc baisse.
@@ -43,7 +49,7 @@ la synthèse et ce qui sert au travail courant.
   ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
   commit `d9a84f1` le 26/09/2026, sur la v0.1.1 le 28/09/2026 (27B et
   Flash-Next), la v0.2.0 le 29/09/2026 (27B, Flash-Next et DeepSeek), puis la
-  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1 et la v0.8.0 (Flash-Next seul pour les deux dernières ; « Suivi en amont »). Les deux premières mesures
+  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0 et la v0.8.1 (Flash-Next seul pour les trois dernières ; « Suivi en amont »). Les deux premières mesures
   précèdent toute release : la v0.1.0 n'est publiée que le 28/09/2026.
 - Pas un llama.cpp : noyaux spécialisés par modèle et par forme de matrice,
   en partie adaptés de llama.cpp / ggml (MIT, cf. leur
@@ -254,6 +260,7 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.7.0 (`aedc129`) | 04/10/2026 | retenue | pas de régression, 16/16 ; préfixe partagé appris en RAM sans `--cache-disk` (#386, ferme #267 : reprise sans disque de 90 à 91,8 %, cache disque gardé) ; décode agentique de Flash-Next 48,1 t/s ; `--cache-ram-bytes` explicite au-delà du budget automatique (#384) ; métriques au format llama.cpp et `/slots` (#389, #403) ; aucun réglage changé |
 | v0.7.1 (`96a4647`) | 05/10/2026 | retenue | Flash-Next seul remesuré, 16/16, pas de régression : prefill long +4 à +6 % (#421), décode agentique 50,7 t/s, 31,8 s par passe ; 27B non remesuré ; baisse du prefill court au banc HTTP due à des écritures lentes du cache disque, présente aussi en 0.7.0 ; aucun réglage changé |
 | v0.8.0 (`e03bb91`) | 05/10/2026 | retenue | `/v1/responses` compatible avec les clients OpenAI comme Codex (#434), seul changement ; Flash-Next seul remesuré, 16/16, au niveau de la 0.7.1 (reprise à 98,7 % due au cache disque déjà peuplé par la série du matin) ; 27B non remesuré depuis la 0.7.0 ; aucun réglage changé |
+| v0.8.1 (`543300e`) | 06/10/2026 | retenue | appels d'outils gardés en syntaxe native, sans enveloppe JSON, et appel reconnu sans `</think>` fermé (#441), lignes vides de tête retirées (#446), historiques d'images (#447) ; Flash-Next seul remesuré, deux séries, 16/16, débits au niveau de la 0.8.0 ; reprise à 91,2 % à la première série (points de reprise disque de la 0.8.0 inutilisables, préfixe changé) puis 98,4 % ; une boucle de vérification sur `creation` à la seconde (88,7 s, PASS, forme de #388) ; 27B non remesuré depuis la 0.7.0 ; aucun réglage changé |
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
@@ -364,14 +371,14 @@ depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
 l'échantillonnage suit les profils officiels des modèles (glouton avant), ses
 propres bancs restant en glouton. Les valeurs du tableau visent un usage
 agentique comparable au service ; aucune n'est un réglage interne du moteur.
-Dernière confrontation à la documentation amont : 05/10/2026, v0.8.0 (diff
+Dernière confrontation à la documentation amont : 06/10/2026, v0.8.1 (diff
 de documentation et `--help` des deux images comparés sur bigchuck,
 identiques) : aucune
 option ajoutée, aucun défaut changé depuis la 0.5.0 ;
 `--cache-ram-bytes` explicite peut dépasser le budget automatique (non posée) ;
 `--cache-disk` n'est plus le seul chemin de reprise d'un préfixe commun
 (#386), gardé après la remesure. Les
-confrontations datées (26/09, v0.1.1, v0.2.0, v0.4.0, v0.5.0, v0.7.0, v0.7.1, v0.8.0) sont dans le
+confrontations datées (26/09, v0.1.1, v0.2.0, v0.4.0, v0.5.0, v0.7.0, v0.7.1, v0.8.0, v0.8.1) sont dans le
 journal, à l'entrée de chaque version ; chaque montée de version y ajoute la
 sienne et met cette ligne à jour.
 
