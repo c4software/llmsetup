@@ -14,11 +14,11 @@ la synthèse et ce qui sert au travail courant.
 - **Verdict** : bien configuré, gufo fait le même travail agentique que le
   service en 30 % de temps en moins sur le 27B et Flash-Next, sans le
   remplacer (section « Verdict »).
-- **En service** : image épinglée `gufo-runtime:0.8.1` depuis le 06/10/2026
-  (une ligne, `runtime-gufo/IMAGE`),
-  remesurée le jour même sur Flash-Next seul, sans régression (0.1.1 le 28/09, 0.2.0 le 29/09, 0.4.0 montée puis
-  annulée le 01/10, 0.5.0 le 03/10, 0.7.0 le 04/10, 0.7.1 le 05/10 au matin, 0.8.0 le 05/10), derrière llama-swap, en `--think off`, 2 sessions, cache disque 16 Gio et
-  staging 8 Gio ; réglages dans « Paramètres de gufo et leur origine ».
+- **En service** : image épinglée par la ligne de `runtime-gufo/IMAGE`, seul
+  endroit où la version courante est écrite (historique des montées dans
+  « Versions : synthèse »), remesurée à chaque montée ; derrière llama-swap,
+  en `--think off`, 2 sessions, cache disque 16 Gio et staging 8 Gio ;
+  réglages dans « Paramètres de gufo et leur origine ».
 - **Tickets** : les ouverts sont dans le tableau « À surveiller ». Notre
   ticket #388 (boucle d'appels d'outils de Flash-Next) a été fermé le
   03/10/2026 ; sa synthèse est dans « Ticket #388 ».
