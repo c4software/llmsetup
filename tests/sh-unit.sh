@@ -270,7 +270,9 @@ fi
 # service. Tout passe par un faux `docker`, un faux `getent`, un faux `curl`
 # et un faux `systemctl` : aucun démon, aucun conteneur, aucun réseau.
 SVC="$TMP/svc"
-mkdir -p "$SVC/bin" "$SVC/repo/runtime" "$SVC/home/models" "$SVC/etat"
+mkdir -p "$SVC/bin" "$SVC/repo/runtime" "$SVC/repo/runtime-gufo" "$SVC/home/models" "$SVC/etat"
+# lib/gufo.sh lit l'image épinglée de gufo dans ce fichier dès qu'il est sourcé.
+cp "$REPO_DIR/runtime-gufo/IMAGE" "$SVC/repo/runtime-gufo/"
 
 # Dockerfile factice : c'est lui qui porte les révisions épinglées depuis le
 # 18/09/2026, et _llama_build les y lit par un grep (jamais en démarrant un
@@ -837,6 +839,25 @@ if grep -qx "GUFO_PORT=8090" <<<"$GENV_BANC" && grep -qx "GUFO_RESTART=no" <<<"$
   echo "[OK]   gufo env : réglages du banc (port, redémarrage, projet, préchargé) surchargeables"
 else
   echo "[FAIL] gufo env : les surcharges du banc ne passent pas"; rc=1
+fi
+# L'image de gufo n'est épinglée qu'à UN endroit, runtime-gufo/IMAGE : le .env
+# la porte telle quelle, l'environnement la surcharge (bancs), et aucun autre
+# fichier exécuté ne récrit une version en dur (trois endroits à tenir
+# ensemble jusqu'au 06/10/2026).
+GIMG="$(<"$REPO_DIR/runtime-gufo/IMAGE")"
+if [[ "$GIMG" =~ ^[^[:space:]]+:[^[:space:]:]+$ && "$GIMG" != *:latest ]] \
+   && grep -qxF -- "GUFO_IMAGE=$GIMG" <<<"$GENV" \
+   && grep -qx "GUFO_IMAGE=autre:1" <<<"$(_run_svc 'generate_gufo_env' "GUFO_IMAGE=autre:1")"; then
+  echo "[OK]   gufo env : image = la ligne de runtime-gufo/IMAGE ($GIMG), surchargeable"
+else
+  echo "[FAIL] gufo env : image épinglée ('$GIMG') absente du .env ou non surchargeable"; rc=1
+fi
+if en_dur="$(grep -rnE 'gufo-runtime:[0-9]' "$REPO_DIR/lib" "$REPO_DIR/tools" "$REPO_DIR/setup-llm.sh" \
+               "$REPO_DIR/runtime-gufo" --include='*.sh' --include='*.yml' --include='*.yaml' \
+               --include='Dockerfile*' --include='*.py')"; then
+  echo "[FAIL] gufo : version d'image écrite en dur hors de runtime-gufo/IMAGE :"; echo "$en_dur"; rc=1
+else
+  echo "[OK]   gufo : aucune version d'image en dur hors de runtime-gufo/IMAGE"
 fi
 # Noms acceptés par --gufo : courts et complets, tout le reste refusé.
 if [[ "$(_run_svc '_gufo_nom 27b; _gufo_nom deepseek-v4-flash')" == $'qwen3.8-27b\ndeepseek-v4-flash' ]] \

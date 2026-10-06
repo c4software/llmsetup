@@ -43,7 +43,7 @@ A="$GUFO_DATA/resultats/agentic"
 DEBUG="${DEBUG:-1}"
 export PI_SESSIONS="${PI_SESSIONS:-1}"
 
-image="${GUFO_IMAGE:-$(sed -n 's/^GUFO_IMAGE="\${GUFO_IMAGE:-\(.*\)}"$/\1/p' "$DEPOT/lib/gufo.sh")}"
+image="${GUFO_IMAGE:-$(<"$DEPOT/runtime-gufo/IMAGE")}"
 TAG="${TAG:-$(date +%F)-${image##*:}}"
 S="$A/$TAG"
 

@@ -24,7 +24,7 @@
 #
 # Tickets suivis : les « | #NNN | » du tableau « À surveiller » de
 # docs/GUFO.md, seule liste à tenir ; les tickets ouverts par l'utilisateur gh
-# connecté sont ajoutés. Image épinglée : GUFO_IMAGE de lib/gufo.sh.
+# connecté sont ajoutés. Image épinglée : la ligne de runtime-gufo/IMAGE.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,7 +34,7 @@ DOC="$SCRIPT_DIR/docs/GUFO.md"
 
 command -v gh >/dev/null 2>&1 || { echo "ERREUR : gh introuvable" >&2; exit 2; }
 
-_image_epinglee() { sed -n 's/^GUFO_IMAGE="\${GUFO_IMAGE:-\(.*\)}"$/\1/p' "$SCRIPT_DIR/lib/gufo.sh"; }
+_image_epinglee() { cat "$SCRIPT_DIR/runtime-gufo/IMAGE"; }
 
 # Nos tickets : ouverts seulement. Un ticket suivi qui se ferme reste visible
 # (fermé) tant que sa ligne est dans le tableau de docs/GUFO.md, qui la retire.

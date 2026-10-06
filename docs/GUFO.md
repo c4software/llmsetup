@@ -398,7 +398,7 @@ gufo « nu » (sans cache disque) était à égalité avec le service sur le 27B
 contournement retiré, modèle remesuré ou non) sans question posée à
 l'utilisateur et réponse reçue**, une question par décision, avec la mesure
 ou la ligne de documentation qui la motive. La version mesurée en dernier
-est celle de `GUFO_IMAGE` dans `lib/gufo.sh`.
+est celle de `runtime-gufo/IMAGE` (défaut de `GUFO_IMAGE`).
 
 Seconde règle (02/10/2026) : **toute validation se lance d'emblée en debug**
 (gufo `-v` et sessions pi gardées), jamais une série normale suivie d'un
@@ -435,9 +435,10 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
    28/09/2026 sauf demande) ; chaque réglage ou contournement que les étapes
    2 et 3 proposent de changer ; la machine est-elle libre (les bancs
    coupent le service et gufo d'usage réel).
-5. **Appliquer ce qui a été accepté** : `GUFO_IMAGE` de `lib/gufo.sh`,
-   `runtime-gufo/download.sh` et `runtime-gufo/Dockerfile.routeur` (même
-   version aux trois endroits), réglages dans
+5. **Appliquer ce qui a été accepté** : la ligne de `runtime-gufo/IMAGE`
+   (seul endroit depuis le 06/10/2026 : `lib/gufo.sh`, `download.sh`,
+   `bench/remesure.sh` et `tools/gufo-amont.sh` la lisent,
+   `Dockerfile.routeur` la reçoit du `.env`), réglages dans
    `runtime-gufo/gufo-llama-swap.yaml` avec leur commentaire d'origine ;
    `./tests/sh-unit.sh`, `bash -n`, commit qui dit pourquoi, push ; sur
    bigchuck `git pull --ff-only` puis `./setup-llm.sh --gufo-download image`.

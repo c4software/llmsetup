@@ -507,7 +507,8 @@ unless-stopped` des deux côtés, l'autre étant arrêté ou supprimé). Les ban
 séparé), sur le même port ; `bench/remesure.sh` les enchaîne après une
 montée de version (option `SANS_CACHE=1`, journaux rangés par version, bilan
 par `bench/journal.py`). Image de gufo épinglée par sa version publiée
-(`GUFO_IMAGE` de `lib/gufo.sh`, `gufo-runtime:0.8.0` depuis le 05/10/2026,
+(la ligne de `runtime-gufo/IMAGE`, seul endroit à éditer, que `lib/gufo.sh`
+prend pour défaut de `GUFO_IMAGE` ; `gufo-runtime:0.8.0` depuis le 05/10/2026,
 jamais `latest`) ; `tools/gufo-amont.sh` (lecture seule, `gh api`) affiche
 releases, images, commits et l'état des tickets suivis dans `docs/GUFO.md`.
 

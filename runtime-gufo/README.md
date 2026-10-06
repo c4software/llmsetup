@@ -67,6 +67,7 @@ requêtes de gufo.
 |---|---|
 | `docker-compose.yml` | Le conteneur, versionné : image gufo + llama-swap, périphériques GPU, utilisateur de l'hôte, volumes, `restart: ${GUFO_RESTART}`. Aucune valeur machine : tout vient du `.env` |
 | `Dockerfile.routeur` | L'image : celle de gufo plus le binaire llama-swap, épinglé par version et SHA-256 ; construite par compose |
+| `IMAGE` | L'image de gufo épinglée, une ligne (`ghcr.io/gufo-org/toolboxes/gufo-runtime:<version>`) : SEUL endroit à éditer pour changer de version. Défaut de `GUFO_IMAGE` pour `lib/gufo.sh`, `download.sh`, `bench/remesure.sh` et `tools/gufo-amont.sh` ; `Dockerfile.routeur` la reçoit du `.env` |
 | `gufo-llama-swap.yaml` | La SEULE description des lignes de commande de gufo, modèle par modèle, versionnée, sans valeur machine (`${env.VAR}`) : réglages et leur origine, groupe exclusif, préchargement |
 | `download.sh image\|flashnext\|deepseek\|tts\|asr\|qwen-image\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --gufo-download`) |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
