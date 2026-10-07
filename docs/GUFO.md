@@ -48,7 +48,8 @@ la synthèse et ce qui sert au travail courant.
   défaut (16 au lieu de 4). 27B remesuré le même jour, première fois depuis
   la 0.7.0 : 16/16, boucle agentique identique (décode 42,5 t/s, reprise
   93,4 %), prefill 1 à 2 % plus bas sur une série.
-- **À vérifier à la prochaine release** : le défaut du staging (#259) ; le
+- **À vérifier à la prochaine release** : le défaut du staging sans plafond
+  de 1 Gio (#473, qui ferme #259 le 07/10/2026, pas dans la 0.9.0) ; le
   prefill du 27B (1 à 2 % sous la 0.7.0 en 0.9.0, une série) ; les `write_ms` du cache disque quand le
   prefill court du banc baisse ; la première série après une montée, à cache
   disque froid deux fois de suite (0.8.1, 0.9.0).
@@ -219,11 +220,10 @@ plus de commandes `gh`.
 
 Tickets ouverts seulement : un ticket fermé sort du tableau, ce qu'il a
 changé reste dans le journal (#388, fermé le 03/10/2026, a sa synthèse plus
-bas).
+bas ; #259, fermé le 07/10/2026, est dans « Tickets : synthèse »).
 
-| Ticket | Sujet | État au 02/10/2026 (#259 : au 04/10/2026, #239 : au 05/10/2026) |
+| Ticket | Sujet | État au 02/10/2026 (#239 : au 05/10/2026, #228 : au 07/10/2026) |
 |---|---|---|
-| #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre) ; contournement en place : `--cache-disk` + staging 8 Gio ; point d'étape du mainteneur (fedeizzo) le 03/10/2026 sur `main` (1b4e6825) : reprise sans `--cache-disk` et apprentissage corrigés par #386, éviction en `--sessions 1` par #369, refus de staging journalisé ; reste le défaut de `--cache-disk-staging-bytes` (plafond fixe de 1 Gio à retirer), ticket fermable ensuite ; #386 est dans la 0.7.0, remesurée le 04/10/2026 : reprise sans disque de 90 à 91,8 %, le disque rapporte encore 1,4 à 1,8 point, `--cache-disk` et staging 8 Gio gardés ; historique dans le journal |
 | #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée, puis jugé « worth experimenting » par le mainteneur (25/09), après les premiers bugs ; porte aussi le pool persistant de #263 depuis le 28/09 ; le 05/10/2026, un tiers (alytaphoenix) propose une cascade n-gram CPU puis MTP, la mesure sur llama.cpp avec de vrais transcripts d'agent et renonce : n-gram seul au niveau du sans-spéculation (27,1 % d'acceptance), cascade 10 à 20 % plus lente que le MTP seul ; test local à la requête et en glouton, le pool persistant n'est pas mesuré ; aucune question pour nous |
 | #228 | ROCm 10 | verdict gufo : rester sur ROCm 7.2.3 (décode -5 % en ROCm 10) ; le 06/10/2026, jtsylve attribue la baisse à clang 23 et non aux bibliothèques ROCm 10 (clang 22 sur ROCm 10 plus rapide que l'image 0.8.1 en Q8), PR #459 ; clang 23 change le texte glouton de Flash-Next, portes de qualité à repasser avant d'y passer |
 | #200 | runtime HRX + noyaux Loom | ouvert depuis août, +3,6 % de prefill 27B |
@@ -237,13 +237,20 @@ model replacement not implemented »), un budget de raisonnement.
 
 Historique complet dans le journal.
 
-- **#259 et #267, cache entre conversations** : #259 ouvert, #267 fermé le
-  03/10/2026 par #386. Le 24/09/2026,
+- **#259 et #267, cache entre conversations** : #259 (le nôtre) fermé le
+  07/10/2026 par #473, #267 fermé le 03/10/2026 par #386. Le 24/09/2026,
   ticket ouvert puis corrigé par nos soins (en grande partie une
   configuration) ; #279 (26/09) rend le staging automatique mais plafonné à
   1 Gio, insuffisant chez nous ; le 30/09 le mainteneur confirme les quatre
   points ; le 03/10/2026, trois sont corrigés : #369 (déjà dans la 0.5.0) et
-  #386 (dans la 0.7.0).
+  #386 (dans la 0.7.0). Le quatrième l'est par #473, mergée le 07/10/2026
+  à 14:58 UTC, donc après la 0.9.0 et pas dedans : le plafond fixe de 1 Gio
+  du staging automatique disparaît, il reste le huitième de la RAM
+  disponible et le budget disque. D'après la PR, rien ne change pour
+  Flash-Next à 262144 de contexte (le huitième de la RAM y borne déjà) et
+  le conseil de poser 8 Gio à la main y est maintenu : notre staging de
+  8 Gio reste, à confronter au défaut calculé à la release qui portera
+  #473.
 - **#239, n-gram** : ouvert, deux commentaires de notre part le 24/09/2026,
   conception à pool persistant à suivre à part.
 - **#272, GPU occupé à 100 % au repos** : le nôtre, du 25/09/2026, fermé par

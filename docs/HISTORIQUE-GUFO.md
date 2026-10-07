@@ -142,6 +142,16 @@ baisse en ROCm 10 vient de clang 23 et non des bibliothèques, PR #459 ;
 clang 23 change le texte glouton de Flash-Next). Aucune question ne nous
 est posée.
 
+Relecture des tickets suivis le 07/10/2026 au soir : **#259, le nôtre, est
+fermé** à 14:58 UTC par #473 (mergée, hors 0.9.0), qui retire le plafond
+fixe de 1 Gio du staging automatique du cache disque ; le défaut devient le
+plus petit du huitième de la RAM disponible et du budget disque. La PR dit
+Flash-Next à 262144 de contexte non concerné et y garde le conseil des
+8 Gio explicites : contournement gardé, à revoir sur la release suivante.
+#259 sort du tableau « À surveiller ». #239 (dernier commentaire du 05/10,
+déjà noté), #200 et #299 (PR toujours en brouillon, en attente du
+mainteneur) n'ont pas bougé.
+
 Confrontation des paramètres à la documentation amont :
 
 - **07/10/2026, v0.9.0** (diff v0.8.1...v0.9.0 de la documentation, `--help`
