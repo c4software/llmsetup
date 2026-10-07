@@ -9,7 +9,7 @@ dans `runtime-gufo/`, sans intégration au routeur du service. Le détail daté
 [`docs/HISTORIQUE-GUFO.md`](HISTORIQUE-GUFO.md) ; ce document n'en garde que
 la synthèse et ce qui sert au travail courant.
 
-État au 06/10/2026 :
+État au 07/10/2026 :
 
 - **Verdict** : bien configuré, gufo fait le même travail agentique que le
   service en 30 % de temps en moins sur le 27B et Flash-Next, sans le
@@ -38,9 +38,18 @@ la synthèse et ce qui sert au travail courant.
   reprise (points de reprise disque de la 0.8.0 inutilisables, préfixe
   changé), 98,4 % à la seconde. Une boucle de vérification sur `creation`
   (forme de #388, 88,7 s, PASS).
+- **0.9.0** : points de reprise de Flash-Next sans copie (#445), prefill à
+  long contexte (#463) ; Flash-Next 16/16 sur deux séries, débits au niveau
+  de la 0.8.1 (prefill 52k 1 424 puis 1 416 t/s, gain annoncé par #445 non
+  vu à notre banc), mémoire 107 Gio au lieu de 111. Première série à 93,1 %
+  de reprise (points de reprise disque de la 0.8.1 presque tous
+  inutilisables, alors que le format disque est annoncé inchangé), 98,6 % à
+  la seconde. `--max-pending-per-client` vaut désormais `--max-pending` par
+  défaut (16 au lieu de 4).
 - **À vérifier à la prochaine release** : le défaut du staging (#259) ; le
   27B, pas remesuré depuis la 0.7.0 ; les `write_ms` du cache disque quand le
-  prefill court du banc baisse.
+  prefill court du banc baisse ; la première série après une montée, à cache
+  disque froid deux fois de suite (0.8.1, 0.9.0).
 
 ## Ce qu'est gufo
 
@@ -49,7 +58,7 @@ la synthèse et ce qui sert au travail courant.
   ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
   commit `d9a84f1` le 26/09/2026, sur la v0.1.1 le 28/09/2026 (27B et
   Flash-Next), la v0.2.0 le 29/09/2026 (27B, Flash-Next et DeepSeek), puis la
-  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0 et la v0.8.1 (Flash-Next seul pour les trois dernières ; « Suivi en amont »). Les deux premières mesures
+  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1 et la v0.9.0 (Flash-Next seul pour les quatre dernières ; « Suivi en amont »). Les deux premières mesures
   précèdent toute release : la v0.1.0 n'est publiée que le 28/09/2026.
 - Pas un llama.cpp : noyaux spécialisés par modèle et par forme de matrice,
   en partie adaptés de llama.cpp / ggml (MIT, cf. leur
@@ -214,7 +223,7 @@ bas).
 |---|---|---|
 | #259 | renommé : préfixes partagés réservés au cache disque, staging par défaut trop petit pour le 27B | ouvert (le nôtre) ; contournement en place : `--cache-disk` + staging 8 Gio ; point d'étape du mainteneur (fedeizzo) le 03/10/2026 sur `main` (1b4e6825) : reprise sans `--cache-disk` et apprentissage corrigés par #386, éviction en `--sessions 1` par #369, refus de staging journalisé ; reste le défaut de `--cache-disk-staging-bytes` (plafond fixe de 1 Gio à retirer), ticket fermable ensuite ; #386 est dans la 0.7.0, remesurée le 04/10/2026 : reprise sans disque de 90 à 91,8 %, le disque rapporte encore 1,4 à 1,8 point, `--cache-disk` et staging 8 Gio gardés ; historique dans le journal |
 | #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée, puis jugé « worth experimenting » par le mainteneur (25/09), après les premiers bugs ; porte aussi le pool persistant de #263 depuis le 28/09 ; le 05/10/2026, un tiers (alytaphoenix) propose une cascade n-gram CPU puis MTP, la mesure sur llama.cpp avec de vrais transcripts d'agent et renonce : n-gram seul au niveau du sans-spéculation (27,1 % d'acceptance), cascade 10 à 20 % plus lente que le MTP seul ; test local à la requête et en glouton, le pool persistant n'est pas mesuré ; aucune question pour nous |
-| #228 | ROCm 10 | verdict gufo : rester sur ROCm 7.2.3 (décode -5 % en ROCm 10) |
+| #228 | ROCm 10 | verdict gufo : rester sur ROCm 7.2.3 (décode -5 % en ROCm 10) ; le 06/10/2026, jtsylve attribue la baisse à clang 23 et non aux bibliothèques ROCm 10 (clang 22 sur ROCm 10 plus rapide que l'image 0.8.1 en Q8), PR #459 ; clang 23 change le texte glouton de Flash-Next, portes de qualité à repasser avant d'y passer |
 | #200 | runtime HRX + noyaux Loom | ouvert depuis août, +3,6 % de prefill 27B |
 | #299 | PR : Qwen3.6-35B-A3B (`qwen35moe`, GDN + MoE 256 experts, MTP, DFlash 2), par slimsami, ouverte le 27/09 | **suivie à la demande de l'utilisateur** (28/09) : même architecture qu'Ornith-1.5-35B-A3B, notre modèle agentique par défaut (fine-tune de Qwen3.6-35B-A3B). Annoncé sur UD-Q6_K_XL : prefill 1 790 à 2 702 t/s contre 1 057 à 1 202 pour llama.cpp Vulkan, DFlash 2 à 83,3 t/s en glouton ; MTP pas encore branché dans `gufo serve`. À vérifier si elle est mergée : notre Ornith est en Q4_K_M (la PR ne cite que Q6_K et Q8_0 pour les experts), et gufo refuse les quants hors de ses formats ; le 30/09, **mise en attente par le mainteneur** : pas de nouveau modèle ni de nouvelle quant avant un produit stable avec les modèles actuels |
 
@@ -261,6 +270,7 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.7.1 (`96a4647`) | 05/10/2026 | retenue | Flash-Next seul remesuré, 16/16, pas de régression : prefill long +4 à +6 % (#421), décode agentique 50,7 t/s, 31,8 s par passe ; 27B non remesuré ; baisse du prefill court au banc HTTP due à des écritures lentes du cache disque, présente aussi en 0.7.0 ; aucun réglage changé |
 | v0.8.0 (`e03bb91`) | 05/10/2026 | retenue | `/v1/responses` compatible avec les clients OpenAI comme Codex (#434), seul changement ; Flash-Next seul remesuré, 16/16, au niveau de la 0.7.1 (reprise à 98,7 % due au cache disque déjà peuplé par la série du matin) ; 27B non remesuré depuis la 0.7.0 ; aucun réglage changé |
 | v0.8.1 (`543300e`) | 06/10/2026 | retenue | appels d'outils gardés en syntaxe native, sans enveloppe JSON, et appel reconnu sans `</think>` fermé (#441), lignes vides de tête retirées (#446), historiques d'images (#447) ; Flash-Next seul remesuré, deux séries, 16/16, débits au niveau de la 0.8.0 ; reprise à 91,2 % à la première série (points de reprise disque de la 0.8.0 inutilisables, préfixe changé) puis 98,4 % ; une boucle de vérification sur `creation` à la seconde (88,7 s, PASS, forme de #388) ; 27B non remesuré depuis la 0.7.0 ; aucun réglage changé |
+| v0.9.0 (`2e35aaf`) | 07/10/2026 | retenue | points de reprise du prompt de Flash-Next sans copie de l'état complet (#445), prefill à long contexte (#463), points de branchement appris gardés sous pression RAM (#466), pages CMA libres hors du budget RAM (sans effet ici, `CmaTotal` 0), messages système en cours de conversation remontés en tête pour Qwen (#449), `--trace` (#458, non posée), `--max-pending-per-client` au défaut de `--max-pending` (#467, 16 au lieu de 4) ; Flash-Next seul remesuré, deux séries, 16/16, débits au niveau de la 0.8.1, mémoire 107 Gio au lieu de 111 ; reprise à 93,1 % à la première série (une seule reprise disque, trois débuts de conversation recalculés) puis 98,6 % ; 27B non remesuré depuis la 0.7.0 ; aucun réglage changé |
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
@@ -371,14 +381,16 @@ depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
 l'échantillonnage suit les profils officiels des modèles (glouton avant), ses
 propres bancs restant en glouton. Les valeurs du tableau visent un usage
 agentique comparable au service ; aucune n'est un réglage interne du moteur.
-Dernière confrontation à la documentation amont : 06/10/2026, v0.8.1 (diff
-de documentation et `--help` des deux images comparés sur bigchuck,
-identiques) : aucune
-option ajoutée, aucun défaut changé depuis la 0.5.0 ;
+Dernière confrontation à la documentation amont : 07/10/2026, v0.9.0 (diff
+de documentation et `--help` des deux images comparés sur bigchuck) : une
+option ajoutée, `--trace` (non posée : le fichier garde les conversations
+entières), un défaut changé, `--max-pending-per-client` (valeur de
+`--max-pending`, 16, au lieu de 4 ; non posée), premiers écarts depuis la
+0.5.0 ;
 `--cache-ram-bytes` explicite peut dépasser le budget automatique (non posée) ;
 `--cache-disk` n'est plus le seul chemin de reprise d'un préfixe commun
 (#386), gardé après la remesure. Les
-confrontations datées (26/09, v0.1.1, v0.2.0, v0.4.0, v0.5.0, v0.7.0, v0.7.1, v0.8.0, v0.8.1) sont dans le
+confrontations datées (26/09, v0.1.1, v0.2.0, v0.4.0, v0.5.0, v0.7.0, v0.7.1, v0.8.0, v0.8.1, v0.9.0) sont dans le
 journal, à l'entrée de chaque version ; chaque montée de version y ajoute la
 sienne et met cette ligne à jour.
 
@@ -392,7 +404,7 @@ sienne et met cette ligne à jour.
 | `--cache-disk` | activé, 16 Gio | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations jusqu'à la 0.5.0 (mesuré) ; depuis la 0.7.0 la RAM l'apprend aussi (#386, mesuré le 04/10/2026 : reprise sans disque de 90 à 91,8 %, contre 93,6 % avec), gardé parce que le disque rapporte encore 1,4 à 1,8 point et 4 s de prefill sur le 27B, et que le cache RAM est perdu à chaque redémarrage et à chaque bascule de modèle par llama-swap ; 16 Gio car partagé entre les modèles et un point de reprise Flash-Next de session réelle pèse 1,5 Go (8 Gio en garde environ 5), et `docs/SERVER.md` demande plus que les défauts pour le 27B à contexte long. Passé au défaut de 8 Gio le matin du 26/09/2026, remis à 16 Gio le jour même |
 | `--cache-disk-staging-bytes` | 8 Gio | automatique depuis #279 : au plus 1 Gio et 1/8 de la RAM disponible (512 Mio fixes avant) | non utilisé | nous : au défaut, les points de reprise du 27B sont refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; non préalloué. Valeur que `docs/SERVER.md` recommande désormais pour Flash-Next à contexte plein |
 | spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
-| `--max-pending-per-client` | inchangé (4) | 4 | non indiqué | gufo ; derrière llama-swap, toutes les requêtes viennent de 127.0.0.1, donc 4 en file au plus pour tous les clients réunis (aucun rejet vu à ce jour) |
+| `--max-pending-per-client` | non posé (16 depuis la 0.9.0, 4 avant) | valeur de `--max-pending` (16) depuis v0.9.0 (#467), 4 avant | non indiqué | gufo ; derrière llama-swap, toutes les requêtes viennent de 127.0.0.1 : jusqu'à la 0.8.1, 4 en file au plus pour tous les clients réunis (aucun rejet vu), 16 depuis |
 | fichiers | Flash-Next UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q8_0 | | UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q4_K_M | gufo, sauf le drafter du 27B pris dans le parc (Q8_0, mesuré identique au Q4_K_M) |
 
 Les chiffres agentiques avec cache disque ont été mesurés avec ces réglages ;
