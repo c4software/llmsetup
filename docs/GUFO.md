@@ -184,10 +184,10 @@ Depuis les clients, par le proxy (`http://llmproxy`, modèles préfixés
 d'image, route les corps multipart (transcription, édition) d'après leur
 champ `model` et sert `GET /v1/audio/voices` (commit bcaf63e du proxy).
 Pour pi et omp, l'extension `tools/gufo-media.ts` ajoute deux outils :
-`generer_image` (PNG dans le dossier de travail) et `parler` (lecture par
+`image_generation` (PNG dans le dossier de travail) et `parler` (lecture par
 `pw-play`, voix intégrée ou décrite, cette dernière par VoiceDesign).
 Vérifié le 25/09/2026 : `parler` sous pi en 10,6 s pour tout le tour,
-`generer_image` 512² en 20 étapes sous omp en 90 s pour tout le tour (bascule
+`image_generation` (alors nommé `generer_image`) 512² en 20 étapes sous omp en 90 s pour tout le tour (bascule
 vers Qwen-Image, puis retour à Flash-Next pour la réponse).
 
 Variante servie : `Qwen-Image-2.1-heretic` (encodeur de texte

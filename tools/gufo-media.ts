@@ -175,8 +175,13 @@ async function parler(params: any, cwd: string, signal?: AbortSignal) {
 }
 
 export default function (pi: ExtensionAPI) {
+  // Nommé comme l'outil hébergé du proxy (llm-proxy, [chat].always), exprès :
+  // quand un client déclare une fonction du nom d'un outil hébergé, le proxy
+  // garde celle du client et ne présente pas la sienne. pi et omp n'ont donc
+  // qu'UN outil d'image, celui-ci, qui écrit le PNG dans le dossier de travail
+  // (celui du proxy rend un lien, fait pour une interface de chat).
   pi.registerTool({
-    name: "generer_image",
+    name: "image_generation",
     label: "Image (gufo)",
     description:
       "Génère une image avec Qwen-Image sur gufo et l'enregistre en PNG. " +
@@ -206,7 +211,7 @@ export default function (pi: ExtensionAPI) {
     description:
       "Modifie une image existante selon une consigne (Qwen-Image sur gufo) : changer une couleur, retirer ou ajouter " +
       "un objet, changer le style ou le fond ; avec plusieurs images, les combiner (ex. placer l'objet de la première " +
-      "dans la scène de la seconde). Écrit le résultat en PNG à côté de la première image. Même coût que generer_image. " +
+      "dans la scène de la seconde). Écrit le résultat en PNG à côté de la première image. Même coût que image_generation. " +
       "Rédiger la consigne en anglais pour de meilleurs résultats.",
     parameters: {
       type: "object",

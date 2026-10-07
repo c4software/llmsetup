@@ -55,7 +55,7 @@ image 1024² en 90 s ; Flash-Next, voix et transcription ensemble laissent
 
 Par le proxy (`http://llmproxy`), les mêmes modèles sont préfixés
 `bigchuck/` ; pour pi et omp, `tools/gufo-media.ts` ajoute les outils
-`generer_image` et `parler`.
+`image_generation` et `parler`.
 
 Le 27B tourne avec les fichiers du parc, rien d'autre à télécharger.
 `./setup-llm.sh --status` dit qui tient le port, `--gufo-logs` suit les
