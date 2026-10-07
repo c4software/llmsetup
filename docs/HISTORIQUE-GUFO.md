@@ -23,8 +23,14 @@ Choix de l'utilisateur du 07/10/2026 (« oui monte et remesure ») : image
 remesuré depuis la 0.7.0**). Pas de régression, 16/16 aux deux séries.
 Vérifié après la remesure : `gufo version 0.9.0 (2e35aaf)` dans le conteneur
 d'usage (Flash-Next préchargé), une requête avec `stop` en direct sur `:8009`
-(« 1 à 4 », `finish_reason` stop) ; proxy, voix, transcription et image non
-revérifiés.
+(« 1 à 4 », `finish_reason` stop). Puis, à la demande de l'utilisateur, par
+le proxy (`http://llmproxy`, modèles `bigchuck/…`) : les huit modèles
+listés, la même requête avec `stop` (« 1 à 4 », stop), synthèse CustomVoice
+(voix `aiden`, WAV 24 kHz, 4,4 s chargement compris), sa transcription par
+Qwen3-ASR (phrase rendue mot pour mot, 3,6 s), liste des voix
+(`/v1/audio/voices?model=…`), image 512² en 20 étapes (17,3 s, théière
+lisible), retour à Flash-Next en 37,3 s. Édition d'image, VoiceDesign,
+clonage et flux WebSocket non testés.
 
 Deux séries le 07/10/2026 (8 min chacune, journaux dans
 `resultats/agentic/2026-10-07-0.9.0/` et `…-0.9.0-passe2/`, colonne v0.9.0 du
@@ -110,7 +116,23 @@ Confrontation des paramètres à la documentation amont :
   `--max-pending-per-client` passe du défaut 4 à la valeur de
   `--max-pending` (16), non posée, donc 16 requêtes en file au lieu de 4
   derrière llama-swap ; budget RAM automatique redéfini (`MemAvailable`
-  moins `CmaFree`), sans effet ici. Contournements non revus.
+  moins `CmaFree`), sans effet ici. `--help` de `serve tts`, `serve asr`
+  et `serve image` identiques entre les deux images.
+  Tableau des paramètres relu ligne à ligne contre ce `--help`, les guides
+  des deux Qwen et `docs/KV-CACHE.md` en v0.9.0, et contre le démarrage de
+  gufo en usage réel (Flash-Next, 2 sessions) : tout tient, rien à changer.
+  Échantillonnage journalisé au démarrage : 0,7 / top-k 20 / top-p 0,8 /
+  presence 1,5, `thinking=off` (le profil attendu) ; `--sessions 2` reste
+  la valeur des guides ; défauts du cache disque (8 Gio) et du staging (au
+  plus 1 Gio) inchangés, donc nos 16 Gio et 8 Gio gardent leur raison, le
+  staging restant au-dessus d'un point de reprise de 200k tokens (5,70 Go
+  d'après gufo) ; aucun refus de staging ; `queue_budget` à 3 files pour le
+  LLM, comme le suppose le `ttl: 60` des voix. Budget RAM automatique du
+  cache en usage réel : 14,0 Go (`max_bytes` 23,8 Go), soit deux points de
+  reprise profonds, quand l'exemple de `docs/KV-CACHE.md` cité dans le yaml
+  n'en donne que 7,76 Go sur la machine de gufo : `--cache-ram-bytes`
+  reste non posée. Cache disque plein (65 fichiers, 17,0 Go pour 16 Gio de
+  rétention), éviction LRU en régime normal. Contournements non revus.
 
 ## Release v0.8.1 (06/10/2026), retenue le jour même
 
