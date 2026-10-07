@@ -1,9 +1,8 @@
 import type { ExtensionAPI, ProviderModelConfig } from "@earendil-works/pi-coding-agent";
 
 // Adresse et clé du proxy lues dans l'environnement (LLM_PROXY_URL,
-// LLM_PROXY_API_KEY ; LLM_PROXY_KEY accepté aussi, comme dans gufo-media.ts et
-// llm-proxy-web.ts) : rien en dur dans le dépôt. Défauts : le proxy du réseau
-// local, ouvert.
+// LLM_PROXY_API_KEY ; LLM_PROXY_KEY accepté aussi, comme dans gufo-media.ts) :
+// rien en dur dans le dépôt. Défauts : le proxy du réseau local, ouvert.
 const ENDPOINT = (process.env.LLM_PROXY_URL ?? "http://llmproxy").replace(/\/+$/, "");
 const API_KEY = process.env.LLM_PROXY_API_KEY ?? process.env.LLM_PROXY_KEY ?? "unused";
 
