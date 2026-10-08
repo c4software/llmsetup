@@ -27,8 +27,9 @@ flashnext`, puis une boucle agentique du 27B sans
 `--cache-disk-staging-bytes`. 16/16 aux quatre séries, pas de régression de
 débit, prefill long de Flash-Next à +4 %. Un point reste ouvert, les
 écritures du cache disque de Flash-Next vingt fois plus lentes à la première
-série ; l'utilisateur retient la version et le note à vérifier (pas d'essai
-croisé 0.9.0 / 0.9.1).
+série ; l'utilisateur retient la version et le note à vérifier, puis
+demande un nouvel essai : l'essai croisé 0.9.0 / 0.9.1 ne le reproduit pas
+(plus bas), pas de ticket.
 Vérifié après la remesure : `GUFO_IMAGE` en 0.9.1 dans le `.env` d'usage,
 Flash-Next préchargé, une requête avec `stop` en direct sur `:8009` (« 1 à
 4 », `finish_reason` stop), 37 threads dans le processus gufo. Proxy, voix,
@@ -79,9 +80,8 @@ Lecture :
   suivant en avance) ou le disque (cache plein, 15 puis 16 Gio sur 16 ;
   même symptôme attribué au disque en 0.7.1, « Prefill court en baisse au
   banc », où il touchait les deux versions comparées). La seconde série
-  agentique n'a rien écrit et ne tranche pas. À départager par l'essai
-  croisé du 05/10 (`essais/prefill-court.sh`, bras alternés 0.9.0 / 0.9.1)
-  si le symptôme revient.
+  agentique n'a rien écrit et ne tranche pas. Départagé le jour même par
+  l'essai croisé ci-dessous : pas la version.
 - **Première série à cache disque froid pour la troisième montée de
   suite** : un `no_checkpoint`, trois `prefix_changed`, aucune reprise
   disque, 91,5 % ; 99,2 % à la seconde, sur un cache écrit par la 0.9.1
@@ -95,6 +95,38 @@ Lecture :
   corrige et le dit (« mon attente pour le cas 4 était fausse »). Pas de
   boucle.
 - **Aucun refus de staging** aux quatre séries.
+
+### Écritures du cache disque : essai croisé 0.9.0 / 0.9.1
+
+À la demande de l'utilisateur (« on refait un test, et on va ouvrir un
+ticket si c'est toujours pareil »), le 08/10/2026 de 15:46 à 15:54 :
+`essais/ecriture-0.9.1.sh` (non versionné), bras alternés 0.9.0 / 0.9.1 /
+0.9.0 / 0.9.1 sur Flash-Next, réglage du banc (1 session, cache disque
+d'usage plein à 16 Gio, staging 8 Gio), sonde `essais/prefill-court.py`
+(une requête courte, cinq « bench », trois « refactor », préfixe
+aléatoire, chaque requête écrit un point de reprise). Journaux dans
+`resultats/ecriture-2026-10-08/`.
+
+| Bras | `write_ms` des 9 points de reprise (114 à 164 Mo) | prefill « bench », passes 2 à 5 (t/s) | prefill « refactor », passes 2 et 3 (t/s) |
+|---|---|---|---|
+| A1, 0.9.0 | 96 à 146 ms | 1 368 à 1 377 | 1 375 à 1 378 |
+| B1, 0.9.1 | 96 à 131 ms | 1 357 à 1 363 | 1 361 à 1 362 |
+| A2, 0.9.0 | 94 à 129 ms | 1 362 à 1 366 | 1 369 à 1 371 |
+| B2, 0.9.1 | 103 à 155 ms | 1 346 à 1 352 | 1 366 |
+
+**Non reproduit, pas de ticket** : les 18 écritures de la 0.9.1 tiennent
+en 96 à 155 ms, comme celles de la 0.9.0 (94 à 146 ms), aucune au-dessus
+de 160 ms, aucun prefill court lent (première passe de chaque prompt à
+1 185 à 1 292 t/s dans les quatre bras). Les 2,3 à 3,2 s de la remesure ne
+viennent donc pas de la version. Cause la plus probable, non vérifiée :
+l'ordre de la remesure, où Flash-Next passait juste après le 27B, dont le
+banc à 52k et la boucle agentique écrivent des points de reprise de
+plusieurs Go dans un cache plein et en évincent autant (suppressions et
+`discard=async` sur ce btrfs, le mécanisme mesuré sans gufo le 05/10,
+« Prefill court en baisse au banc ») ; en 0.9.0 Flash-Next avait été
+mesuré avant le 27B. Écart résiduel du prefill court en 0.9.1 : 0,5 à
+1,5 % sous la 0.9.0 dans les deux paires, dans le sens des -0,7 % que #459
+annonce en clang 22.
 
 ### 27B en 0.9.1
 
