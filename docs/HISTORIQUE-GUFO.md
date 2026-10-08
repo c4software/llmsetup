@@ -15,6 +15,159 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.9.1 (08/10/2026), retenue le jour même
+
+Choix de l'utilisateur du 08/10/2026, question par question (checklist) :
+monter (image épinglée en `gufo-runtime:0.9.1`, `7277964`, yaml inchangé),
+remesurer le 27B et Flash-Next avec une seconde série de Flash-Next, garder
+le staging de 8 Gio et y ajouter un essai du 27B au défaut, machine libre.
+Les trois temps sont enchaînés par `essais/montee-0.9.1.sh` (non versionné,
+14:45 à 15:15) : `remesure.sh 27b flashnext`, `TAG=…-passe2 remesure.sh
+flashnext`, puis une boucle agentique du 27B sans
+`--cache-disk-staging-bytes`. 16/16 aux quatre séries, pas de régression de
+débit, prefill long de Flash-Next à +4 %. Un point reste ouvert, les
+écritures du cache disque de Flash-Next vingt fois plus lentes à la première
+série ; l'utilisateur retient la version et le note à vérifier (pas d'essai
+croisé 0.9.0 / 0.9.1).
+Vérifié après la remesure : `GUFO_IMAGE` en 0.9.1 dans le `.env` d'usage,
+Flash-Next préchargé, une requête avec `stop` en direct sur `:8009` (« 1 à
+4 », `finish_reason` stop), 37 threads dans le processus gufo. Proxy, voix,
+transcription et image non revérifiés (rien dans la 0.9.1 n'y touche).
+
+Journaux dans `resultats/agentic/2026-10-08-0.9.1/`, `…-0.9.1-passe2/` et
+`…-0.9.1-staging-defaut/`. Flash-Next contre la 0.9.0 (colonne v0.9.1 du
+second tableau = la première série) :
+
+| Flash-Next, 1 session | 0.9.0, passe 1 | 0.9.0, passe 2 | 0.9.1, passe 1 | 0.9.1, passe 2 |
+|---|---|---|---|---|
+| banc HTTP, justesse | OK | OK | sanity, aiguilles, tour 2 à 100 % : OK | OK |
+| prefill court, 1,4 à 1,6k (t/s) | 1 241 à 1 347 | 1 242 à 1 346 | 437 à 1 319 | 1 021 à 1 319 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 416 / 1 424,1 / 1 432,4 | 1 400 à 1 417 / 1 415,6 / 1 428,9 | 1 376 à 1 397 / 1 480,9 / 1 492,6 | 1 389 à 1 394 / 1 479,8 / 1 484,0 |
+| décode code (t/s) | 66,2 à 68,4 | 65,8 à 69,0 | 68,2 à 68,7 | 64,6 à 69,1 |
+| chargement, mémoire | 85,5 s, 107 Gio | 81,1 s, 107 Gio | 82,2 s, 107,5 Gio | 88,5 s, 107,4 Gio |
+| agentique, cache disque | 16/16, 53 requêtes, repris 93,1 %, prefill 11 s, décode 82 s à 51,1 t/s, acceptance 84,6 % | 16/16, 51 requêtes, repris 98,6 %, prefill 7 s, décode 78 s à 50,6 t/s, acceptance 85,7 % | 16/16, 53 requêtes, repris 91,5 %, prefill 14 s, décode 85 s à 48,6 t/s, acceptance 85,7 % | 16/16, 49 requêtes, repris 99,2 %, prefill 5 s, décode 73 s à 51,0 t/s, acceptance 84,6 % |
+| reprises disque / RAM / ratés | 1 / 49 / 3 | 3 / 48 / 0 | 0 / 49 / 4 | 4 / 45 / 0 |
+| points de reprise disque écrits, `write_ms` | 3, 115 à 127 ms | 0 | 4, 2 342 à 3 220 ms | 0 |
+| `creation`, passes 1/2/3 (s) | 23,0 / 20,9 / 14,0 | 15,3 / 14,5 / 21,5 | 22,5 / 20,6 / 15,1 | 16,1 / 14,5 / 14,1 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 254 ms | 254 ms | 263 ms | 260 ms |
+
+Lecture :
+
+- **Prefill long à +4 %** aux deux séries : 1 481 puis 1 480 t/s à 52k
+  contre 1 424 puis 1 416, 1 493 puis 1 484 à 32k contre 1 432 puis 1 429,
+  une requête par série. C'est #470 (blocs de 4 096 tokens), sous les +6 à
+  +11 % annoncés par la PR sur des prompts de dépôt et dans la fourchette
+  d'un relecteur amont (+3,6 à +7 %). Prefill à 6,5k 1 à 2 % plus bas
+  (1 376 à 1 397 contre 1 400 à 1 417), dans le sens des -0,7 % que #459
+  annonce en clang 22 sur pp2048 ; une requête par passe, non conclu.
+- **Mémoire inchangée** (107,5 et 107,4 Gio contre 107) et 37 threads dans
+  gufo en usage : les +1,3 Gio et les 96 lecteurs n-gram de la description
+  de #470 ont été retirés avant le merge (commentaire de francescobozzo du
+  07/10), ce que `EXPERIMENTS.md` de Flash-Next ne dit pas encore (« 128
+  readers », « +1.3 GiB »).
+- **Écritures du cache disque de Flash-Next lentes à la première série,
+  cause non établie** : les quatre points de reprise (169,6 à 171,1 Mo,
+  1 508 à 1 554 tokens, trois d'entre eux de la même taille à l'octet près
+  qu'en 0.9.0) s'écrivent en 2,3 à 3,2 s contre 115 à 127 ms la
+  veille. Le 27B, sur le même disque six minutes plus tôt, écrit les siens
+  en 246 à 312 ms (320 à 323 Mo), comme en 0.9.0. Même forme au banc HTTP,
+  sans les `write_ms` pour le confirmer (le journal de gufo du banc n'est
+  pas gardé) : deux passes du prompt court à 437 et 878 t/s (premier token
+  à 3,1 et 1,6 s contre 1,0), une à 1 021 et une à 1 142 à la seconde série.
+  Deux lectures possibles, non départagées : la version (#470 change les
+  lectures n-gram de Flash-Next, en `O_DIRECT` sur ce NVMe, et lit le bloc
+  suivant en avance) ou le disque (cache plein, 15 puis 16 Gio sur 16 ;
+  même symptôme attribué au disque en 0.7.1, « Prefill court en baisse au
+  banc », où il touchait les deux versions comparées). La seconde série
+  agentique n'a rien écrit et ne tranche pas. À départager par l'essai
+  croisé du 05/10 (`essais/prefill-court.sh`, bras alternés 0.9.0 / 0.9.1)
+  si le symptôme revient.
+- **Première série à cache disque froid pour la troisième montée de
+  suite** : un `no_checkpoint`, trois `prefix_changed`, aucune reprise
+  disque, 91,5 % ; 99,2 % à la seconde, sur un cache écrit par la 0.9.1
+  (4 reprises disque, aucun raté). Décode agentique à 48,6 t/s à la
+  première série (51,1 en 0.9.0), 51,0 à la seconde : pas de baisse
+  établie. Le ralentissement du décode MTP après une requête d'image
+  signalé en relecture de #470 (73 à 199 ms) n'est pas mesuré par nos bancs
+  (aucune image).
+- **`creation` plus long à la première série** (22,5 et 20,6 s), comme en
+  0.9.0 : le modèle écrit une valeur attendue fausse dans `test.js`, la
+  corrige et le dit (« mon attente pour le cas 4 était fausse »). Pas de
+  boucle.
+- **Aucun refus de staging** aux quatre séries.
+
+### 27B en 0.9.1
+
+Une série, contre celle de la 0.9.0 de la veille :
+
+| 27B, 1 session | 0.9.0 | 0.9.1 |
+|---|---|---|
+| banc HTTP, justesse | OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4 à 1,6k (t/s) | 505 à 537 | 503 à 539 |
+| prefill à 6,5k / 52k / 32k (t/s) | 560 / 497,3 / 533,7 | 558 / 495,3 / 531,9 |
+| décode prose / code (t/s) | 41,8 à 47,4 / 64,0 à 65,8 | 39,2 à 48,9 / 64,9 à 65,7 |
+| chargement, mémoire | 31,5 s, 77 Gio | 33,5 s, 77 Gio |
+| agentique, cache disque | 16/16, 49 requêtes, repris 93,4 %, prefill 18 s, décode 42,5 t/s, acceptance 70,0 % | 16/16, 49 requêtes, repris 93,6 %, prefill 16 s, décode 42,1 t/s, acceptance 72,5 % |
+| reprises disque / RAM / ratés | 1 / 45 / 3 | 1 / 45 / 3 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 357 ms | 359 ms |
+
+- **Pas de régression** : le coût de #459 en clang 22 (prefill de 16 à 64
+  tokens 1,0 à 1,9 % plus lent d'après la PR) ne se voit ni au banc (0,4 %
+  au plus, à des tailles où la PR annonce 1,1 % au plus) ni au premier
+  token des petites requêtes (359 contre 357 ms). Le prefill reste 1 à 2 %
+  sous la 0.7.0 (558 contre 570 à 6,5k, 495 contre 502 à 52k), deux séries
+  de suite maintenant : écart stable, antérieur à la 0.9.1.
+- Trois points de reprise disque écrits (`write_ms` 246 à 312 ms), mêmes
+  trois débuts de conversation recalculés qu'en 0.7.0 et 0.9.0.
+
+### Staging au défaut sur le 27B (#473)
+
+Une boucle agentique du 27B avec `--cache-disk-staging-bytes` retiré de la
+macro `gufo` le temps de la série (yaml restauré, rien de commité), après
+les deux séries de Flash-Next : limite résolue à 11 383 192 576 octets
+(10,6 Gio, le huitième de la RAM disponible après chargement, sous le
+budget disque de 16 Gio) contre nos 8 Gio, 16/16, 50 requêtes, repris
+98,7 % (3 reprises disque, aucun raté, cache peuplé par la première série),
+décode 42,6 t/s, aucun refus `staging_capacity`. Aucun point de reprise
+écrit (90 sautés, `min_step`) : le défaut ne gêne pas le 27B, mais
+l'écriture sous ce défaut n'a pas été exercée. Pour Flash-Next, non essayé :
+estimation d'après la mémoire relevée au banc (107 Gio utilisés sur 124) :
+environ 17 Gio disponibles après chargement, soit un défaut d'environ
+2 Gio, à peine au-dessus d'un point de reprise de session réelle
+(1,5 Go), et #473 signale deux captures en file pour une même requête.
+Staging de 8 Gio gardé.
+
+v0.9.1 (`dea22ce`, image `gufo-runtime:0.9.1`, digest `79a7046bb5cc`),
+publiée le 08/10/2026 à 12:05 UTC, image à 12:25. Contenu depuis v0.9.0 :
+#470, prefill de Flash-Next par blocs de 4 096 tokens au lieu de 2 048,
+rendu possible par un découpage dense au budget de l'indexeur (les logits de
+prefill ne dépendent plus de la taille du bloc, sorties annoncées identiques
+octet pour octet) et par la lecture en avance des lignes n-gram du bloc
+suivant ; à côté d'un décode actif le prefill reste à `--prefill-chunk`
+(512) ; #459, noyaux GEMM de prefill du 27B et un noyau de Flash-Next sans
+spill de registres sous clang 23 (contraintes de source, test
+`kernel_resources_test`), l'image restant construite en clang 22 ; #473,
+staging automatique du cache disque sans plafond fixe de 1 Gio ; #464,
+littéraux des tokens de contrôle de Qwen regroupés (refactor) ; #472, test.
+
+Tickets suivis : #228 sans nouveau commentaire depuis le 06/10, la PR #459
+qu'il citait est mergée et dans cette release ; #200, #239 et #299 n'ont pas
+bougé. Aucune question ne nous est posée.
+
+Confrontation des paramètres à la documentation amont :
+
+- **08/10/2026, v0.9.1** (diff v0.9.0...v0.9.1 de la documentation, `--help`
+  0.9.0 et 0.9.1 comparés sur bigchuck : une ligne d'écart) : le défaut de
+  `--cache-disk-staging-bytes` devient le plus petit du huitième de la RAM
+  disponible et du budget disque (« at most the disk budget and 1/8
+  available RAM »), sans plafond de 1 Gio ; `docs/SERVER.md` et
+  `docs/KV-CACHE.md` suivent, et #473 garde le conseil des 8 Gio explicites
+  pour Flash-Next à 262144 de contexte. Aucune option ajoutée ni retirée.
+  `--prefill-chunk` garde son défaut de 512 et ne borne que le prefill à
+  côté d'un décode actif ; le bloc de 4 096 de #470 est une constante
+  interne. Tableau des paramètres : seule la ligne du staging change
+  (défaut de gufo), nos valeurs restent.
+
 ## Release v0.9.0 (07/10/2026), retenue le jour même
 
 Choix de l'utilisateur du 07/10/2026 (« oui monte et remesure ») : image
@@ -1851,18 +2004,21 @@ Douzième colonne : 0.9.0 (07/10), Flash-Next seul, première des deux séries
 du jour, elle aussi sur un cache disque presque inutilisable (voir « Release
 v0.9.0 »).
 La colonne 27B v0.9.0 (07/10, une série) est rangée avec celles du 27B.
+Colonnes v0.9.1 (08/10) : le 27B (une série) rangé avec les siens, et
+Flash-Next, première des deux séries du jour, à cache disque froid une
+troisième fois (voir « Release v0.9.1 »).
 
-| Mesure | 27B v0.2.0 | 27B v0.4.0 | 27B v0.5.0 | 27B v0.7.0 | 27B v0.9.0 | Flash-Next v0.2.0 | Flash-Next v0.4.0 | Flash-Next v0.5.0 | Flash-Next v0.7.0 | Flash-Next v0.7.1 | Flash-Next v0.8.0 | Flash-Next v0.8.1 | Flash-Next v0.9.0 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| prefill 52k (t/s) | 508,3 | 504,6 | 499,8 | 501,7 | 497,3 | 1 395,5 | 1 370,5 | 1 361,0 | 1 364,6 | 1 439,9 | 1 432,0 | 1 406,2 | 1 424,1 |
-| décode code, banc HTTP (t/s) | ~66 | ~65 | ~66 | ~66 | ~65 | ~61 | ~61 | 55 à 62 | 60 à 63 | 65 à 68 | 66 à 69 | 67 à 69 | 66 à 68 |
-| tour 2 sur 32k en cache (t/s) | 107,4 | 107,1 | | |  | 151,2 | 160,4 | | | | |  |  |
-| `creation`, passes 1/2/3 (s) | 18,5 / 17,7 / 28,1 | 25,1 / 22,8 / 33,1 | 21,5 / 21,1 / 26,1 | 22,8 / 18,4 / 17,6 | 21,9 / 18,8 / 18,0 | 16,4 / 15,3 / 17,7 | 23,1 / **2 563,7** / 19,5 | 16,9 / 24,4 / 17,3 | 17,5 / 22,2 / 22,7 | 16,3 / 20,4 / 21,3 | 15,1 / 13,9 / 15,5 | 15,5 / 14,5 / 12,8 | 23,0 / 20,9 / 14,0 |
-| `bugfix`, passes 1/2/3 (s) | 9,6 / 8,9 / 8,8 | 12,3 / 11,4 / 12,8 | 9,4 / 10,0 / 9,7 | 9,8 / 9,1 / 10,6 | 10,6 / 10,0 / 9,4 | 7,7 / 7,1 / 6,3 | 9,7 / 12,4 / 10,8 | 7,5 / 6,8 / 7,4 | 7,2 / 6,6 / 7,2 | 7,1 / 5,6 / 5,4 | 6,8 / 6,0 / 6,5 | 6,5 / 6,5 / 6,1 | 6,6 / 6,6 / 5,4 |
-| requêtes agentiques | 51 | 54 | 51 | 49 | 49 | 49 | 1 645 | 51 | 53 | 53 | 49 | 49 | 53 |
-| décode agentique (t/s) | 43,9 | 30,5 | 42,3 | 42,5 | 42,5 | 50,4 | 27,8 (boucle comprise) | 44,7 | 48,1 | 50,7 | 51,0 | 52,4 | 51,1 |
-| acceptance du spéculatif (médiane) | 69,9 % | 50,7 % | 71,0 % | 71,8 % | 70,0 % | 84,6 % | 60,0 % | 85,7 % | 85,7 % | 84,8 % | 84,6 % | 85,7 % | 84,6 % |
-| prompt repris du cache | 92,7 % | 90,4 % | 93,2 % | 93,6 % | 93,4 % | 92,2 % | 99,2 % | 93,3 % | 93,1 % | 93,8 % | 98,7 % (cache disque déjà peuplé) | 91,2 % (points de reprise disque de la 0.8.0 inutilisables) | 93,1 % (une seule reprise disque sur le cache de la 0.8.1) |
-| reprises disque / RAM | 12 / 36 | 12 / 39 | 2 / 46 | 1 / 45 | 1 / 45 | 12 / 34 | 10 / 1 623 | 2 / 46 | 1 / 49 | 1 / 49 | 3 / 46 | 0 / 45 | 1 / 49 |
-| points de reprise disque écrits | 58 | 37 | 3 (82 sautés, `min_step`) | 3 (75 sautés, `min_step`) | 3 (78 sautés, `min_step`) | 44 | 1 355 | 3 (67 sautés, `min_step`) | 3 (80 sautés, `min_step`) | 3 (66 sautés, `min_step`) | 0 (72 sautés, `min_step`) | 4 (61 sautés, `min_step`) | 3 (74 sautés, `min_step`) |
-| points de reprise refusés (staging) | 0 | 0 | | 0 | 0 | 0 | 296 | | 0 | 0 | 0 | 0 | 0 |
+| Mesure | 27B v0.2.0 | 27B v0.4.0 | 27B v0.5.0 | 27B v0.7.0 | 27B v0.9.0 | 27B v0.9.1 | Flash-Next v0.2.0 | Flash-Next v0.4.0 | Flash-Next v0.5.0 | Flash-Next v0.7.0 | Flash-Next v0.7.1 | Flash-Next v0.8.0 | Flash-Next v0.8.1 | Flash-Next v0.9.0 | Flash-Next v0.9.1 |
+|---|---|---|---|---|---| --- |---|---|---|---|---|---|---|---| --- |
+| prefill 52k (t/s) | 508,3 | 504,6 | 499,8 | 501,7 | 497,3 | 495,3 | 1 395,5 | 1 370,5 | 1 361,0 | 1 364,6 | 1 439,9 | 1 432,0 | 1 406,2 | 1 424,1 | 1 480,9 |
+| décode code, banc HTTP (t/s) | ~66 | ~65 | ~66 | ~66 | ~65 | ~65 | ~61 | ~61 | 55 à 62 | 60 à 63 | 65 à 68 | 66 à 69 | 67 à 69 | 66 à 68 | 68 à 69 |
+| tour 2 sur 32k en cache (t/s) | 107,4 | 107,1 | | |  |  | 151,2 | 160,4 | | | | |  |  |  |
+| `creation`, passes 1/2/3 (s) | 18,5 / 17,7 / 28,1 | 25,1 / 22,8 / 33,1 | 21,5 / 21,1 / 26,1 | 22,8 / 18,4 / 17,6 | 21,9 / 18,8 / 18,0 | 20,2 / 22,2 / 14,9 | 16,4 / 15,3 / 17,7 | 23,1 / **2 563,7** / 19,5 | 16,9 / 24,4 / 17,3 | 17,5 / 22,2 / 22,7 | 16,3 / 20,4 / 21,3 | 15,1 / 13,9 / 15,5 | 15,5 / 14,5 / 12,8 | 23,0 / 20,9 / 14,0 | 22,5 / 20,6 / 15,1 |
+| `bugfix`, passes 1/2/3 (s) | 9,6 / 8,9 / 8,8 | 12,3 / 11,4 / 12,8 | 9,4 / 10,0 / 9,7 | 9,8 / 9,1 / 10,6 | 10,6 / 10,0 / 9,4 | 10,5 / 8,7 / 8,6 | 7,7 / 7,1 / 6,3 | 9,7 / 12,4 / 10,8 | 7,5 / 6,8 / 7,4 | 7,2 / 6,6 / 7,2 | 7,1 / 5,6 / 5,4 | 6,8 / 6,0 / 6,5 | 6,5 / 6,5 / 6,1 | 6,6 / 6,6 / 5,4 | 7,6 / 6,4 / 5,5 |
+| requêtes agentiques | 51 | 54 | 51 | 49 | 49 | 49 | 49 | 1 645 | 51 | 53 | 53 | 49 | 49 | 53 | 53 |
+| décode agentique (t/s) | 43,9 | 30,5 | 42,3 | 42,5 | 42,5 | 42,1 | 50,4 | 27,8 (boucle comprise) | 44,7 | 48,1 | 50,7 | 51,0 | 52,4 | 51,1 | 48,6 |
+| acceptance du spéculatif (médiane) | 69,9 % | 50,7 % | 71,0 % | 71,8 % | 70,0 % | 72,5 % | 84,6 % | 60,0 % | 85,7 % | 85,7 % | 84,8 % | 84,6 % | 85,7 % | 84,6 % | 85,7 % |
+| prompt repris du cache | 92,7 % | 90,4 % | 93,2 % | 93,6 % | 93,4 % | 93,6 % | 92,2 % | 99,2 % | 93,3 % | 93,1 % | 93,8 % | 98,7 % (cache disque déjà peuplé) | 91,2 % (points de reprise disque de la 0.8.0 inutilisables) | 93,1 % (une seule reprise disque sur le cache de la 0.8.1) | 91,5 % (aucune reprise disque sur le cache de la 0.9.0) |
+| reprises disque / RAM | 12 / 36 | 12 / 39 | 2 / 46 | 1 / 45 | 1 / 45 | 1 / 45 | 12 / 34 | 10 / 1 623 | 2 / 46 | 1 / 49 | 1 / 49 | 3 / 46 | 0 / 45 | 1 / 49 | 0 / 49 |
+| points de reprise disque écrits | 58 | 37 | 3 (82 sautés, `min_step`) | 3 (75 sautés, `min_step`) | 3 (78 sautés, `min_step`) | 3 (69 sautés, `min_step`) | 44 | 1 355 | 3 (67 sautés, `min_step`) | 3 (80 sautés, `min_step`) | 3 (66 sautés, `min_step`) | 0 (72 sautés, `min_step`) | 4 (61 sautés, `min_step`) | 3 (74 sautés, `min_step`) | 4 (73 sautés, `min_step`, écrits en 2,3 à 3,2 s) |
+| points de reprise refusés (staging) | 0 | 0 | | 0 | 0 | 0 | 0 | 296 | | 0 | 0 | 0 | 0 | 0 | 0 |

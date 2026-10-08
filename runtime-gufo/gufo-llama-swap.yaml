@@ -66,7 +66,14 @@
 #                         refuserait ceux du 27B dès ~8k tokens (165 Mo +
 #                         0,1 Mo par token, le prompt système de Claude Code
 #                         seul ~2,1 Go). Refus journalisés depuis #279
-#                         (reason=staging_capacity). Changer la
+#                         (reason=staging_capacity). Depuis la 0.9.1
+#                         (#473) le défaut n'a plus ce plafond (plus
+#                         petit de 1/8 de la RAM disponible et du budget
+#                         disque) : 10,6 Gio résolus pour le 27B le
+#                         08/10/2026, mais environ 2 Gio pour Flash-Next,
+#                         qui laisse peu de RAM libre ; 8 Gio gardés,
+#                         que docs/SERVER.md de gufo recommande toujours
+#                         pour Flash-Next à contexte plein. Changer la
 #                         configuration rend ce cache inutilisable. Partagé
 #                         entre les modèles (l'identité du cache inclut le
 #                         modèle).
