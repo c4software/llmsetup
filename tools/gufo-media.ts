@@ -10,8 +10,9 @@ import { basename, dirname, extname, resolve } from "node:path";
 // /image-edit <fichier>... <prompt> et /parler [voix décrite] <texte>.
 // Générer ou modifier une image et parler, par gufo
 // (runtime/gufo/, docs/GUFO.md) derrière le proxy (llm-proxy, routage au
-// préfixe « bigchuck/ »). Copier dans ~/.pi/agent/extensions et
-// ~/.omp/agent/extensions.
+// préfixe « silentchuck/ », la machine par défaut depuis le 09/10/2026 ;
+// « bigchuck/ » reste un backend du proxy, à choisir par les variables
+// GUFO_*). Copier dans ~/.pi/agent/extensions et ~/.omp/agent/extensions.
 //
 // Coût à connaître : Qwen-Image est dans le groupe mémoire « gros » de
 // gufo-llama-swap.yaml, avec les LLM. Générer une image décharge le LLM de
@@ -23,12 +24,12 @@ import { basename, dirname, extname, resolve } from "node:path";
 
 const ENDPOINT = process.env.LLM_PROXY_URL ?? "http://llmproxy";
 const API_KEY = process.env.LLM_PROXY_KEY ?? "unused";
-const MODELE_IMAGE = process.env.GUFO_IMAGE_MODEL ?? "bigchuck/Qwen-Image-2.1-heretic";
+const MODELE_IMAGE = process.env.GUFO_IMAGE_MODEL ?? "silentchuck/Qwen-Image-2.1-heretic";
 // 512x512 : ~16 s en 20 étapes, 4 fois plus rapide que 1024x1024 (défaut de gufo).
 const TAILLE_IMAGE = process.env.GUFO_IMAGE_SIZE ?? "512x512";
-const MODELE_VOIX = process.env.GUFO_TTS_MODEL ?? "bigchuck/qwen3-tts-12hz-1.7b-customvoice";
+const MODELE_VOIX = process.env.GUFO_TTS_MODEL ?? "silentchuck/qwen3-tts-12hz-1.7b-customvoice";
 // Voix décrite en langage naturel (champ instructions) : variante VoiceDesign.
-const MODELE_VOIX_DECRITE = process.env.GUFO_TTS_DESIGN_MODEL ?? "bigchuck/qwen3-tts-12hz-1.7b-voice-design";
+const MODELE_VOIX_DECRITE = process.env.GUFO_TTS_DESIGN_MODEL ?? "silentchuck/qwen3-tts-12hz-1.7b-voice-design";
 // Lecteur audio : lit le PCM brut (16 bits signé, mono, 24 kHz) sur son entrée
 // standard, au fil de la synthèse. Autres lecteurs possibles par la variable :
 // "paplay --raw --rate=24000 --channels=1 --format=s16le" ou
