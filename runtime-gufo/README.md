@@ -96,14 +96,18 @@ de modèles à copier d'une machine à l'autre. `--cleanup` épargne ce dossier
 par son nom (aucun modèle de `lib/models.sh` ne le référence, il le verrait
 sinon orphelin). Avant cette date ils étaient dans `GUFO_DATA/models`.
 
+Le cache disque de gufo (16 Gio au plus) est dans `GUFO_CACHE`, par défaut
+`~/.local/state/llm-setup/gufo-cache`, à côté de celui du service
+(`GUFO_DATA/cache` avant le 09/10/2026). Il se reconstruit seul : inutile de
+le copier d'une machine à l'autre.
+
 Le reste est hors du dépôt et hors de `~/models`, dans `GUFO_DATA`, par
 défaut `~/llm/gufo-test` :
 
 - `.env` (usage réel) et `banc.env` (bancs) : générés ;
-- `cache/` : cache disque de gufo (16 Gio au plus) ;
 - `resultats/` : sorties des bancs.
 
-Variables : `GUFO_DATA`, `MODELS_BASE` (téléchargement seul), `GUFO_IMAGE`, `GUFO_SESSIONS` (défaut 2 ; `SESSIONS`
+Variables : `GUFO_DATA`, `GUFO_CACHE`, `MODELS_BASE` (téléchargement seul), `GUFO_IMAGE`, `GUFO_SESSIONS` (défaut 2 ; `SESSIONS`
 pour les bancs, défaut 1), `PASSES` (banc agentique). Les bancs posent
 eux-mêmes `GUFO_PROJET=gufo-banc`, `GUFO_CONTENEUR=gufo-banc`,
 `GUFO_RESTART=no` et leur `.env`.

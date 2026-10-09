@@ -490,7 +490,9 @@ llama-swap épinglé par SHA-256), configuration versionnée
 de gufo, valeurs machine en `${env.VAR}`), `.env` généré par `lib/gufo.sh`
 dans `GUFO_DATA` (défaut `~/llm/gufo-test`, hors du dépôt et de `~/models` ;
 les poids propres à gufo sont, eux, dans `~/models/gufo` depuis le 09/10/2026,
-sous le montage du parc, et `--cleanup` les épargne)
+sous le montage du parc, et `--cleanup` les épargne ; son cache disque est dans
+`GUFO_CACHE`, défaut `~/.local/state/llm-setup/gufo-cache`, à côté de celui du
+service)
 avec les seules valeurs machine : uid:gid de l'hôte, gid NUMÉRIQUES de render
 et video, chemins, port, sessions, politique de redémarrage, modèle
 préchargé, `COMPOSE_FILE` (usage manuel : `cd ~/llm/gufo-test && docker

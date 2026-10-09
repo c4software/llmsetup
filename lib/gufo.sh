@@ -20,12 +20,17 @@
 # deux côtés, l'autre étant arrêté ou supprimé).
 #
 # Variables (environnement), pour les bancs de runtime-gufo/bench/ surtout :
-#   GUFO_DATA      données hors dépôt et hors ~/models : cache/ (cache
-#                  disque), resultats/, .env (défaut ~/llm/gufo-test). Les
-#                  poids propres à gufo n'y sont plus depuis le 09/10/2026 :
-#                  ils vivent avec le parc, dans $MODELS_BASE/gufo (un seul
-#                  dossier de modèles à copier d'une machine à l'autre),
-#                  que --cleanup épargne (lib/setup.sh)
+#   GUFO_DATA      données hors dépôt et hors ~/models : resultats/, essais/,
+#                  .env (défaut ~/llm/gufo-test). Les poids propres à gufo
+#                  n'y sont plus depuis le 09/10/2026 : ils vivent avec le
+#                  parc, dans $MODELS_BASE/gufo (un seul dossier de modèles à
+#                  copier d'une machine à l'autre), que --cleanup épargne
+#                  (lib/setup.sh)
+#   GUFO_CACHE     cache disque de gufo, 16 Gio au plus (défaut
+#                  ~/.local/state/llm-setup/gufo-cache, à côté du cache du
+#                  service, COMPOSE_CACHE_DIR de lib/compose.sh ; dans
+#                  GUFO_DATA/cache avant le 09/10/2026). Partagé par l'usage
+#                  réel et les bancs, comme avant
 #   GUFO_IMAGE     image (défaut : la ligne de runtime-gufo/IMAGE, SEUL endroit
 #                  où la version est épinglée ; download.sh, bench/remesure.sh
 #                  et tools/gufo-amont.sh lisent le même fichier, et
@@ -43,6 +48,7 @@
 GUFO_DIR="$SCRIPT_DIR/runtime-gufo"
 GUFO_COMPOSE_FILE="$GUFO_DIR/docker-compose.yml"
 GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
+GUFO_CACHE="${GUFO_CACHE:-$HOME/.local/state/llm-setup/gufo-cache}"
 GUFO_IMAGE="${GUFO_IMAGE:-$(<"$GUFO_DIR/IMAGE")}"
 GUFO_PROJET="${GUFO_PROJET:-gufo}"
 GUFO_ENV_FILE="${GUFO_ENV_FILE:-$GUFO_DATA/.env}"
@@ -92,7 +98,7 @@ SVC_GID=$(id -g)
 GID_RENDER=$gid_render
 GID_VIDEO=$gid_video
 MODELS_BASE=$MODELS_BASE
-GUFO_DATA=$GUFO_DATA
+GUFO_CACHE=$GUFO_CACHE
 ENV
 }
 
@@ -142,7 +148,7 @@ cmd_gufo() {
   docker image inspect "$GUFO_IMAGE" >/dev/null 2>&1 \
     || error "Image $GUFO_IMAGE absente - ./setup-llm.sh --gufo-download image"
 
-  mkdir -p "$GUFO_DATA/cache"
+  mkdir -p "$GUFO_DATA" "$GUFO_CACHE"
   local tmp; tmp="$(mktemp)"
   generate_gufo_env "$modele" > "$tmp" || { rm -f "$tmp"; error ".env de gufo non généré (groupes GPU)"; }
   mv -f "$tmp" "$GUFO_ENV_FILE"

@@ -68,17 +68,18 @@ services:
     # Valeurs lues par gufo-llama-swap.yaml (${env.VAR}).
     environment:
       MODELS_BASE: ${MODELS_BASE:?}
-      GUFO_DATA: ${GUFO_DATA:?}
+      GUFO_CACHE: ${GUFO_CACHE:?}
       GUFO_SESSIONS: ${GUFO_SESSIONS:?}
       GUFO_PRECHARGE: ${GUFO_PRECHARGE:?}
     # Parc au MÊME chemin et en lecture seule (les lignes de commande portent
     # des chemins absolus de l'hôte) ; les poids propres à gufo y sont depuis
-    # le 09/10/2026, dans MODELS_BASE/gufo, donc sous le même montage ; le cache disque est
+    # le 09/10/2026, dans MODELS_BASE/gufo, donc sous le même montage ; le cache disque
+    # (GUFO_CACHE, à côté de celui du service dans ~/.local/state/llm-setup) est
     # le seul point inscriptible ; la configuration de llama-swap, versionnée,
     # est lue au démarrage (un changement demande --gufo, qui recrée).
     volumes:
       - "${MODELS_BASE:?}:${MODELS_BASE:?}:ro"
-      - "${GUFO_DATA:?}/cache:${GUFO_DATA:?}/cache:rw"
+      - "${GUFO_CACHE:?}:${GUFO_CACHE:?}:rw"
       - "${GUFO_RUNTIME_DIR:?}/gufo-llama-swap.yaml:/etc/llama-swap/config.yaml:ro"
     entrypoint:
       - "/usr/local/bin/llama-swap"

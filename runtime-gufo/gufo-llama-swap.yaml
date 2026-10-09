@@ -101,7 +101,7 @@ macros:
   "gufo": >-
     gufo serve llm --host 127.0.0.1 --port ${PORT}
     --context 262144 --sessions ${env.GUFO_SESSIONS}
-    --cache-disk ${env.GUFO_DATA}/cache --cache-disk-bytes 17179869184
+    --cache-disk ${env.GUFO_CACHE} --cache-disk-bytes 17179869184
     --cache-disk-staging-bytes 8589934592
   # Qwen sans raisonnement (sections nothink du service). Échantillonnage
   # officiel Qwen laissé à gufo depuis la 0.2.0 (gufo-org/gufo#282) : profil

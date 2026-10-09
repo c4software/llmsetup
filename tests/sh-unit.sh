@@ -830,6 +830,7 @@ cp "$REPO_DIR/runtime-gufo/docker-compose.yml" "$SVC/repo/runtime-gufo/"
 GENV="$(_run_svc 'generate_gufo_env qwen3.8-flash-next')"
 for attendu in "GUFO_PRECHARGE=qwen3.8-flash-next" "COMPOSE_PROJECT_NAME=gufo" "GUFO_CONTENEUR=gufo-8009" \
                "GUFO_RESTART=unless-stopped" "GUFO_PORT=8009" "GUFO_SESSIONS=2" \
+               "GUFO_CACHE=$SVC/home/.local/state/llm-setup/gufo-cache" \
                "GID_RENDER=303" "GID_VIDEO=986" "SVC_UID=$(id -u)"; do
   if grep -qxF -- "$attendu" <<<"$GENV"; then
     echo "[OK]   gufo env : $attendu"
@@ -872,11 +873,12 @@ else
 fi
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   GD="$SVC/gufo-data"; mkdir -p "$GD"
-  sed "s|^GUFO_DATA=.*|GUFO_DATA=$GD|" <<<"$GENV" > "$GD/.env"
+  sed "s|^GUFO_CACHE=.*|GUFO_CACHE=$GD/cache|" <<<"$GENV" > "$GD/.env"
   if out="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config 2>&1)"; then
     if grep -qF "user: $(id -u):$(id -g)" <<<"$out" && grep -qF "container_name: gufo-8009" <<<"$out" \
        && grep -qF "/usr/local/bin/llama-swap" <<<"$out" && grep -qF "GUFO_PRECHARGE: qwen3.8-flash-next" <<<"$out" \
-       && grep -qF "gufo-llama-swap.yaml" <<<"$out" && ! grep -q '\${' <<<"$out"; then
+       && grep -qF "gufo-llama-swap.yaml" <<<"$out" && grep -qF "GUFO_CACHE: $GD/cache" <<<"$out" \
+       && ! grep -q '\${' <<<"$out"; then
       echo "[OK]   gufo compose : llama-swap, utilisateur de l'hôte, préchargé, aucune variable non résolue"
     else
       echo "[FAIL] gufo compose : rendu inattendu"; rc=1
