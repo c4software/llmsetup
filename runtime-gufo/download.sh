@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Récupère l'image de gufo et les poids que gufo exige, aux révisions épinglées
 # par ses guides de modèles (docs/models/*/README.md du dépôt gufo), dans
-# GUFO_DATA/models (défaut ~/llm/gufo-test/models).
+# MODELS_BASE/gufo (défaut ~/models/gufo).
 # Appelé par ./setup-llm.sh --gufo-download, ou seul.
 #
 # Usage :
@@ -23,9 +23,8 @@
 # pas un fichier déjà présent. Qwen3-TTS : gufo n'épingle que le code amont,
 # les révisions HF ci-dessous sont celles du 25/09/2026.
 set -euo pipefail
-GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
 IMG="${GUFO_IMAGE:-$(<"$(dirname "$(realpath "$0")")/IMAGE")}"
-DL="$GUFO_DATA/models"
+DL="${MODELS_BASE:-$HOME/models}/gufo"
 
 telecharge() {
   case "$1" in

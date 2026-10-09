@@ -652,13 +652,17 @@ mv -f "$SVC/repo/runtime/Dockerfile.garde" "$SVC/repo/runtime/Dockerfile.rocm-st
 #     .env) sont hors d'atteinte par construction des deux find.
 #     Le test le fige : un « find -type f » à la racine les ferait apparaître
 #     ici, et --cleanup --yes supprimerait la configuration du service.
-mkdir -p "$SVC/home/models/un" "$SVC/home/models/orphelin"
+#     Le dossier gufo (poids propres à gufo, hors lib/models.sh) est épargné
+#     par son nom : sans cela --cleanup --yes en supprimerait 250 Go.
+mkdir -p "$SVC/home/models/un" "$SVC/home/models/orphelin" "$SVC/home/models/gufo/sous"
 : > "$SVC/home/models/un/a.gguf"
 : > "$SVC/home/models/orphelin/vieux.gguf"
+: > "$SVC/home/models/gufo/plat.gguf"
+: > "$SVC/home/models/gufo/sous/shard.gguf"
 out="$(_run_svc 'cmd_cleanup')"; grc=$?
 if [[ "$grc" -eq 0 && "$out" == *"orphelin"* \
-      && "$out" != *"models.ini"* && "$out" != *".env"* ]]; then
-  echo "[OK]   cleanup : dossier orphelin listé, models.ini et .env intouchés"
+      && "$out" != *"models.ini"* && "$out" != *".env"* && "$out" != *"/gufo"* ]]; then
+  echo "[OK]   cleanup : dossier orphelin listé, models.ini, .env et gufo/ intouchés"
 else
   echo "[FAIL] cleanup : code $grc, sortie : $out"; rc=1
 fi
@@ -886,7 +890,7 @@ fi
 # gufo-llama-swap.yaml : chaque modèle porte le même nom que son
 # --served-model-name (sinon gufo répond 404), ne retire plus stop ni
 # stop_sequences (gérés par gufo depuis #260), annonce le --context de la macro gufo (capabilities.context, lu
-# par le proxy), ne pointe que sous le parc ou GUFO_DATA ; groupe exclusif ; chaque
+# par le proxy), ne pointe que sous le parc (MODELS_BASE, dont MODELS_BASE/gufo) ; groupe exclusif ; chaque
 # nom court de lib/gufo.sh existe ; llama-swap épinglé par somme.
 LSY="$(cat "$REPO_DIR/runtime-gufo/gufo-llama-swap.yaml")"
 LSY_CTX="$(grep -oE -- '--context [0-9]+' <<<"$LSY" | head -1 | cut -d' ' -f2)"
@@ -894,8 +898,8 @@ for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash; do
   bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
   if grep -q -- "--served-model-name $m" <<<"$bloc" && ! grep -q 'stripParams' <<<"$bloc" \
      && [[ -n "$LSY_CTX" ]] && grep -qE "^      context: $LSY_CTX$" <<<"$bloc" \
-     && ! grep -oE '[^ ]+\.gguf' <<<"$bloc" | grep -vqE '^\$\{env\.(MODELS_BASE|GUFO_DATA)\}/'; then
-    echo "[OK]   llama-swap : $m nommé comme gufo le sert, stop transmis, contexte annoncé ($LSY_CTX), fichiers sous le parc ou GUFO_DATA"
+     && ! grep -oE '[^ ]+\.gguf' <<<"$bloc" | grep -vqE '^\$\{env\.MODELS_BASE\}/'; then
+    echo "[OK]   llama-swap : $m nommé comme gufo le sert, stop transmis, contexte annoncé ($LSY_CTX), fichiers sous le parc"
   else
     echo "[FAIL] llama-swap : bloc $m incohérent dans gufo-llama-swap.yaml"; rc=1
   fi

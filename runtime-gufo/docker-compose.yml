@@ -71,13 +71,13 @@ services:
       GUFO_DATA: ${GUFO_DATA:?}
       GUFO_SESSIONS: ${GUFO_SESSIONS:?}
       GUFO_PRECHARGE: ${GUFO_PRECHARGE:?}
-    # Parc et GGUF de référence au MÊME chemin et en lecture seule (les lignes
-    # de commande portent des chemins absolus de l'hôte) ; le cache disque est
+    # Parc au MÊME chemin et en lecture seule (les lignes de commande portent
+    # des chemins absolus de l'hôte) ; les poids propres à gufo y sont depuis
+    # le 09/10/2026, dans MODELS_BASE/gufo, donc sous le même montage ; le cache disque est
     # le seul point inscriptible ; la configuration de llama-swap, versionnée,
     # est lue au démarrage (un changement demande --gufo, qui recrée).
     volumes:
       - "${MODELS_BASE:?}:${MODELS_BASE:?}:ro"
-      - "${GUFO_DATA:?}/models:${GUFO_DATA:?}/models:ro"
       - "${GUFO_DATA:?}/cache:${GUFO_DATA:?}/cache:rw"
       - "${GUFO_RUNTIME_DIR:?}/gufo-llama-swap.yaml:/etc/llama-swap/config.yaml:ro"
     entrypoint:

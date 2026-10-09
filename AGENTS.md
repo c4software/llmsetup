@@ -65,7 +65,7 @@ résumer ou la supprimer, non.
   `docker compose config`, régénération qui ne réécrit pas un fichier identique,
   `_svc_restart` qui n'émet jamais `compose restart`, `_svc_wait_ready` qui
   échoue vite sur un conteneur sorti, `--cleanup` qui épargne les deux
-  artefacts générés et `--migrate-off-systemd` idempotente ; et pour le ini :
+  artefacts générés et le dossier `gufo`, et `--migrate-off-systemd` idempotente ; et pour le ini :
   device `ROCm0` partout et aucun `Vulkan0`, `fit = off` / `load-mode = none` /
   cache K et V `f16` dans l'en-tête, `spec-draft-ngl = all` injecté sur chaque
   drafter séparé, `batch-size` 16384 sur la seule section autorisée, et le

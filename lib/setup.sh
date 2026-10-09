@@ -181,6 +181,10 @@ cmd_update() {
 # à la racine) supprimerait la configuration du service à chaque --cleanup,
 # alors qu'elle se régénère certes, mais pas au milieu d'un run.
 #
+# Le dossier `gufo` (poids propres à gufo, runtime-gufo/download.sh) est
+# épargné lui aussi : aucun modèle de lib/models.sh ne le référence, il serait
+# sinon listé orphelin en entier (plus de 250 Go).
+#
 # Dry-run par défaut ; --yes pour exécuter réellement.
 # =============================================================================
 
@@ -220,7 +224,7 @@ cmd_cleanup() {
   # 1. dossiers de modèle entiers
   while IFS= read -r d; do
     _in_list "$(basename "$d")" "${keep_keys[@]}" || doomed+=("$d")
-  done < <(find "$MODELS_BASE" -mindepth 1 -maxdepth 1 -type d ! -name '.cache' | sort)
+  done < <(find "$MODELS_BASE" -mindepth 1 -maxdepth 1 -type d ! -name '.cache' ! -name 'gufo' | sort)
 
   # 2. .gguf orphelins dans les dossiers conservés
   while IFS= read -r f; do
@@ -251,7 +255,7 @@ cmd_cleanup() {
   done
 
   # dossiers de quant vidés + métadonnées hf devenues orphelines
-  find "$MODELS_BASE" -mindepth 2 -type d -empty -delete 2>/dev/null || true
+  find "$MODELS_BASE" -mindepth 2 -type d -empty ! -path "$MODELS_BASE/gufo/*" -delete 2>/dev/null || true
 
   info "✅ Nettoyage terminé."
 

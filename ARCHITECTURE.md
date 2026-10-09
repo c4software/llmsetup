@@ -488,7 +488,9 @@ Même schéma que le service : compose versionné `runtime-gufo/docker-compose.y
 llama-swap épinglé par SHA-256), configuration versionnée
 `runtime-gufo/gufo-llama-swap.yaml` (SEULE description des lignes de commande
 de gufo, valeurs machine en `${env.VAR}`), `.env` généré par `lib/gufo.sh`
-dans `GUFO_DATA` (défaut `~/llm/gufo-test`, hors du dépôt et de `~/models`)
+dans `GUFO_DATA` (défaut `~/llm/gufo-test`, hors du dépôt et de `~/models` ;
+les poids propres à gufo sont, eux, dans `~/models/gufo` depuis le 09/10/2026,
+sous le montage du parc, et `--cleanup` les épargne)
 avec les seules valeurs machine : uid:gid de l'hôte, gid NUMÉRIQUES de render
 et video, chemins, port, sessions, politique de redémarrage, modèle
 préchargé, `COMPOSE_FILE` (usage manuel : `cd ~/llm/gufo-test && docker

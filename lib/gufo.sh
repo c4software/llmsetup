@@ -20,9 +20,12 @@
 # deux côtés, l'autre étant arrêté ou supprimé).
 #
 # Variables (environnement), pour les bancs de runtime-gufo/bench/ surtout :
-#   GUFO_DATA      données hors dépôt et hors ~/models : models/ (GGUF de
-#                  référence), cache/ (cache disque), resultats/, .env
-#                  (défaut ~/llm/gufo-test)
+#   GUFO_DATA      données hors dépôt et hors ~/models : cache/ (cache
+#                  disque), resultats/, .env (défaut ~/llm/gufo-test). Les
+#                  poids propres à gufo n'y sont plus depuis le 09/10/2026 :
+#                  ils vivent avec le parc, dans $MODELS_BASE/gufo (un seul
+#                  dossier de modèles à copier d'une machine à l'autre),
+#                  que --cleanup épargne (lib/setup.sh)
 #   GUFO_IMAGE     image (défaut : la ligne de runtime-gufo/IMAGE, SEUL endroit
 #                  où la version est épinglée ; download.sh, bench/remesure.sh
 #                  et tools/gufo-amont.sh lisent le même fichier, et
@@ -139,7 +142,7 @@ cmd_gufo() {
   docker image inspect "$GUFO_IMAGE" >/dev/null 2>&1 \
     || error "Image $GUFO_IMAGE absente - ./setup-llm.sh --gufo-download image"
 
-  mkdir -p "$GUFO_DATA/models" "$GUFO_DATA/cache"
+  mkdir -p "$GUFO_DATA/cache"
   local tmp; tmp="$(mktemp)"
   generate_gufo_env "$modele" > "$tmp" || { rm -f "$tmp"; error ".env de gufo non généré (groupes GPU)"; }
   mv -f "$tmp" "$GUFO_ENV_FILE"
@@ -179,8 +182,8 @@ cmd_gufo_logs() {
 }
 
 # cmd_gufo_download <image|flashnext|deepseek|tts|asr|qwen-image|all> - image et poids de
-# référence, dans GUFO_DATA/models.
+# référence, dans $MODELS_BASE/gufo.
 cmd_gufo_download() {
   [[ -n "${1:-}" ]] || error "--gufo-download attend : image, flashnext, deepseek, tts, asr, qwen-image ou all"
-  GUFO_DATA="$GUFO_DATA" GUFO_IMAGE="$GUFO_IMAGE" "$GUFO_DIR/download.sh" "$1"
+  MODELS_BASE="$MODELS_BASE" GUFO_IMAGE="$GUFO_IMAGE" "$GUFO_DIR/download.sh" "$1"
 }

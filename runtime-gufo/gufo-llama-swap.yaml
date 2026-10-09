@@ -147,7 +147,7 @@ models:
     name: "Qwen3.8-Flash-Next (gufo, MTP)"
     cmd: >-
       ${gufo} --served-model-name qwen3.8-flash-next
-      --model ${env.GUFO_DATA}/models/qwen3.8-flash-next/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
+      --model ${env.MODELS_BASE}/gufo/qwen3.8-flash-next/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
       --speculative mtp
       --mtp-model ${env.MODELS_BASE}/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
       --mmproj ${env.MODELS_BASE}/qwen3.8-flash-next/mmproj-BF16.gguf
@@ -170,16 +170,16 @@ models:
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-
       ${gufo} --served-model-name deepseek-v4-flash
-      --model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
+      --model ${env.MODELS_BASE}/gufo/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
       --speculative dspark
-      --dspark-model ${env.GUFO_DATA}/models/DeepSeek-V4-Flash-DSpark-support-0731.gguf
+      --dspark-model ${env.MODELS_BASE}/gufo/DeepSeek-V4-Flash-DSpark-support-0731.gguf
       --think off
     checkEndpoint: /health
     capabilities:
       context: 262144
 
   # ── Audio et image : autres serveurs de gufo (voir docs/models/ de gufo) ──
-  # Poids BF16 safetensors dans GUFO_DATA/models (--gufo-download tts, asr,
+  # Poids BF16 safetensors dans MODELS_BASE/gufo (--gufo-download tts, asr,
   # qwen-image). Routes relayées par llama-swap : /v1/audio/speech,
   # /v1/audio/voices, /v1/audio/transcriptions, /v1/images/generations et
   # /v1/images/edits. Le flux WebSocket /v1/audio/speech/stream de la synthèse
@@ -210,7 +210,7 @@ models:
     name: "Qwen3-TTS 1.7B CustomVoice (gufo)"
     cmd: >-
       gufo serve tts --host 127.0.0.1 --port ${PORT}
-      --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-CustomVoice
+      --model ${env.MODELS_BASE}/gufo/Qwen3-TTS-12Hz-1.7B-CustomVoice
       --served-model-name qwen3-tts-12hz-1.7b-customvoice
     checkEndpoint: /health
     ttl: 60
@@ -219,7 +219,7 @@ models:
     name: "Qwen3-TTS 1.7B VoiceDesign (gufo)"
     cmd: >-
       gufo serve tts --host 127.0.0.1 --port ${PORT}
-      --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign
+      --model ${env.MODELS_BASE}/gufo/Qwen3-TTS-12Hz-1.7B-VoiceDesign
       --served-model-name qwen3-tts-12hz-1.7b-voice-design
     checkEndpoint: /health
     ttl: 60
@@ -228,7 +228,7 @@ models:
     name: "Qwen3-TTS 1.7B Base, clonage de voix (gufo)"
     cmd: >-
       gufo serve tts --host 127.0.0.1 --port ${PORT}
-      --model ${env.GUFO_DATA}/models/Qwen3-TTS-12Hz-1.7B-Base
+      --model ${env.MODELS_BASE}/gufo/Qwen3-TTS-12Hz-1.7B-Base
       --served-model-name qwen3-tts-12hz-1.7b-base
     checkEndpoint: /health
     ttl: 60
@@ -239,7 +239,7 @@ models:
     name: "Qwen3-ASR 1.7B (gufo)"
     cmd: >-
       gufo serve asr --host 127.0.0.1 --port ${PORT}
-      --model ${env.GUFO_DATA}/models/Qwen3-ASR-1.7B
+      --model ${env.MODELS_BASE}/gufo/Qwen3-ASR-1.7B
       --served-model-name qwen3-asr-1.7b
     checkEndpoint: /health
     ttl: 60
@@ -263,7 +263,7 @@ models:
     name: "Qwen-Image-2.1, encodeur Heretic (gufo)"
     cmd: >-
       gufo serve image --host 127.0.0.1 --port ${PORT}
-      --model ${env.GUFO_DATA}/models/Qwen-Image-2.1-heretic
+      --model ${env.MODELS_BASE}/gufo/Qwen-Image-2.1-heretic
       --served-model-name Qwen-Image-2.1-heretic
     checkEndpoint: /health
 

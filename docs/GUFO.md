@@ -384,7 +384,8 @@ Chiffres qui portent ces conclusions :
 gufo se pilote depuis le point d'entrée du dépôt ; compose, téléchargement et
 bancs sont versionnés dans [`runtime-gufo/`](../runtime-gufo/README.md). Les
 données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
-(défaut `~/llm/gufo-test` sur bigchuck, déjà peuplé) :
+(défaut `~/llm/gufo-test` sur bigchuck, déjà peuplé), sauf les poids propres
+à gufo, rangés avec le parc dans `~/models/gufo` depuis le 09/10/2026 :
 
 - `./setup-llm.sh --gufo [flashnext|27b|deepseek]` : gufo, toujours derrière
   llama-swap (section « Routeur » ci-dessus), à la place du service sur
@@ -401,7 +402,8 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   DeepSeek IQ2XXS antirez `1cd7b56`, 87 Go, et DSpark `e7f0403`, 6 Go ;
   le drafter DFlash 2 Q4_K_M `2d9571f`, 1,1 Go, téléchargé pour la
   comparaison au Q8_0, mesuré identique et supprimé le 25/09/2026). Présents
-  sur bigchuck (191 Go dans `GUFO_DATA/models`).
+  sur bigchuck (191 Go dans `~/models/gufo`, `GUFO_DATA/models` avant le
+  09/10/2026).
 - `runtime-gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
   (`bench/mesure.py`). Cas gufo : `27b`, `flashnext`, `deepseek` ; cas service : `27b`, `flashnext`, `flashnext-large-ub`,
   `deepseek`.

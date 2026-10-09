@@ -90,15 +90,20 @@ Nom exposé par gufo : `qwen3.8-27b` ou `qwen3.8-flash-next` (via le proxy :
 
 ## Où vont les données
 
-Hors du dépôt et hors de `~/models` (où `--cleanup` les verrait orphelines),
-dans `GUFO_DATA`, par défaut `~/llm/gufo-test` :
+Les poids propres à gufo (`--gufo-download`) vont avec le parc, dans
+`~/models/gufo` (`MODELS_BASE/gufo`), depuis le 09/10/2026 : un seul dossier
+de modèles à copier d'une machine à l'autre. `--cleanup` épargne ce dossier
+par son nom (aucun modèle de `lib/models.sh` ne le référence, il le verrait
+sinon orphelin). Avant cette date ils étaient dans `GUFO_DATA/models`.
+
+Le reste est hors du dépôt et hors de `~/models`, dans `GUFO_DATA`, par
+défaut `~/llm/gufo-test` :
 
 - `.env` (usage réel) et `banc.env` (bancs) : générés ;
-- `models/` : GGUF de référence de gufo (`--gufo-download`) ;
 - `cache/` : cache disque de gufo (16 Gio au plus) ;
 - `resultats/` : sorties des bancs.
 
-Variables : `GUFO_DATA`, `GUFO_IMAGE`, `GUFO_SESSIONS` (défaut 2 ; `SESSIONS`
+Variables : `GUFO_DATA`, `MODELS_BASE` (téléchargement seul), `GUFO_IMAGE`, `GUFO_SESSIONS` (défaut 2 ; `SESSIONS`
 pour les bancs, défaut 1), `PASSES` (banc agentique). Les bancs posent
 eux-mêmes `GUFO_PROJET=gufo-banc`, `GUFO_CONTENEUR=gufo-banc`,
 `GUFO_RESTART=no` et leur `.env`.
