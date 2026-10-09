@@ -64,7 +64,12 @@ SAUVE=""
 fin() {
   if [[ -n "$SAUVE" ]]; then cp -f "$SAUVE" "$YAML"; rm -f "$SAUVE"; fi
   GUFO_SANS_SERVICE=1 "$DEPOT/setup-llm.sh" --gufo-off >/dev/null 2>&1 || true
-  if ((STOPPE)) && [[ "$(docker inspect -f '{{.State.Running}}' llama-server 2>/dev/null || true)" != true ]]; then
+  # Machine où le service n'a jamais été installé (pas de models.ini, gufo
+  # seul : silentchuck, 09/10/2026) : rien à relancer. --start y sortait en
+  # erreur (« Config introuvable »), donc ce script aussi, et remesure.sh
+  # (set -e) s'arrêtait après le banc HTTP en laissant gufo coupé.
+  if ((STOPPE)) && [[ -f "$HOME/models/models.ini" ]] \
+     && [[ "$(docker inspect -f '{{.State.Running}}' llama-server 2>/dev/null || true)" != true ]]; then
     "$DEPOT/setup-llm.sh" --start
   fi
   return 0

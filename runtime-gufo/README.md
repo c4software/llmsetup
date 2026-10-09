@@ -119,7 +119,8 @@ eux-mêmes `GUFO_PROJET=gufo-banc`, `GUFO_CONTENEUR=gufo-banc`,
   refusent tant que gufo tourne. Le dernier lancé repart seul au démarrage
   de la machine.
 - Les bancs retirent un gufo d'usage réel au départ et relancent le service
-  à la fin.
+  à la fin, sauf sur une machine où il n'a jamais été installé (pas de
+  `~/models/models.ini`, gufo seul) : là ils ne relancent rien.
 - Garder la configuration de gufo stable : la changer (`GUFO_SESSIONS`…) rend
   son cache disque inutilisable.
 - `stop` et `stop_sequences` : gérés par gufo depuis le 25/09/2026
