@@ -21,7 +21,8 @@ Choix de l'utilisateur du 09/10/2026, question par question (checklist) :
 monter (image épinglée en `gufo-runtime:0.10.0`, `9a6d9a1`, yaml inchangé),
 remesurer Flash-Next seul (seul modèle dont le moteur change ; 27B et
 DeepSeek non remesurés) avec une seconde série, machine libre tout de suite,
-puis retenir la version malgré la boucle de la seconde série. Les deux temps
+puis retenir la version malgré la boucle de la seconde série ; le 27B est
+remesuré ensuite, à sa demande (« 27B en 0.10.0 », plus bas). Les deux temps
 sont enchaînés par `essais/montee-0.10.0.sh` (non versionné, 14:35 à 14:57) :
 `remesure.sh flashnext`, puis `TAG=…-passe2 remesure.sh flashnext`. 16/16 à
 la première série, **15/16 à la seconde** : `creation` passe 1 arrêté par le
@@ -135,6 +136,37 @@ Lecture :
 - **Première série à cache disque froid une quatrième fois** : un
   `no_checkpoint`, deux `prefix_changed`, une reprise disque, 93,6 %.
 - **Aucun refus de staging** aux deux séries.
+
+### 27B en 0.10.0
+
+À la demande de l'utilisateur après la décision (« test le 27b »), le
+09/10/2026 de 15:13 à 15:23 : `remesure.sh 27b`, une série, journal dans
+`essais/montee-0.10.0-27b.log`, journaux agentiques dans
+`resultats/agentic/2026-10-09-0.10.0/` (`avant/` y est la série à staging au
+défaut de la 0.9.1, sur cache chaud, non comparable). Contre la série de la
+0.9.1 de la veille :
+
+| 27B, 1 session | 0.9.1 | 0.10.0 |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4 à 1,6k (t/s) | 503 à 539 | 510 à 540 |
+| prefill à 6,5k / 52k / 32k (t/s) | 558 / 495,3 / 531,9 | 566 / 499,9 / 535,8 |
+| décode prose / code (t/s) | 39,2 à 48,9 / 64,9 à 65,7 | 41,1 à 50,7 / 65,2 à 66,0 |
+| chargement, mémoire | 33,5 s, 77 Gio | 30,5 s, 77 Gio |
+| agentique, cache disque | 16/16, 49 requêtes, repris 93,6 %, prefill 16 s, décode 42,1 t/s, acceptance 72,5 % | 16/16, 50 requêtes, repris 93,6 %, prefill 18 s, décode 43,3 t/s, acceptance 71,0 % |
+| reprises disque / RAM / ratés | 1 / 45 / 3 | 1 / 46 / 3 |
+| `creation`, passes 1/2/3 (s) | 20,2 / 22,2 / 14,9 | 23,1 / 17,7 / 21,5 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 359 ms | 360 ms |
+
+- **Pas de régression, pas de boucle** : 16/16, débits au niveau de la
+  0.9.1 alors que la release ne touche pas le 27B. Prefill 0,7 à 1,4 % plus
+  haut (566 contre 558 à 6,5k, 499,9 contre 495,3 à 52k, 535,8 contre 531,9
+  à 32k), une requête ou deux par point, dans le bruit d'une série ; il
+  reste 0,5 à 1 % sous la 0.7.0 (570 à 6,5k, 502 à 52k).
+- Trois points de reprise disque écrits (`write_ms` 272 à 556 ms), mêmes
+  trois débuts de conversation recalculés (un `no_checkpoint`, deux
+  `prefix_changed`), aucun refus de staging.
+- Usage réel relancé à la fin (Flash-Next, conteneur `gufo-8009`).
 
 ## Release v0.9.1 (08/10/2026), retenue le jour même
 
@@ -2160,21 +2192,22 @@ La colonne 27B v0.9.0 (07/10, une série) est rangée avec celles du 27B.
 Colonnes v0.9.1 (08/10) : le 27B (une série) rangé avec les siens, et
 Flash-Next, première des deux séries du jour, à cache disque froid une
 troisième fois (voir « Release v0.9.1 »).
-Colonne v0.10.0 (09/10) : Flash-Next seul (27B non remesuré), première des
-deux séries du jour ; la seconde, à 15/16 avec une boucle sur `creation`,
-n'est pas reportée (voir « Release v0.10.0 »).
+Colonnes v0.10.0 (09/10) : le 27B (une série, lancée après la décision)
+rangé avec les siens, et Flash-Next, première des deux séries du jour ; la
+seconde, à 15/16 avec une boucle sur `creation`, n'est pas reportée (voir
+« Release v0.10.0 »).
 
-| Mesure | 27B v0.2.0 | 27B v0.4.0 | 27B v0.5.0 | 27B v0.7.0 | 27B v0.9.0 | 27B v0.9.1 | Flash-Next v0.2.0 | Flash-Next v0.4.0 | Flash-Next v0.5.0 | Flash-Next v0.7.0 | Flash-Next v0.7.1 | Flash-Next v0.8.0 | Flash-Next v0.8.1 | Flash-Next v0.9.0 | Flash-Next v0.9.1 | Flash-Next v0.10.0 |
-|---|---|---|---|---|---| --- |---|---|---|---|---|---|---|---| --- | --- |
-| prefill 52k (t/s) | 508,3 | 504,6 | 499,8 | 501,7 | 497,3 | 495,3 | 1 395,5 | 1 370,5 | 1 361,0 | 1 364,6 | 1 439,9 | 1 432,0 | 1 406,2 | 1 424,1 | 1 480,9 | 1 583,2 |
-| décode code, banc HTTP (t/s) | ~66 | ~65 | ~66 | ~66 | ~65 | ~65 | ~61 | ~61 | 55 à 62 | 60 à 63 | 65 à 68 | 66 à 69 | 67 à 69 | 66 à 68 | 68 à 69 | 66 à 69 |
-| tour 2 sur 32k en cache (t/s) | 107,4 | 107,1 | | |  |  | 151,2 | 160,4 | | | | |  |  |  |  |
-| `creation`, passes 1/2/3 (s) | 18,5 / 17,7 / 28,1 | 25,1 / 22,8 / 33,1 | 21,5 / 21,1 / 26,1 | 22,8 / 18,4 / 17,6 | 21,9 / 18,8 / 18,0 | 20,2 / 22,2 / 14,9 | 16,4 / 15,3 / 17,7 | 23,1 / **2 563,7** / 19,5 | 16,9 / 24,4 / 17,3 | 17,5 / 22,2 / 22,7 | 16,3 / 20,4 / 21,3 | 15,1 / 13,9 / 15,5 | 15,5 / 14,5 / 12,8 | 23,0 / 20,9 / 14,0 | 22,5 / 20,6 / 15,1 | 15,2 / 14,3 / 20,2 |
-| `bugfix`, passes 1/2/3 (s) | 9,6 / 8,9 / 8,8 | 12,3 / 11,4 / 12,8 | 9,4 / 10,0 / 9,7 | 9,8 / 9,1 / 10,6 | 10,6 / 10,0 / 9,4 | 10,5 / 8,7 / 8,6 | 7,7 / 7,1 / 6,3 | 9,7 / 12,4 / 10,8 | 7,5 / 6,8 / 7,4 | 7,2 / 6,6 / 7,2 | 7,1 / 5,6 / 5,4 | 6,8 / 6,0 / 6,5 | 6,5 / 6,5 / 6,1 | 6,6 / 6,6 / 5,4 | 7,6 / 6,4 / 5,5 | 7,1 / 6,5 / 5,4 |
-| requêtes agentiques | 51 | 54 | 51 | 49 | 49 | 49 | 49 | 1 645 | 51 | 53 | 53 | 49 | 49 | 53 | 53 | 51 |
-| décode agentique (t/s) | 43,9 | 30,5 | 42,3 | 42,5 | 42,5 | 42,1 | 50,4 | 27,8 (boucle comprise) | 44,7 | 48,1 | 50,7 | 51,0 | 52,4 | 51,1 | 48,6 | 51,3 |
-| acceptance du spéculatif (médiane) | 69,9 % | 50,7 % | 71,0 % | 71,8 % | 70,0 % | 72,5 % | 84,6 % | 60,0 % | 85,7 % | 85,7 % | 84,8 % | 84,6 % | 85,7 % | 84,6 % | 85,7 % | 82,0 % |
-| prompt repris du cache | 92,7 % | 90,4 % | 93,2 % | 93,6 % | 93,4 % | 93,6 % | 92,2 % | 99,2 % | 93,3 % | 93,1 % | 93,8 % | 98,7 % (cache disque déjà peuplé) | 91,2 % (points de reprise disque de la 0.8.0 inutilisables) | 93,1 % (une seule reprise disque sur le cache de la 0.8.1) | 91,5 % (aucune reprise disque sur le cache de la 0.9.0) | 93,6 % (une reprise disque sur le cache de la 0.9.1) |
-| reprises disque / RAM | 12 / 36 | 12 / 39 | 2 / 46 | 1 / 45 | 1 / 45 | 1 / 45 | 12 / 34 | 10 / 1 623 | 2 / 46 | 1 / 49 | 1 / 49 | 3 / 46 | 0 / 45 | 1 / 49 | 0 / 49 | 1 / 47 |
-| points de reprise disque écrits | 58 | 37 | 3 (82 sautés, `min_step`) | 3 (75 sautés, `min_step`) | 3 (78 sautés, `min_step`) | 3 (69 sautés, `min_step`) | 44 | 1 355 | 3 (67 sautés, `min_step`) | 3 (80 sautés, `min_step`) | 3 (66 sautés, `min_step`) | 0 (72 sautés, `min_step`) | 4 (61 sautés, `min_step`) | 3 (74 sautés, `min_step`) | 4 (73 sautés, `min_step`, écrits en 2,3 à 3,2 s) | 3 (69 sautés, `min_step`) |
-| points de reprise refusés (staging) | 0 | 0 | | 0 | 0 | 0 | 0 | 296 | | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Mesure | 27B v0.2.0 | 27B v0.4.0 | 27B v0.5.0 | 27B v0.7.0 | 27B v0.9.0 | 27B v0.9.1 | 27B v0.10.0 | Flash-Next v0.2.0 | Flash-Next v0.4.0 | Flash-Next v0.5.0 | Flash-Next v0.7.0 | Flash-Next v0.7.1 | Flash-Next v0.8.0 | Flash-Next v0.8.1 | Flash-Next v0.9.0 | Flash-Next v0.9.1 | Flash-Next v0.10.0 |
+|---|---|---|---|---|---| --- | --- |---|---|---|---|---|---|---|---| --- | --- |
+| prefill 52k (t/s) | 508,3 | 504,6 | 499,8 | 501,7 | 497,3 | 495,3 | 499,9 | 1 395,5 | 1 370,5 | 1 361,0 | 1 364,6 | 1 439,9 | 1 432,0 | 1 406,2 | 1 424,1 | 1 480,9 | 1 583,2 |
+| décode code, banc HTTP (t/s) | ~66 | ~65 | ~66 | ~66 | ~65 | ~65 | ~66 | ~61 | ~61 | 55 à 62 | 60 à 63 | 65 à 68 | 66 à 69 | 67 à 69 | 66 à 68 | 68 à 69 | 66 à 69 |
+| tour 2 sur 32k en cache (t/s) | 107,4 | 107,1 | | |  |  |  | 151,2 | 160,4 | | | | |  |  |  |  |
+| `creation`, passes 1/2/3 (s) | 18,5 / 17,7 / 28,1 | 25,1 / 22,8 / 33,1 | 21,5 / 21,1 / 26,1 | 22,8 / 18,4 / 17,6 | 21,9 / 18,8 / 18,0 | 20,2 / 22,2 / 14,9 | 23,1 / 17,7 / 21,5 | 16,4 / 15,3 / 17,7 | 23,1 / **2 563,7** / 19,5 | 16,9 / 24,4 / 17,3 | 17,5 / 22,2 / 22,7 | 16,3 / 20,4 / 21,3 | 15,1 / 13,9 / 15,5 | 15,5 / 14,5 / 12,8 | 23,0 / 20,9 / 14,0 | 22,5 / 20,6 / 15,1 | 15,2 / 14,3 / 20,2 |
+| `bugfix`, passes 1/2/3 (s) | 9,6 / 8,9 / 8,8 | 12,3 / 11,4 / 12,8 | 9,4 / 10,0 / 9,7 | 9,8 / 9,1 / 10,6 | 10,6 / 10,0 / 9,4 | 10,5 / 8,7 / 8,6 | 9,7 / 9,2 / 9,0 | 7,7 / 7,1 / 6,3 | 9,7 / 12,4 / 10,8 | 7,5 / 6,8 / 7,4 | 7,2 / 6,6 / 7,2 | 7,1 / 5,6 / 5,4 | 6,8 / 6,0 / 6,5 | 6,5 / 6,5 / 6,1 | 6,6 / 6,6 / 5,4 | 7,6 / 6,4 / 5,5 | 7,1 / 6,5 / 5,4 |
+| requêtes agentiques | 51 | 54 | 51 | 49 | 49 | 49 | 50 | 49 | 1 645 | 51 | 53 | 53 | 49 | 49 | 53 | 53 | 51 |
+| décode agentique (t/s) | 43,9 | 30,5 | 42,3 | 42,5 | 42,5 | 42,1 | 43,3 | 50,4 | 27,8 (boucle comprise) | 44,7 | 48,1 | 50,7 | 51,0 | 52,4 | 51,1 | 48,6 | 51,3 |
+| acceptance du spéculatif (médiane) | 69,9 % | 50,7 % | 71,0 % | 71,8 % | 70,0 % | 72,5 % | 71,0 % | 84,6 % | 60,0 % | 85,7 % | 85,7 % | 84,8 % | 84,6 % | 85,7 % | 84,6 % | 85,7 % | 82,0 % |
+| prompt repris du cache | 92,7 % | 90,4 % | 93,2 % | 93,6 % | 93,4 % | 93,6 % | 93,6 % | 92,2 % | 99,2 % | 93,3 % | 93,1 % | 93,8 % | 98,7 % (cache disque déjà peuplé) | 91,2 % (points de reprise disque de la 0.8.0 inutilisables) | 93,1 % (une seule reprise disque sur le cache de la 0.8.1) | 91,5 % (aucune reprise disque sur le cache de la 0.9.0) | 93,6 % (une reprise disque sur le cache de la 0.9.1) |
+| reprises disque / RAM | 12 / 36 | 12 / 39 | 2 / 46 | 1 / 45 | 1 / 45 | 1 / 45 | 1 / 46 | 12 / 34 | 10 / 1 623 | 2 / 46 | 1 / 49 | 1 / 49 | 3 / 46 | 0 / 45 | 1 / 49 | 0 / 49 | 1 / 47 |
+| points de reprise disque écrits | 58 | 37 | 3 (82 sautés, `min_step`) | 3 (75 sautés, `min_step`) | 3 (78 sautés, `min_step`) | 3 (69 sautés, `min_step`) | 3 (81 sautés, `min_step`) | 44 | 1 355 | 3 (67 sautés, `min_step`) | 3 (80 sautés, `min_step`) | 3 (66 sautés, `min_step`) | 0 (72 sautés, `min_step`) | 4 (61 sautés, `min_step`) | 3 (74 sautés, `min_step`) | 4 (73 sautés, `min_step`, écrits en 2,3 à 3,2 s) | 3 (69 sautés, `min_step`) |
+| points de reprise refusés (staging) | 0 | 0 | | 0 | 0 | 0 | 0 | 0 | 296 | | 0 | 0 | 0 | 0 | 0 | 0 | 0 |

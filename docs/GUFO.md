@@ -70,12 +70,15 @@ la synthèse et ce qui sert au travail courant.
   `creation` jusqu'au garde-temps de 300 s, forme de #388 (toutes
   versions), retenue quand même par l'utilisateur. Écritures du cache
   disque normales (119 à 164 ms), Flash-Next mesuré sans le 27B avant lui.
+  27B remesuré après la décision (une série) : 16/16, pas de boucle, au
+  niveau de la 0.9.1 (prefill 499,9 t/s à 52k, décode agentique 43,3 t/s,
+  reprise 93,6 %).
 - **À vérifier à la prochaine release** : l'ordre de `remesure.sh` (les
   écritures lentes de Flash-Next sont apparues juste après le 27B, qui
   remplit et évince le cache disque ; en 0.10.0, Flash-Next mesuré seul
   écrit en 119 à 164 ms, ce qui va dans ce sens sans le prouver : lire les
   `write_ms` de Flash-Next quand il passe en second) ; le
-  prefill du 27B (1 à 2 % sous la 0.7.0 en 0.9.0 et en 0.9.1, non remesuré
+  prefill du 27B (1 à 2 % sous la 0.7.0 en 0.9.0 et en 0.9.1, 0,5 à 1 %
   en 0.10.0) ; la première
   série après une montée, à cache disque froid quatre fois de suite (0.8.1,
   0.9.0, 0.9.1, 0.10.0) ; le décode MTP de Flash-Next après une requête d'image
@@ -94,7 +97,7 @@ la synthèse et ce qui sert au travail courant.
   ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
   commit `d9a84f1` le 26/09/2026, sur la v0.1.1 le 28/09/2026 (27B et
   Flash-Next), la v0.2.0 le 29/09/2026 (27B, Flash-Next et DeepSeek), puis la
-  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1 et la v0.10.0 (Flash-Next seul de la v0.7.1 à la v0.8.1 et en v0.10.0, les deux Qwen en v0.9.0 et v0.9.1 ; « Suivi en amont »). Les deux premières mesures
+  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1 et la v0.10.0 (Flash-Next seul de la v0.7.1 à la v0.8.1, les deux Qwen depuis la v0.9.0 ; « Suivi en amont »). Les deux premières mesures
   précèdent toute release : la v0.1.0 n'est publiée que le 28/09/2026.
 - Pas un llama.cpp : noyaux spécialisés par modèle et par forme de matrice,
   en partie adaptés de llama.cpp / ggml (MIT, cf. leur
@@ -315,7 +318,7 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.8.1 (`543300e`) | 06/10/2026 | retenue | appels d'outils gardés en syntaxe native, sans enveloppe JSON, et appel reconnu sans `</think>` fermé (#441), lignes vides de tête retirées (#446), historiques d'images (#447) ; Flash-Next seul remesuré, deux séries, 16/16, débits au niveau de la 0.8.0 ; reprise à 91,2 % à la première série (points de reprise disque de la 0.8.0 inutilisables, préfixe changé) puis 98,4 % ; une boucle de vérification sur `creation` à la seconde (88,7 s, PASS, forme de #388) ; 27B non remesuré depuis la 0.7.0 ; aucun réglage changé |
 | v0.9.0 (`2e35aaf`) | 07/10/2026 | retenue | points de reprise du prompt de Flash-Next sans copie de l'état complet (#445), prefill à long contexte (#463), points de branchement appris gardés sous pression RAM (#466), pages CMA libres hors du budget RAM (sans effet ici, `CmaTotal` 0), messages système en cours de conversation remontés en tête pour Qwen (#449), `--trace` (#458, non posée), `--max-pending-per-client` au défaut de `--max-pending` (#467, 16 au lieu de 4) ; Flash-Next seul remesuré, deux séries, 16/16, débits au niveau de la 0.8.1, mémoire 107 Gio au lieu de 111 ; reprise à 93,1 % à la première série (une seule reprise disque, trois débuts de conversation recalculés) puis 98,6 % ; 27B remesuré (une série), 16/16, boucle agentique au niveau de la 0.7.0, prefill 1 à 2 % plus bas ; aucun réglage changé |
 | v0.9.1 (`dea22ce`) | 08/10/2026 | retenue | prefill de Flash-Next par blocs de 4 096 tokens (#470), noyaux de prefill du 27B et de Flash-Next sans spill sous clang 23 (#459, image toujours en clang 22), staging automatique sans plafond de 1 Gio (#473) ; 27B (une série) et Flash-Next (deux séries) remesurés, 16/16 ; prefill long de Flash-Next à +4 % (1 481 t/s à 52k), mémoire et threads inchangés, 27B au niveau de la 0.9.0 ; reprise de Flash-Next à 91,5 % à la première série (cache disque froid) puis 99,2 % ; écritures du cache disque de Flash-Next à 2,3 à 3,2 s à la première série (115 à 127 ms en 0.9.0), non reproduites à l'essai croisé 0.9.0 / 0.9.1 du même jour (94 à 155 ms dans les deux versions), donc pas la version ; staging au défaut essayé sur le 27B (10,6 Gio, aucun refus), 8 Gio gardés ; aucun réglage changé |
-| v0.10.0 (`3020d24`) | 09/10/2026 | retenue | prefill et rattrapage MTP de Flash-Next (#485), outils et streaming sur `/v1/messages` (#469, non essayé), tuiles IQ2 de DeepSeek pour les lots de 2 à 31 tokens (#482, non mesuré), RFC d'une refonte du cache de continuation (#488, #489, documentation seule) ; Flash-Next seul remesuré, deux séries ; prefill long à +5 à +7 % (1 583 t/s à 52k), décode, mémoire et threads inchangés ; 16/16 puis 15/16 : boucle d'appels d'outils sur `creation` à la seconde série (garde-temps de 300 s, 150 appels, forme de #388, pas de ticket), retenue par l'utilisateur ; reprise à 93,6 % à la première série (cache disque froid), seconde non comparable ; acceptance agentique à 82,0 % à la première série, à relire ; écritures du cache disque en 119 à 164 ms ; `--help` identique, aucun réglage changé |
+| v0.10.0 (`3020d24`) | 09/10/2026 | retenue | prefill et rattrapage MTP de Flash-Next (#485), outils et streaming sur `/v1/messages` (#469, non essayé), tuiles IQ2 de DeepSeek pour les lots de 2 à 31 tokens (#482, non mesuré), RFC d'une refonte du cache de continuation (#488, #489, documentation seule) ; Flash-Next remesuré, deux séries ; prefill long à +5 à +7 % (1 583 t/s à 52k), décode, mémoire et threads inchangés ; 16/16 puis 15/16 : boucle d'appels d'outils sur `creation` à la seconde série (garde-temps de 300 s, 150 appels, forme de #388, pas de ticket), retenue par l'utilisateur ; reprise à 93,6 % à la première série (cache disque froid), seconde non comparable ; acceptance agentique à 82,0 % à la première série, à relire ; écritures du cache disque en 119 à 164 ms ; 27B remesuré après la décision (une série), 16/16, sans boucle, au niveau de la 0.9.1 ; `--help` identique, aucun réglage changé |
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
