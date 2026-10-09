@@ -1,6 +1,6 @@
 ---
 name: ajout-modele
-description: Procédure complète d'ajout d'un modèle dans ce dépôt (lib/models.sh) jusqu'au récap de performance partageable. À charger dès qu'on ajoute, remplace ou re-qualifie un modèle (nouveau GGUF, nouvelle quant, variante MTP, changement de moteur).
+description: Procédure complète d'ajout d'un modèle dans ce dépôt (runtime/llama-cpp-rocm-strix/lib/models.sh) jusqu'au récap de performance partageable. À charger dès qu'on ajoute, remplace ou re-qualifie un modèle (nouveau GGUF, nouvelle quant, variante MTP, changement de moteur).
 ---
 
 # Ajouter un modèle, de la fiche HF au tableau de perfs
@@ -11,22 +11,24 @@ on ne passe pas à la suivante sans lui. Les commandes se lancent sur la
 machine qui héberge le service (`./setup-llm.sh`, conteneur `llama-server`),
 jamais en parallèle les unes des autres : un seul GPU.
 
-Lire `AGENTS.md` et `ARCHITECTURE.md` avant d'éditer. Le bloc de
-`lib/models.sh` est la seule source de vérité du modèle ; ses commentaires
+Cette skill concerne le runtime `llama-cpp-rocm-strix` (un modèle servi par gufo se déclare dans `runtime/gufo/`, cf. AGENTS.md) : les sous-commandes citées s'entendent avec ce runtime actif, ou préfixées de `LLM_RUNTIME=llama-cpp-rocm-strix`.
+
+Lire `AGENTS.md` et `runtime/llama-cpp-rocm-strix/ARCHITECTURE.md` avant d'éditer. Le bloc de
+`runtime/llama-cpp-rocm-strix/lib/models.sh` est la seule source de vérité du modèle ; ses commentaires
 sont la connaissance métier et doivent citer les mesures (date, device,
 quant) qui justifient chaque réglage.
 
 ## Le moteur d'abord : l'image ROCm
 
 Depuis le 18/09/2026 le dépôt n'a plus qu'UN moteur : l'image docker construite
-par `runtime/` (ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
+par `runtime/llama-cpp-rocm-strix/` (ROCm 10.0 gfx1151 + ROCr/HIP retained-PM4 +
 [halo-box/strix-llama.cpp](https://github.com/halo-box/strix-llama.cpp) en HIP
 seul). Elle sert le service ET les outils hors service (`llama-bench` des
-courbes de batch, `llama-server` jetable de `tools/spec-isolate.sh`), par
-`_dk_run` (`lib/runtime.sh`). Le fork Vulkan installé sur l'hôte, ses liens dans
+courbes de batch, `llama-server` jetable de `runtime/llama-cpp-rocm-strix/tools/spec-isolate.sh`), par
+`_dk_run` (`runtime/llama-cpp-rocm-strix/lib/image.sh`). Le fork Vulkan installé sur l'hôte, ses liens dans
 `~/.local/bin` et ses commandes `--setup-fork` / `--update-fork` /
 `--unset-fork` ont été retirés ce jour-là. Les révisions du moteur sont
-épinglées dans deux `ARG` de `runtime/Dockerfile.rocm-strix` : les faire bouger
+épinglées dans deux `ARG` de `runtime/llama-cpp-rocm-strix/Dockerfile.rocm-strix` : les faire bouger
 (ou revenir en arrière) consiste à éditer le fichier, commiter la raison, puis
 reconstruire.
 `./setup-llm.sh --image-build` construit (raccourci vers
@@ -102,8 +104,8 @@ l'historique git si le besoin revient.)
 Les deux alimentent `KNOWN_FILES` (donc `--cleanup`) : un fichier déclaré est
 protégé, un fichier qui cesse de l'être devient un orphelin supprimable.
 
-Critère de passage : le bloc `lib/models.sh` est écrit (commentaire métier
-compris), `bash -n lib/models.sh` passe, et le ini généré n'a changé que
+Critère de passage : le bloc `runtime/llama-cpp-rocm-strix/lib/models.sh` est écrit (commentaire métier
+compris), `bash -n runtime/llama-cpp-rocm-strix/lib/models.sh` passe, et le ini généré n'a changé que
 pour ce modèle :
 
 ```bash
@@ -145,7 +147,7 @@ Deux questions indépendantes :
    `parallel = 1` était donné ici comme obligatoire jusqu'au 15/09/2026 : c'est
    un CHOIX à justifier par modèle (contexte par slot, mémoire, rendement
    mesuré), pas un interdit du moteur (vérifié dans le fork le 15/09/2026, cf.
-   en-tête de `lib/models.sh`). Sur une
+   en-tête de `runtime/llama-cpp-rocm-strix/lib/models.sh`). Sur une
    architecture à état récurrent (GDN des Qwen3.5+, conv LFM2), le rollback
    partiel sur rejet de draft est en mainline (PR #22673) mais n'a pas été
    validé ici sur Vulkan en boucle de tool calls : garder une variante sans
@@ -175,7 +177,7 @@ répondre d'abord hors service, sur un `llama-server` jetable qui ne touche ni
 au ini ni aux `.conf` :
 
 ```bash
-PASSES=2 MAX_TOKENS=1200 tools/spec-isolate.sh <tag> -- \
+PASSES=2 MAX_TOKENS=1200 runtime/llama-cpp-rocm-strix/tools/spec-isolate.sh <tag> -- \
   -m ~/models/<dossier>/<gguf> -md ~/models/<dossier>/<drafter.gguf> \
   --spec-type draft-dspark --spec-draft-n-max 3 -c 32768 \
   --temp 0.1 --top-k 50 --min-p 0 --repeat-penalty 1.1 -ctk f16 -ctv f16
@@ -196,7 +198,7 @@ DÉGÉNÉRÉE » invalide la mesure, si beaux que soient les t/s : c'est le
 charabia à 550 t/s de l'étape 3) ; le **décode** se lit sur la médiane hors 1re passe, et
 se compare à un run `--spec-type none` des mêmes arguments. Enchaîner plusieurs
 `<tag>` (un par n-max) coûte un redémarrage chacun et tranche la question. Puis
-seulement : écrire le réglage retenu dans `lib/models.sh` avec ses chiffres
+seulement : écrire le réglage retenu dans `runtime/llama-cpp-rocm-strix/lib/models.sh` avec ses chiffres
 datés, et le CONFIRMER tel qu'il est servi par
 `./setup-llm.sh --spec-ab <modèle> <n> - <variante>` (ou `--spec-test`) ; le
 test isolé est un dégrossissage, le service reste l'arbitre.
@@ -223,7 +225,7 @@ le `--spec-type` attendu dans `status.args`, et un premier
 Le modèle est déclaré et servi (fin de l'étape 2) : sur la machine du service,
 
 ```bash
-tools/qualif-modele.sh <section>
+runtime/llama-cpp-rocm-strix/tools/qualif-modele.sh <section>
 ```
 
 joue dans l'ordre l'étape 3 (`--bench-sanity`, **bloquante**), l'étape 5
@@ -239,14 +241,14 @@ justesse : là, tout s'arrête.
 
 Ce qu'il ne fait pas : l'étape 4 (`--spec-tune`) reste manuelle, elle n'a de
 sens que pour `draft-mtp` et elle écrit dans `spec-nmax.conf` ; le test isolé
-(`tools/spec-isolate.sh`) se joue avant la déclaration ; et rien n'est écrit
-dans `lib/models.sh`, le README ou `docs/HISTORIQUE.md` : les chiffres du
+(`runtime/llama-cpp-rocm-strix/tools/spec-isolate.sh`) se joue avant la déclaration ; et rien n'est écrit
+dans `runtime/llama-cpp-rocm-strix/lib/models.sh`, le README ou `docs/HISTORIQUE.md` : les chiffres du
 récapitulatif restent à reporter à la main.
 
 ## 3. Contrôle de justesse sur ROCm0 (--bench-sanity)
 
 Il n'y a plus de device à choisir : le moteur du service est l'image de
-`runtime/`, construite en HIP seul, qui n'expose que `ROCm0`
+`runtime/llama-cpp-rocm-strix/`, construite en HIP seul, qui n'expose que `ROCm0`
 (`--bench-devices` et `bench-devices.conf` ont été retirés le 18/09/2026).
 Ce qui reste de cette étape est ce qui la justifiait, et elle passe donc
 toujours en premier, AVANT toute mesure de spéculation :
@@ -282,15 +284,15 @@ sert) :
 
 ```bash
 ./setup-llm.sh --stop
-tools/bench-depth.sh ~/models/<dossier>/<gguf>    # 0 / 16k / 32k
+runtime/llama-cpp-rocm-strix/tools/bench-depth.sh ~/models/<dossier>/<gguf>    # 0 / 16k / 32k
 ./setup-llm.sh --start
 ```
 
-Un bump de révision dans `runtime/Dockerfile.rocm-strix` change les noyaux et
+Un bump de révision dans `runtime/llama-cpp-rocm-strix/Dockerfile.rocm-strix` change les noyaux et
 rouvre la question, comme un changement de quant : refaire ce contrôle après
 chaque reconstruction de l'image.
 
-Critère de passage : `--bench-sanity` répond juste (`tools/qualif-modele.sh`
+Critère de passage : `--bench-sanity` répond juste (`runtime/llama-cpp-rocm-strix/tools/qualif-modele.sh`
 s'ARRÊTE sinon), le texte généré est lisible, et toute anomalie est notée dans
 le commentaire du bloc avec la révision d'image et le symptôme.
 
@@ -313,7 +315,7 @@ Attention, ce forçage vaut `draft-mtp` quelle que soit la liste. Sur un modèle
 servi par un **drafter externe** (`ngram-map-k,draft-dflash`), `--spec-tune`
 mesurerait donc la tête MTP et non le drafter réellement servi. Y régler le n-max par
 `--spec-ab` (`spec-draft-n-max=4` contre `=7`…), et reporter le retenu dans
-`lib/models.sh` avec ses chiffres.
+`runtime/llama-cpp-rocm-strix/lib/models.sh` avec ses chiffres.
 
 Critère de passage : `spec-nmax.conf` contient la ligne du modèle, et le
 commentaire du bloc cite les t/s par k, la date, le device et l'étiquette de
@@ -330,7 +332,7 @@ par la courbe seule, hors service :
 
 ```bash
 ./setup-llm.sh --stop
-DEV=Vulkan0,ROCm0 REPS=5 tools/bench-spec-batch.sh ~/models/<dossier>/<gguf>
+DEV=Vulkan0,ROCm0 REPS=5 runtime/llama-cpp-rocm-strix/tools/bench-spec-batch.sh ~/models/<dossier>/<gguf>
 ./setup-llm.sh --start
 ```
 
@@ -358,7 +360,7 @@ sur mesure réelle avec `prompts/spec-refactor.txt` (le seul prompt où les
 n-grams ont des hits). Gagnant écrit dans `spec-ngram.conf`.
 
 Sur un modèle servi par un **drafter externe** (`ngram-map-k,draft-dflash`,
-`…,draft-dspark`), `tools/qualif-modele.sh` ne passe pas par cette commande
+`…,draft-dspark`), `runtime/llama-cpp-rocm-strix/tools/qualif-modele.sh` ne passe pas par cette commande
 mais par `--spec-ab` : l'arbitrage de `--spec-ngram-tune` se fait contre une
 référence « sans spéculation » (`spec-type none`) qui ne dit rien ici, la
 bonne référence étant le drafter seul, réellement servi ; et `--spec-ab`
@@ -381,7 +383,7 @@ externe, un drafter contre un autre, une référence sans spéculation) passe pa
 (`base` = la configuration courante), et pour chacune ini régénéré, restart,
 `--spec-test`, puis bilan comparé et **retour à la configuration courante**,
 Ctrl-C compris. Rien n'est écrit dans les conf : le choix se reporte à la main
-dans `lib/models.sh`, avec ses chiffres.
+dans `runtime/llama-cpp-rocm-strix/lib/models.sh`, avec ses chiffres.
 
 ```bash
 ./setup-llm.sh --spec-ab <modèle> 4 - base "spec-ngram-map-k-min-hits=1" "spec-ngram-map-k-min-hits=3"
@@ -466,7 +468,7 @@ compare pas à un tableau pris en `performance`. Ce n'est pas le profil de
 | ngram 47 + draft-dflash, n-max 7 | Vulkan0 | 359 | 32,6 | 0,595 | --bench, 3 passes (bench-task) |
 
 Retenu : ngram-map-k 47 + draft-dflash 7 (spec-ngram.conf, spec-draft-n-max
-dans lib/models.sh). Paquet Arch b10433, même GGUF, ancien réglage MTP :
+dans runtime/llama-cpp-rocm-strix/lib/models.sh). Paquet Arch b10433, même GGUF, ancien réglage MTP :
 261 / 29,5 / 0,65 (autre série, citée pour situer, pas pour comparer à la décimale).
 ```
 
@@ -483,17 +485,17 @@ Règles du tableau :
   entre parenthèses ou en note, jamais dans la même colonne ;
 - un seul mode EC par tableau, pour la même raison (10 à 13 % de décode) : le
   mode est affiché en en-tête de `--bench`, `--spec-test`, `--spec-ab`,
-  `tools/spec-isolate.sh` et `tools/qualif-modele.sh`, et journalisé en fin de
+  `runtime/llama-cpp-rocm-strix/tools/spec-isolate.sh` et `runtime/llama-cpp-rocm-strix/tools/qualif-modele.sh`, et journalisé en fin de
   ligne de `logs/bench.log`, `logs/spec-tests.log` et `mesures.tsv` ;
 - la dernière ligne dit ce qui est retenu et dans quel `.conf` ;
 - les mêmes chiffres vont, résumés, à trois endroits versionnés : le
-  commentaire du bloc `lib/models.sh` (date, moteur, device, quant), la table
+  commentaire du bloc `runtime/llama-cpp-rocm-strix/lib/models.sh` (date, moteur, device, quant), la table
   « Parc au <date> » du README, et les sections « Récapitulatif par modèle »
   (table et écarts) et « Paquet Arch contre fork : mesures » (notes) de
   `docs/HISTORIQUE.md` quand la mesure oppose les deux séries ;
 - mettre à jour la ligne du modèle dans `docs/perfs.tsv` (mêmes chiffres,
   point décimal) puis régénérer les figures du README :
-  `python3 py/perf_graphs.py`. Les trois SVG de `docs/graphs/` se commitent
+  `python3 runtime/llama-cpp-rocm-strix/py/perf_graphs.py`. Les trois SVG de `docs/graphs/` se commitent
   avec le reste, ils ne sont pas produits à la volée.
 
 Sources des chiffres : `logs/spec-tests.log` (TSV, colonnes spec-type et
@@ -552,15 +554,15 @@ Le dépôt est aussi cloné sur la machine qui héberge le service : pousser la
 branche, puis là-bas `git pull --ff-only` avant chaque série de commandes,
 lancer les commandes du projet, ne rien commiter ni éditer sur place (les
 `.conf` et journaux y sont écrits par les commandes, c'est leur place).
-Vérifier `git status` propre et `bash tests/py-golden.sh` après le pull.
+Vérifier `git status` propre et `bash runtime/llama-cpp-rocm-strix/tests/py-golden.sh` après le pull.
 Une mesure à la fois ; les longues (rechargement de 100 Go, 4 passes) se
 lancent en arrière-plan avec leur sortie dans un fichier, et on lit la
 sortie complète avant de conclure, pas seulement la dernière ligne.
 
 ## Clôture
 
-- `./tests/py-golden.sh` si un `py/*.py` a bougé, `./tests/sh-unit.sh` si
-  `_llama_build` (lib/common.sh) ou `lib/runtime.sh` ont bougé,
+- `runtime/llama-cpp-rocm-strix/tests/py-golden.sh` si un `runtime/llama-cpp-rocm-strix/py/*.py` a bougé, `./tests/sh-unit.sh` si
+  `_llama_build` (lib/common.sh du runtime) ou `runtime/llama-cpp-rocm-strix/lib/image.sh` ont bougé,
   `bash -n` sur les fichiers
   touchés (`sh -n` sur `bench-agentic/*.sh`).
 - Commit par étape (bloc, puis réglages mesurés), message avec les
@@ -573,7 +575,7 @@ sortie complète avant de conclure, pas seulement la dernière ligne.
   `spec-ngram.conf` et `preload.conf` sur bigchuck, sans quoi le modèle repart
   silencieusement sur les valeurs par défaut du script (et sort du
   préchargement).
-- Si le modèle remplace un autre : le retirer de `lib/models.sh`, noter la
+- Si le modèle remplace un autre : le retirer de `runtime/llama-cpp-rocm-strix/lib/models.sh`, noter la
   date dans le commentaire `KNOWN_FILES`, et signaler que
   `./setup-llm.sh --cleanup` purgera l'ancien GGUF (ne pas le lancer
   sans demande).

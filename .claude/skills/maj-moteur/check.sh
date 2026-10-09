@@ -11,11 +11,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-DOCKERFILE="$SCRIPT_DIR/runtime/Dockerfile.rocm-strix"
-AMONT="$SCRIPT_DIR/runtime/AMONT.md"
-PATCHES="$SCRIPT_DIR/runtime/patches"
+DOCKERFILE="$SCRIPT_DIR/runtime/llama-cpp-rocm-strix/Dockerfile.rocm-strix"
+AMONT="$SCRIPT_DIR/runtime/llama-cpp-rocm-strix/AMONT.md"
+PATCHES="$SCRIPT_DIR/runtime/llama-cpp-rocm-strix/patches"
 
-# Dépôt amont du Dockerfile (cf. runtime/AMONT.md, « Provenance »).
+# Dépôt amont du Dockerfile (cf. runtime/llama-cpp-rocm-strix/AMONT.md, « Provenance »).
 UP_REPO="kyuz0/amd-strix-halo-toolboxes"
 UP_FILE="toolboxes/Dockerfile.rocm-10.0-strix-llama"
 UP_TAG="docker.io/kyuz0/amd-strix-halo-toolboxes:rocm-10.0-strix-llama"
@@ -106,7 +106,7 @@ _prs_ouvertes "$(_repo_of "$(_arg REPO)")"
 _compare_rev "Runtime ROCr/HIP" "$(_arg ROCM_SYSTEMS_REPO)" "$(_arg ROCM_SYSTEMS_BRANCH)" "$(_arg ROCM_SYSTEMS_REV)"
 
 # ---------------------------------------------------------------------------
-# 3 : Dockerfile amont (celui dont runtime/Dockerfile.rocm-strix est la copie)
+# 3 : Dockerfile amont (celui dont runtime/llama-cpp-rocm-strix/Dockerfile.rocm-strix est la copie)
 # ---------------------------------------------------------------------------
 titre "Dockerfile amont : $UP_REPO/$UP_FILE (main)"
 local_up="$(sed -n 's/^| Commit du fichier en amont | `\([0-9a-f]*\)` |$/\1/p' "$AMONT" | head -1)"
@@ -131,7 +131,7 @@ for c in cs:
     if local_up and c["sha"].startswith(local_up): break
     print("    %s %s %s" % (c["sha"][:12], c["commit"]["committer"]["date"][:10], c["commit"]["message"].splitlines()[0][:100]))
 print("  Diff à lire : gh api repos/%s/contents/%s?ref=main --jq .content | base64 -d" % ("kyuz0/amd-strix-halo-toolboxes", "toolboxes/Dockerfile.rocm-10.0-strix-llama"))
-print("  puis ne réappliquer que les cinq écarts listés dans runtime/AMONT.md.")
+print("  puis ne réappliquer que les cinq écarts listés dans runtime/llama-cpp-rocm-strix/AMONT.md.")
 sys.exit(3)
 PY
   then a_jour+=("Dockerfile amont"); else en_retard+=("Dockerfile amont"); fi
@@ -140,7 +140,7 @@ fi
 # ---------------------------------------------------------------------------
 # 4 : patchs (partagés entre Dockerfiles amont, bougent sans que le nôtre bouge)
 # ---------------------------------------------------------------------------
-titre "Patchs : runtime/patches contre $UP_REPO/toolboxes (main)"
+titre "Patchs : runtime/llama-cpp-rocm-strix/patches contre $UP_REPO/toolboxes (main)"
 patch_retard=0
 for p in "$PATCHES"/*.patch; do
   nom="$(basename "$p")"

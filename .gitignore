@@ -6,3 +6,4 @@ plans/
 /spec-ngram.conf
 /logs/
 __pycache__/
+/runtime.conf

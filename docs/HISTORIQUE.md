@@ -3,7 +3,9 @@
 Archive des campagnes de mesure et des essais du dépôt, sortie du README le
 13/09/2026 pour n'y garder que l'état courant : chiffres, protocoles et récits
 datés, repris des sections correspondantes du README. L'état courant du parc
-(réglages retenus et perfs) reste dans `README.md`, section « Parc au
+(réglages retenus et perfs) reste dans le README du runtime
+(`runtime/llama-cpp-rocm-strix/README.md`, le `README.md` du dépôt jusqu'au
+09/10/2026), section « Parc au
 22/09/2026, moteur conteneurisé ROCm0 » (le texte d'origine disait « perfs sur
 le fork » et citait « Parc au 17/09/2026 », titre que le README ne porte
 plus).
@@ -38,6 +40,67 @@ ailleurs :
   variantes `-parallel`, procédures du fork, essai batch 16384 du 17/09) :
   [`docs/SECTIONS-RETIREES.md`](SECTIONS-RETIREES.md). Chaque passage concerné
   garde ici la décision, le motif et les chiffres clés, et y renvoie.
+
+## Découpage en runtimes (09/10/2026)
+
+Décision de l'utilisateur du 09/10/2026 : le dépôt devient modulaire. Un
+dossier `runtime/<nom>/` par moteur, autonome, un contrat écrit
+(`runtime/CONTRAT.md`), un lancement toujours cloisonné par docker compose, un
+runtime actif mémorisé (`runtime.conf`, bascule par `--runtime <nom>`). Le
+service de ce journal est désormais le runtime **`llama-cpp-rocm-strix`**, le
+défaut du dépôt ; gufo est le runtime `gufo` (`docs/HISTORIQUE-GUFO.md`).
+Aucune mesure rejouée, aucun modèle ni réglage touché : `models.ini` généré
+identique à l'octet avant et après (274 lignes, comparé sur le même `HOME`).
+
+**Les entrées de ce journal citent les chemins de leur époque et ne sont pas
+réécrites.** Correspondance :
+
+| Avant | Depuis le 09/10/2026 |
+|---|---|
+| `runtime/` (Dockerfile, compose, patchs, `AMONT.md`) | `runtime/llama-cpp-rocm-strix/` |
+| `lib/models.sh`, `ini.sh`, `compose.sh`, `preload.sh`, `setup.sh`, `spec.sh`, `service.sh`, `lib/bench/` | `runtime/llama-cpp-rocm-strix/lib/…` |
+| `lib/runtime.sh` (image, `_dk_run`) | `runtime/llama-cpp-rocm-strix/lib/image.sh` |
+| `lib/common.sh` (téléchargements, journaux, `_llama_build`, mode EC, garde mémoire) | `runtime/llama-cpp-rocm-strix/lib/common.sh` ; `info`/`warn`/`error`, `MODELS_BASE`, `SERVER_PORT`, `_compose_gid` restent dans `lib/common.sh` |
+| `lib/help.sh` | `runtime/llama-cpp-rocm-strix/lib/aide.sh` (aide du runtime), `lib/help.sh` (commandes communes) |
+| `py/`, `tests/py-golden.sh`, `tests/py-unit.py`, `tests/fixtures/` | `runtime/llama-cpp-rocm-strix/py/`, `…/tests/` |
+| `tools/qualif-modele.sh`, `spec-isolate.sh`, `bench-depth.sh`, `bench-spec-batch.sh` | `runtime/llama-cpp-rocm-strix/tools/` |
+| `README.md`, `ARCHITECTURE.md` (ce moteur) | `runtime/llama-cpp-rocm-strix/README.md`, `ARCHITECTURE.md` |
+| `lib/svc.sh` (pilotage du routeur) | `lib/svc.sh`, générique : pilote le runtime actif |
+
+Restent à la racine : `prompts/`, `bench-agentic/`, `docs/`, `logs/` et les
+`.conf` (choix utilisateur, pas déplacés).
+
+Ce qui change pour ce moteur au-delà des chemins :
+
+- **Commandes** : aucune ne change de nom. `--start`, `--stop`, `--restart`,
+  `--status`, `--logs` et `--setup` sont communes et visent le runtime actif ;
+  toutes les autres (`--bench*`, `--spec-*`, `--preload`, `--update`,
+  `--cleanup`, `--image-build`, `--list-devices`, `--migrate-off-systemd`)
+  sont des sous-commandes de ce runtime, refusées quand un autre est l'actif
+  (`LLM_RUNTIME=llama-cpp-rocm-strix ./setup-llm.sh …` les lance quand même).
+  Sans `runtime.conf`, ce runtime est l'actif : une machine déjà installée se
+  comporte comme avant.
+- **`.env`** : deux valeurs changent, les chemins du dépôt (`COMPOSE_FILE`,
+  `RUNTIME_DIR`). Il est donc réécrit au premier `--start`. Le reste est
+  identique, et le compose n'a pas bougé.
+- **Exclusivité** : `--start` ne refuse plus quand gufo tient le port, il
+  l'arrête (pilotage générique). `--status` dit quel runtime tient le port.
+- **`--start` affiche** le préchargement après la ligne de démarrage, sous une
+  forme un peu différente ; les tuners, qui redémarrent le service, l'affichent
+  aussi.
+- **`--cleanup`** n'a plus le nom `gufo` écrit en dur : il épargne les dossiers
+  du parc qu'un autre runtime déclare réservés (`RT_PARC_RESERVE`).
+- **Outils** : `qualif-modele.sh` lance ses étapes avec
+  `LLM_RUNTIME=llama-cpp-rocm-strix`, pour ne pas dépendre du runtime actif.
+- **Tests** : ceux du pilotage (jamais `compose restart`, attente, `.env` non
+  réécrit) et des règles communes du compose sont passés dans le test du
+  contrat, `tests/sh-unit.sh` à la racine ; ce runtime garde les siens
+  (`runtime/llama-cpp-rocm-strix/tests/`).
+
+Non vérifié sur machine : écrit sans GPU ni docker. `./tests/sh-unit.sh`
+(faux docker, 127 contrôles, deux rendus `docker compose config` sautés),
+`py-golden.sh` et `py-unit.py` passent ; ni `--start`, ni `--image-build`, ni
+un banc, ni un outil hors service n'ont tourné sur la nouvelle arborescence.
 
 ## Flash-Next face à halogen-flash-server, micro-lot et n-gram (22/09/2026)
 

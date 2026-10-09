@@ -5,7 +5,7 @@ description: Vérifier si l'image ROCm du service est en retard sur ses amonts (
 
 # Mettre à jour le moteur : vérifier, montrer, puis seulement agir
 
-L'image `llm-rocm-strix:latest` (voir `runtime/AMONT.md`) épingle quatre choses,
+L'image `llm-rocm-strix:latest` (voir `runtime/llama-cpp-rocm-strix/AMONT.md`) épingle quatre choses,
 chacune avec son amont. Rien ne se met à jour tout seul, c'est voulu : une
 image est une série de mesures. Cette skill fait le tour des quatre en lecture
 seule, montre ce qui a changé, et n'enclenche l'update que sur un « oui »
@@ -13,10 +13,10 @@ explicite de l'utilisateur, partie par partie.
 
 | Partie | Épinglé où | Amont |
 |---|---|---|
-| Moteur llama.cpp | `ARG ENGINE_REV`, `runtime/Dockerfile.rocm-strix` | `halo-box/strix-llama.cpp`, branche `master` |
+| Moteur llama.cpp | `ARG ENGINE_REV`, `runtime/llama-cpp-rocm-strix/Dockerfile.rocm-strix` | `halo-box/strix-llama.cpp`, branche `master` |
 | Runtime ROCr/HIP retained-PM4 | `ARG ROCM_SYSTEMS_REV`, même fichier | `pwilkin/rocm-systems`, branche `ilintar-experiments` |
-| Dockerfile lui-même | ligne « Commit du fichier en amont » de `runtime/AMONT.md` | `kyuz0/amd-strix-halo-toolboxes`, `toolboxes/Dockerfile.rocm-10.0-strix-llama` sur `main` |
-| Les deux patchs | `runtime/patches/*.patch` | `toolboxes/*.patch` du même dépôt (partagés entre Dockerfiles, bougent seuls) |
+| Dockerfile lui-même | ligne « Commit du fichier en amont » de `runtime/llama-cpp-rocm-strix/AMONT.md` | `kyuz0/amd-strix-halo-toolboxes`, `toolboxes/Dockerfile.rocm-10.0-strix-llama` sur `main` |
+| Les deux patchs | `runtime/llama-cpp-rocm-strix/patches/*.patch` | `toolboxes/*.patch` du même dépôt (partagés entre Dockerfiles, bougent seuls) |
 
 Une cinquième ligne, pour information : le tag d'image publié en amont
 (absent au 18/09/2026, « Manual build only »). Même s'il apparaît, le build
@@ -48,7 +48,7 @@ Pour chaque partie EN RETARD, résumer à l'utilisateur, en français et sans
 jargon inutile :
 
 - **ce que ça change pour ce parc** : lire les titres de commits et les fichiers
-  touchés sous l'angle des modèles servis (`lib/models.sh`) et des chemins
+  touchés sous l'angle des modèles servis (`runtime/llama-cpp-rocm-strix/lib/models.sh`) et des chemins
   chauds du dépôt. Repères : `ggml-cuda/` = kernels HIP (décode, prefill, MMQ,
   flash attention) ; `common/speculative.cpp`, `spec`, `mtp`, `draft` = la
   spéculation (n-max, acceptance, `spec-nmax.conf` à re-tuner) ; `server` =
@@ -76,16 +76,16 @@ comparent plus à ceux pris après (`_llama_build` étiquette les journaux
 `strix-<engine7>+r<rocm7>`, lus sur les deux `ARG`).
 
 1. **Moteur ou runtime** : remplacer la valeur de l'`ARG` concerné dans
-   `runtime/Dockerfile.rocm-strix` par le sommet donné par le check, ET la
+   `runtime/llama-cpp-rocm-strix/Dockerfile.rocm-strix` par le sommet donné par le check, ET la
    copie de cette valeur dans le bloc de commentaires « Révisions épinglées »
    en tête du fichier (date d'épinglage comprise). Deux lignes par révision,
    rien d'autre.
 2. **Dockerfile amont** : suivre « Resynchroniser » d'`AMONT.md` (diff à la
    main, cinq écarts réappliqués), mettre à jour les lignes « Commit du fichier
    en amont » et « Resynchronisé ». **Patchs** : recopier byte pour byte dans
-   `runtime/patches/`.
+   `runtime/llama-cpp-rocm-strix/patches/`.
 3. Vérifier que rien d'autre n'a bougé : `git diff --stat` ne doit lister que
-   `runtime/`. Puis `./tests/sh-unit.sh` (forme de l'étiquette de moteur,
+   `runtime/llama-cpp-rocm-strix/`. Puis `./tests/sh-unit.sh` (forme de l'étiquette de moteur,
    `--image-build` par `docker compose build`).
 4. **Commiter en disant POURQUOI** : le correctif attendu ou la mesure visée,
    les PR ou commits amont repris, et la phrase « nouveau moteur : les mesures
@@ -122,7 +122,7 @@ Justesse d'abord, comme pour un modèle ajouté (skill `ajout-modele`, étape 3)
    sans demande).
 4. Tableau de synthèse « X contre Y, soit +N % » par modèle, ligne dans
    `docs/HISTORIQUE.md`, et les chiffres résumés dans le commentaire du bloc
-   `lib/models.sh` concerné, seul endroit versionné.
+   `runtime/llama-cpp-rocm-strix/lib/models.sh` concerné, seul endroit versionné.
 
 Retour arrière : remettre les anciennes valeurs des `ARG` (l'historique git du
 Dockerfile est le journal), commiter, `--image-build`, `--restart`.

@@ -1,32 +1,23 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Test unitaire des helpers bash qui dépendent de l'ENVIRONNEMENT plutôt que
-# d'une entrée : _llama_build (étiquette du moteur, lue sur les ARG du
-# Dockerfile vendorisé), _ec_power_mode (mode d'alimentation de l'APU lu sur le contrôleur
-# embarqué), la garde mémoire (lib/common.sh), le moteur conteneurisé
-# (lib/runtime.sh, sur un faux docker), le service en conteneur (.env
-# généré pour runtime/docker-compose.yml, _svc_*, --migrate-off-systemd) et le models.ini généré (lib/ini.sh,
-# lib/models.sh).
+# Test du CONTRAT des runtimes (runtime/CONTRAT.md) et du pilotage générique
+# (lib/common.sh, lib/svc.sh, setup-llm.sh), puis les tests de chaque runtime.
 #
-# Ce qui a disparu le 18/09/2026, avec le fork strix-llama.cpp : la résolution
-# d'un binaire llama-* sur l'HÔTE (_llama_bin, _host_llama_build) et ses
-# étiquettes "bNNNNN" / "strix-<commit>", le garde-fou moteur/ini
-# (FORK_ONLY_KEYS), l'épinglage (fork.conf), le suivi d'amont (--update-fork) et
-# la proposition du fork en fin de --setup. Il n'y a plus qu'un moteur, celui de
-# l'image, et une seule forme d'étiquette.
+# Trois parties :
+#   1. Conformité : chaque dossier de runtime/ respecte le contrat (fichiers,
+#      déclarations, fonctions, règles du compose, aucun effet de bord au
+#      chargement, pas de collision entre runtimes). C'est ce test qui dit
+#      si un runtime NEUF est recevable.
+#   2. Pilotage générique, sur deux runtimes FACTICES dans un dépôt jetable :
+#      choix du runtime actif, aiguillage des sous-commandes, ordre du
+#      démarrage, exclusivité, bascule et retour arrière, .env idempotent,
+#      jamais « compose restart ». Aucun moteur réel n'y entre : ce qui est
+#      prouvé ici vaut pour tout runtime conforme.
+#   3. Les tests de chaque runtime (runtime/<nom>/tests/sh-unit.sh).
 #
-# Ce qui a disparu le 18/09/2026 au soir, avec la couche d'abstraction autour de
-# l'image : runtime/image.conf et sa lecture stricte, les LABEL llm-setup.*, la
-# promotion sous tag temporaire et sa vérification d'après-coup, la purge par
-# label, logs/images.tsv, --image-update et --image-status. Il reste un
-# Dockerfile (qui porte les révisions) et un compose (qui porte le bloc build).
-#
-# Depuis le 19/09/2026 le compose n'est plus généré : runtime/docker-compose.yml
-# est versionné, et lib/compose.sh n'écrit plus que ~/models/.env (gid, chemins,
-# --models-max, tag de l'image, COMPOSE_FILE). Le rendu est validé par le VRAI
-# `docker compose config` quand il est là, sur le .env produit avec un faux getent.
-#
-# Lancement : ./tests/sh-unit.sh (aucune dépendance, aucun modèle, aucun réseau)
+# Tout passe par un faux `docker`, un faux `getent` et un faux `curl` : aucun
+# démon, aucun conteneur, aucun réseau.
+# Lancement : ./tests/sh-unit.sh [--contrat]   (--contrat : parties 1 et 2 seules)
 # =============================================================================
 set -uo pipefail
 
@@ -37,284 +28,51 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 rc=0
 
-mkdir -p "$TMP/home" "$TMP/bin"
+ok()   { echo "[OK]   $*"; }
+fail() { echo "[FAIL] $*"; rc=1; }
 
-# Helpers de lib/common.sh dans un environnement maîtrisé : HOME et PATH
-# bidons, et SCRIPT_DIR pointé sur un dossier jetable (common.sh crée son logs/).
-_run() {
-  HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
-    bash -c "source '$REPO_DIR/lib/common.sh'; $1"
-}
+mkdir -p "$TMP/bin" "$TMP/home" "$TMP/etat"
 
-_ck() {  # $1 = libellé, $2 = attendu, $3 = obtenu
-  if [[ "$2" == "$3" ]]; then
-    echo "[OK]   $1 = $3"
-  else
-    echo "[FAIL] $1 : attendu '$2', obtenu '$3'"; rc=1
-  fi
-}
-
-mkdir -p "$TMP/repo"
-
-# 4ter. Garde mémoire _ensure_room_for (lib/common.sh) : avant de laisser le
-# routeur charger un modèle, décharger les plus gros modèles chargés tant que
-# `free` ne montre pas la place. Testée sur de faux `free` et `curl` et des
-# GGUF creux (truncate) — aucun serveur, aucun modèle réel. Les tailles sont
-# en Mio pour rester lisibles ; seuls les rapports comptent.
-ROOM="$TMP/room"
-mkdir -p "$ROOM/bin" "$ROOM/repo" "$ROOM/w"
-truncate -s 100M "$ROOM/w/geant.gguf"
-truncate -s 10M  "$ROOM/w/geant-draft.gguf"   # spec-draft-model : compte aussi
-truncate -s 80M  "$ROOM/w/gros.gguf"
-truncate -s 20M  "$ROOM/w/petit.gguf"
-echo "petit-precharge" > "$ROOM/repo/preload.conf"
-
-# Faux free : la colonne "available" est lue dans un fichier d'état que le faux
-# curl met à jour à chaque déchargement (le noyau rend les pages).
-cat > "$ROOM/bin/free" <<EOF
+# Faux docker. Journalise chaque appel, et tient l'état des conteneurs dans
+# etat/<conteneur>.running : `compose up` met en marche le conteneur nommé par
+# la ligne CONTENEUR= du --env-file, `compose stop` et `docker stop` l'arrêtent.
+# etat/up-echec (un nom de conteneur) fait échouer son `up`.
+cat > "$TMP/bin/docker" <<EOF
 #!/usr/bin/env bash
-echo "               total        used        free      shared  buff/cache   available"
-echo "Mem: 1000000000 0 0 0 0 \$(cat "$ROOM/avail")"
+E="$TMP/etat"
 EOF
-# Faux curl : GET /models → liste des chargés ; POST /models/unload → retire le
-# modèle de la liste, rend sa taille au "free" et journalise le déchargement.
-cat > "$ROOM/bin/curl" <<EOF
-#!/usr/bin/env bash
-if [[ "\$*" == *"/models/unload"* ]]; then
-  m="\$(printf '%s\n' "\$@" | sed -n 's/.*"model": *"\([^"]*\)".*/\1/p' | head -1)"
-  echo "\$m" >> "$ROOM/unloaded"
-  grep -vx "\$m" "$ROOM/loaded" > "$ROOM/l.tmp" || true
-  mv "$ROOM/l.tmp" "$ROOM/loaded"
-  a="\$(cat "$ROOM/avail")"; s="\$(cat "$ROOM/size.\$m" 2>/dev/null || echo 0)"
-  echo \$(( a + s )) > "$ROOM/avail"
-  echo '{"success":true}'
-  exit 0
-fi
-python3 -c '
-import json, sys
-ids = [l.strip() for l in open(sys.argv[1]) if l.strip()]
-print(json.dumps({"data": [{"id": i, "status": {"value": "loaded"}} for i in ids]}))
-' "$ROOM/loaded"
-EOF
-chmod +x "$ROOM/bin/free" "$ROOM/bin/curl"
-echo $(( 80 * 1024 * 1024 )) > "$ROOM/size.gros"
-echo $(( 20 * 1024 * 1024 )) > "$ROOM/size.petit-precharge"
-
-# Déclarations minimales : deux modèles chargés (un gros à la demande, un petit
-# préchargé) et le géant à charger.
-ROOM_DECL="
-declare -A MODEL_INI
-MODEL_INI[geant]='model = $ROOM/w/geant.gguf
-spec-draft-model = $ROOM/w/geant-draft.gguf'
-MODEL_INI[gros]='model = $ROOM/w/gros.gguf'
-MODEL_INI[petit-precharge]='model = $ROOM/w/petit.gguf'
-"
-_run_room() {  # \$1 = octets disponibles au départ, \$2 = env supplémentaire
-  printf 'gros\npetit-precharge\n' > "$ROOM/loaded"
-  : > "$ROOM/unloaded"
-  echo "$1" > "$ROOM/avail"
-  env -i HOME="$TMP/home" PATH="$ROOM/bin:/usr/bin:/bin" SCRIPT_DIR="$ROOM/repo" ${2:-} \
-    bash -c "set -euo pipefail
-      source '$REPO_DIR/lib/common.sh'
-      source '$REPO_DIR/lib/ini.sh'
-      $ROOM_DECL
-      BENCH_ROOM_TIMEOUT=1
-      _ensure_room_for geant" >/dev/null 2>&1
-  tr '\n' ' ' < "$ROOM/unloaded" | sed 's/ *$//'
-}
-
-# (a) place suffisante (500 Mio pour ~121 Mio estimés) : rien déchargé.
-_ck "garde mémoire : place suffisante" "" "$(_run_room $(( 500 * 1024 * 1024 )))"
-# (b) place insuffisante (50 Mio) : le plus gros NON préchargé part, et lui
-#     seul — une fois 'gros' déchargé, les 130 Mio suffisent, le préchargé reste.
-_ck "garde mémoire : le plus gros non préchargé" "gros" "$(_run_room $(( 50 * 1024 * 1024 )))"
-# (c) BENCH_NO_UNLOAD=1 : garde désactivée, rien déchargé malgré le manque.
-_ck "garde mémoire : BENCH_NO_UNLOAD=1" "" "$(_run_room $(( 50 * 1024 * 1024 )) BENCH_NO_UNLOAD=1)"
-
-# 4bis. Mode d'alimentation de l'APU (_ec_power_mode) : lecture du sysfs, repli
-#       sur "inconnu", et surtout JAMAIS d'échec : aucune mesure ne doit être
-#       refusée parce que le contrôleur embarqué est muet.
-_run_ec() {  # $1 = chemin de EC_POWER_MODE_FILE
-  HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
-    EC_POWER_MODE_FILE="$1" \
-    bash -c "source '$REPO_DIR/lib/common.sh'; _ec_power_mode" 2>/dev/null
-}
-printf 'balanced\n' > "$TMP/ec-mode"
-_ck "mode EC : lu dans le sysfs" "balanced" "$(_run_ec "$TMP/ec-mode")"
-printf 'performance' > "$TMP/ec-mode"   # sans saut de ligne final
-_ck "mode EC : sans saut de ligne"  "performance" "$(_run_ec "$TMP/ec-mode")"
-: > "$TMP/ec-vide"
-_ck "mode EC : fichier vide"        "inconnu"     "$(_run_ec "$TMP/ec-vide")"
-_ck "mode EC : fichier absent"      "inconnu"     "$(_run_ec "$TMP/ec-absent")"
-# set -e chez l'appelant : la fonction sort toujours en 0, même sans fichier.
-if HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" \
-   EC_POWER_MODE_FILE="$TMP/ec-absent" \
-   bash -c "set -euo pipefail; source '$REPO_DIR/lib/common.sh'; _ec_power_mode >/dev/null; echo suite" 2>/dev/null \
-   | grep -q '^suite$'; then
-  echo "[OK]   mode EC : ne tue pas un script sous set -e"
-else
-  echo "[FAIL] mode EC : la fonction a fait échouer l'appelant sous set -e"; rc=1
-fi
-
-# 6. Moteur conteneurisé (lib/runtime.sh). Depuis le 18/09/2026 il n'y a plus
-# d'abstraction autour de l'image : --image-build n'est qu'un raccourci vers
-# « docker compose build ». Ce qui reste à tenir, et qui casserait
-# SILENCIEUSEMENT : la référence de l'image (un seul tag, absence distinguable)
-# et le fait que le build passe bien par le compose SANS être bloqué par
-# l'absence d'image : sinon la machine ne pourrait jamais construire la
-# première. Tout passe par un faux `docker` : aucun build, aucun réseau, aucun
-# daemon.
-IMG="$TMP/img"
-mkdir -p "$IMG/bin" "$IMG/repo/runtime" "$IMG/store"
-
-# Dockerfile factice : seules les deux lignes ARG *_REV sont lues (par
-# _llama_build), et sa seule présence est exigée par cmd_image_build.
-cat > "$IMG/repo/runtime/Dockerfile.rocm-strix" <<'EOF'
-ARG ENGINE_REV=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-ARG ROCM_SYSTEMS_REV=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-EOF
-# Le compose du dépôt, tel quel : c'est lui que le .env généré doit nommer.
-cp "$REPO_DIR/runtime/docker-compose.yml" "$IMG/repo/runtime/"
-: > "$IMG/repo/preload.conf"
-
-# Faux docker : magasin d'images en fichiers ($IMG/store/<nom>_<tag>) et journal
-# des appels. `compose build` crée l'image, comme le vrai (il pose le tag de la
-# clé `image` du service).
-cat > "$IMG/bin/docker" <<EOF
-#!/usr/bin/env bash
-S="$IMG/store"
-EOF
-cat >> "$IMG/bin/docker" <<'EOF'
-_f() { echo "$S/${1//[:\/]/_}"; }
-printf '%s\n' "$*" >> "$S/../docker.log"
-case "$1" in
-  image)
-    [[ "$2" == "inspect" ]] || exit 1
-    [[ -f "$(_f "$3")" ]] || exit 1
-    exit 0 ;;
-  compose)
-    for a in "$@"; do [[ "$a" == "build" ]] && { echo bati > "$(_f llm-rocm-strix:latest)"; exit 0; }; done
-    exit 1 ;;
-esac
-exit 1
-EOF
-
-cat > "$IMG/bin/getent" <<'EOF'
-#!/usr/bin/env bash
-[[ "$1" == "group" ]] || exit 2
-case "$2" in
-  render) echo "render:x:303:" ;;
-  video)  echo "video:x:986:" ;;
-  *) exit 2 ;;
-esac
-EOF
-chmod +x "$IMG/bin/docker" "$IMG/bin/getent"
-mkdir -p "$TMP/home/models"
-: > "$TMP/home/models/models.ini"
-
-_run_img() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé = non interactif
-  env -i HOME="$TMP/home" PATH="$IMG/bin:/usr/bin:/bin" SCRIPT_DIR="$IMG/repo" ${2:-} \
-    bash -c "set -euo pipefail
-      source '$REPO_DIR/lib/common.sh'
-      source '$REPO_DIR/lib/svc.sh'
-      source '$REPO_DIR/lib/ini.sh'
-      source '$REPO_DIR/lib/compose.sh'
-      source '$REPO_DIR/lib/runtime.sh'
-      $1" </dev/null 2>&1
-}
-
-# (a) Tag et référence. Un seul tag : la référence de l'image courante ne dépend
-#     d'aucun tri, mais l'absence d'image doit rester distinguable (code 1, rien
-#     sur la sortie) : c'est ce qui fait refuser la génération du .env.
-_ck "tag de l'image" "latest" "$(_run_img '_image_tag')"
-_ck "image absente : rien" "absente" "$(_run_img '_image_ref || echo absente')"
-
-# (b) --image-build : passe par « docker compose build », et NE se bloque PAS
-#     sur l'absence d'image : sinon aucune machine ne pourrait construire la
-#     première (le .env refuse de se générer sans image, sauf pour lui).
-: > "$IMG/docker.log"
-out="$(_run_img 'cmd_image_build')"; grc=$?
-if [[ "$grc" -eq 0 ]] && grep -q 'compose .* build' "$IMG/docker.log" \
-   && [[ -f "$IMG/store/llm-rocm-strix_latest" ]]; then
-  echo "[OK]   image-build : docker compose build, image absente non bloquante"
-else
-  echo "[FAIL] image-build : code $grc, appels docker :"
-  sed 's/^/       /' "$IMG/docker.log"; echo "$out" | sed 's/^/       /'; rc=1
-fi
-
-# (c) Un argument inconnu ne doit pas partir en build silencieux.
-out="$(_run_img 'cmd_image_build --oups')"; grc=$?
-if [[ "$grc" -ne 0 && "$out" == *"--oups"* ]]; then
-  echo "[OK]   image-build : argument inconnu ⇒ refus nommant l'argument"
-else
-  echo "[FAIL] image-build argument inconnu : code $grc, sortie : $out"; rc=1
-fi
-
-# (d) --no-cache est transmis tel quel à compose (un build « propre » demandé et
-#     silencieusement mis en cache ne se verrait qu'à la mesure suivante).
-: > "$IMG/docker.log"
-_run_img 'cmd_image_build --no-cache' >/dev/null
-if grep -q 'compose .* build --no-cache' "$IMG/docker.log"; then
-  echo "[OK]   image-build : --no-cache transmis à docker compose build"
-else
-  echo "[FAIL] image-build : --no-cache perdu, appels : $(cat "$IMG/docker.log")"; rc=1
-fi
-
-# 7. Service en conteneur : compose versionné, .env généré (lib/compose.sh) et
-# pilotage (lib/svc.sh). Ce qui est testé ici est ce qui, en cas de bug, casse
-# SILENCIEUSEMENT ou coûte une campagne : un compose qui perdrait une option de
-# la ligne de commande du routeur ou un durcissement, un --models-max qui ne
-# suivrait plus preload.conf, un `docker compose restart` qui resservirait
-# l'ancienne image, une attente de /health qui tournerait cinq minutes sur un
-# conteneur déjà mort, et un --cleanup qui ramasserait la configuration du
-# service. Tout passe par un faux `docker`, un faux `getent`, un faux `curl`
-# et un faux `systemctl` : aucun démon, aucun conteneur, aucun réseau.
-SVC="$TMP/svc"
-mkdir -p "$SVC/bin" "$SVC/repo/runtime" "$SVC/repo/runtime-gufo" "$SVC/home/models" "$SVC/etat"
-# lib/gufo.sh lit l'image épinglée de gufo dans ce fichier dès qu'il est sourcé.
-cp "$REPO_DIR/runtime-gufo/IMAGE" "$SVC/repo/runtime-gufo/"
-
-# Dockerfile factice : c'est lui qui porte les révisions épinglées depuis le
-# 18/09/2026, et _llama_build les y lit par un grep (jamais en démarrant un
-# conteneur : la fonction est appelée à chaque journal de chaque mesure).
-cat > "$SVC/repo/runtime/Dockerfile.rocm-strix" <<'EOF'
-ARG ENGINE_REV=abcdef1234567890abcdef1234567890abcdef12
-ARG ROCM_SYSTEMS_REV=9876543210fedcba9876543210fedcba98765432
-EOF
-# preload.conf factice : deux modèles préchargés ⇒ --models-max attendu = 3.
-printf 'un\ndeux\n' > "$SVC/repo/preload.conf"
-: > "$SVC/home/models/models.ini"
-
-# Faux docker : journalise chaque appel (c'est lui qui prouve qu'aucun
-# « compose restart » n'est émis) et lit l'état du conteneur dans des fichiers
-# que le test pose. ETAT_IMAGE=0 simule une image absente.
-cat > "$SVC/bin/docker" <<EOF
-#!/usr/bin/env bash
-E="$SVC/etat"
-EOF
-cat >> "$SVC/bin/docker" <<'EOF'
+cat >> "$TMP/bin/docker" <<'EOF'
 printf '%s\n' "$*" >> "$E/docker.log"
+conteneur_du_env() {
+  local f="" prec=""
+  for a in "$@"; do [[ "$prec" == "--env-file" ]] && f="$a"; prec="$a"; done
+  [[ -f "$f" ]] && sed -n 's/^CONTENEUR=//p' "$f"
+}
 case "$1" in
   info) exit 0 ;;
-  image)
-    [[ "$2" == "inspect" ]] || exit 1
-    [[ "$(cat "$E/image" 2>/dev/null || echo 1)" == "1" ]] || exit 1
-    [[ "$3" == "llm-rocm-strix:latest" ]] || exit 1
-    exit 0 ;;
+  image) exit 0 ;;
   inspect)
+    c="${@: -1}"
     case "$*" in
-      *State.Running*)  cat "$E/running"  2>/dev/null || echo false ;;
-      *State.Status*)   cat "$E/status"   2>/dev/null || echo running ;;
-      *State.ExitCode*) cat "$E/exitcode" 2>/dev/null || echo 0 ;;
+      *State.Running*)  cat "$E/$c.running" 2>/dev/null || echo false ;;
+      *State.Status*)   cat "$E/$c.status"  2>/dev/null || echo running ;;
+      *State.ExitCode*) cat "$E/$c.exitcode" 2>/dev/null || echo 0 ;;
     esac
     exit 0 ;;
-  compose) exit 0 ;;
-  stop) exit 0 ;;
+  stop) echo false > "$E/${@: -1}.running"; exit 0 ;;
+  compose)
+    c="$(conteneur_du_env "$@")"
+    case " $* " in
+      *" up "*)
+        [[ "$(cat "$E/up-echec" 2>/dev/null)" == "$c" ]] && exit 1
+        [[ -n "$c" ]] && echo true > "$E/$c.running" ;;
+      *" stop "*) [[ -n "$c" ]] && echo false > "$E/$c.running" ;;
+    esac
+    exit 0 ;;
 esac
 exit 1
 EOF
-
-cat > "$SVC/bin/getent" <<'EOF'
+cat > "$TMP/bin/getent" <<'EOF'
 #!/usr/bin/env bash
 [[ "$1" == "group" ]] || exit 2
 case "$2" in
@@ -323,632 +81,386 @@ case "$2" in
   *) exit 2 ;;
 esac
 EOF
-
-# Faux curl : /health répond selon un fichier d'état.
-cat > "$SVC/bin/curl" <<EOF
+cat > "$TMP/bin/curl" <<EOF
 #!/usr/bin/env bash
-[[ "\$(cat "$SVC/etat/health" 2>/dev/null || echo ok)" == "ok" ]] || exit 7
+[[ "\$(cat "$TMP/etat/health" 2>/dev/null || echo ok)" == "ok" ]] || exit 7
 exit 0
 EOF
+chmod +x "$TMP/bin/docker" "$TMP/bin/getent" "$TMP/bin/curl"
 
-# Faux systemctl : journalise et réussit toujours (une unité absente ne doit
-# de toute façon pas faire échouer la migration).
-cat > "$SVC/bin/systemctl" <<EOF
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >> "$SVC/etat/systemctl.log"
-exit 0
-EOF
-# Faux ss : port libre.
-printf '#!/usr/bin/env bash\necho "State Recv-Q Send-Q Local"\nexit 0\n' > "$SVC/bin/ss"
-chmod +x "$SVC/bin/docker" "$SVC/bin/getent" "$SVC/bin/curl" "$SVC/bin/systemctl" "$SVC/bin/ss"
+# =============================================================================
+# 1. Conformité de chaque runtime du dépôt
+# =============================================================================
 
-echo 1 > "$SVC/etat/image"
-echo ok > "$SVC/etat/health"
-echo true > "$SVC/etat/running"
-echo running > "$SVC/etat/status"
+# Commandes du cycle de vie : communes, aucun runtime ne peut les redéclarer.
+GENERIQUES="--runtime --setup --start --stop --restart --status --logs --en-marche --help -h"
+REQUISES="check env setup etiquette aide commande"
 
-# Deux modèles déclarés, pour que load_preload_conf retienne les deux lignes du
-# preload.conf factice (elle ignore un modèle inconnu du script).
-SVC_DECL="
-declare -A MODEL_INI
-MODEL_INI[un]='model = $SVC/home/models/un/a.gguf'
-MODEL_INI[deux]='model = $SVC/home/models/deux/b.gguf'
-PRESET_ORDER=(un deux)
-declare -A GROUPE_AVANT
-DEFAULT_DEVICE=ROCm0
-DEFAULT_PRELOAD=()
-KNOWN_FILES=($SVC/home/models/un/a.gguf)
-"
-_run_svc() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé
-  env -i HOME="$SVC/home" PATH="$SVC/bin:/usr/bin:/bin" SCRIPT_DIR="$SVC/repo" ${2:-} \
+RUNTIMES_PRESENTS=()
+for d in "$REPO_DIR"/runtime/*/; do
+  [[ -d "$d" ]] && RUNTIMES_PRESENTS+=("$(basename "$d")")
+done
+if [[ ${#RUNTIMES_PRESENTS[@]} -gt 0 ]]; then
+  ok "runtimes présents : ${RUNTIMES_PRESENTS[*]}"
+else
+  fail "aucun dossier dans runtime/"
+fi
+
+# _charge <nom> <appel> - le générique puis CE runtime seul, dans un
+# environnement vide (HOME et PATH bidons), sur le vrai dépôt.
+_charge() {
+  env -i HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$REPO_DIR" \
     bash -c "set -euo pipefail
       source '$REPO_DIR/lib/common.sh'
       source '$REPO_DIR/lib/svc.sh'
-      $SVC_DECL
-      source '$REPO_DIR/lib/ini.sh'
-      source '$REPO_DIR/lib/compose.sh'
-      source '$REPO_DIR/lib/setup.sh'
-      source '$REPO_DIR/lib/runtime.sh'
-      source '$REPO_DIR/lib/service.sh'
-      source '$REPO_DIR/lib/gufo.sh'
-      $1" </dev/null 2>&1
+      RUNTIMES=('$1'); RT='$1'
+      source '$REPO_DIR/runtime/$1/runtime.sh'
+      $2" </dev/null
 }
 
-# (a) Le compose versionné et le .env généré. Chaque assertion correspond à une
-#     décision qui a coûté une mise au point : le nom de projet (sinon
-#     « models »), le nom de conteneur (tous les messages du dépôt le nomment),
-#     le montage AU MÊME CHEMIN et en lecture seule (models.ini porte des
-#     chemins absolus), les gid NUMÉRIQUES (les noms n'existent pas dans
-#     l'image), cap_drop ALL avec seccomp=unconfined, l'absence de mem_limit
-#     (la garde mémoire raisonne sur l'hôte) et --models-max dérivé de
-#     preload.conf. Le YAML est lu tel quel dans le dépôt ; le .env est ce que
-#     generate_env écrit sur stdout.
-cp "$REPO_DIR/runtime/docker-compose.yml" "$SVC/repo/runtime/"
-YML="$(cat "$REPO_DIR/runtime/docker-compose.yml")"
-ENVOUT="$(_run_svc 'generate_env')"
-_ckin() {  # $1 = libellé, $2 = motif attendu dans $YML
-  if grep -qF -- "$2" <<<"$YML"; then
-    echo "[OK]   compose : $1"
-  else
-    echo "[FAIL] compose : $1 - motif absent : $2"; rc=1
+declare -A VU_CONTENEUR=() VU_ENV=() VU_CMD=() VU_FN=()
+BASE_FN="$(env -i HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$REPO_DIR" \
+  bash -c "source '$REPO_DIR/lib/common.sh'; source '$REPO_DIR/lib/svc.sh'; declare -F | cut -d' ' -f3")"
+
+for nom in ${RUNTIMES_PRESENTS[@]+"${RUNTIMES_PRESENTS[@]}"}; do
+  D="$REPO_DIR/runtime/$nom"
+  id="${nom//[^A-Za-z0-9]/_}"
+  avant=$rc
+
+  # Fichiers imposés.
+  for f in runtime.sh docker-compose.yml tests/sh-unit.sh; do
+    [[ -f "$D/$f" ]] || fail "$nom : $f absent"
+  done
+  [[ -x "$D/tests/sh-unit.sh" ]] || fail "$nom : tests/sh-unit.sh non exécutable"
+  [[ "$nom" =~ ^[a-z0-9][a-z0-9.-]*$ ]] || fail "$nom : nom de dossier hors [a-z0-9.-]"
+  [[ -f "$D/runtime.sh" && -f "$D/docker-compose.yml" ]] || continue
+
+  # Chargement : rien sur stdout, aucun appel à docker ni à curl.
+  : > "$TMP/etat/docker.log"
+  sortie="$(_charge "$nom" ':' 2>&1)" || fail "$nom : runtime.sh ne se charge pas : $sortie"
+  [[ -z "$sortie" ]] || fail "$nom : runtime.sh affiche quelque chose en se chargeant : $sortie"
+  [[ ! -s "$TMP/etat/docker.log" ]] || fail "$nom : runtime.sh appelle docker en se chargeant"
+
+  # Déclarations.
+  decl="$(_charge "$nom" 'printf "%s\n" "${RT_CONTENEUR['"$nom"']:-}" "${RT_ENV_FILE['"$nom"']:-}" "${RT_DESCRIPTION['"$nom"']:-}" "${RT_COMMANDES['"$nom"']:-}"' 2>/dev/null)"
+  { IFS= read -r conteneur; IFS= read -r envf; IFS= read -r desc; IFS= read -r cmds; } <<<"$decl"
+  [[ -n "$conteneur" ]] || fail "$nom : RT_CONTENEUR[$nom] non déclaré (le runtime se déclare-t-il sous le nom de son dossier ?)"
+  [[ "$envf" == /* ]] || fail "$nom : RT_ENV_FILE[$nom] n'est pas un chemin absolu : '$envf'"
+  [[ -n "$desc" ]] || fail "$nom : RT_DESCRIPTION[$nom] vide"
+  [[ "$envf" != "$REPO_DIR"/* ]] || fail "$nom : le .env généré vivrait dans le dépôt ($envf)"
+  if [[ -n "$conteneur" ]]; then
+    [[ -z "${VU_CONTENEUR[$conteneur]:-}" ]] || fail "$nom : conteneur '$conteneur' déjà pris par ${VU_CONTENEUR[$conteneur]}"
+    VU_CONTENEUR[$conteneur]="$nom"
   fi
-}
-# Les motifs INTERDITS sont cherchés hors commentaires : le YAML explique
-# justement pourquoi il n'y a ni mem_limit, ni docker.sock, ni network_mode.
-_ckout() {  # $1 = libellé, $2 = motif INTERDIT
-  if grep -v '^[[:space:]]*#' <<<"$YML" | grep -qF -- "$2"; then
-    echo "[FAIL] compose : $1 - motif présent alors qu'il ne devrait pas : $2"; rc=1
-  else
-    echo "[OK]   compose : $1"
+  if [[ -n "$envf" ]]; then
+    [[ -z "${VU_ENV[$envf]:-}" ]] || fail "$nom : .env '$envf' déjà pris par ${VU_ENV[$envf]}"
+    VU_ENV[$envf]="$nom"
   fi
-}
-_ckenv() {  # $1 = libellé, $2 = ligne attendue dans le .env
-  if grep -qxF -- "$2" <<<"$ENVOUT"; then
-    echo "[OK]   env : $1"
-  else
-    echo "[FAIL] env : $1 - ligne absente : $2"; rc=1
+
+  # Sous-commandes : en --xxx, hors cycle de vie, propres à ce runtime.
+  for c in $cmds; do
+    [[ "$c" == --* ]] || fail "$nom : sous-commande '$c' sans --"
+    [[ " $GENERIQUES " != *" $c "* ]] || fail "$nom : '$c' est une commande commune, pas une sous-commande"
+    [[ -z "${VU_CMD[$c]:-}" ]] || fail "$nom : sous-commande '$c' déjà déclarée par ${VU_CMD[$c]}"
+    VU_CMD[$c]="$nom"
+  done
+
+  # Fonctions du contrat, et collisions de noms avec un autre runtime.
+  fns="$(_charge "$nom" 'declare -F | cut -d" " -f3' 2>/dev/null)"
+  for f in $REQUISES; do
+    grep -qx "rt_${id}_$f" <<<"$fns" || fail "$nom : fonction rt_${id}_$f absente"
+  done
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    grep -qx "$f" <<<"$BASE_FN" && continue
+    [[ -z "${VU_FN[$f]:-}" ]] || fail "$nom : fonction $f déjà définie par ${VU_FN[$f]} (tous les runtimes sont chargés ensemble)"
+    VU_FN[$f]="$nom"
+  done <<<"$fns"
+
+  # etiquette : une chaîne sans espace (colonne de journal TSV), sans docker.
+  : > "$TMP/etat/docker.log"
+  etiq="$(_charge "$nom" '_rt etiquette' 2>/dev/null)"
+  [[ "$etiq" =~ ^[A-Za-z0-9._+?-]+$ ]] || fail "$nom : étiquette impropre à une colonne TSV : '$etiq'"
+  [[ ! -s "$TMP/etat/docker.log" ]] || fail "$nom : etiquette lance docker (elle est appelée à chaque journal)"
+
+  # aide : cite chaque sous-commande déclarée.
+  aide="$(_charge "$nom" '_rt aide' 2>/dev/null)"
+  [[ -n "$aide" ]] || fail "$nom : aide vide"
+  for c in $cmds; do
+    grep -qF -- "$c" <<<"$aide" || fail "$nom : l'aide ne cite pas la sous-commande $c"
+  done
+
+  # Compose : règles lues hors commentaires.
+  yml="$(grep -v '^[[:space:]]*#' "$D/docker-compose.yml")"
+  mauvaises="$(grep -oE '\$\{[^}]*\}' <<<"$yml" | grep -vE '^\$\{[A-Z_][A-Z0-9_]*:\?\}$' | sort -u | tr '\n' ' ')"
+  [[ -z "$mauvaises" ]] || fail "$nom : compose : variables hors \${VAR:?} : $mauvaises"
+  grep -qE '^[[:space:]]*container_name:[[:space:]]*"?\$\{[A-Z_]+:\?\}' <<<"$yml" || fail "$nom : compose : container_name n'est pas une variable \${VAR:?}"
+  grep -qE '^[[:space:]]*restart:' <<<"$yml" || fail "$nom : compose : politique restart absente"
+  grep -qE '^[[:space:]]*user:[[:space:]]*"\$\{[A-Z_]+:\?\}:\$\{[A-Z_]+:\?\}"' <<<"$yml" || fail "$nom : compose : user n'est pas l'uid:gid de l'hôte par variables (le conteneur tournerait en root)"
+  grep -qE '^[[:space:]]*ports:' <<<"$yml" || fail "$nom : compose : aucun port publié"
+  for interdit in 'privileged' 'docker.sock' 'network_mode: host' 'network_mode: "host"' 'mem_limit'; do
+    grep -qF -- "$interdit" <<<"$yml" && fail "$nom : compose : '$interdit' interdit par le contrat"
+  done
+  if grep -qF 'MODELS_BASE' <<<"$yml"; then
+    grep -qE '\$\{MODELS_BASE:\?\}:\$\{MODELS_BASE:\?\}:ro' <<<"$yml" || fail "$nom : compose : le parc n'est pas monté au même chemin en :ro"
   fi
-}
-_ckin "nom de projet explicite"          "name: llm-setup"
-_ckin "nom de conteneur = SERVICE_NAME"  "container_name: \${SERVICE_NAME:?}"
-_ckin "image = IMAGE_REF"                "image: \${IMAGE_REF:?}"
-_ckin "pas de pull"                      "pull_policy: never"
-# Le bloc build : c'est lui qui fait de ce compose la SEULE façon de construire
-# l'image, et du Dockerfile du dépôt la seule source des révisions.
-_ckin "contexte de build = RUNTIME_DIR"  "context: \${RUNTIME_DIR:?}"
-_ckin "Dockerfile vendorisé nommé"       "dockerfile: Dockerfile.rocm-strix"
-_ckin "montage au même chemin, en ro"    "- \"\${MODELS_BASE:?}:\${MODELS_BASE:?}:ro\""
-_ckin "cache inscriptible hors de ~/models" ":/var/cache/llama:rw\""
-_ckin "uid:gid de l'hôte, jamais root"   "user: \"\${SVC_UID:?}:\${SVC_GID:?}\""
-_ckin "gid de render par variable"       "- \"\${GID_RENDER:?}\""
-_ckin "gid de video par variable"        "- \"\${GID_VIDEO:?}\""
-_ckin "cap_drop ALL"                     "- ALL"
-_ckin "seccomp exigé par ROCr"           "- \"seccomp=unconfined\""
-_ckin "no-new-privileges"                "- \"no-new-privileges:true\""
-_ckin "port publié sur BIND_ADDR"        "- \"\${BIND_ADDR:?}:\${SERVER_PORT:?}:\${SERVER_PORT:?}\""
-_ckin "models-max par variable"          "\"\${MODELS_MAX:?}\""
-_ckin "ini passé au routeur"             "\${CONFIG_DIR:?}/models.ini"
-_ckin "jinja conservé"                   "\"--jinja\""
-_ckin "autoload conservé"                "\"--models-autoload\""
-_ckin "host interne 0.0.0.0"             "\"--host\""
-_ckin "arrêt long et SIGINT"             "stop_grace_period: 180s"
-_ckin "sonde sans curl"                  "/dev/tcp/127.0.0.1/\${SERVER_PORT:?}"
-_ckout "jamais de mem_limit"             "mem_limit"
-_ckout "jamais privileged"               "privileged: true"
-_ckout "jamais docker.sock"              "docker.sock"
-_ckout "jamais network_mode host"        "network_mode"
-# Interdit par l'amont sur le runtime retained-PM4 : sortie corrompue.
-_ckout "jamais GGML_CUDA_ENABLE_UNIFIED_MEMORY" "GGML_CUDA_ENABLE_UNIFIED_MEMORY"
-# Aucune variable optionnelle : un .env incomplet doit faire refuser le fichier
-# par compose (nom de la variable à l'appui), pas monter un service à moitié.
-if grep -v '^[[:space:]]*#' <<<"$YML" | grep -oE '\$\{[A-Z_]+[^}]*\}' | grep -qv ':?}$'; then
-  echo "[FAIL] compose : variable sans :? (elle passerait vide sans un mot)"; rc=1
-else
-  echo "[OK]   compose : toutes les variables sont obligatoires (:?)"
-fi
-# Le .env : chaque variable du YAML y est, avec la valeur machine attendue.
-_ckenv "en-tête GÉNÉRÉ, NE PAS ÉDITER"   "# GÉNÉRÉ par ./setup-llm.sh (lib/compose.sh) - NE PAS ÉDITER"
-_ckenv "COMPOSE_FILE = compose du dépôt" "COMPOSE_FILE=$SVC/repo/runtime/docker-compose.yml"
-_ckenv "nom de conteneur"                "SERVICE_NAME=llama-server"
-_ckenv "image locale"                    "IMAGE_REF=llm-rocm-strix:latest"
-_ckenv "contexte de build = runtime/ du dépôt" "RUNTIME_DIR=$SVC/repo/runtime"
-_ckenv "port"                            "SERVER_PORT=8009"
-_ckenv "bind 0.0.0.0 par défaut"         "BIND_ADDR=0.0.0.0"
-_ckenv "ini dans ~/models"               "CONFIG_DIR=$SVC/home/models"
-_ckenv "montage de ~/models"             "MODELS_BASE=$SVC/home/models"
-_ckenv "uid de l'utilisateur du service" "SVC_UID=$(id -u)"
-_ckenv "gid de l'utilisateur du service" "SVC_GID=$(id -g)"
-_ckenv "gid numérique de render"         "GID_RENDER=303"
-_ckenv "gid numérique de video"          "GID_VIDEO=986"
-_ckenv "models-max = préchargés + 1"     "MODELS_MAX=3"
-for v in $(grep -v '^[[:space:]]*#' <<<"$YML" | grep -oE '\$\{[A-Z_]+' | tr -d '${' | sort -u); do
-  if ! grep -q "^$v=" <<<"$ENVOUT"; then
-    echo "[FAIL] env : variable \$$v du compose absente du .env"; rc=1
-  fi
+  [[ "$(grep -cE '^  [A-Za-z0-9_-]+:[[:space:]]*$' <<<"$(awk '/^services:/{f=1;next} f&&/^[^[:space:]]/{f=0} f' <<<"$yml")")" -eq 1 ]] \
+    || fail "$nom : compose : un service et un seul"
+
+  [[ $rc -eq $avant ]] && ok "contrat : $nom conforme (fichiers, déclarations, ${REQUISES// /, }, étiquette '$etiq', compose)"
 done
 
-# (b) Image absente : rien n'est généré, et le message nomme --image-build.
-#     Un .env qui nommerait une image inexistante démarrerait « bien » et
-#     échouerait au premier up, sur un message de docker.
-echo 0 > "$SVC/etat/image"
-out="$(_run_svc 'generate_env')"; grc=$?
-if [[ "$grc" -ne 0 && "$out" == *"--image-build"* ]]; then
-  echo "[OK]   env : image absente ⇒ refus nommant --image-build"
+# Le défaut du dépôt existe.
+defaut="$(env -i HOME="$TMP/home" PATH="/usr/bin:/bin" SCRIPT_DIR="$REPO_DIR" bash -c "source '$REPO_DIR/lib/common.sh'; echo \$RUNTIME_DEFAUT")"
+if [[ -d "$REPO_DIR/runtime/$defaut" ]]; then
+  ok "runtime par défaut présent : $defaut"
 else
-  echo "[FAIL] env : image absente, code $grc, sortie : $out"; rc=1
-fi
-echo 1 > "$SVC/etat/image"
-
-# (c) regen_env : écrit, puis NE RÉÉCRIT PAS un contenu identique (la date de
-#     modification doit vouloir dire « la configuration a bougé »), et réécrit
-#     dès qu'une source change (ici preload.conf ⇒ --models-max).
-_run_svc 'regen_env' >/dev/null
-CF="$SVC/home/models/.env"
-if [[ -f "$CF" ]]; then
-  touch -d '2020-01-01 00:00' "$CF"
-  avant="$(stat -c %Y "$CF")"
-  _run_svc 'regen_env' >/dev/null
-  apres="$(stat -c %Y "$CF")"
-  if [[ "$avant" == "$apres" ]]; then
-    echo "[OK]   env : contenu identique ⇒ fichier non réécrit"
-  else
-    echo "[FAIL] env : fichier réécrit sans changement de contenu"; rc=1
-  fi
-  printf 'un\n' > "$SVC/repo/preload.conf"
-  _run_svc 'regen_env' >/dev/null
-  if [[ "$(stat -c %Y "$CF")" != "$avant" ]] && grep -qx 'MODELS_MAX=2' "$CF"; then
-    echo "[OK]   env : preload.conf changé ⇒ --models-max suivi"
-  else
-    echo "[FAIL] env : --models-max n'a pas suivi preload.conf"; rc=1
-  fi
-  # preload.conf vide (commentaires seuls) ⇒ un seul résident, pas de plancher à 2.
-  printf '; rien\n' > "$SVC/repo/preload.conf"
-  _run_svc 'regen_env' >/dev/null
-  if grep -qx 'MODELS_MAX=1' "$CF"; then
-    echo "[OK]   env : preload.conf vide ⇒ --models-max 1 (un seul résident)"
-  else
-    echo "[FAIL] env : preload.conf vide devrait donner --models-max 1"; rc=1
-  fi
-  printf 'un\ndeux\n' > "$SVC/repo/preload.conf"
-  _run_svc 'regen_env' >/dev/null
-  # Validation par l'outil lui-même quand il est là : aucune assertion de
-  # forme ne remplace le parseur de compose (une clé mal placée, un scalaire
-  # mal cité, une variable non résolue passeraient nos greps). `config` est
-  # purement client, il ne parle pas au démon ; il est lancé EXACTEMENT comme
-  # _svc_compose (--project-directory sur ~/models, où vit le .env) et son
-  # rendu doit porter les valeurs machine, plus aucune variable.
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-    if out="$(docker compose --project-directory "$SVC/home/models" -f "$SVC/repo/runtime/docker-compose.yml" config 2>&1)"; then
-      echo "[OK]   compose : accepté par « docker compose config » avec le .env"
-      _ckr() {  # $1 = libellé, $2 = motif attendu dans le rendu
-        if grep -qF -- "$2" <<<"$out"; then
-          echo "[OK]   rendu : $1"
-        else
-          echo "[FAIL] rendu : $1 - motif absent : $2"; rc=1
-        fi
-      }
-      _ckr "conteneur nommé"          "container_name: llama-server"
-      _ckr "image locale"             "image: llm-rocm-strix:latest"
-      _ckr "gid de render résolu"     "\"303\""
-      _ckr "ini au chemin de l'hôte"  "$SVC/home/models/models.ini"
-      _ckr "models-max résolu"        "\"3\""
-      _ckr "contexte de build résolu" "context: $SVC/repo/runtime"
-      if grep -q '\${' <<<"$out"; then
-        echo "[FAIL] rendu : une variable n'est pas résolue"; rc=1
-      else
-        echo "[OK]   rendu : aucune variable non résolue"
-      fi
-      # Le .env seul, depuis ~/models et sans -f : l'usage manuel documenté
-      # (cd ~/models && docker compose ps) doit trouver le compose par COMPOSE_FILE.
-      if (cd "$SVC/home/models" && docker compose config -q 2>&1); then
-        echo "[OK]   compose : trouvé depuis ~/models par COMPOSE_FILE du .env"
-      else
-        echo "[FAIL] compose : introuvable depuis ~/models sans -f (COMPOSE_FILE ?)"; rc=1
-      fi
-    else
-      echo "[FAIL] compose : refusé par docker compose : $out"; rc=1
-    fi
-  elif python3 -c 'import yaml' 2>/dev/null; then
-    if out="$(python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "$REPO_DIR/runtime/docker-compose.yml" 2>&1)"; then
-      echo "[OK]   compose : YAML bien formé (python3-yaml ; docker compose absent)"
-    else
-      echo "[FAIL] compose : YAML invalide : $out"; rc=1
-    fi
-  else
-    echo "[SKIP] compose : ni docker compose ni python3-yaml pour valider le fichier"
-  fi
-else
-  echo "[FAIL] env : regen_env n'a rien écrit dans $CF"; rc=1
-fi
-
-# (c2) Migration : l'ancien docker-compose.yml généré dans ~/models est retiré
-#      (il passerait avant COMPOSE_FILE du .env en usage manuel) ; un fichier
-#      sans l'en-tête de génération est laissé en place.
-printf '# GÉNÉRÉ par ./setup-llm.sh (lib/compose.sh) - NE PAS ÉDITER\nname: x\n' > "$SVC/home/models/docker-compose.yml"
-_run_svc 'regen_env' >/dev/null
-if [[ ! -f "$SVC/home/models/docker-compose.yml" ]]; then
-  echo "[OK]   env : ancien compose généré retiré de ~/models"
-else
-  echo "[FAIL] env : ancien compose généré laissé dans ~/models"; rc=1
-fi
-printf 'name: manuel\n' > "$SVC/home/models/docker-compose.yml"
-_run_svc 'regen_env' >/dev/null
-if [[ -f "$SVC/home/models/docker-compose.yml" ]]; then
-  echo "[OK]   env : compose écrit à la main laissé en place"
-else
-  echo "[FAIL] env : compose écrit à la main supprimé"; rc=1
-fi
-rm -f "$SVC/home/models/docker-compose.yml"
-
-# (c3) _svc_stop sans .env : arrêt propre par `docker stop` sur le nom du
-#      conteneur, jamais sauté (premier --restart sur le nouveau format).
-mv "$SVC/home/models/.env" "$SVC/home/models/.env.garde"
-: > "$SVC/etat/docker.log"
-out="$(_run_svc '_svc_stop 7')"; grc=$?
-if [[ "$grc" -eq 0 ]] && grep -qx 'stop -t 7 llama-server' "$SVC/etat/docker.log" \
-   && ! grep -q '^compose' "$SVC/etat/docker.log"; then
-  echo "[OK]   svc : stop sans .env ⇒ docker stop sur le nom du conteneur"
-else
-  echo "[FAIL] svc : stop sans .env, code $grc, appels : $(cat "$SVC/etat/docker.log")"; rc=1
-fi
-mv "$SVC/home/models/.env.garde" "$SVC/home/models/.env"
-
-# (d) LE test qui compte côté pilotage : _svc_restart ne doit JAMAIS émettre
-#     « compose restart », qui relancerait le conteneur existant - donc
-#     l'ancienne image, l'ancienne ligne de commande et l'ancien --models-max.
-#     Un stop puis un up --force-recreate, rien d'autre.
-: > "$SVC/etat/docker.log"
-out="$(_run_svc '_svc_restart')"; grc=$?
-log="$(cat "$SVC/etat/docker.log")"
-if [[ "$grc" -eq 0 ]] && ! grep -qE 'compose .* restart' <<<"$log" \
-   && grep -q 'force-recreate' <<<"$log" && grep -q ' stop ' <<<"$log"; then
-  echo "[OK]   svc : restart = stop + up --force-recreate (jamais compose restart)"
-else
-  echo "[FAIL] svc : restart, code $grc, appels docker :"
-  sed 's/^/       /' <<<"$log"; rc=1
-fi
-
-# (e) Attente de /health : le conteneur est sorti, il ne répondra jamais. La
-#     boucle doit rendre la main tout de suite en donnant le code de sortie,
-#     pas attendre les 300 s du plafond (deux mesures perdues autrement).
-echo ko > "$SVC/etat/health"
-echo exited > "$SVC/etat/status"
-echo 137 > "$SVC/etat/exitcode"
-t0="$(date +%s)"
-out="$(_run_svc '_svc_wait_ready 300')"; grc=$?
-t1="$(date +%s)"
-if [[ "$grc" -ne 0 && "$out" == *"137"* && $(( t1 - t0 )) -lt 20 ]]; then
-  echo "[OK]   svc : conteneur sorti ⇒ échec immédiat, code de sortie donné"
-else
-  echo "[FAIL] svc : attente sur conteneur sorti, code $grc, $(( t1 - t0 )) s, sortie : $out"; rc=1
-fi
-echo ok > "$SVC/etat/health"
-echo running > "$SVC/etat/status"
-
-# (f) Étiquette de moteur du SERVICE : les deux ARG *_REV du Dockerfile
-#     vendorisé, lus par un grep, puis le repli. C'est la colonne build de tous
-#     les journaux TSV : une étiquette fausse rend une campagne entière
-#     incomparable. Elle ne doit JAMAIS dépendre de l'état de docker (l'image
-#     peut être absente pendant une reconstruction) ni coûter un conteneur.
-_ck "étiquette : ARG du Dockerfile" "strix-abcdef1+r9876543" "$(_run_svc '_llama_build')"
-: > "$SVC/etat/docker.log"
-echo 0 > "$SVC/etat/image"
-_ck "étiquette : image absente, révisions quand même lues" "strix-abcdef1+r9876543" \
-    "$(_run_svc '_llama_build')"
-if [[ ! -s "$SVC/etat/docker.log" ]]; then
-  echo "[OK]   étiquette : aucun appel à docker (lecture de fichier seule)"
-else
-  echo "[FAIL] étiquette : docker appelé : $(cat "$SVC/etat/docker.log")"; rc=1
-fi
-echo 1 > "$SVC/etat/image"
-# REV vidée (cas non épinglé, sommet de branche au build) : rien à annoncer,
-# l'étiquette le dit.
-mv "$SVC/repo/runtime/Dockerfile.rocm-strix" "$SVC/repo/runtime/Dockerfile.garde"
-printf 'ARG ENGINE_REV=\nARG ROCM_SYSTEMS_REV=\n' > "$SVC/repo/runtime/Dockerfile.rocm-strix"
-_ck "étiquette : repli final" "?" "$(_run_svc '_llama_build')"
-mv -f "$SVC/repo/runtime/Dockerfile.garde" "$SVC/repo/runtime/Dockerfile.rocm-strix"
-
-# (g) --cleanup : les deux artefacts GÉNÉRÉS de ~/models (models.ini et
-#     .env) sont hors d'atteinte par construction des deux find.
-#     Le test le fige : un « find -type f » à la racine les ferait apparaître
-#     ici, et --cleanup --yes supprimerait la configuration du service.
-#     Le dossier gufo (poids propres à gufo, hors lib/models.sh) est épargné
-#     par son nom : sans cela --cleanup --yes en supprimerait 250 Go.
-mkdir -p "$SVC/home/models/un" "$SVC/home/models/orphelin" "$SVC/home/models/gufo/sous"
-: > "$SVC/home/models/un/a.gguf"
-: > "$SVC/home/models/orphelin/vieux.gguf"
-: > "$SVC/home/models/gufo/plat.gguf"
-: > "$SVC/home/models/gufo/sous/shard.gguf"
-out="$(_run_svc 'cmd_cleanup')"; grc=$?
-if [[ "$grc" -eq 0 && "$out" == *"orphelin"* \
-      && "$out" != *"models.ini"* && "$out" != *".env"* && "$out" != *"/gufo"* ]]; then
-  echo "[OK]   cleanup : dossier orphelin listé, models.ini, .env et gufo/ intouchés"
-else
-  echo "[FAIL] cleanup : code $grc, sortie : $out"; rc=1
-fi
-
-# (h) --migrate-off-systemd : idempotente. Elle sera jouée une fois par
-#     machine, éventuellement deux (reprise après interruption), et une
-#     machine neuve - sans unité - doit la traverser sans erreur.
-mkdir -p "$SVC/home/.config/systemd/user"
-: > "$SVC/home/.config/systemd/user/llama-server.service"
-: > "$SVC/etat/systemctl.log"
-out="$(_run_svc 'cmd_migrate_off_systemd')"; grc=$?
-out2="$(_run_svc 'cmd_migrate_off_systemd')"; grc2=$?
-if [[ "$grc" -eq 0 && "$grc2" -eq 0 \
-      && ! -f "$SVC/home/.config/systemd/user/llama-server.service" \
-      && "$out" == *"port 8009 libre"* && "$out2" == *"--start"* ]] \
-   && grep -q 'stop llama-server' "$SVC/etat/systemctl.log" \
-   && grep -q 'disable llama-server' "$SVC/etat/systemctl.log" \
-   && grep -q 'daemon-reload' "$SVC/etat/systemctl.log"; then
-  echo "[OK]   migrate-off-systemd : unité débranchée, port vérifié, rejouable"
-else
-  echo "[FAIL] migrate-off-systemd : codes $grc/$grc2"
-  echo "$out"  | sed 's/^/       1: /'
-  echo "$out2" | sed 's/^/       2: /'; rc=1
+  fail "RUNTIME_DEFAUT ($defaut) n'est pas un dossier de runtime/"
 fi
 
 # =============================================================================
-# 4quater. models.ini généré (lib/ini.sh + lib/models.sh RÉELS)
-#
-# Ajouté le 18/09/2026 avec la bascule du moteur sur l'image ROCm : le ini est
-# la seule chose que le routeur lit, et chacune des assertions ci-dessous
-# correspond à une décision de cette bascule qu'une régression silencieuse
-# annulerait (un device Vulkan qui revient, un batch 16384 qui déborde sur une
-# autre section, un drafter qui atterrit ailleurs que sur sa cible).
+# 2. Pilotage générique, sur deux runtimes factices
 # =============================================================================
-INI_HOME="$TMP/inihome"
-mkdir -p "$INI_HOME"
-_run_ini() {  # $1 = appel bash, $2 = env supplémentaire
-  env -i HOME="$INI_HOME" PATH="$TMP/bin:/usr/bin:/bin" SCRIPT_DIR="$TMP/repo" ${2:-} \
-    bash -c "set -euo pipefail
-      source '$REPO_DIR/lib/common.sh'
-      source '$REPO_DIR/lib/svc.sh'
-      source '$REPO_DIR/lib/models.sh'
-      source '$REPO_DIR/lib/ini.sh'
-      $1" </dev/null 2>&1
+
+R="$TMP/depot"
+mkdir -p "$R/lib" "$R/runtime"
+cp "$REPO_DIR/setup-llm.sh" "$R/"
+cp "$REPO_DIR/lib/common.sh" "$REPO_DIR/lib/svc.sh" "$REPO_DIR/lib/help.sh" "$R/lib/"
+
+# _faux <nom> - un runtime minimal et conforme. Chaque fonction de contrat
+# écrit son nom dans etat/appels.log ; etat/<nom>.check à 0 fait échouer check.
+_faux() {
+  local n="$1"
+  mkdir -p "$R/runtime/$n"
+  cat > "$R/runtime/$n/docker-compose.yml" <<'EOF'
+services:
+  svc:
+    container_name: ${CONTENEUR:?}
+    restart: unless-stopped
+    user: "${SVC_UID:?}:${SVC_GID:?}"
+    ports:
+      - "8009:8009"
+EOF
+  cat > "$R/runtime/$n/runtime.sh" <<EOF
+RT_CONTENEUR[$n]="c-$n"
+RT_ENV_FILE[$n]="$TMP/home/$n/.env"
+RT_DESCRIPTION[$n]="runtime factice $n"
+RT_COMMANDES[$n]="--propre-$n"
+RT_DELAI_ARRET[$n]=7
+rt_${n}_check() { echo "$n check" >> "$TMP/etat/appels.log"; [[ "\$(cat "$TMP/etat/$n.check" 2>/dev/null || echo 1)" == 1 ]] || { warn "$n pas prêt" >&2; return 1; }; }
+rt_${n}_env() { echo "$n env \$*" >> "$TMP/etat/appels.log"; printf 'CONTENEUR=c-%s\nARG=%s\n' "$n" "\${1:-}"; }
+rt_${n}_avant_demarrage() { echo "$n avant_demarrage" >> "$TMP/etat/appels.log"; }
+rt_${n}_pret() { echo "$n pret" >> "$TMP/etat/appels.log"; }
+rt_${n}_setup() { echo "$n setup \$*" >> "$TMP/etat/appels.log"; }
+rt_${n}_etiquette() { echo "$n-1"; }
+rt_${n}_aide() { echo "aide de $n : --propre-$n"; }
+rt_${n}_commande() { echo "$n commande \$*" >> "$TMP/etat/appels.log"; }
+EOF
 }
+_faux un
+_faux deux
 
-INI="$(_run_ini 'generate_models_ini')"
-_ckini() {  # $1 = libellé, $2 = motif attendu
-  if grep -qF -- "$2" <<<"$INI"; then
-    echo "[OK]   ini : $1"
-  else
-    echo "[FAIL] ini : $1 - motif absent : $2"; rc=1
-  fi
+# _llm [env…] -- args : le point d'entrée du dépôt jetable.
+_llm() {
+  local -a e=()
+  while [[ "${1:-}" != "--" ]]; do e+=("$1"); shift; done
+  shift
+  env -i HOME="$TMP/home" PATH="$TMP/bin:/usr/bin:/bin" ${e[@]+"${e[@]}"} "$R/setup-llm.sh" "$@" </dev/null 2>&1
 }
-_ckini_out() {  # $1 = libellé, $2 = motif INTERDIT (hors commentaires ";")
-  if grep -v '^[[:space:]]*;' <<<"$INI" | grep -qF -- "$2"; then
-    echo "[FAIL] ini : $1 - motif présent alors qu'il ne devrait pas : $2"; rc=1
-  else
-    echo "[OK]   ini : $1"
-  fi
-}
+_raz() { : > "$TMP/etat/docker.log"; : > "$TMP/etat/appels.log"; }
+_marche() { cat "$TMP/etat/c-$1.running" 2>/dev/null || echo false; }
 
-_ckini     "en-tête : device ROCm0"        "device                 = ROCm0"
-_ckini     "en-tête : fit off"             "fit                    = off"
-_ckini     "en-tête : load-mode none"      "load-mode              = none"
-_ckini     "en-tête : cache K f16"         "cache-type-k           = f16"
-_ckini     "en-tête : cache V f16"         "cache-type-v           = f16"
-_ckini_out "aucun Vulkan0, nulle part"     "Vulkan0"
-_ckini_out "ngram-on-disk remplacé par lazy-mode" "ngram-on-disk"
-_ckini     "lazy-mode on-direct (Flash-Next)"     "lazy-mode        = on-direct"
-
-# Un device par section, et tous sur ROCm0 : autant de lignes « device = » que
-# de sections (les flags globaux [*] portent la leur), aucune autre valeur.
-nb_sections="$(grep -c '^\[' <<<"$INI")"          # [*] compris
-nb_device="$(grep -c '^device  *= ROCm0$' <<<"$INI")"
-if [[ "$nb_device" -eq "$nb_sections" ]]; then
-  echo "[OK]   ini : device ROCm0 sur les $nb_sections sections, [*] compris"
+# (a) Choix du runtime actif : défaut absent refusé, runtime.conf, LLM_RUNTIME.
+if out="$(_llm -- --status)"; then
+  fail "runtime par défaut absent du dépôt jetable : aurait dû être refusé"
+elif grep -q "Runtime inconnu" <<<"$out" && grep -q "un deux\|deux un" <<<"$out"; then
+  ok "runtime actif : un défaut absent est refusé en listant les présents"
 else
-  echo "[FAIL] ini : $nb_device lignes device pour $nb_sections sections"; rc=1
+  fail "runtime inconnu mal signalé : $out"
 fi
-
-# spec-draft-ngl = all injecté exactement là où il y a un drafter séparé.
-nb_draft="$(grep -c '^spec-draft-model' <<<"$INI")"
-nb_ngl="$(grep -c '^spec-draft-ngl   = all$' <<<"$INI")"
-nb_devdraft="$(grep -c '^device-draft     = ROCm0$' <<<"$INI")"
-if [[ "$nb_draft" -gt 0 && "$nb_ngl" -eq "$nb_draft" && "$nb_devdraft" -eq "$nb_draft" ]]; then
-  echo "[OK]   ini : device-draft et spec-draft-ngl = all sur les $nb_draft drafters séparés"
+echo "un" > "$R/runtime.conf"
+# (sorties capturées, pas de tube : un grep -q qui sort tôt ferait échouer le
+#  tube sous pipefail)
+out_conf="$(_llm -- --status)"; out_env="$(_llm LLM_RUNTIME=deux -- --status)"
+if grep -q "Runtime actif : un " <<<"$out_conf" && grep -q "Runtime actif : deux " <<<"$out_env"; then
+  ok "runtime actif : runtime.conf, et LLM_RUNTIME qui prime pour une commande"
 else
-  echo "[FAIL] ini : $nb_draft drafters, $nb_ngl spec-draft-ngl, $nb_devdraft device-draft"; rc=1
+  fail "runtime actif : runtime.conf ou LLM_RUNTIME ignoré"
+fi
+if [[ "$(cat "$R/runtime.conf")" == "un" ]]; then
+  ok "runtime actif : LLM_RUNTIME ne mémorise rien"
+else
+  fail "LLM_RUNTIME a réécrit runtime.conf"
 fi
 
-# batch 16384 : les seules sections autorisées (INI_BIG_BATCH_OK) et personne
-# d'autre. Depuis le 18/09/2026 seul batch-size vaut 16384 sur Flash-Next ; son
-# ubatch-size est redescendu à 4096 pour rendre le cache de prompt en long
-# contexte (cf. lib/models.sh). Depuis le 22/09/2026 la variante -large-ub du
-# même GGUF pose batch ET ubatch à 16384 : trois lignes, deux sections.
-nb_batch="$(grep -c '^u\?batch-size  *= 16384$' <<<"$INI")"
-sect_batch="$(awk '/^\[/ { s=$0 } /^u?batch-size[ ]*= 16384$/ { print s }' <<<"$INI" | sort -u | tr -d '[]' | tr '\n' ' ')"
-nb_sect_batch="$(wc -w <<<"$sect_batch")"
-if [[ "$nb_batch" -eq 3 && "$nb_sect_batch" -eq 2 && "$sect_batch" == *"qwen3.8-flash-next-mtp-nothink "* && "$sect_batch" == *"qwen3.8-flash-next-mtp-nothink-large-ub "* ]]; then
-  echo "[OK]   ini : batch 16384 sur les deux seules sections Flash-Next (base et -large-ub)"
+# (b) Aiguillage : sous-commande du runtime actif exécutée, celle d'un autre
+#     refusée en le nommant, inconnue refusée, --setup délégué.
+_raz
+_llm -- --propre-un a b >/dev/null
+if grep -qx "un commande --propre-un a b" "$TMP/etat/appels.log"; then
+  ok "aiguillage : sous-commande du runtime actif exécutée avec ses arguments"
 else
-  echo "[FAIL] ini : $nb_batch lignes à 16384, section(s) : '$sect_batch'"; rc=1
+  fail "aiguillage : sous-commande du runtime actif perdue"
+fi
+if out="$(_llm -- --propre-deux)"; then
+  fail "aiguillage : sous-commande d'un autre runtime acceptée"
+elif grep -q "commande du runtime deux" <<<"$out" && ! grep -q "deux commande" "$TMP/etat/appels.log"; then
+  ok "aiguillage : sous-commande d'un autre runtime refusée en le nommant"
+else
+  fail "aiguillage : refus mal formulé : $out"
+fi
+if out="$(_llm -- --nimporte)"; then
+  fail "aiguillage : commande inconnue acceptée"
+else
+  ok "aiguillage : commande inconnue refusée"
+fi
+_raz
+_llm -- --setup x >/dev/null; _llm LLM_RUNTIME=deux -- --setup y >/dev/null
+if grep -qx "un setup x" "$TMP/etat/appels.log" && grep -qx "deux setup y" "$TMP/etat/appels.log"; then
+  ok "aiguillage : --setup délégué au runtime visé (LLM_RUNTIME installe sans basculer)"
+else
+  fail "aiguillage : --setup mal délégué"
 fi
 
-# ubatch 4096 sur Flash-Next (arbitrage cache de prompt du 18/09/2026).
-if [[ "$(awk '/^\[/ { s=$0 } /^ubatch-size[ ]*= 4096$/ { print s }' <<<"$INI" | tr -d '[]')" == "qwen3.8-flash-next-mtp-nothink" ]]; then
-  echo "[OK]   ini : ubatch 4096 sur Flash-Next"
+# (c) Démarrage : check, avant_demarrage, env, up --force-recreate, pret, dans
+#     cet ordre ; .env écrit dans le dossier déclaré ; arguments transmis.
+_raz
+out="$(_llm -- --start modele)"
+if [[ "$(tr '\n' '|' < "$TMP/etat/appels.log")" == "un check|un avant_demarrage|un env modele|un pret|" ]] \
+   && grep -qx "ARG=modele" "$TMP/home/un/.env" \
+   && grep -q "compose --project-directory $TMP/home/un --env-file $TMP/home/un/.env -f $R/runtime/un/docker-compose.yml up -d --force-recreate" "$TMP/etat/docker.log"; then
+  ok "démarrage : check, avant_demarrage, env, up --force-recreate, pret ; .env et compose aux places du contrat"
 else
-  echo "[FAIL] ini : ubatch 4096 attendu sur la seule section Flash-Next"; rc=1
+  fail "démarrage : séquence inattendue : $(tr '\n' '|' < "$TMP/etat/appels.log") / $out"
+fi
+# .env identique : pas réécrit (la date de modification garde son sens).
+touch -d '2020-01-01' "$TMP/home/un/.env"
+_llm -- --start modele >/dev/null
+if [[ "$(date -r "$TMP/home/un/.env" +%Y)" == "2020" ]]; then
+  ok ".env : contenu identique, fichier non réécrit"
+else
+  fail ".env réécrit alors que rien n'a changé"
+fi
+_llm -- --start autre >/dev/null
+if grep -qx "ARG=autre" "$TMP/home/un/.env" && [[ "$(date -r "$TMP/home/un/.env" +%Y)" != "2020" ]]; then
+  ok ".env : contenu changé, fichier réécrit"
+else
+  fail ".env non réécrit alors que son contenu change"
 fi
 
-# Garde-fou : une section non autorisée qui poserait 16384 fait échouer la
-# génération, avec la section, la valeur et la raison dans le message.
-out="$(_run_ini 'MODEL_INI[deepseek-v4-flash]+=$'"'"'\nubatch-size = 16384'"'"'; generate_models_ini')"; grc=$?
-if [[ "$grc" -ne 0 && "$out" == *"deepseek-v4-flash"* && "$out" == *"16384"* && "$out" == *"139"* ]]; then
-  echo "[OK]   ini : garde-fou ubatch, section non autorisée refusée en nommant la raison"
+# (d) Exclusivité : démarrer un runtime arrête celui qui tient le port.
+_raz
+_llm LLM_RUNTIME=deux -- --start >/dev/null
+if [[ "$(_marche un)" == false && "$(_marche deux)" == true ]] \
+   && grep -q -- "--env-file $TMP/home/un/.env .* stop -t 7" "$TMP/etat/docker.log"; then
+  ok "exclusivité : démarrer « deux » arrête « un » (délai d'arrêt déclaré), un seul runtime sur le port"
 else
-  echo "[FAIL] ini : garde-fou ubatch (code $grc) : $(tail -3 <<<"$out")"; rc=1
+  fail "exclusivité : un=$(_marche un) deux=$(_marche deux)"; cat "$TMP/etat/docker.log"
 fi
 
-# La même valeur sur la section autorisée passe (c'est la conf servie).
-out="$(_run_ini 'generate_models_ini >/dev/null && echo PASSE')"; grc=$?
-if [[ "$grc" -eq 0 && "$out" == *PASSE* ]]; then
-  echo "[OK]   ini : garde-fou ubatch, section autorisée laissée passer"
+# (e) --restart : stop puis start, JAMAIS compose restart ; --stop ; --en-marche.
+_raz
+_llm LLM_RUNTIME=deux -- --restart >/dev/null
+if grep -q ' stop -t 7' "$TMP/etat/docker.log" && grep -q ' up -d --force-recreate' "$TMP/etat/docker.log" \
+   && ! grep -qE 'compose .* restart' "$TMP/etat/docker.log"; then
+  ok "--restart : stop puis up, jamais compose restart"
 else
-  echo "[FAIL] ini : la section autorisée est refusée (code $grc) : $(tail -3 <<<"$out")"; rc=1
+  fail "--restart : séquence docker inattendue"; cat "$TMP/etat/docker.log"
+fi
+if _llm LLM_RUNTIME=deux -- --en-marche && ! _llm -- --en-marche; then
+  ok "--en-marche : 0 pour le runtime qui tourne, 1 pour l'autre, sans rien afficher"
+else
+  fail "--en-marche : codes de retour inattendus"
+fi
+_llm LLM_RUNTIME=deux -- --stop >/dev/null
+if [[ "$(_marche deux)" == false ]]; then ok "--stop : conteneur arrêté"; else fail "--stop sans effet"; fi
+
+# Arrêt sans .env (machine jamais démarrée sur ce format, fichier retiré) :
+# arrêt propre par `docker stop` sur le nom du conteneur, jamais sauté.
+_llm LLM_RUNTIME=deux -- --start >/dev/null
+mv "$TMP/home/deux/.env" "$TMP/home/deux/.env.garde"; _raz
+_llm LLM_RUNTIME=deux -- --stop >/dev/null
+if grep -qx 'stop -t 7 c-deux' "$TMP/etat/docker.log" && ! grep -q '^compose' "$TMP/etat/docker.log" && [[ "$(_marche deux)" == false ]]; then
+  ok "--stop sans .env : docker stop sur le nom du conteneur"
+else
+  fail "--stop sans .env : $(cat "$TMP/etat/docker.log")"
+fi
+mv "$TMP/home/deux/.env.garde" "$TMP/home/deux/.env"
+
+# (f) Attente de /health : le conteneur est sorti, il ne répondra jamais. La
+#     boucle rend la main tout de suite en donnant le code de sortie, sans
+#     attendre le plafond (deux mesures perdues autrement, 17/09/2026).
+echo ko > "$TMP/etat/health"; echo exited > "$TMP/etat/c-un.status"; echo 137 > "$TMP/etat/c-un.exitcode"
+t0=$SECONDS
+if out="$(_llm -- --start)"; then
+  fail "attente : un conteneur sorti devrait faire échouer --start"
+elif (( SECONDS - t0 < 20 )) && grep -q "est sorti (code 137)" <<<"$out"; then
+  ok "attente : conteneur sorti détecté en $((SECONDS - t0)) s, code de sortie donné, sans attendre le plafond"
+else
+  fail "attente : $((SECONDS - t0)) s, sortie : $out"
+fi
+echo ok > "$TMP/etat/health"; echo running > "$TMP/etat/c-un.status"
+
+# (g) Bascule (--runtime). Prérequis du nouveau vérifiés avant de toucher à
+#     quoi que ce soit ; succès mémorisé ; échec du démarrage = retour arrière.
+_llm -- --start >/dev/null                      # « un » sert
+echo 0 > "$TMP/etat/deux.check"; _raz
+if out="$(_llm -- --runtime deux)"; then
+  fail "bascule : un runtime pas prêt aurait dû être refusé"
+elif [[ "$(cat "$R/runtime.conf")" == "un" && "$(_marche un)" == true ]] && ! grep -q ' stop ' "$TMP/etat/docker.log" \
+     && grep -q "LLM_RUNTIME=deux ./setup-llm.sh --setup" <<<"$out"; then
+  ok "bascule : runtime pas prêt refusé, rien arrêté, runtime.conf intact, renvoi à --setup"
+else
+  fail "bascule vers un runtime pas prêt : conf=$(cat "$R/runtime.conf") un=$(_marche un) : $out"
+fi
+echo 1 > "$TMP/etat/deux.check"
+if _llm -- --runtime deux >/dev/null && [[ "$(cat "$R/runtime.conf")" == "deux" && "$(_marche un)" == false && "$(_marche deux)" == true ]]; then
+  ok "bascule : « deux » mémorisé et en marche, « un » arrêté"
+else
+  fail "bascule réussie mal appliquée : conf=$(cat "$R/runtime.conf") un=$(_marche un) deux=$(_marche deux)"
+fi
+echo "c-un" > "$TMP/etat/up-echec"
+if out="$(_llm -- --runtime un)"; then
+  fail "bascule : un démarrage en échec aurait dû sortir en erreur"
+elif [[ "$(cat "$R/runtime.conf")" == "deux" && "$(_marche deux)" == true && "$(_marche un)" == false ]]; then
+  ok "bascule : démarrage en échec, retour arrière (runtime.conf remis, ancien runtime relancé)"
+else
+  fail "retour arrière : conf=$(cat "$R/runtime.conf") un=$(_marche un) deux=$(_marche deux) : $out"
+fi
+: > "$TMP/etat/up-echec"
+if out="$(_llm -- --runtime trois)"; then
+  fail "bascule vers un runtime inexistant acceptée"
+elif grep -q "Runtime inconnu" <<<"$out" && [[ "$(cat "$R/runtime.conf")" == "deux" ]]; then
+  ok "bascule : runtime inexistant refusé"
+else
+  fail "bascule vers un runtime inexistant : $out"
+fi
+if out="$(_llm -- --runtime)" && grep -qE '^\* deux +en marche' <<<"$out" && grep -qE '^  un +arrêté' <<<"$out"; then
+  ok "--runtime : liste, actif marqué, état de chacun"
+else
+  fail "--runtime sans argument : $out"
 fi
 
-# Et une surcharge TEMPORAIRE de --spec-ab est refusée comme le reste : c'est
-# le même crash au bout, la mesure ne doit pas pouvoir le contourner.
-out="$(_run_ini 'generate_models_ini' 'SPEC_AB_PRESET=muse-glimmer-30b-dflash SPEC_AB_OVERRIDES=batch-size=16384')"; grc=$?
-if [[ "$grc" -ne 0 && "$out" == *"muse-glimmer-30b-dflash"* && "$out" == *"16384"* ]]; then
-  echo "[OK]   ini : garde-fou ubatch, surcharge SPEC_AB_OVERRIDES refusée aussi"
+# (h) Aide : commandes communes, runtimes présents, aide du runtime actif.
+out="$(_llm -- --help)"
+if grep -q -- "--runtime <nom>" <<<"$out" && grep -q "runtime factice un" <<<"$out" && grep -q "aide de deux" <<<"$out"; then
+  ok "aide : commandes communes, runtimes présents, aide du runtime actif"
 else
-  echo "[FAIL] ini : surcharge spec-ab non refusée (code $grc) : $(tail -3 <<<"$out")"; rc=1
+  fail "aide incomplète"
 fi
 
-# 5. Étiquette utilisable en colonne TSV : ni espace, ni tabulation. Le "+" de
-# la forme conteneurisée (strix-<engine>+r<rocm>) est admis, il ne casse ni un
-# TSV ni un sed. Sans image (cas d'un poste sans docker) l'étiquette vaut "?",
-# qui doit rester lui aussi une colonne propre.
-etiquette="$(_run '_llama_build')"
-if [[ "$etiquette" =~ ^[A-Za-z0-9._+?-]+$ ]]; then
-  echo "[OK]   étiquette sans espace ni tabulation"
-else
-  echo "[FAIL] étiquette impropre à une colonne TSV : '$etiquette'"; rc=1
-fi
-etiquette="$(_run_img '_llama_build')"
-if [[ "$etiquette" =~ ^[A-Za-z0-9._+-]+$ ]]; then
-  echo "[OK]   étiquette d'image sans espace ni tabulation"
-else
-  echo "[FAIL] étiquette d'image impropre à une colonne TSV : '$etiquette'"; rc=1
-fi
+[[ "$rc" -eq 0 ]] && echo "── contrat et pilotage générique conformes (${RUNTIMES_PRESENTS[*]}). ──"
 
-# (i) gufo, moteur alternatif sur le port du service (lib/gufo.sh,
-#     runtime-gufo/docker-compose.yml, toujours derrière llama-swap). Le .env
-#     porte les valeurs machine (uid:gid de l'hôte, gid NUMÉRIQUES, modèle
-#     préchargé) ; le compose rendu par le vrai docker compose tourne sous
-#     l'utilisateur de l'hôte, lance llama-swap et ne laisse aucune variable ;
-#     gufo-llama-swap.yaml est cohérent ; --start du service refuse tant que
-#     gufo tient le port.
-mkdir -p "$SVC/repo/runtime-gufo"
-cp "$REPO_DIR/runtime-gufo/docker-compose.yml" "$SVC/repo/runtime-gufo/"
-GENV="$(_run_svc 'generate_gufo_env qwen3.8-flash-next')"
-for attendu in "GUFO_PRECHARGE=qwen3.8-flash-next" "COMPOSE_PROJECT_NAME=gufo" "GUFO_CONTENEUR=gufo-8009" \
-               "GUFO_RESTART=unless-stopped" "GUFO_PORT=8009" "GUFO_SESSIONS=2" \
-               "GUFO_CACHE=$SVC/home/.local/state/llm-setup/gufo-cache" \
-               "GID_RENDER=303" "GID_VIDEO=986" "SVC_UID=$(id -u)"; do
-  if grep -qxF -- "$attendu" <<<"$GENV"; then
-    echo "[OK]   gufo env : $attendu"
-  else
-    echo "[FAIL] gufo env : ligne absente : $attendu"; rc=1
-  fi
-done
-GENV_BANC="$(_run_svc 'generate_gufo_env qwen3.8-27b' "GUFO_PORT=8090 GUFO_RESTART=no GUFO_SESSIONS=1 GUFO_PROJET=gufo-banc")"
-if grep -qx "GUFO_PORT=8090" <<<"$GENV_BANC" && grep -qx "GUFO_RESTART=no" <<<"$GENV_BANC" \
-   && grep -qx "COMPOSE_PROJECT_NAME=gufo-banc" <<<"$GENV_BANC" && grep -qx "GUFO_PRECHARGE=qwen3.8-27b" <<<"$GENV_BANC"; then
-  echo "[OK]   gufo env : réglages du banc (port, redémarrage, projet, préchargé) surchargeables"
-else
-  echo "[FAIL] gufo env : les surcharges du banc ne passent pas"; rc=1
+# =============================================================================
+# 3. Les tests de chaque runtime
+# =============================================================================
+if [[ "${1:-}" != "--contrat" ]]; then
+  for nom in ${RUNTIMES_PRESENTS[@]+"${RUNTIMES_PRESENTS[@]}"}; do
+    t="$REPO_DIR/runtime/$nom/tests/sh-unit.sh"
+    [[ -x "$t" ]] || continue
+    echo ""
+    echo "── runtime $nom ──"
+    "$t" || rc=1
+  done
 fi
-# L'image de gufo n'est épinglée qu'à UN endroit, runtime-gufo/IMAGE : le .env
-# la porte telle quelle, l'environnement la surcharge (bancs), et aucun autre
-# fichier exécuté ne récrit une version en dur (trois endroits à tenir
-# ensemble jusqu'au 06/10/2026).
-GIMG="$(<"$REPO_DIR/runtime-gufo/IMAGE")"
-if [[ "$GIMG" =~ ^[^[:space:]]+:[^[:space:]:]+$ && "$GIMG" != *:latest ]] \
-   && grep -qxF -- "GUFO_IMAGE=$GIMG" <<<"$GENV" \
-   && grep -qx "GUFO_IMAGE=autre:1" <<<"$(_run_svc 'generate_gufo_env' "GUFO_IMAGE=autre:1")"; then
-  echo "[OK]   gufo env : image = la ligne de runtime-gufo/IMAGE ($GIMG), surchargeable"
-else
-  echo "[FAIL] gufo env : image épinglée ('$GIMG') absente du .env ou non surchargeable"; rc=1
-fi
-if en_dur="$(grep -rnE 'gufo-runtime:[0-9]' "$REPO_DIR/lib" "$REPO_DIR/tools" "$REPO_DIR/setup-llm.sh" \
-               "$REPO_DIR/runtime-gufo" --include='*.sh' --include='*.yml' --include='*.yaml' \
-               --include='Dockerfile*' --include='*.py')"; then
-  echo "[FAIL] gufo : version d'image écrite en dur hors de runtime-gufo/IMAGE :"; echo "$en_dur"; rc=1
-else
-  echo "[OK]   gufo : aucune version d'image en dur hors de runtime-gufo/IMAGE"
-fi
-# Noms acceptés par --gufo : courts et complets, tout le reste refusé.
-if [[ "$(_run_svc '_gufo_nom 27b; _gufo_nom deepseek-v4-flash')" == $'qwen3.8-27b\ndeepseek-v4-flash' ]] \
-   && ! _run_svc '_gufo_nom routeur' >/dev/null && ! _run_svc '_gufo_nom ""' >/dev/null; then
-  echo "[OK]   gufo : noms de modèle courts et complets reconnus, inconnus refusés"
-else
-  echo "[FAIL] gufo : résolution des noms de modèle"; rc=1
-fi
-if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  GD="$SVC/gufo-data"; mkdir -p "$GD"
-  sed "s|^GUFO_CACHE=.*|GUFO_CACHE=$GD/cache|" <<<"$GENV" > "$GD/.env"
-  if out="$(docker compose --project-directory "$GD" --env-file "$GD/.env" -f "$SVC/repo/runtime-gufo/docker-compose.yml" config 2>&1)"; then
-    if grep -qF "user: $(id -u):$(id -g)" <<<"$out" && grep -qF "container_name: gufo-8009" <<<"$out" \
-       && grep -qF "/usr/local/bin/llama-swap" <<<"$out" && grep -qF "GUFO_PRECHARGE: qwen3.8-flash-next" <<<"$out" \
-       && grep -qF "gufo-llama-swap.yaml" <<<"$out" && grep -qF "GUFO_CACHE: $GD/cache" <<<"$out" \
-       && ! grep -q '\${' <<<"$out"; then
-      echo "[OK]   gufo compose : llama-swap, utilisateur de l'hôte, préchargé, aucune variable non résolue"
-    else
-      echo "[FAIL] gufo compose : rendu inattendu"; rc=1
-    fi
-  else
-    echo "[FAIL] gufo compose : refusé par docker compose : $out"; rc=1
-  fi
-else
-  echo "[SKIP] gufo compose : docker compose absent"
-fi
-# gufo-llama-swap.yaml : chaque modèle porte le même nom que son
-# --served-model-name (sinon gufo répond 404), ne retire plus stop ni
-# stop_sequences (gérés par gufo depuis #260), annonce le --context de la macro gufo (capabilities.context, lu
-# par le proxy), ne pointe que sous le parc (MODELS_BASE, dont MODELS_BASE/gufo) ; groupe exclusif ; chaque
-# nom court de lib/gufo.sh existe ; llama-swap épinglé par somme.
-LSY="$(cat "$REPO_DIR/runtime-gufo/gufo-llama-swap.yaml")"
-LSY_CTX="$(grep -oE -- '--context [0-9]+' <<<"$LSY" | head -1 | cut -d' ' -f2)"
-for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash; do
-  bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
-  if grep -q -- "--served-model-name $m" <<<"$bloc" && ! grep -q 'stripParams' <<<"$bloc" \
-     && [[ -n "$LSY_CTX" ]] && grep -qE "^      context: $LSY_CTX$" <<<"$bloc" \
-     && ! grep -oE '[^ ]+\.gguf' <<<"$bloc" | grep -vqE '^\$\{env\.MODELS_BASE\}/'; then
-    echo "[OK]   llama-swap : $m nommé comme gufo le sert, stop transmis, contexte annoncé ($LSY_CTX), fichiers sous le parc"
-  else
-    echo "[FAIL] llama-swap : bloc $m incohérent dans gufo-llama-swap.yaml"; rc=1
-  fi
-done
-# Tous les modèles (LLM, voix, transcription, image) : nom = --served-model-name,
-# et chacun dans un groupe (sinon llama-swap le laisse coexister avec tout).
-LSY_MODELES="$(awk '/^models:/{f=1;next} /^routing:/{f=0} f' <<<"$LSY")"
-avant=$rc
-for m in $(grep -oE '^  "[^"]+":' <<<"$LSY_MODELES" | tr -d ' ":'); do
-  bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
-  grep -q -- "--served-model-name $m\b" <<<"$bloc" \
-    || { echo "[FAIL] llama-swap : $m servi sous un autre nom"; rc=1; }
-  grep -qE "^            - \"$m\"$" <<<"$LSY" \
-    || { echo "[FAIL] llama-swap : $m dans aucun groupe"; rc=1; }
-done
-[[ $rc -eq $avant ]] && echo "[OK]   llama-swap : $(grep -cE '^  "[^"]+":' <<<"$LSY_MODELES") modèles, chacun nommé comme gufo le sert et rangé dans un groupe"
-# Groupes : les gros (LLM, Qwen-Image) exclusifs, un à la fois ; la voix et la
-# transcription persistantes, jamais déchargées par un gros modèle.
-grp() { awk -v g="        $1:" '$0==g{f=1;next} f&&/^        [a-z]/{f=0} f' <<<"$LSY"; }
-if grep -q 'exclusive: true' <<<"$(grp gros)" && grep -q 'swap: true' <<<"$(grp gros)" \
-   && grep -q '"Qwen-Image-2.1-heretic"' <<<"$(grp gros)" \
-   && grep -q 'persistent: true' <<<"$(grp voix)" && grep -q 'exclusive: false' <<<"$(grp voix)" \
-   && grep -q 'persistent: true' <<<"$(grp transcription)"; then
-  echo "[OK]   llama-swap : gros exclusifs (LLM, Qwen-Image), voix et transcription persistantes"
-else
-  echo "[FAIL] llama-swap : groupes gros / voix / transcription mal réglés"; rc=1
-fi
-if grep -qE '^ADD --checksum=sha256:[0-9a-f]{64}' "$REPO_DIR/runtime-gufo/Dockerfile.routeur"; then
-  echo "[OK]   llama-swap : binaire vérifié par SHA-256"
-else
-  echo "[FAIL] llama-swap : binaire non épinglé par somme dans Dockerfile.routeur"; rc=1
-fi
-echo true > "$SVC/etat/running"
-if out="$(_run_svc '_gufo_refuse')"; then
-  echo "[FAIL] gufo : --start devrait refuser quand gufo tient le port"; rc=1
-elif grep -q -- "--gufo-off" <<<"$out"; then
-  echo "[OK]   gufo : --start refuse tant que gufo tient le port (renvoie à --gufo-off)"
-else
-  echo "[FAIL] gufo : refus sans renvoi à --gufo-off : $out"; rc=1
-fi
-echo false > "$SVC/etat/running"
-if _run_svc '_gufo_refuse' >/dev/null; then
-  echo "[OK]   gufo : --start autorisé quand gufo ne tourne pas"
-else
-  echo "[FAIL] gufo : --start refusé alors que gufo ne tourne pas"; rc=1
-fi
-echo true > "$SVC/etat/running"
-
-[[ "$rc" -eq 0 ]] && echo "── sh-unit : garde mémoire, mode EC, étiquette de moteur, moteur conteneurisé (référence d'image, --image-build = docker compose build), service en conteneur (compose versionné rendu par docker compose config sur le .env généré, régénération idempotente, jamais compose restart, attente de /health, --cleanup, --migrate-off-systemd), gufo (.env, compose llama-swap, configuration llama-swap cohérente (LLM, voix, transcription, image, groupes), noms de modèle, refus de --start) et models.ini généré (device unique ROCm0, fit/load-mode/cache f16 globaux, spec-draft-ngl injecté, garde-fou ubatch) conformes. ──"
 exit "$rc"

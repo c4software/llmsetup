@@ -3,8 +3,11 @@
 Document de travail sur [gufo](https://github.com/gufo-org/gufo), moteur
 d'inférence spécialisé Strix Halo, évalué le 24/09/2026 face au moteur du
 service puis servi à sa place sur `:8009` (les deux ne tiennent pas ensemble
-en mémoire). Pilotage et bancs sont versionnés
-dans `runtime-gufo/`, sans intégration au routeur du service. Le détail daté
+en mémoire). Depuis le 09/10/2026 c'est un **runtime** du dépôt
+(`runtime/gufo/`, contrat dans `runtime/CONTRAT.md`), au même rang que le
+service, qui est le runtime `llama-cpp-rocm-strix` : on bascule de l'un à
+l'autre par `./setup-llm.sh --runtime <nom>`. Pilotage et bancs sont versionnés
+dans `runtime/gufo/`, sans intégration au routeur du service. Le détail daté
 (évaluation, releases, tickets, mesures) est dans le journal
 [`docs/HISTORIQUE-GUFO.md`](HISTORIQUE-GUFO.md) ; ce document n'en garde que
 la synthèse et ce qui sert au travail courant.
@@ -14,7 +17,7 @@ la synthèse et ce qui sert au travail courant.
 - **Verdict** : bien configuré, gufo fait le même travail agentique que le
   service en 30 % de temps en moins sur le 27B et Flash-Next, sans le
   remplacer (section « Verdict »).
-- **En service** : image épinglée par la ligne de `runtime-gufo/IMAGE`, seul
+- **En service** : image épinglée par la ligne de `runtime/gufo/IMAGE`, seul
   endroit où la version courante est écrite (historique des montées dans
   « Versions : synthèse »), remesurée à chaque montée ; derrière llama-swap,
   en `--think off`, 2 sessions, cache disque 16 Gio et staging 8 Gio ;
@@ -173,7 +176,7 @@ Il ne le remplace pas pour autant, faute de :
 Pistes, par ordre de faisabilité :
 
 1. Gufo à la place du service pour un seul modèle, le 27B de préférence
-   (mêmes fichiers, gain mesuré), lancé par `./setup-llm.sh --gufo 27b` ; les
+   (mêmes fichiers, gain mesuré), lancé par `./setup-llm.sh --runtime gufo 27b` (`--gufo 27b` jusqu'au 09/10/2026) ; les
    autres modèles du parc ne sont alors plus servis.
 2. Gufo en second moteur à côté du service, sur un autre port. Points durs :
    la mémoire partagée (27B gufo environ 45 Gio) et deux points d'entrée.
@@ -184,10 +187,10 @@ Pistes, par ordre de faisabilité :
 
 gufo ne sert qu'un modèle par processus et renvoie à llama-swap
 (https://github.com/mostlygeek/llama-swap, MIT) pour exposer plusieurs
-processus sous une même URL. `./setup-llm.sh --gufo` le fait toujours :
+processus sous une même URL. Le runtime gufo le fait toujours :
 llama-swap (v257, épinglé par SHA-256, dans une image dérivée de celle de gufo,
 sans socket docker) écoute sur `:8009` et lance `gufo serve llm` pour le modèle
-demandé (lignes de commande dans `runtime-gufo/gufo-llama-swap.yaml`). Le
+demandé (lignes de commande dans `runtime/gufo/gufo-llama-swap.yaml`). Le
 client choisit `qwen3.8-27b`, `qwen3.8-flash-next` ou `deepseek-v4-flash`
 (IQ2XXS d'antirez, justesse à surveiller) par le champ `model`,
 comme avec le routeur llama-server du service.
@@ -211,7 +214,7 @@ Limites :
 gufo sert aussi la synthèse vocale (Qwen3-TTS 12Hz 1.7B, trois variantes), la
 transcription (Qwen3-ASR 1.7B) et la génération d'images (Qwen-Image-2.1, BF16,
 licence non commerciale), sous les routes OpenAI audio et images. Mêmes
-`gufo-llama-swap.yaml` et `./setup-llm.sh --gufo` : la voix et la
+`gufo-llama-swap.yaml` et même démarrage : la voix et la
 transcription sont chargées À CÔTÉ du modèle de texte (groupes persistants),
 Qwen-Image partage le groupe exclusif des LLM.
 
@@ -245,7 +248,7 @@ constaté ni banc de régression ; essai détaillé dans le journal.
 ## Suivi en amont
 
 Tickets et commentaires publiés sous le compte c4software. Suivi par
-`tools/gufo-amont.sh` (lecture seule, `gh api`, choix du 28/09/2026) :
+`runtime/gufo/tools/gufo-amont.sh` (lecture seule, `gh api`, choix du 28/09/2026) :
 releases, images publiées, commits récents, état des tickets du tableau
 ci-dessous (ses `| #NNN |` sont la liste suivie) et de ceux que nous avons
 ouverts ; `ticket <n> [k]` lit un ticket ou une PR et ses commentaires.
@@ -382,36 +385,44 @@ Chiffres qui portent ces conclusions :
 ## Reprendre les mesures
 
 gufo se pilote depuis le point d'entrée du dépôt ; compose, téléchargement et
-bancs sont versionnés dans [`runtime-gufo/`](../runtime-gufo/README.md). Les
+bancs sont versionnés dans [`runtime/gufo/`](../runtime/gufo/README.md). Les
 données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
 (défaut `~/llm/gufo-test` sur bigchuck, déjà peuplé), sauf les poids propres
 à gufo, rangés avec le parc dans `~/models/gufo` depuis le 09/10/2026 :
 
-- `./setup-llm.sh --gufo [flashnext|27b|deepseek]` : gufo, toujours derrière
+- `./setup-llm.sh --runtime gufo [flashnext|27b|deepseek]` (bascule
+  mémorisée ; `LLM_RUNTIME=gufo ./setup-llm.sh --start [modèle]` pour un essai
+  sans rien mémoriser ; `--gufo [modèle]` jusqu'au 09/10/2026) : gufo, toujours derrière
   llama-swap (section « Routeur » ci-dessus), à la place du service sur
   `:8009`, l'argument choisissant le modèle préchargé (compose
-  `runtime-gufo/docker-compose.yml`, `.env` généré dans
+  `runtime/gufo/docker-compose.yml`, `.env` généré dans
   `GUFO_DATA`, 2 sessions par défaut, `GUFO_SESSIONS=N` pour changer, nom
   exposé `qwen3.8-27b` ou `qwen3.8-flash-next`, cache disque 16 Gio, staging
-  8 Gio, utilisateur de l'hôte). `--gufo-off` pour revenir au service,
-  `--gufo-logs` pour suivre les requêtes. Le dernier lancé repart seul au
-  démarrage de bigchuck ; `--start` du service refuse tant que gufo tourne.
-- `./setup-llm.sh --gufo-download image|flashnext|deepseek|all`
-  (`runtime-gufo/download.sh`) : image et GGUF de référence aux révisions
+  8 Gio, utilisateur de l'hôte). `--runtime llama-cpp-rocm-strix` pour revenir
+  au service (`--gufo-off`), `--restart [modèle]` pour changer de modèle
+  préchargé ou le garder, `--requetes` pour suivre les requêtes
+  (`--gufo-logs`). Le dernier lancé repart seul au
+  démarrage de bigchuck ; démarrer un runtime arrête l'autre (plus de refus).
+- `LLM_RUNTIME=gufo ./setup-llm.sh --setup image|27b|flashnext|deepseek|all`
+  (`--gufo-download` jusqu'au 09/10/2026 ; `runtime/gufo/download.sh`) : le
+  27B et son drafter, la tête MTP et le mmproj de Flash-Next, partagés avec
+  le service, aux mêmes chemins du parc et sans révision épinglée ; et image et GGUF de référence aux révisions
   épinglées par gufo (Flash-Next UD-Q4_K_XL unsloth `38bb39e`, 104 Go ;
   DeepSeek IQ2XXS antirez `1cd7b56`, 87 Go, et DSpark `e7f0403`, 6 Go ;
   le drafter DFlash 2 Q4_K_M `2d9571f`, 1,1 Go, téléchargé pour la
   comparaison au Q8_0, mesuré identique et supprimé le 25/09/2026). Présents
   sur bigchuck (191 Go dans `~/models/gufo`, `GUFO_DATA/models` avant le
   09/10/2026).
-- `runtime-gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
+- `runtime/gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
   (`bench/mesure.py`). Cas gufo : `27b`, `flashnext`, `deepseek` ; cas service : `27b`, `flashnext`, `flashnext-large-ub`,
   `deepseek`.
-- `runtime-gufo/bench/agentic.sh gufo|llama <cas>...` : boucle pi de
+- `runtime/gufo/bench/agentic.sh gufo|llama <cas>...` : boucle pi de
   `bench-agentic/`, `PASSES=3`, garde-temps d'une heure.
-- Les deux bancs lancent gufo par `--gufo` sur le même port, en 1 session,
-  sans redémarrage automatique, projet et `.env` séparés ; ils retirent un
-  gufo d'usage réel au départ et relancent le service à la fin.
+- Les deux bancs lancent gufo par le point d'entrée
+  (`LLM_RUNTIME=gufo … --start <cas>`) sur le même port, en 1 session,
+  sans redémarrage automatique, projet et `.env` séparés ; ils arrêtent le
+  runtime d'usage réel au départ (gufo ou le service) et le relancent à la
+  fin s'il tournait.
 - `GUFO_DATA/resultats/` : `resultats.tsv` (banc HTTP), `chargements.tsv`,
   `reponses/` (textes générés), journaux gufo, `agentic/` (sorties pi et
   journaux gufo par requête). Les mesures du 24/09/2026 y sont, y compris
@@ -449,7 +460,7 @@ confrontations datées (26/09, v0.1.1, v0.2.0, v0.4.0, v0.5.0, v0.7.0, v0.7.1, v
 journal, à l'entrée de chaque version ; chaque montée de version y ajoute la
 sienne et met cette ligne à jour.
 
-| Paramètre | `runtime-gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
+| Paramètre | `runtime/gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
 |---|---|---|---|---|
 | `--context` | 262144 | contexte natif depuis d5fd781 (4096 avant) | 32768 | nous : contexte natif, celui du service ; redondant depuis d5fd781 (chargement : `context_tokens=262144`), gardé explicite parce que `capabilities.context` doit lui rester égal |
 | `--sessions` | 2 | 1 | 2 | gufo (guides du 27B et de Flash-Next) et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
@@ -472,7 +483,7 @@ gufo « nu » (sans cache disque) était à égalité avec le service sur le 27B
 contournement retiré, modèle remesuré ou non) sans question posée à
 l'utilisateur et réponse reçue**, une question par décision, avec la mesure
 ou la ligne de documentation qui la motive. La version mesurée en dernier
-est celle de `runtime-gufo/IMAGE` (défaut de `GUFO_IMAGE`).
+est celle de `runtime/gufo/IMAGE` (défaut de `GUFO_IMAGE`).
 
 Seconde règle (02/10/2026) : **toute validation se lance d'emblée en debug**
 (gufo `-v` et sessions pi gardées), jamais une série normale suivie d'un
@@ -482,16 +493,16 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
 `agentic.sh` pose `DEBUG=1 PI_SESSIONS=1`.
 
 1. **Ce qui a changé** (lecture) :
-   - `tools/gufo-amont.sh` : releases, images publiées, commits, tickets
+   - `runtime/gufo/tools/gufo-amont.sh` : releases, images publiées, commits, tickets
      suivis (ceux du tableau « À surveiller », plus les nôtres) ;
-   - `tools/gufo-amont.sh release <tag>` et le `CHANGELOG.md` amont ;
-   - `tools/gufo-amont.sh ticket <n> 3` pour chaque ticket suivi qui a bougé,
+   - `runtime/gufo/tools/gufo-amont.sh release <tag>` et le `CHANGELOG.md` amont ;
+   - `runtime/gufo/tools/gufo-amont.sh ticket <n> 3` pour chaque ticket suivi qui a bougé,
      et chaque PR mergée qui touche le cache, le serveur, le 27B ou
      Flash-Next ;
    - repérer les tickets fermés, les questions qu'on nous pose (à noter
      pour l'étape 8) et les PR suivies (#299 : Ornith).
 2. **Nouvelles recommandations de réglage** (lecture) :
-   - `tools/gufo-amont.sh diff <version épinglée> <nouvelle>` : `docs/SERVER.md`,
+   - `runtime/gufo/tools/gufo-amont.sh diff <version épinglée> <nouvelle>` : `docs/SERVER.md`,
      `docs/CLI.md`, guides et `QUALITY.md` / `EXPERIMENTS.md` des modèles ;
    - `gufo serve llm --help` des deux images, comparé (`docker run --rm
      --entrypoint gufo <image> serve llm --help`, sur bigchuck) : options
@@ -509,27 +520,27 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
    28/09/2026 sauf demande) ; chaque réglage ou contournement que les étapes
    2 et 3 proposent de changer ; la machine est-elle libre (les bancs
    coupent le service et gufo d'usage réel).
-5. **Appliquer ce qui a été accepté** : la ligne de `runtime-gufo/IMAGE`
-   (seul endroit depuis le 06/10/2026 : `lib/gufo.sh`, `download.sh`,
-   `bench/remesure.sh` et `tools/gufo-amont.sh` la lisent,
+5. **Appliquer ce qui a été accepté** : la ligne de `runtime/gufo/IMAGE`
+   (seul endroit depuis le 06/10/2026 : `runtime/gufo/runtime.sh`, `download.sh`,
+   `bench/remesure.sh` et `runtime/gufo/tools/gufo-amont.sh` la lisent,
    `Dockerfile.routeur` la reçoit du `.env`), réglages dans
-   `runtime-gufo/gufo-llama-swap.yaml` avec leur commentaire d'origine ;
+   `runtime/gufo/gufo-llama-swap.yaml` avec leur commentaire d'origine ;
    `./tests/sh-unit.sh`, `bash -n`, commit qui dit pourquoi, push ; sur
-   bigchuck `git pull --ff-only` puis `./setup-llm.sh --gufo-download image`.
+   bigchuck `git pull --ff-only` puis `LLM_RUNTIME=gufo ./setup-llm.sh --setup image`.
 6. **Remesurer**, un GPU donc en séquence, sur les modèles retenus, en une
-   commande : `nohup runtime-gufo/bench/remesure.sh 27b flashnext >
+   commande : `nohup runtime/gufo/bench/remesure.sh 27b flashnext >
    ~/llm/gufo-test/remesure.log 2>&1 &` (`SANS_CACHE=1` pour ajouter la
    boucle sans cache disque ; boucles agentiques toujours en debug, gufo
    `-v` et sessions pi gardées, par défaut depuis le 02/10/2026 pour ne pas
    rejouer une série afin d'avoir le transcript d'un incident), qui enchaîne :
-   - `runtime-gufo/bench/run.sh gufo 27b flashnext` : justesse d'abord
+   - `runtime/gufo/bench/run.sh gufo 27b flashnext` : justesse d'abord
      (aiguilles, `sanity`), puis prefill court et à 52k, décode prose et
      code, cache au tour 2, mémoire, temps de chargement ;
-   - `runtime-gufo/bench/agentic.sh gufo 27b flashnext` : 16/16, temps par
+   - `runtime/gufo/bench/agentic.sh gufo 27b flashnext` : 16/16, temps par
      passe, part du cache (disque / RAM / ratés) ;
    - la copie des journaux bruts de `resultats/agentic/`, que le banc
      écrase, dans `resultats/agentic/<date>-<version>/` (`avant/` = la
-     remesure précédente), puis leur bilan par `runtime-gufo/bench/journal.py`
+     remesure précédente), puis leur bilan par `runtime/gufo/bench/journal.py`
      et la relance de gufo d'usage réel.
 7. **Lire les journaux**, pas seulement les débits : refus de staging
    (`reason=staging_capacity`), `cache_miss_reason`, points de reprise écrits,
@@ -543,12 +554,13 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
    retirés), tableau des paramètres (date de confrontation) ;
    réponses aux tickets où l'on nous a posé une question, **rédigées puis
    montrées à l'utilisateur avant publication**.
-9. **Remettre l'usage réel** : `./setup-llm.sh --gufo flashnext` (ou le
+9. **Remettre l'usage réel** : `remesure.sh` relance le runtime qui servait ;
+   à la main, `./setup-llm.sh --start flashnext` sous le runtime gufo (ou le
    modèle d'avant), `/v1/models`, une requête avec `stop` par le proxy, voix
    et transcription si elles servent.
 
 Pour rejouer contre une nouvelle version de gufo sans la checklist complète :
-`runtime-gufo/download.sh image`, puis `runtime-gufo/bench/run.sh gufo 27b` et
-`runtime-gufo/bench/agentic.sh gufo 27b`. Ce sont les deux mesures qui
+`runtime/gufo/download.sh image`, puis `runtime/gufo/bench/run.sh gufo 27b` et
+`runtime/gufo/bench/agentic.sh gufo 27b`. Ce sont les deux mesures qui
 comparent les moteurs à fichiers identiques ; les chiffres du service du
 24/09/2026 (journal, « Évaluation face au service ») sont la référence.

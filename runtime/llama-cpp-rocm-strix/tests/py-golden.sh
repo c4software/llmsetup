@@ -1,0 +1,267 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Test golden des scripts py/ — leurs sorties sur les fixtures doivent
+# rester BYTE-IDENTIQUES aux références de tests/fixtures/expected/, capturées
+# avec le code inline d'origine AVANT extraction.
+#
+# À rejouer après toute modification d'un py/*.py. Si la sortie change
+# volontairement : mettre à jour la fixture attendue ET vérifier les sed/grep
+# bash qui la consomment (PP=/G=/A=, GEN=/ACC=/DN=, REC=).
+#
+# Les bodies JSON de build_body.py sont comparés en ÉQUIVALENCE (json.loads),
+# pas en octets : json.dumps et l'ancien printf ne sérialisent pas pareil,
+# seul le contenu parsé (messages, seed, etc.) doit être identique.
+# (body-spec.json = équivalent à l'ancien printf ; body-bench.json =
+#  référence régénérée au passage au contexte réaliste bench-context.txt, 15/08/2026.)
+# =============================================================================
+set -euo pipefail
+
+TESTS_DIR="$(dirname "$(realpath "$0")")"
+# Dossier du runtime (py/ y est), et racine du dépôt (prompts/, partagés).
+RT_DIR="$(dirname "$TESTS_DIR")"
+REPO_DIR="$(dirname "$(dirname "$RT_DIR")")"
+PY="$RT_DIR/py"
+PROMPTS="$REPO_DIR/prompts"
+F="$TESTS_DIR/fixtures"
+E="$F/expected"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+rc=0
+
+_ck() {  # $1 = nom de la référence, $2 = fichier produit
+  if diff -u "$E/$1" "$2" >"$TMP/diff" 2>&1; then
+    echo "[OK]   $1"
+  else
+    echo "[FAIL] $1"; cat "$TMP/diff"; rc=1
+  fi
+}
+
+# --- timings.py --------------------------------------------------------------
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-spec.json")" 1  > "$TMP/o" || true; _ck bench-p1.txt "$TMP/o"
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-spec.json")" 2  > "$TMP/o" || true; _ck bench-p2.txt "$TMP/o"
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-plain.json")" 1 > "$TMP/o" || true; _ck bench-plain-p1.txt "$TMP/o"
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-plain.json")" 2 > "$TMP/o" || true; _ck bench-plain-p2.txt "$TMP/o"
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-error.json")" 1 > "$TMP/o" || true; _ck bench-error.txt "$TMP/o"
+# degen : charabia répétitif à 536 t/s (DeepSeek V4 sur ROCm0, 21/08/2026) —
+# la ligne doit le signaler et émettre DEGEN=1, en bench comme en spec
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen.json")" 2 > "$TMP/o" || true; _ck bench-degen-p2.txt "$TMP/o"
+python3 "$PY/timings.py" --spec  "$(cat "$F/chat-degen.json")" 2 "" > "$TMP/o" || true; _ck spec-degen-p2.txt "$TMP/o"
+# degen-mix : même charabia ponctué de tokens collés (17 % de mots distincts,
+# au-dessus du seuil) — c'est la part du mot dominant (80 %) qui doit le prendre
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen-mix.json")" 2 > "$TMP/o" || true; _ck bench-degen-mix-p2.txt "$TMP/o"
+# degen-rocm : la VRAIE réponse de 1000 tokens (DeepSeek V4 / ROCm0, b10433,
+# 21/08/2026) — les critères par mots n'y voient rien, seule la répétition
+# périodique au niveau caractères (0,64) la prend
+python3 "$PY/timings.py" --bench "$(cat "$F/chat-degen-rocm.json")" 1 > "$TMP/o" || true; _ck bench-degen-rocm-p1.txt "$TMP/o"
+# refactor-legit : vraie réponse du 27B (k4v, seed 43) — code qui recopie la
+# même classe plusieurs fois, 14 % de mots distincts, périodicité 0,21 : NE
+# DOIT PAS être signalée (faux positif du 21/08 corrigé)
+python3 "$PY/timings.py" --spec "$(cat "$F/chat-refactor-legit.json")" 1 specmix > "$TMP/o" || true; _ck spec-refactor-legit.txt "$TMP/o"
+python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 1 spec  > "$TMP/o" || true; _ck spec-p1.txt "$TMP/o"
+python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 2 spec  > "$TMP/o" || true; _ck spec-p2.txt "$TMP/o"
+python3 "$PY/timings.py" --spec "$(cat "$F/chat-plain.json")" 2 ""   > "$TMP/o" || true; _ck spec-plain-p2.txt "$TMP/o"
+python3 "$PY/timings.py" --spec "$(cat "$F/chat-plain.json")" 2 spec > "$TMP/o" || true; _ck spec-plain-spec-p2.txt "$TMP/o"
+python3 "$PY/timings.py" --spec "$(cat "$F/chat-error.json")" 1 spec > "$TMP/o" || true; _ck spec-error.txt "$TMP/o"
+# specmix = spec-type en liste : l'acceptance affichée est un agrégat des
+# implémentations, la ligne doit le dire (les lignes machine GEN=/ACC=/DN=
+# consommées par le bash restent identiques au cas "spec").
+python3 "$PY/timings.py" --spec "$(cat "$F/chat-spec.json")" 2 specmix > "$TMP/o" || true; _ck spec-mix-p2.txt "$TMP/o"
+
+# --- bench_prefill.py (bilan : médianes par taille sur les passes saines) -----
+# prefill.tsv : deux passes saines à 4 k et 32 k, une passe contaminée à 32 k
+# (cache 30 000 tokens, 3 417 t/s : le faux 835 du 18/09) et une passe en
+# erreur à 65 k (tout à 0) — les deux doivent être EXCLUES des médianes et
+# comptées dans "saines/passes" ; les lignes MED= sont lues par le bash.
+python3 "$PY/bench_prefill.py" bilan < "$F/prefill.tsv" > "$TMP/o" || true; _ck prefill-bilan.txt "$TMP/o"
+printf '' | python3 "$PY/bench_prefill.py" bilan > "$TMP/o" || true; _ck prefill-vide.txt "$TMP/o"
+
+# --- spec_server_nmax.py -----------------------------------------------------
+python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink < "$F/models.json" > "$TMP/o"; _ck nmax-found.txt "$TMP/o"
+python3 "$PY/spec_server_nmax.py" qwen3.8-27b             < "$F/models.json" > "$TMP/o"; _ck nmax-noargs.txt "$TMP/o"
+python3 "$PY/spec_server_nmax.py" inconnu                 < "$F/models.json" > "$TMP/o"; _ck nmax-absent.txt "$TMP/o"
+# argv[2] = flag arbitraire : sert à lire le spec-type réel du serveur
+python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models-mixte.json" > "$TMP/o"; _ck spectype-found.txt "$TMP/o"
+python3 "$PY/spec_server_nmax.py" qwen3.8-27b-mtp-nothink --spec-type < "$F/models.json"       > "$TMP/o"; _ck spectype-absent.txt "$TMP/o"
+
+# --- check_answer.py : réponse directe, dans le raisonnement seulement, fausse (code tronqué/allongé)
+for c in ok think bad; do
+  code=0; python3 "$PY/check_answer.py" "$(cat "$F/chat-answer-$c.json")" LAMPADAIRE-2719 > "$TMP/o" || code=$?
+  echo "rc=$code" >> "$TMP/o"; _ck "answer-$c.txt" "$TMP/o"
+done
+
+# --- cache_stats.py : 1350 tokens servis du cache sur 1470 (92 %), erreur, illisible
+python3 "$PY/cache_stats.py" "$(cat "$F/chat-cached.json")" "2. suite" > "$TMP/o" || true; _ck cache-suite.txt "$TMP/o"
+python3 "$PY/cache_stats.py" "$(cat "$F/chat-error.json")" "1. froid" > "$TMP/o" || true; _ck cache-error.txt "$TMP/o"
+
+# --- parallel_agg.py : 2 réponses valides + 1 erreur serveur, temps mur 60 s
+python3 "$PY/parallel_agg.py" 60 "$F/chat-spec.json" "$F/chat-plain.json" "$F/chat-error.json" > "$TMP/o"; _ck parallel-agg.txt "$TMP/o"
+
+# --- bench_compare.py : 9b = régression décode -6 % et build changé ; 27b =
+#     prefill contaminé (pas de drapeau) + acceptance ; lfm2.5 = 1re mesure ;
+#     inconnu = absent du journal ; ROCm0 du 9b ne doit pas servir de référence
+#     au run Vulkan0.
+#     Mode EC (11e colonne, 16/09/2026) : muse-glimmer = un run "balanced"
+#     intercalé, la référence doit être le run "performance" plus ancien (même
+#     mode, aucune mention) ; lfm2.5-8b = aucun run de même mode, référence
+#     gardée mais mention "mode EC différent" (ligne sans colonne = inconnu)
+python3 "$PY/bench_compare.py" "$F/bench.log" qwen3.5-9b qwen3.8-27b-mtp-nothink lfm2.5-2.6b inconnu \
+  muse-glimmer-30b-dflash lfm2.5-8b-a1b-nothink > "$TMP/o"; _ck bench-compare.txt "$TMP/o"
+python3 "$PY/bench_compare.py" "$F/absent.log" qwen3.5-9b > "$TMP/o"; _ck bench-compare-absent.txt "$TMP/o"
+
+# --- depth_curve.py : courbe synthétique 0/16k/32k, tour simulé 2000/3000
+python3 "$PY/depth_curve.py" m.gguf Vulkan0 2000 3000 "" rec < "$F/depth-dense.jsonl" > "$TMP/o"; _ck depth-dense.txt "$TMP/o"
+python3 "$PY/depth_curve.py" m.gguf Vulkan0 2000 3000 "" rec < "$F/bench-vide.jsonl" > "$TMP/o"; _ck depth-vide.txt "$TMP/o"
+
+# --- batch_curve.py (stdout déterministe : l'horodatage ne va que dans le TSV)
+# marche  : vraie courbe Vulkan0 du 27B Q4, coupure de noyau entre 8 et 9
+# plat    : dense borné bande passante, aucune marche → un seul candidat
+# moe     : pente forte mais LISSE — ne doit PAS être prise pour une marche
+# inverse : palier ROCm0 reproductible (batch 8 plus lent que 16)
+# vide    : entrée illisible → pas de plantage, lignes machine vides
+# grossiere : même courbe Vulkan0 que « marche » mais SANS le batch 9 (balayage
+#           grossier 1,8,16,32,48) — la marche est invisible au test par unité,
+#           le script doit rendre STEP_LO=8/STEP_HI=16 à raffiner, et non
+#           conclure à un seul candidat (défaut mesuré le 21/08/2026)
+# deepseek : courbe réelle du MoE 284B (21/08/2026), défavorable partout
+#           (45 % du draft dès size_m 7) — plus de « aucune taille viable »,
+#           repli sur deux candidats à mesurer (7 et 31), la mesure ayant
+#           donné +9 % avec 7
+for c in marche plat moe inverse vide grossiere deepseek; do
+  python3 "$PY/batch_curve.py" m.gguf Vulkan0 0 "" rec < "$F/bench-$c.jsonl" > "$TMP/o"
+  _ck "curve-$c.txt" "$TMP/o"
+done
+
+# --- spec_analyze.py (cwd = tmp, chemins de log relatifs → sorties stables ;
+#     copies des logs : la quarantaine réécrit le fichier) ---------------------
+cp "$F/spec-tests.log" "$F/spec-tests-quarantine.log" "$F/spec-tests-mixte.log" "$TMP/"
+(
+  cd "$TMP"
+  python3 "$PY/spec_analyze.py" spec-tests.log qwen3.8-27b-mtp-nothink Qwen3.8-27B-UD-Q4_K_XL.gguf ROCm0 6 rec > full.txt
+  head -1 spec-tests.log > single.log
+  python3 "$PY/spec_analyze.py" single.log qwen3.8-27b-mtp-nothink Qwen3.8-27B-UD-Q4_K_XL.gguf ROCm0 2 > single.txt
+  python3 "$PY/spec_analyze.py" spec-tests-quarantine.log qwen3.8-27b-mtp-nothink Qwen3.8-27B-UD-Q4_K_XL.gguf ROCm0 6 rec > quarantine.txt
+  python3 "$PY/spec_analyze.py" absent.log qwen3.8-27b-mtp-nothink x ROCm0 2 > empty.txt
+  # spec-type mixte : les runs à k variable sont ÉCARTÉS de la calibration et
+  # surtout PAS mis en quarantaine — leurs tokens/forward dépassent
+  # légitimement k+1 (un hit n-gram drafte plus que spec-draft-n-max). Le log
+  # doit ressortir intact, d'où sa comparaison ci-dessous.
+  python3 "$PY/spec_analyze.py" spec-tests-mixte.log qwen3.8-27b-mtp-nothink Qwen3.8-27B-UD-Q4_K_XL.gguf ROCm0 6 rec > mixte.txt
+)
+_ck analyze-full.txt "$TMP/full.txt"
+_ck analyze-single.txt "$TMP/single.txt"
+_ck analyze-quarantine.txt "$TMP/quarantine.txt"
+_ck analyze-quarantine-log.txt "$TMP/spec-tests-quarantine.log"
+_ck analyze-empty.txt "$TMP/empty.txt"
+_ck analyze-mixte.txt "$TMP/mixte.txt"
+_ck analyze-mixte-log.txt "$TMP/spec-tests-mixte.log"
+
+# --- build_body.py : équivalence json.loads avec les bodies de référence -----
+python3 "$PY/build_body.py" qwen3.8-27b-mtp-nothink 1500 43 "$PROMPTS/spec-test.txt" > "$TMP/body-spec.json"
+python3 "$PY/build_body.py" qwen3.6-35b-a3b-nothink 1000 43 "$PROMPTS/bench-context.txt" "$PROMPTS/bench-task.txt" > "$TMP/body-bench.json"
+# spec-refactor : prompt de l'arbitrage --spec-ngram-tune. La référence fige le
+# prompt autant que le body — le modifier invalide les comparaisons avec les
+# runs antérieurs de spec-tests.log (cf. AGENTS.md).
+python3 "$PY/build_body.py" qwen3.8-27b-mtp-nothink 1500 43 "$PROMPTS/spec-refactor.txt" > "$TMP/body-refactor.json"
+for b in body-spec body-bench body-refactor; do
+  if python3 -c '
+import json, sys
+a, b = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+sys.exit(0 if a == b else 1)
+' "$E/$b.json" "$TMP/$b.json"; then
+    echo "[OK]   $b.json (équivalence json.loads)"
+  else
+    echo "[FAIL] $b.json : le body construit diverge de la référence printf"; rc=1
+  fi
+done
+
+# --- spec_isolate_bench.py : mesure de bout en bout sur un serveur bouchon ---
+# Pas de référence golden ici (la sortie porte une date et des t/s), mais un
+# test FONCTIONNEL : un petit serveur HTTP stdlib rend une réponse
+# /v1/chat/completions canonique, et on vérifie les trois choses que l'outil
+# doit garantir — acceptance calculée depuis draft_n/draft_n_accepted, TSV
+# écrit avec son en-tête, et sanité héritée de timings.degenere() (une réponse
+# de charabia doit ressortir "non").
+BOUCHON="$TMP/bouchon.py"
+cat > "$BOUCHON" <<'PYEOF'
+import json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# draft_n 300 / accepted 120 => acceptance 0.400, valeur attendue par le test.
+TIMINGS = {"prompt_per_second": 2500.0, "predicted_per_second": 120.5,
+           "predicted_n": 200, "prompt_n": 700, "cache_n": 0,
+           "draft_n": 300, "draft_n_accepted": 120}
+SAIN = ("def inverse(tete):\n    prec = None\n    while tete:\n"
+        "        suiv = tete.suivant\n        tete.suivant = prec\n"
+        "        prec, tete = tete, suiv\n    return prec\n") * 8
+CHARABIA = "dev " * 400
+
+class H(BaseHTTPRequestHandler):
+    def do_POST(self):
+        corps = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        # le prompt "degen" du test demande explicitement la sortie dégénérée
+        texte = CHARABIA if "DEGEN" in corps["messages"][0]["content"] else SAIN
+        rep = json.dumps({"timings": TIMINGS,
+                          "choices": [{"message": {"content": texte}}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(rep)))
+        self.end_headers()
+        self.wfile.write(rep)
+    def log_message(self, *a):
+        pass
+
+srv = HTTPServer(("127.0.0.1", 0), H)
+print(srv.server_port, flush=True)
+srv.serve_forever()
+PYEOF
+
+mkdir -p "$TMP/prompts" "$TMP/isolate"
+echo "Ecris une fonction Python qui inverse une liste chainee." > "$TMP/prompts/bouchon-sain.txt"
+echo "DEGEN : reponse volontairement repetitive." > "$TMP/prompts/bouchon-degen.txt"
+
+python3 "$BOUCHON" > "$TMP/port.txt" &
+BPID=$!
+for _ in $(seq 1 50); do [[ -s "$TMP/port.txt" ]] && break; sleep 0.1; done
+BPORT="$(head -1 "$TMP/port.txt" || true)"
+if [[ -z "$BPORT" ]]; then
+  echo "[FAIL] spec_isolate_bench : serveur bouchon non démarré"; rc=1
+else
+  python3 "$PY/spec_isolate_bench.py" --port "$BPORT" --tag bouchon \
+    --out "$TMP/isolate" --prompts bouchon-sain.txt,bouchon-degen.txt \
+    --passes 2 --max-tokens 64 --np 1 --prompts-dir "$TMP/prompts" \
+    > "$TMP/isolate.out" 2>&1 || { echo "[FAIL] spec_isolate_bench : sortie non nulle"; cat "$TMP/isolate.out"; rc=1; }
+
+  _ckgrep() {  # $1 = libellé, $2 = motif grep -E, $3 = fichier
+    if grep -qE "$2" "$3"; then echo "[OK]   $1"; else
+      echo "[FAIL] $1 : motif '$2' absent de $3"; sed -n '1,40p' "$3"; rc=1; fi
+  }
+  # acceptance = 120/300 = 0,400, sur l'affichage comme dans le TSV
+  _ckgrep "spec_isolate_bench : acceptance 0.400 affichée" 'acceptance=0\.400 \(120/300\)' "$TMP/isolate.out"
+  _ckgrep "spec_isolate_bench : médiane hors 1re passe"    'médianes hors 1re passe'       "$TMP/isolate.out"
+  _ckgrep "spec_isolate_bench : charabia signalé"          'SORTIE DÉGÉNÉRÉE'              "$TMP/isolate.out"
+  T="$TMP/isolate/mesures.tsv"
+  if [[ -s "$T" ]]; then
+    # $'…' : les motifs portent de VRAIS tabulateurs, grep -E ne connaît pas \t
+    # ec_mode = dernière colonne (16/09/2026) : "inconnu" ici, --ec-mode n'est
+    # pas passé par le test (pas de contrôleur embarqué sur la machine de test)
+    _ckgrep "spec_isolate_bench : en-tête TSV" $'^date\ttag\tprompt\tnp\tmesure\tpp\tgen\tn\tdraft_n\taccepted\tacceptance\tsain\tagrege\tec_mode$' "$T"
+    _ckgrep "spec_isolate_bench : TSV passe saine"  $'bouchon-sain[.]txt\t1\tpasse1\t2500\t120[.]50\t200\t300\t120\t0[.]400\toui\t\tinconnu$'  "$T"
+    _ckgrep "spec_isolate_bench : TSV passe dégénérée" $'bouchon-degen[.]txt\t1\tpasse2\t.*\t0[.]400\tnon\t\tinconnu$' "$T"
+    n="$(grep -c . "$T")"
+    if [[ "$n" -eq 5 ]]; then echo "[OK]   spec_isolate_bench : 4 mesures + en-tête"
+    else echo "[FAIL] spec_isolate_bench : $n lignes de TSV, 5 attendues"; cat "$T"; rc=1; fi
+  else
+    echo "[FAIL] spec_isolate_bench : mesures.tsv absent ou vide"; rc=1
+  fi
+  # générations sauvegardées, une par prompt et par passe
+  if [[ -s "$TMP/isolate/gen-bouchon-sain-p2.txt" ]]; then
+    echo "[OK]   spec_isolate_bench : génération sauvegardée"
+  else
+    echo "[FAIL] spec_isolate_bench : gen-bouchon-sain-p2.txt absent"; rc=1
+  fi
+fi
+kill "$BPID" 2>/dev/null || true
+
+[[ "$rc" -eq 0 ]] && echo "── py-golden : tout est identique aux références. ──"
+exit "$rc"

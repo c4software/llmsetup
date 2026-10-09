@@ -2,7 +2,12 @@
 
 Journal daté de [gufo](https://github.com/gufo-org/gufo), moteur d'inférence
 spécialisé Strix Halo servi à la place du service llama.cpp sur demande
-(`./setup-llm.sh --gufo`) : évaluation, releases amont, tickets, mesures.
+(`./setup-llm.sh --gufo` jusqu'au 09/10/2026, runtime `gufo` du dépôt
+depuis) : évaluation, releases amont, tickets, mesures. Les entrées
+antérieures au découpage citent les chemins et les commandes de leur époque
+(`runtime-gufo/`, `lib/gufo.sh`, `--gufo`, `--gufo-off`, `--gufo-download`,
+`tools/gufo-amont.sh`) : elles ne sont pas réécrites, la correspondance est
+dans l'entrée « Découpage en runtimes ».
 Pendant de [`docs/HISTORIQUE.md`](HISTORIQUE.md), qui garde le journal du
 service llama.cpp. L'état courant, les réglages, le tableau des tickets
 ouverts et la checklist de montée de version sont dans
@@ -14,6 +19,55 @@ Entrées de la plus récente à la plus ancienne, décision ou résultat en têt
 Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
+
+## Découpage en runtimes (09/10/2026) : gufo devient un runtime du dépôt
+
+Décision de l'utilisateur du 09/10/2026, après un essai jugé concluant et une
+branche `gufo-seul` écartée (gufo seul moteur, non fusionnée) : le dépôt reste
+sur `master` avec ses deux moteurs, mais **modulaire**. Un dossier
+`runtime/<nom>/` par moteur, un contrat écrit (`runtime/CONTRAT.md`), un
+lancement toujours cloisonné par docker compose, un runtime actif mémorisé
+(`runtime.conf`). Aucune mesure rejouée, aucun réglage de gufo changé :
+`gufo-llama-swap.yaml`, `docker-compose.yml` et `Dockerfile.routeur` ne bougent
+que dans leurs commentaires, `IMAGE` est intacte.
+
+| Avant | Depuis le 09/10/2026 |
+|---|---|
+| `runtime-gufo/` | `runtime/gufo/` |
+| `lib/gufo.sh` | `runtime/gufo/runtime.sh` (fonctions de contrat `rt_gufo_*`) |
+| `tools/gufo-amont.sh` | `runtime/gufo/tools/gufo-amont.sh` |
+| `--gufo [modèle]` | `--runtime gufo [modèle]` (bascule mémorisée), ou `LLM_RUNTIME=gufo ./setup-llm.sh --start [modèle]` |
+| `--gufo-off` | `--runtime llama-cpp-rocm-strix` |
+| pas d'équivalent | `--restart [modèle]` sous le runtime gufo : garde le modèle préchargé du `.env` |
+| `--gufo-logs` | `--requetes` |
+| `--gufo-download <quoi>` | `LLM_RUNTIME=gufo ./setup-llm.sh --setup <quoi>`, avec la cible `27b` en plus |
+| `--start` du service refusé tant que gufo tourne | démarrer un runtime arrête l'autre |
+
+Ce qui change pour gufo au-delà des noms :
+
+- **Plus de pilotage à lui** : le générique (`lib/svc.sh`) écrit le `.env`,
+  arrête le runtime qui tenait le port, recrée le conteneur
+  (`up -d --force-recreate`) et attend `/health` ; gufo n'y ajoute que
+  l'attente de son modèle préchargé. L'arrêt est un `compose stop` (conteneur
+  gardé arrêté) et non plus un `compose down`.
+- **Modèle préchargé** : sans argument, `--start` et `--restart` reprennent
+  celui du `.env` en place (Flash-Next s'il n'y en a pas), au lieu de retomber
+  sur Flash-Next.
+- **Autonome pour ses poids** : `download.sh` prend aussi le 27B (cible et
+  drafter DFlash 2), la tête MTP et le mmproj de Flash-Next, qu'il partage
+  avec le service, aux mêmes chemins, sans révision épinglée et sans reprendre
+  un fichier présent.
+- **`~/models/gufo` réservé** : le `--cleanup` du service l'épargne parce que
+  gufo le déclare (`RT_PARC_RESERVE`), plus parce que son nom y était écrit.
+- **Bancs** : `run.sh` et `agentic.sh` arrêtent le runtime d'usage réel, quel
+  qu'il soit, et le relancent à la fin s'il tournait ; `remesure.sh` ne le
+  relance qu'une fois, à la fin.
+
+À faire sur les machines : sur une machine qui ne sert que gufo (silentchuck),
+`./setup-llm.sh --runtime gufo` une fois, sans quoi les commandes visent le
+service ; mettre à jour une autorisation locale posée sur l'ancien chemin de
+`gufo-amont.sh`. Non vérifié sur machine : écrit sans GPU ni docker, seuls les
+tests (faux docker) ont tourné.
 
 ## Release v0.10.0 (09/10/2026), retenue le jour même
 

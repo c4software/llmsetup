@@ -1,0 +1,89 @@
+# =============================================================================
+# Runtime gufo (runtime/CONTRAT.md) : gufo derrière llama-swap, sur SERVER_PORT
+#
+# gufo (https://github.com/gufo-org/gufo) est un moteur HIP spécialisé Strix
+# Halo évalué le 24/09/2026 (docs/GUFO.md) : un modèle par processus, GGUF
+# imposés. Il ne s'intègre pas au routeur llama-server du runtime
+# llama-cpp-rocm-strix : c'est un runtime à part, les deux sont exclusifs
+# (même port, un GPU), le pilotage arrête l'un pour démarrer l'autre.
+#
+# gufo démarre TOUJOURS derrière llama-swap (la voie que sa documentation
+# recommande pour plusieurs modèles) : llama-swap écoute sur le port publié et
+# lance « gufo serve llm » pour le modèle demandé par le client (champ
+# « model »), en arrêtant le précédent, comme le routeur llama-server. Les lignes de commande de gufo, modèle par modèle, sont dans
+# gufo-llama-swap.yaml, seule source de vérité ; l'image ajoute llama-swap à celle
+# de gufo (Dockerfile.routeur).
+#
+# Fichier VERSIONNÉ, sans valeur machine : tout ce qui varie est une variable
+# ${VAR:?}, lue dans le .env que ./setup-llm.sh --start écrit dans GUFO_DATA
+# (runtime.sh du runtime). Le .env porte COMPOSE_FILE, d'où l'usage à la main :
+#   cd ~/llm/gufo-test && docker compose ps | logs -f
+# Pilotage : ./setup-llm.sh --runtime gufo, puis --start [modèle préchargé] |
+# --stop | --restart | --requetes (jamais « compose restart » : --start régénère le .env puis
+# recrée le conteneur).
+# =============================================================================
+
+# Nom par défaut ; runtime.sh passe COMPOSE_PROJECT_NAME par le .env (gufo, ou
+# gufo-banc pour les bancs de bench/).
+name: gufo
+
+services:
+  gufo:
+    # Image de gufo + llama-swap (v257, SHA-256), construite par compose quand
+    # elle manque ou que le Dockerfile change (pull_policy: build, couches en
+    # cache).
+    image: ${GUFO_ROUTEUR_IMAGE:?}
+    pull_policy: build
+    build:
+      context: ${GUFO_RUNTIME_DIR:?}
+      dockerfile: Dockerfile.routeur
+      args:
+        GUFO_IMAGE: ${GUFO_IMAGE:?}
+    # container_name figé par variable (contrat) : le pilotage et --requetes
+    # l'interrogent par docker inspect et docker logs.
+    container_name: ${GUFO_CONTENEUR:?}
+    # unless-stopped pour l'usage réel : le dernier runtime lancé repart seul au
+    # démarrage de la machine, l'autre ayant été arrêté volontairement par le
+    # pilotage. « no » pour les bancs.
+    restart: ${GUFO_RESTART:?}
+    devices:
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    # Contrat : uid:gid de l'utilisateur qui lance (hôte, résolus par
+    # runtime.sh), jamais root ; le cache disque reste à lui.
+    user: "${SVC_UID:?}:${SVC_GID:?}"
+    # gid NUMÉRIQUES de render et video, résolus sur l'hôte (_compose_gid) : les
+    # noms n'existent pas dans l'image.
+    group_add:
+      - "${GID_RENDER:?}"
+      - "${GID_VIDEO:?}"
+    # Les poids sont mappés et épinglés : memlock illimité, comme la
+    # documentation de gufo le demande (--ulimit memlock=-1).
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "0.0.0.0:${GUFO_PORT:?}:8080"
+    # Valeurs lues par gufo-llama-swap.yaml (${env.VAR}).
+    environment:
+      MODELS_BASE: ${MODELS_BASE:?}
+      GUFO_CACHE: ${GUFO_CACHE:?}
+      GUFO_SESSIONS: ${GUFO_SESSIONS:?}
+      GUFO_PRECHARGE: ${GUFO_PRECHARGE:?}
+    # Parc au MÊME chemin et en lecture seule (les lignes de commande portent
+    # des chemins absolus de l'hôte) ; les poids propres à gufo y sont depuis
+    # le 09/10/2026, dans MODELS_BASE/gufo, donc sous le même montage ; le cache disque
+    # (GUFO_CACHE, à côté de celui de l'autre runtime dans ~/.local/state/llm-setup) est
+    # le seul point inscriptible ; la configuration de llama-swap, versionnée,
+    # est lue au démarrage (un changement demande --restart, qui recrée).
+    volumes:
+      - "${MODELS_BASE:?}:${MODELS_BASE:?}:ro"
+      - "${GUFO_CACHE:?}:${GUFO_CACHE:?}:rw"
+      - "${GUFO_RUNTIME_DIR:?}/gufo-llama-swap.yaml:/etc/llama-swap/config.yaml:ro"
+    entrypoint:
+      - "/usr/local/bin/llama-swap"
+      - "-config"
+      - "/etc/llama-swap/config.yaml"
+      - "-listen"
+      - ":8080"

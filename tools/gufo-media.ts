@@ -9,7 +9,7 @@ import { basename, dirname, extname, resolve } from "node:path";
 // directes, sans passer par le modèle : /image [LxH] <prompt>,
 // /image-edit <fichier>... <prompt> et /parler [voix décrite] <texte>.
 // Générer ou modifier une image et parler, par gufo
-// (runtime-gufo/, docs/GUFO.md) derrière le proxy (llm-proxy, routage au
+// (runtime/gufo/, docs/GUFO.md) derrière le proxy (llm-proxy, routage au
 // préfixe « bigchuck/ »). Copier dans ~/.pi/agent/extensions et
 // ~/.omp/agent/extensions.
 //

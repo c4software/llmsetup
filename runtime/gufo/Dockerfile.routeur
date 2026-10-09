@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1.7
+# =============================================================================
+# gufo + llama-swap : l'image du service de runtime/gufo/docker-compose.yml
+#
+# gufo ne sert qu'un modèle par processus ; sa documentation renvoie à
+# llama-swap (https://github.com/mostlygeek/llama-swap, MIT) pour exposer
+# plusieurs processus sous une même URL. Cette image ajoute le binaire
+# llama-swap à l'image de gufo : llama-swap écoute sur le port publié et lance
+# lui-même « gufo serve llm » pour le modèle demandé par le client, en
+# déchargeant le précédent (gufo-llama-swap.yaml). Pas de socket docker, rien sur
+# l'hôte : tout vit dans ce conteneur, avec les mêmes périphériques que gufo.
+#
+# Construite par « docker compose up » (bloc build, pull_policy: build : les
+# couches en cache rendent la reconstruction immédiate quand rien ne change)
+# à chaque ./setup-llm.sh --start du runtime gufo.
+# Version et somme SHA-256 épinglées : une nouvelle version de llama-swap est
+# un changement de ce fichier, jamais un effet de bord. Même règle pour gufo,
+# dont la version vient du .env (GUFO_IMAGE, épinglée dans runtime/gufo/IMAGE
+# et lue par runtime.sh). Pas de défaut ici, pour qu'elle ne soit écrite
+# qu'à un endroit ; build à la main :
+#   docker build --build-arg GUFO_IMAGE="$(cat IMAGE)" -f Dockerfile.routeur .
+# =============================================================================
+
+ARG GUFO_IMAGE
+
+FROM alpine:3.20 AS llama-swap
+ARG LLAMA_SWAP_VERSION=257
+ADD --checksum=sha256:939cf1ddf9bd2a9859bf67b01f63469ea2a60454e40e24f19325887ad73ffe79 \
+    https://github.com/mostlygeek/llama-swap/releases/download/v${LLAMA_SWAP_VERSION}/llama-swap_${LLAMA_SWAP_VERSION}_linux_amd64.tar.gz \
+    /tmp/llama-swap.tar.gz
+RUN tar -xzf /tmp/llama-swap.tar.gz -C /tmp llama-swap \
+ && install -m 0755 /tmp/llama-swap /llama-swap
+
+FROM ${GUFO_IMAGE}
+COPY --from=llama-swap /llama-swap /usr/local/bin/llama-swap
+LABEL org.opencontainers.image.title="gufo-routeur" \
+      llm-setup.llama-swap.version="257"
