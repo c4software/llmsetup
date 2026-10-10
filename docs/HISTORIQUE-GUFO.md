@@ -69,6 +69,143 @@ service ; mettre à jour une autorisation locale posée sur l'ancien chemin de
 `gufo-amont.sh`. Non vérifié sur machine : écrit sans GPU ni docker, seuls les
 tests (faux docker) ont tourné.
 
+## Release v0.11.0 (10/10/2026), retenue le jour même, mesurée sur silentchuck
+
+Choix de l'utilisateur du 10/10/2026 : monter et mesurer Flash-Next sur
+silentchuck (« on applique et on test flash-next sur silentchuck »), retenir
+sur cette série, puis remesurer le 27B (« fait, et enchaine avec le 27b »).
+Image épinglée en `gufo-runtime:0.11.0` (`d3b75a5`, yaml inchangé).
+**Première montée mesurée sur silentchuck et non sur bigchuck** : les
+tableaux ci-dessous se comparent aux séries 0.10.0 faites sur silentchuck le
+09/10/2026 au soir (`remesure-silentchuck-essai1.log` de 19:32 à 19:41,
+`remesure-silentchuck.log` de 19:59 à 20:13, journaux agentiques de la seconde
+dans `resultats/agentic/2026-10-09-0.10.0-silentchuck/`), pas aux tableaux
+des entrées précédentes, mesurés sur bigchuck. Une série par modèle :
+`remesure.sh flashnext` de 16:36 à 16:44, `remesure.sh 27b` de 17:47 à 17:57
+(`remesure.log` et `remesure-27b.log` de `~/llm/gufo-test`), journaux
+agentiques dans `resultats/agentic/2026-10-10-0.11.0/`. 16/16 sur les deux
+modèles, pas de boucle. Vérifié après chaque remesure : `GUFO_IMAGE` en
+0.11.0 dans le `.env` d'usage, `gufo version 0.11.0 (e3c0d4c)` dans le
+conteneur, Flash-Next préchargé, 37 threads ; après celle de Flash-Next, une
+requête avec `stop` en direct sur `:8009` (« 1 à 4 », `finish_reason` stop).
+Proxy, voix, transcription et image non revérifiés ; images dans les
+résultats d'outils (#506) non essayées.
+
+Contenu (notes de release, diff de documentation v0.10.0...v0.11.0) :
+
+- **Refonte du cache de continuation, première livraison** (cartes de la RFC
+  #488 / #489) : contrats d'adaptateur communs (#493), registre de
+  ressources et réservations transactionnelles (#496), blocs partagés et
+  provenance des points de reprise (#498), index de préfixes cohérent
+  (#500), baux de slots et gardes de mutation (#501), politique de rétention
+  et événements rejouables (#503), support HIP engagé et pools de transfert
+  (#504), lignes empruntées gardées tant que les slots sont inactifs (#505),
+  manifestes disque et index de métadonnées au démarrage (#507), publication
+  des points de reprise avec reprise après crash (#509), transferts par
+  morceaux bornés (#515), sélection et éviction des points de reprise
+  résidents et durables (#517). C'est la livraison annoncée à l'entrée de la
+  0.10.0 comme « à requalifier ».
+- **#476** : frontière vivante gardée quand une branche restaure son point de
+  reprise emprunté.
+- **#518, noyaux de décodage de Flash-Next** : lignes Q8_1 écrites par le
+  producteur, chargements anticipés, réductions DPP / `permlanex16`, lectures
+  Q4_K / HC sans branche. Annoncé (EXPERIMENTS.md) : tg32 +5,8 à +6,0 % à
+  profondeur 0 et +7,1 à +7,2 % à 32K sur deux machines, rejeu agentique
+  servi +6,8 % / +7,1 %, 2 à 4 sessions concurrentes +3,9 à +4,4 %, prefill
+  et mémoire de crête inchangés, logits identiques à l'octet (QUALITY.md :
+  1 017 118 720 comparaisons à 64K / 128K).
+- **#506** : images gardées dans les résultats d'outils (`input_image` dans
+  une sortie d'appel de fonction de Responses, `image_url` dans un message
+  `role:"tool"` de Chat), seul changement de `docs/SERVER.md`.
+- **#532** (tableaux de métadonnées GGUF d'entiers 8 et 16 bits), **#520**
+  (cause des échecs de génération journalisée), **#499** (Qwen-Image :
+  envois de poids par tampons épinglés, non mesuré ici).
+- Rien pour le 27B hors du cache. Après la release, donc hors de l'image :
+  #530, #512, #510 et #533, tous sur `/v1/messages`.
+
+Confrontation des paramètres (10/10/2026) : `gufo serve llm --help` des
+images 0.10.0 et 0.11.0 identique (68 lignes, comparé sur silentchuck),
+aucune option ajoutée ni retirée, aucun défaut changé ; `docs/CLI.md`
+inchangé. Réglages et contournements gardés tels quels : la refonte du cache
+n'apporte aucune option, `--cache-disk`, 16 Gio et staging 8 Gio restent
+posés. Aucun des tickets suivis (#200, #228, #239, #299) n'a bougé.
+
+| Flash-Next, 1 session, silentchuck | 0.10.0, série 1 (19:39) | 0.10.0, série 2 (20:06) | 0.11.0 (16:37) |
+|---|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4 à 1,6k (t/s) | 1 145 à 1 396 | 1 140 à 1 396 | 1 148 à 1 409 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 478 à 1 481 / 1 583,7 / 1 597,8 | 1 391 à 1 478 / 1 568,2 / 1 576,8 | 1 498 à 1 513 / 1 606,2 / 1 618,8 |
+| décode code (t/s) | 66,7 à 67,4 | 66,0 à 67,5 | 71,5 à 72,5 |
+| chargement, mémoire | 77,2 s, 109 419 Mio | 79,9 s, 109 216 Mio | 85,8 s, 109 745 Mio |
+| agentique, cache disque | non gardé | 16/16, 51 requêtes, repris 93,8 %, prefill 10 s, décode 82 s à 48,6 t/s, acceptance 85,7 % | 16/16, 51 requêtes, repris 98,6 %, prefill 8 s, décode 76 s à 52,7 t/s, acceptance 84,6 % |
+| reprises disque / RAM / ratés | | 1 / 47 / 3 | 3 / 48 / 0 |
+| points de reprise disque écrits | | 3 | 0 (75 refus `min_step`) |
+| passes 1/2/3 (s), dont `creation` | | 40,4 / 26,4 / 28,3, dont 22,8 / 15,0 / 17,1 | 32,5 / 26,1 / 29,7, dont 17,4 / 14,3 / 18,2 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | | 260 ms | 256 ms |
+
+| 27B, 1 session, silentchuck | 0.10.0, série 1 (19:32) | 0.10.0, série 2 (19:59) | 0.11.0 (17:48) |
+|---|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4 à 1,6k (t/s) | 524 à 554 | 525 à 553 | 527 à 558 |
+| prefill à 6,5k / 52k / 32k (t/s) | 583 / 521,6 / 560,3 | 583 à 584 / 521,7 / 560,7 | 585 / 522,5 / 561,5 |
+| décode prose / code (t/s) | 43,1 à 47,8 / 45,4 à 66,3 | 43,7 à 48,1 / 66,1 à 67,4 | 42,8 à 47,0 / 65,3 à 66,9 |
+| chargement, mémoire | 24,1 s, 82 760 Mio | 23,6 s, 82 500 Mio | 26,1 s, 82 346 Mio |
+| agentique, cache disque | non gardé | 16/16, 49 requêtes, repris 98,7 %, prefill 10 s, décode 97 s à 43,0 t/s, acceptance 71,0 % | 16/16, 49 requêtes, repris 93,5 %, prefill 16 s, décode 98 s à 43,8 t/s, acceptance 72,1 % |
+| reprises disque / RAM / ratés | | 1 / 48 / 0 | 1 / 45 / 3 (un `no_checkpoint`, deux `prefix_changed`) |
+| points de reprise disque écrits, `write_ms` | | 0 | 3, 231 à 236 ms |
+| passes 1/2/3 (s), dont `creation` | | 38,8 / 35,4 / 37,4, dont 19,5 / 18,8 / 19,1 | 42,6 / 37,7 / 36,4, dont 20,1 / 19,4 / 18,8 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | | 355 ms | 355 ms |
+
+Lecture :
+
+- **Décode de Flash-Next à +6 à +8 %** : 71,5 à 72,5 t/s en code contre 66,0
+  à 67,5 sur les deux séries 0.10.0, trois requêtes par série ; 52,7 t/s en
+  agentique contre 48,6. C'est #518, au niveau de ce qu'il annonce.
+  Acceptance agentique à 84,6 %, dans la fourchette habituelle (84,6 à
+  85,7 %) : les 82,0 % de la première série 0.10.0 sur bigchuck ne se
+  revoient pas.
+- **Prefill long de Flash-Next à +1,4 à +2,7 %** (1 606 t/s à 52k contre
+  1 584 et 1 568, 1 619 à 32k contre 1 598 et 1 577), une requête par série,
+  alors que #518 annonce un prefill inchangé : l'écart entre les deux séries
+  0.10.0 (1 %) est du même ordre, à ne pas tenir pour un gain. Chargement
+  6 à 9 s plus long (85,8 s contre 77,2 et 79,9), une mesure.
+- **27B au niveau de la 0.10.0**, comme attendu (rien pour lui hors du
+  cache) : prefill à moins de 0,5 %, décode dans la dispersion des deux
+  séries, premier token identique.
+- **Cache disque, ce que la série dit de la refonte** : les 16 Gio de points
+  de reprise écrits en 0.10.0 sont relus par la 0.11.0 (3 reprises disque et
+  aucun raté sur Flash-Next, 1 sur le 27B), sans message de migration ni de
+  rejet dans les journaux. L'écriture au nouveau format n'est exercée que
+  par le 27B : 3 points de reprise de 323 Mo en 231 à 236 ms ; Flash-Next
+  n'en a écrit aucun (75 refus `min_step`, tout était déjà repris). Une
+  éviction (`action=removed reason=lru`) pendant la série du 27B, aucun
+  refus `staging_capacity`. Non exercés : la reprise après crash (#509) et
+  la relecture au redémarrage d'un point écrit par la 0.11.0.
+- **Reprise du 27B à 93,5 % et trois ratés** contre 98,7 % et aucun à la
+  série 2 de la veille : c'est le chiffre habituel d'une série à cache froid
+  (93,6 % sur bigchuck en 0.9.1 et en 0.10.0, mêmes trois débuts de
+  conversation), et la série 2 de la veille suivait une série 1 qui avait
+  peuplé le cache. Ses points de reprise de la veille n'ont donc pas servi
+  aux trois débuts de conversation ; la cause n'est pas établie (évincés par
+  le cache plein, 16,9 Gio retenus sur 17,2 au moment des écritures, ou
+  illisibles en 0.11.0). Flash-Next, mesuré avant lui, a repris les siens.
+- **Non comparable à bigchuck** : silentchuck donne un prefill du 27B plus
+  haut (522 t/s à 52k contre 500) et une mémoire plus haute (82 Gio contre
+  77, 109,5 contre 107,5 sur Flash-Next) dans les deux versions ; aucune
+  mesure 0.11.0 n'a été faite sur bigchuck.
+
+Deux défauts du banc vus sur silentchuck, présents à l'identique dans les
+séries 0.10.0, donc sans lien avec la montée, non corrigés :
+
+- le `.out` de `agentic.sh` affiche « prompt 0 tok (+0 du cache, 0 %),
+  généré 0 tok » sur chaque scénario (lignes `TSV` à zéro) : les chiffres
+  agentiques des tableaux viennent de `journal.py`, donc du journal de gufo,
+  et les temps mur du `.out` ;
+- `[ERROR] failed to preload model qwen3.8-flash-next: status 404` (ou
+  `qwen3.8-27b`) une fois au lancement du routeur du banc : gufo répond 404
+  à un `GET /` (`[WARN] [http] … path=/ status=404`), le modèle est chargé
+  quand même et le banc l'attend.
+
 ## Release v0.10.0 (09/10/2026), retenue le jour même
 
 Choix de l'utilisateur du 09/10/2026, question par question (checklist) :
