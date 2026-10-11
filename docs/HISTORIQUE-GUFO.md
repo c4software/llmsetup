@@ -69,6 +69,154 @@ service ; mettre à jour une autorisation locale posée sur l'ancien chemin de
 `gufo-amont.sh`. Non vérifié sur machine : écrit sans GPU ni docker, seuls les
 tests (faux docker) ont tourné.
 
+## Release v0.12.0 (11/10/2026), retenue le jour même, mesurée sur silentchuck
+
+Choix de l'utilisateur du 11/10/2026, question par question (checklist) :
+monter (image épinglée en `gufo-runtime:0.12.0`, `31cbe6a`, yaml inchangé),
+remesurer Flash-Next et le 27B, machine libre tout de suite, puis retenir la
+version sur cette série (« On garde »). Image publiée à
+11:43 UTC, 17 minutes après la release. Une seule commande cette fois,
+`remesure.sh 27b flashnext` de 13:45 à 14:03 (`remesure-0.12.0.log` de
+`~/llm/gufo-test`), donc **27B d'abord, Flash-Next ensuite** (en 0.11.0 :
+une série par modèle, Flash-Next d'abord) ; journaux agentiques dans
+`resultats/agentic/2026-10-11-0.12.0/`. 16/16 sur les deux modèles, pas de
+boucle. Vérifié après la remesure : `GUFO_IMAGE` en 0.12.0 dans le `.env`
+d'usage, `gufo version 0.12.0 (88090af)` dans le conteneur, Flash-Next
+préchargé, 37 threads, les huit modèles dans `/v1/models`, une requête avec
+`stop` en direct sur `:8009` (« 1 à 4 », `finish_reason` stop). Proxy, voix,
+transcription et image non revérifiés ; images et `count_tokens` de
+`/v1/messages` (#510, #512) non essayés.
+
+Contenu (notes de release, diff de documentation v0.11.0...v0.12.0, corps des
+PR #536, #549 et #534) :
+
+- **#549, snapshots de Flash-Next gardés dans la marge du device** (ferme
+  #487, probablement #514) : les snapshots « empruntés » gardent leurs lignes
+  KV sur le device, et leurs copies de protection allaient dans un pool HIP
+  alors que le budget du cache ne compte que la RAM hôte (`MemAvailable / 2`).
+  Sur un APU la limite du device (GTT) peut être bien plus basse : un
+  engagement du pool échouait, puis un bug de ROCm 7.2.3
+  (`VmHeap::AllocBlock`, bloc libéré encore chaîné) rendait toutes les
+  requêtes suivantes `generation_failed` et faisait tomber l'arrêt en
+  `signal=11`. Désormais `hipMemGetInfo` est lu avant chaque engagement
+  (scratch différé de l'exécuteur plus 512 Mio laissés libres) et ce qui ne
+  tient pas passe dans la charge hôte du snapshot. Reproduit en amont avec
+  `--sessions 2 --context 262144 --speculative mtp` et des prompts de 125k
+  tokens. Coût annoncé : `cache_snapshot_ms` à +5 à +32 % (3 à 8 ms sur des
+  captures de 15 à 60 ms), temps annoncés « non qualifiés ».
+- **#536, adaptateur de continuation de Flash-Next** (carte 14 de la refonte
+  du cache) : livré mais **inactif**, le service garde l'ancien cache jusqu'à
+  la carte 19. Ralentissement maximal annoncé des binaires de production :
+  2,94 % en prefill, 1,59 % en décode.
+- **#534, arguments des appels d'outils natifs diffusés au fil de l'eau**
+  (ferme #347) : Qwen et DeepSeek, sur Chat, Responses et Messages ; avant,
+  les arguments n'arrivaient qu'une fois l'appel complet. Annoncé : premier
+  fragment d'un gros argument Flash-Next à 1,8 s au lieu de 29,4 s, 1 856
+  fragments au lieu d'un, temps total inchangé ; validé en amont avec pi
+  0.87.0 et OpenCode. Corrige aussi une espace perdue après le premier bloc
+  de raisonnement de Messages et un accent grave non fermé dans un argument
+  Qwen qui faisait fuir le balisage de l'appel suivant dans le texte.
+- **`/v1/messages`** : images dans les tours utilisateur et les résultats
+  d'outils (#510), `count_tokens` implémenté (#512, 501 avant),
+  `input_tokens` sans les lectures de cache (#530 : l'écart noté à l'entrée
+  de la 0.10.0 est levé). Nos bancs ne lisent pas ce champ.
+- **Serveur** : énumérations JSON mêlant chaînes et nombres (#535), clients
+  WebSocket en écoute gardés au-delà du délai d'inactivité (#527), noms
+  d'en-têtes HTTP non conformes rejetés (#533), images refusées avant
+  lecture sur un modèle texte seul (#550), messages d'erreur de Chat (#545,
+  #546). Documentation : `top_p: 0` accepté (#548).
+- Rien pour le 27B hors du flux des appels d'outils.
+
+Confrontation des paramètres (11/10/2026) : `gufo serve llm --help` des
+images 0.11.0 et 0.12.0 identique (68 lignes, comparé sur silentchuck),
+aucune option ajoutée ni retirée, aucun défaut changé ; `docs/CLI.md` et les
+guides des modèles inchangés, `docs/SERVER.md` ne change que sur `top_p: 0`,
+les images de Messages et `count_tokens`. Réglages et contournements gardés
+tels quels. Aucun des tickets suivis (#200, #228, #239, #299) n'a bougé,
+aucune question ne nous est posée.
+
+| Flash-Next, 1 session, silentchuck | 0.11.0 (10/10, 16:37, mesuré seul) | 0.12.0 (11/10, 13:53, après le 27B) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4 à 1,6k (t/s) | 1 148 à 1 409 | 1 082 à 1 405 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 498 à 1 513 / 1 606,2 / 1 618,8 | 1 187 et 1 522 / 1 589,1 / 1 588,0 |
+| décode code (t/s) | 71,5 à 72,5 | 68,1 à 73,9 |
+| chargement, mémoire | 85,8 s, 109 745 Mio | 103,3 s, 108 484 Mio |
+| agentique, cache disque | 16/16, 51 requêtes, repris 98,6 %, prefill 8 s, décode 76 s à 52,7 t/s, acceptance 84,6 % | 16/16, 49 requêtes, repris 93,5 %, prefill 10 s, décode 69 s à 55,7 t/s, acceptance 85,7 % |
+| reprises disque / RAM / ratés | 3 / 48 / 0 | 1 / 45 / 3 (un `no_checkpoint`, deux `prefix_changed`) |
+| points de reprise disque écrits, `write_ms` | 0 (75 refus `min_step`) | 3, 103 à 124 ms (69 refus `min_step`) |
+| passes 1/2/3 (s), dont `creation` | 32,5 / 26,1 / 29,7, dont 17,4 / 14,3 / 18,2 | 30,4 / 24,6 / 27,1, dont 15,0 / 13,1 / 15,7 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 256 ms | 247 ms |
+
+| 27B, 1 session, silentchuck | 0.11.0 (10/10, 17:48) | 0.12.0 (11/10, 13:46) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4 à 1,6k (t/s) | 527 à 558 | 527 à 558 |
+| prefill à 6,5k / 52k / 32k (t/s) | 585 / 522,5 / 561,5 | 586 / 522,3 / 561,7 |
+| décode prose / code (t/s) | 42,8 à 47,0 / 65,3 à 66,9 | 39,9 à 48,7 / 66,4 à 66,9 |
+| chargement, mémoire | 26,1 s, 82 346 Mio | 28,1 s, 82 373 Mio |
+| agentique, cache disque | 16/16, 49 requêtes, repris 93,5 %, prefill 16 s, décode 98 s à 43,8 t/s, acceptance 72,1 % | 16/16, 50 requêtes, repris 98,8 %, prefill 10 s, décode 98 s à 42,5 t/s, acceptance 71,0 % |
+| reprises disque / RAM / ratés | 1 / 45 / 3 | 3 / 47 / 0 |
+| points de reprise disque écrits, `write_ms` | 3, 231 à 236 ms | 0 (81 refus `min_step`) |
+| passes 1/2/3 (s), dont `creation` | 42,6 / 37,7 / 36,4, dont 20,1 / 19,4 / 18,8 | 37,4 / 39,0 / 36,9, dont 18,4 / 19,9 / 20,1 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 355 ms | 353 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16 sur les deux
+  modèles avec les arguments d'outils désormais diffusés (#534), aucun
+  `generation_failed`, aucune erreur dans les journaux hors le `404` connu
+  du préchargement.
+- **27B au niveau de la 0.11.0**, comme attendu : prefill à moins de 0,1 %,
+  décode en code identique, premier token identique. La prose va de 39,9 à
+  48,7 t/s sur trois requêtes (42,8 à 47,0 la veille) : dispersion plus
+  large, médiane au même niveau.
+- **Flash-Next, prefill long 1 à 2 % plus bas** (1 589 t/s à 52k contre
+  1 606, 1 588 à 32k contre 1 619), une requête par point : c'est le sens et
+  l'ordre de grandeur que #536 annonce (2,94 % au plus), mais aussi l'écart
+  entre les deux séries 0.10.0 de la même machine (1 584 et 1 568 à 52k).
+  Ni établi ni écarté.
+- **Flash-Next, première requête de chaque taille plus lente** : 1 082 t/s à
+  1,4k et 1 187 t/s à 6,5k à la première passe, 1 405 et 1 522 ensuite (la
+  veille : 1 148 puis 1 407, et 1 498 puis 1 513). L'écart à 6,5k est
+  nouveau, cause non cherchée, une mesure.
+- **Flash-Next, décode en code plus dispersé** (68,1 à 73,9 t/s contre 71,5
+  à 72,5), deux requêtes sur trois sous la veille, alors que le décode
+  agentique monte à 55,7 t/s (52,7) avec une acceptance au même niveau
+  (85,7 %). Les deux mesures se contredisent : pas de conclusion sur le
+  décode, à relire à la prochaine série.
+- **Chargement de Flash-Next à 103,3 s** contre 85,8 s (77 à 80 s en
+  0.10.0), une mesure, juste après l'arrêt du 27B.
+- **Cache disque, les rôles s'inversent** : le 27B reprend tout (98,8 %,
+  3 reprises disque, aucun raté) et Flash-Next recalcule ses trois débuts
+  de conversation (93,5 %, les trois ratés habituels d'une série à cache
+  froid), à l'inverse de la veille. Le 27B avait écrit 3 points de reprise
+  en 0.11.0 et fait 3 reprises disque ici : cohérent avec une relecture,
+  après redémarrage et montée de version, de points écrits au nouveau
+  format, laissée « non exercée » la veille (lu dans les compteurs, non
+  vérifié fichier par fichier). Pour Flash-Next, la cause n'est pas
+  établie : ses points dataient de la 0.10.0, le cache était presque plein
+  (14,9 Go retenus sur 17,2 au moment des écritures, une éviction `lru`
+  pendant la série) et la machine a servi en usage réel entre les deux
+  séries.
+- **Écritures de Flash-Next passé en second : normales** (3 points de
+  170 Mo en 103 à 124 ms). Les écritures lentes vues en 0.9.1 juste après le
+  27B ne se revoient pas ; ici le 27B n'a rien écrit avant lui, donc la
+  question de l'ordre de `remesure.sh` reste ouverte.
+- **Coût de #549 non lu** : les journaux de la série n'ont pas de champ de
+  temps de capture des snapshots, et le chemin de repli (device sans marge)
+  n'est pas exercé par nos bancs (1 session, prompts de 52k au plus).
+  Mémoire de crête 1,3 Gio plus basse sur Flash-Next (108 484 Mio contre
+  109 745), une mesure.
+- **Gain de #534 non mesuré** : le banc ne chronomètre pas le premier
+  fragment d'argument d'un appel d'outil ; les temps par passe sont au
+  niveau de la veille ou un peu en dessous (Flash-Next 30,4 / 24,6 / 27,1 s
+  contre 32,5 / 26,1 / 29,7).
+
+Les deux défauts du banc notés à l'entrée de la 0.11.0 (`.out` agentique à
+0 token, `failed to preload … 404` au lancement) sont toujours là, non
+corrigés.
+
 ## Release v0.11.0 (10/10/2026), retenue le jour même, mesurée sur silentchuck
 
 Choix de l'utilisateur du 10/10/2026 : monter et mesurer Flash-Next sur
