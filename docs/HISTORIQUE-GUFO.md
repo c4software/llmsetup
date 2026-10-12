@@ -69,6 +69,103 @@ service ; mettre à jour une autorisation locale posée sur l'ancien chemin de
 `gufo-amont.sh`. Non vérifié sur machine : écrit sans GPU ni docker, seuls les
 tests (faux docker) ont tourné.
 
+## Release v0.13.0 (12/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
+
+Demande de l'utilisateur du 12/10/2026, en une réponse (« applique et test
+flash next uniquement ») : monter (image épinglée en `gufo-runtime:0.13.0`,
+`a36f7a5`, yaml inchangé) et remesurer Flash-Next seul ; le 27B n'est pas
+remesuré, aucun changement de la release ne le touche. Image publiée à
+13:29 UTC, 16 minutes après la release. `remesure.sh flashnext` de 18:44 à
+18:54 (`remesure-0.13.0.log` de `~/llm/gufo-test`), **Flash-Next mesuré
+seul** comme en 0.11.0 (en 0.12.0 il passait après le 27B) ; journaux
+agentiques dans `resultats/agentic/2026-10-12-0.13.0/`. 16/16, pas de
+boucle. Vérifié après la remesure : `GUFO_IMAGE` en 0.13.0 dans le `.env`
+d'usage, `gufo version 0.13.0 (fcf8bf7)` dans le conteneur, Flash-Next
+préchargé, 133 threads (37 en 0.12.0 : les 96 lecteurs de plus de #551), les
+huit modèles dans `/v1/models`, une requête avec `stop` en direct sur `:8009`
+(« 1 à 4 », `finish_reason` stop). Proxy, voix, transcription et image non
+revérifiés. Version retenue par l'utilisateur sur cette série (« on garde »).
+
+Contenu (notes de release, diff de documentation v0.12.0...v0.13.0) :
+
+- **#551, 128 lecteurs n-gram pour Flash-Next, « comme documenté »** :
+  `EXPERIMENTS.md` retenait 128 lecteurs avec les blocs de prefill de 4 096
+  tokens (#470), qui doublent chaque collecte, « 96 threads de plus » (donc
+  32 avant, déduit, corps de la PR non lu) ; les lecteurs bloquent dans
+  `pread` et ne sont réveillés que par lecture.
+  Annoncé sur gfx1151 (#538), prompts frais de 5k à 66k : prefill médian
+  0,3 à 0,6 s plus court par requête, soit 6 à 7 % à 5k-8k et 1 % à 65k.
+- **#541, `--stall-timeout-ms`** : sortie en `device_lost` (statut 75, comme
+  la perte du device) quand l'ordonnanceur a du travail et ne progresse plus
+  pendant ce délai ; vise un appel au device qui ne revient jamais, pendant
+  lequel `/health` et les heartbeats de flux continuent de répondre.
+  Désactivée par défaut (0), minimum 60000 ; détection entre le délai et 1,5
+  fois le délai. Ne vise pas la boucle d'appels d'outils de #388, où la
+  génération progresse.
+- **#557** : `cache_prompt: false` respecté aussi sur `/v1/completions` et
+  `/completion` (`null` garde le défaut). **#544** : `stream` booléen ou
+  `null` accepté sur les routes de compatibilité.
+- Documentation : le budget RAM automatique du cache ignore les serveurs
+  lancés ensuite sur la même machine (#556), noyaux de prefill du fork XDNA2
+  essayés et rejetés (#565).
+- Rien pour le 27B ni pour DeepSeek.
+
+Confrontation des paramètres (12/10/2026) : `gufo serve llm --help` passe de
+68 à 69 lignes entre les images 0.12.0 et 0.13.0 (comparé sur silentchuck),
+**une option ajoutée, `--stall-timeout-ms`** (défaut 0), aucune retirée,
+aucun défaut changé ; `docs/SERVER.md` et `docs/CLI.md` ne changent que sur
+cette option et sur `cache_prompt`. Option **non posée** : c'est un réglage
+à décider (question ouverte), et la relance par llama-swap d'un gufo sorti en
+statut 75 n'a pas été vérifiée.
+Réglages et contournements gardés tels quels. Aucun des tickets suivis (#200,
+#228, #239, #299) n'a bougé, aucune question ne nous est posée.
+
+| Flash-Next, 1 session, silentchuck | 0.12.0 (11/10, 13:53, après le 27B) | 0.13.0 (12/10, 18:46, mesuré seul) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4 à 1,6k (t/s) | 1 082 à 1 405 | 1 189 à 1 406 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 187 et 1 522 / 1 589,1 / 1 588,0 | 1 265 et 1 529 / 1 598,7 / 1 590,4 |
+| décode code (t/s) | 68,1 à 73,9 | 70,2 à 71,7 |
+| chargement, mémoire | 103,3 s, 108 484 Mio | 103,6 s, 108 841 Mio |
+| agentique, cache disque | 16/16, 49 requêtes, repris 93,5 %, prefill 10 s, décode 69 s à 55,7 t/s, acceptance 85,7 % | 16/16, 49 requêtes, repris 99,1 %, prefill 6 s, décode 67 s à 53,1 t/s, acceptance 85,7 % |
+| reprises disque / RAM / ratés | 1 / 45 / 3 (un `no_checkpoint`, deux `prefix_changed`) | 3 / 46 / 0 |
+| points de reprise disque écrits, `write_ms` | 3, 103 à 124 ms (69 refus `min_step`) | 0 (60 refus `min_step`) |
+| passes 1/2/3 (s), dont `creation` | 30,4 / 24,6 / 27,1, dont 15,0 / 13,1 / 15,7 | 28,3 / 24,8 / 24,6, dont 13,6 / 13,2 / 13,5 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 247 ms | 256 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16, aucun
+  `generation_failed`, aucun `device_lost`, aucun refus de staging, aucune
+  erreur dans les journaux hors le `404` connu du préchargement.
+- **Le gain annoncé de #551 ne se lit pas dans nos bancs.** Prefill à 52k
+  1 598,7 t/s contre 1 589,1, soit +0,6 % ; à 32k 1 590,4 contre 1 588,0,
+  soit +0,2 % ; seconde requête à 6,5k 1 529 contre 1 522, soit +0,5 % : tout
+  est dans la dispersion des séries (la 0.11.0 donnait 1 606 à 52k). La
+  première requête à 6,5k passe de 1 187 à 1 265 t/s (+6,6 %), mais c'est une
+  requête par version, la première longue après le chargement, déjà
+  dispersée d'une série à l'autre (1 498 en 0.11.0). Les lecteurs sont bien
+  là (133 threads contre 37). Annonce amont et mesure ne se contredisent pas :
+  1 % attendu à 65k, et notre seul point court est unique.
+- **Décode au niveau de la 0.12.0** : code resserré à 70,2 à 71,7 t/s (68,1 à
+  73,9), agentique 53,1 t/s contre 55,7 et 52,7 en 0.11.0, acceptance
+  identique (85,7 %). Rien dans la release ne touche le décode.
+- **Cache : reprise à 99,1 %, aucun raté**, sur cache disque chaud (3
+  reprises disque, les points écrits par la série 0.12.0 relus sans rejet) ;
+  d'où 6 s de prefill au lieu de 10 et des passes plus courtes (24,6 à
+  28,3 s). C'est l'état du cache, pas la version : même figure qu'en 0.11.0
+  (98,6 %). Les trois débuts de conversation recalculés de la 0.12.0 ne
+  reviennent pas, cause toujours non établie. Aucune écriture disque, donc
+  `write_ms` non exercé.
+- **Chargement en 103,6 s** comme en 0.12.0 (85,8 s en 0.11.0) alors que
+  Flash-Next est ici mesuré seul : l'ordre de `remesure.sh` n'explique donc
+  pas cet écart.
+- Toujours là : `.out` agentique à 0 token et `failed to preload … 404` au
+  lancement du banc.
+
+Non mesuré : #541 (option non posée), #557 et #544 (routes que nos bancs
+n'utilisent pas), le 27B.
+
 ## Release v0.12.0 (11/10/2026), retenue le jour même, mesurée sur silentchuck
 
 Choix de l'utilisateur du 11/10/2026, question par question (checklist) :
