@@ -126,8 +126,7 @@ la synthèse et ce qui sert au travail courant.
   la machine de mesure (0.11.0 à 0.13.0 mesurées sur silentchuck seulement ;
   **plateforme changée le 12/10/2026 au soir**, BIOS 1.11, EC 0.17, VRAM
   1 Gio, `ttm.page_pool_size` : la référence est la série 0.13.0 de 22:19,
-  entrée « Plateforme de silentchuck » du journal ; première requête
-  `refactor` à 744 t/s à la série avec pool, à relire) ;
+  entrée « Plateforme de silentchuck » du journal) ;
   l'ordre de `remesure.sh` (les
   écritures lentes de Flash-Next sont apparues juste après le 27B, qui
   remplit et évince le cache disque ; en 0.10.0, Flash-Next mesuré seul

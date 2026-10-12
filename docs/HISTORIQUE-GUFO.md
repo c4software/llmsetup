@@ -123,9 +123,12 @@ Lecture :
   +0,1 à +0,2 %, décode en code resserré. La passe 2 à 31,9 s vient de
   `creation` (20,4 s ; 51 requêtes contre 49 sur la série, donc sans doute
   plus d'appels d'outils du modèle, transcript non relu), les débits ne
-  bougeant pas. À revoir : la première requête `refactor` à
-  744 t/s en prefill (1 282 aux deux autres séries), une seule mesure, juste
-  après le chargement.
+  bougeant pas. Les premières requêtes `bench` et `refactor` de cette série
+  sont sorties à 730 et 744 t/s en prefill (1 200 et 1 282 à la référence) :
+  **non reproduit** au banc HTTP rejoué à 22:57, même configuration (1 206
+  et 1 285 t/s, prefill à 52k 1 599,4 t/s, chargement 92,7 s). Accident de
+  série, cause non établie (elle suivait de 20 s un essai de bascule entre
+  le 27B et Flash-Next), pas un effet du pool.
 - **Le pool rend bien la mémoire** : en basculant de Flash-Next au 27B par
   llama-swap, la RAM disponible remonte de 21,2 à 60,4 Gio, et gufo calcule
   pour le 27B un budget de cache RAM normal (`automatic_bytes` 32,9 Go) ;
@@ -151,9 +154,13 @@ Constats de la soirée sur la machine, hors mesures :
 - **Ventilateurs** : ni commande ni vitesse exposées à Linux sur cette carte.
 - **Consommation** : la prise mesurée est passée de 25 à 48 W à 19:48:03,
   avant le flash ; silentchuck était au repos (processeur à 5 à 7 W, GPU à
-  0 %) et la prise tirait encore 42 à 46 W machine éteinte. Cause probable,
-  non confirmée : un autre appareil sur la même prise (reconfiguration des
-  écrans du portable à 19:48:04). Ni gufo 0.13.0 ni le BIOS en cause.
+  0 %). Cause probable, non confirmée : l'écran branché en HDMI sur
+  silentchuck (`HDMI-A-1` connectée et active en 2560x1440, `consoleblank=0`
+  donc jamais mis en veille), passé du portable à silentchuck à 19:48:04
+  (le portable perd sa sortie à cette seconde) et alimenté par la même
+  prise ; l'utilisateur indique que silentchuck y est seule, à vérifier en
+  éteignant l'écran. Ni gufo 0.13.0 ni le BIOS en cause. (Les 42 à 46 W lus
+  vers 20:09 « machine éteinte » ne prouvent rien : arrêt encore en cours.)
 - gufo n'a pas redémarré seul au premier démarrage après le flash
   (conteneur « Exited (0) », relancé par `--start`), puis l'a fait au
   suivant : cause non établie.
