@@ -69,6 +69,95 @@ service ; mettre à jour une autorisation locale posée sur l'ancien chemin de
 `gufo-amont.sh`. Non vérifié sur machine : écrit sans GPU ni docker, seuls les
 tests (faux docker) ont tourné.
 
+## Plateforme de silentchuck (12/10/2026 au soir) : BIOS 1.11, EC 0.17, VRAM 1 Gio, pool TTM
+
+Changement de plateforme de la machine de mesure, fait par l'utilisateur le
+12/10/2026 entre 21:40 et 22:35, après la série 0.13.0 de 18:46 : **toute
+comparaison à venir part de la série de 22:19 ci-dessous**, plus de celles de
+la 0.11.0 à la 0.13.0 prises en BIOS 1.09. Aucun fichier du dépôt ne change :
+ce sont des réglages de la machine (Minisforum MS-S1 MAX, Ryzen AI Max+ 395).
+
+- **BIOS 1.09 vers 1.11** (`SHWSA_STXH_1.11_260828A`, page de support
+  Minisforum, flashé depuis le shell EFI par `EfiFlash.nsh`), EC 0.15 vers
+  0.17. Notes de version de l'archive : 1.10 « Update EC FW 0.16 », 1.11
+  « Update EC FW 0.17, Fixup WOL fail in 25H2 OS », rien d'autre.
+- **Mémoire vidéo réservée 512 Mio vers 1 024 Mio** : le BIOS 1.11 ne propose
+  plus 512 Mio (constat de l'utilisateur dans le setup, non retrouvé en
+  ligne). RAM vue par le noyau 130 768 104 K vers 130 250 416 K, soit 506 Mio
+  de moins ; GTT inchangée (126 976 Mio).
+- **`ttm.page_pool_size=32505856`** ajouté à la ligne de commande du noyau
+  (`/etc/limine-entry-tool.d/strix-halo-vram.conf`, puis `limine-update` et
+  redémarrage), égal à `ttm.pages_limit` : conseil du wiki Strix Halo pour une
+  machine qui ne fait que de l'IA (moins de fragmentation). Le paramètre
+  valait 0 (défaut du noyau). Le reste est inchangé : `iommu=pt`,
+  `amdgpu.gttsize=126976`, `ttm.pages_limit=32505856`, noyau 7.2.5-3-omarchy,
+  profil `performance`.
+- Non changés et non essayés : `amd_iommu=off` (le wiki annonce moins de 2 %
+  sur le décode de llama.cpp) et le profil `tuned` `accelerator-performance`
+  (annoncé +5 à 8 % sur `pp512`).
+
+Trois séries `remesure.sh flashnext` le même jour, gufo 0.13.0 dans les
+trois, Flash-Next mesuré seul, journaux dans
+`resultats/agentic/2026-10-12-0.13.0/`, `…-bios111/` et `…-bios111-pool/` :
+
+| Flash-Next, 1 session, silentchuck, gufo 0.13.0 | BIOS 1.09 (18:46) | BIOS 1.11 (22:19), **référence** | BIOS 1.11 + pool TTM (22:38) |
+|---|---|---|---|
+| banc HTTP, justesse | OK | OK | OK |
+| prefill court, 1,6k, `refactor` (t/s) | 1 282 à 1 393 | 1 282 à 1 405 | 744, puis 1 405 et 1 399 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 265 et 1 529 / 1 598,7 / 1 590,4 | 1 492 et 1 495 / 1 597,0 / 1 607,1 | 1 502 et 1 507 / 1 598,7 / 1 610,2 |
+| décode code (t/s) | 70,2 à 71,7 | 67,8 à 73,2 | 72,0 à 72,7 |
+| chargement, mémoire | 103,6 s, 108 841 Mio | 117,8 s, 108 805 Mio | 110,9 s, 108 723 Mio |
+| agentique, cache disque | 16/16, 49 requêtes, repris 99,1 %, prefill 6 s, décode 67 s à 53,1 t/s, acceptance 85,7 % | 16/16, 49 requêtes, repris 98,8 %, prefill 6 s, décode 70 s à 53,7 t/s, acceptance 85,7 % | 16/16, 51 requêtes, repris 98,4 %, prefill 8 s, décode 75 s à 51,7 t/s, acceptance 85,7 % |
+| reprises disque / RAM / ratés | 3 / 46 / 0 | 3 / 46 / 0 | 3 / 48 / 0 |
+| points de reprise disque écrits | 0 (60 refus `min_step`) | 0 (66 refus `min_step`) | 0 (78 refus `min_step`) |
+| passes 1/2/3 (s), dont `creation` | 28,3 / 24,8 / 24,6, dont 13,6 / 13,2 / 13,5 | 29,4 / 26,4 / 25,3, dont 14,5 / 15,1 / 13,7 | 30,5 / 31,9 / 25,0, dont 15,3 / 20,4 / 13,4 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 256 ms | 256 ms | 255 ms |
+
+Lecture :
+
+- **Le firmware ne change pas les débits** : prefill long à -0,1 % (52k) et
+  +1,1 % (32k), décode et agentique dans la dispersion des séries. Aucune
+  erreur dans les trois séries (`generation_failed`, `device_lost`, refus de
+  staging : zéro).
+- **Le pool TTM ne change rien de mesurable** sur une série : prefill long à
+  +0,1 à +0,2 %, décode en code resserré. La passe 2 à 31,9 s vient de
+  `creation` (20,4 s ; 51 requêtes contre 49 sur la série, donc sans doute
+  plus d'appels d'outils du modèle, transcript non relu), les débits ne
+  bougeant pas. À revoir : la première requête `refactor` à
+  744 t/s en prefill (1 282 aux deux autres séries), une seule mesure, juste
+  après le chargement.
+- **Le pool rend bien la mémoire** : en basculant de Flash-Next au 27B par
+  llama-swap, la RAM disponible remonte de 21,2 à 60,4 Gio, et gufo calcule
+  pour le 27B un budget de cache RAM normal (`automatic_bytes` 32,9 Go) ;
+  Flash-Next rechargé, 20,5 Gio disponibles (21,0 avant le flash, la
+  différence est la VRAM). L'intérêt annoncé du pool (fragmentation) ne se
+  verrait que sur une longue durée avec beaucoup de bascules : non mesuré.
+- **Chargement de Flash-Next** à 111 à 118 s contre 104 s : chaque série suit
+  un redémarrage de la machine, cache de fichiers froid, donc non attribué.
+
+Constats de la soirée sur la machine, hors mesures :
+
+- **La veille ne reprend pas** : `systemctl suspend` entre en `s2idle` et ne
+  ressort jamais (deux essais, 20:00 et 21:10, en BIOS 1.09 ; ni paquet
+  magique, ni appui court, seul l'appui de 10 s). Défaut décrit à
+  l'identique en 1.09 et en 1.11 par un tiers
+  (gist `hjanuschka/164f82bcc0121a6c13902e5693e1d7fd` : le firmware
+  n'implémente que la séquence Modern Standby, contournement
+  `module_blacklist=amd_pmc`, non essayé ici). Les cibles `sleep` et
+  `suspend` étaient masquées, l'utilisateur les a remasquées.
+- **Wake-on-LAN** : fonctionne depuis l'arrêt complet (paquet magique en
+  diffusion sur le réseau local vers la MAC de `enp97s0`, machine joignable
+  en 26 s, ErP sur Disable) ; pas par Tailscale, pas depuis la veille.
+- **Ventilateurs** : ni commande ni vitesse exposées à Linux sur cette carte.
+- **Consommation** : la prise mesurée est passée de 25 à 48 W à 19:48:03,
+  avant le flash ; silentchuck était au repos (processeur à 5 à 7 W, GPU à
+  0 %) et la prise tirait encore 42 à 46 W machine éteinte. Cause probable,
+  non confirmée : un autre appareil sur la même prise (reconfiguration des
+  écrans du portable à 19:48:04). Ni gufo 0.13.0 ni le BIOS en cause.
+- gufo n'a pas redémarré seul au premier démarrage après le flash
+  (conteneur « Exited (0) », relancé par `--start`), puis l'a fait au
+  suivant : cause non établie.
+
 ## Release v0.13.0 (12/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
 
 Demande de l'utilisateur du 12/10/2026, en une réponse (« applique et test
