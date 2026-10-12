@@ -154,13 +154,14 @@ Constats de la soirée sur la machine, hors mesures :
 - **Ventilateurs** : ni commande ni vitesse exposées à Linux sur cette carte.
 - **Consommation** : la prise mesurée est passée de 25 à 48 W à 19:48:03,
   avant le flash ; silentchuck était au repos (processeur à 5 à 7 W, GPU à
-  0 %). Cause probable, non confirmée : l'écran branché en HDMI sur
-  silentchuck (`HDMI-A-1` connectée et active en 2560x1440, `consoleblank=0`
-  donc jamais mis en veille), passé du portable à silentchuck à 19:48:04
-  (le portable perd sa sortie à cette seconde) et alimenté par la même
-  prise ; l'utilisateur indique que silentchuck y est seule, à vérifier en
-  éteignant l'écran. Ni gufo 0.13.0 ni le BIOS en cause. (Les 42 à 46 W lus
-  vers 20:09 « machine éteinte » ne prouvent rien : arrêt encore en cours.)
+  0 %). **Cause : l'écran branché en HDMI sur silentchuck**, passé du
+  portable à silentchuck à 19:48:04 (`HDMI-A-1` active en 2560x1440,
+  `consoleblank=0` donc jamais mise en veille). Confirmé à 23:10:43 : câble
+  HDMI débranché par l'utilisateur, la prise tombe de 39,0 à 16,2 W en trois
+  secondes, processeur inchangé (5,7 W). Non tranché : si les 23 W sont
+  l'écran lui-même (alimenté par la même prise) ou le surcoût de la sortie
+  vidéo active dans la machine. Ni gufo 0.13.0 ni le BIOS en cause ; repos
+  avec Flash-Next chargé, sans écran : 16 W.
 - gufo n'a pas redémarré seul au premier démarrage après le flash
   (conteneur « Exited (0) », relancé par `--start`), puis l'a fait au
   suivant : cause non établie.
