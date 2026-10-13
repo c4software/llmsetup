@@ -92,7 +92,8 @@ l'utilisateur ce jour-là (19:14, 19:34, 19:47), prefill à 52k 1 430,6 puis
 1 292,9 puis 1 521,5 t/s, contre 1 597,0 à la référence du 12/10 : quel
 réglage pour quelle série, non noté. **La référence du 12/10 (22:19) ne vaut
 donc plus pour le prefill long** ; la 0.14.0 se compare à la série 0.13.0 de
-19:47, supposée prise aux mêmes limites (non vérifié).
+19:47, prise aux mêmes limites (confirmé par l'utilisateur le soir même :
+elles étaient déjà en place à 19:47).
 
 | Flash-Next, 1 session, silentchuck | 0.13.0, référence du 12/10 (22:19) | 0.13.0 (13/10, 19:47, limites de puissance changées) | 0.14.0 (13/10, 21:46) |
 |---|---|---|---|
@@ -118,7 +119,7 @@ Lecture :
 - **Prefill long : 4 % sous la référence du 12/10, non attribuable à la
   0.14.0.** Contre la série 0.13.0 de 19:47, +0,7 % à 52k, +0,5 % à 32k,
   +2,2 à +2,5 % à 6,5k : une série de chaque côté, limites de puissance
-  supposées égales, donc sans conclusion au-delà de « pas de baisse
+  égales (confirmé par l'utilisateur), donc sans conclusion au-delà de « pas de baisse
   visible ». Rien dans la release ne vise le prefill.
 - **Premier token des petites requêtes : 154 ms contre 256 à 259 ms**
   (médiane, n = 18 contre 21), et le tour 2 du banc de cache à 0,175 s
