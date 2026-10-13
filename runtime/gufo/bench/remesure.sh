@@ -27,9 +27,9 @@
 # (avec-cache/, sans-cache/) dans resultats/agentic/<TAG>/. Le banc HTTP
 # ajoute ses lignes à resultats/resultats.tsv (colonne date).
 #
-# SANS_CACHE=1 retire --cache-disk et --cache-disk-staging-bytes de la macro
-# gufo de gufo-llama-swap.yaml le temps de la série (copie de sauvegarde,
-# restaurée par trap) : sert à vérifier une affirmation amont sur la reprise
+# SANS_CACHE=1 retire --cache-disk et --cache-disk-staging-bytes des lignes de
+# commande de gufo-llama-swap.yaml (dans la macro gufo jusqu'à la 0.13.0) le
+# temps de la série (copie de sauvegarde, restaurée par trap) : sert à vérifier une affirmation amont sur la reprise
 # des préfixes partagés sans disque (#259, #267). Refusé si le fichier a des
 # modifications locales. Rien n'est commité. agentic.sh refusant DEBUG=1 sur
 # un yaml modifié, le -v de cette série est posé ici, dans la même copie.

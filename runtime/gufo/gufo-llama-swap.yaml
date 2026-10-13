@@ -78,7 +78,32 @@
 #                         pour Flash-Next à contexte plein. Changer la
 #                         configuration rend ce cache inutilisable. Partagé
 #                         entre les modèles (l'identité du cache inclut le
-#                         modèle).
+#                         modèle) jusqu'à la 0.13.0.
+#                         Depuis la 0.14.0 (gufo-org/gufo#573, Flash-Next
+#                         servi par le nouveau cache par composants, le 27B
+#                         et DeepSeek gardant l'ancien), ces options ne sont
+#                         plus dans la macro commune mais sur chaque ligne
+#                         de commande :
+#                         - Flash-Next a son dossier, GUFO_CACHE/flash-next
+#                           (créé par runtime.sh, sous le même montage) : un
+#                           seul serveur Flash-Next possède son dossier, et
+#                           il y SUPPRIME au démarrage les *.kvc et .tmp-*
+#                           de l'ancien format, ceux des autres modèles
+#                           compris, écritures en cours comprises
+#                           (docs/SERVER.md de gufo : ne pas partager un
+#                           dossier entre Flash-Next et les autres). Son
+#                           budget de 16 Gio compte désormais tous les
+#                           fichiers, écritures inachevées comprises, et
+#                           s'ajoute aux 16 Gio du dossier des deux autres ;
+#                         - Flash-Next n'a plus de staging : il ignore
+#                           --cache-disk-staging-bytes (event=option_ignored)
+#                           et passe chaque point de reprise par un tampon
+#                           interne de 1 Mio ; docs/SERVER.md demande de
+#                           retirer l'option de ses lignes de commande ;
+#                         - le 27B et DeepSeek gardent GUFO_CACHE et le
+#                           staging de 8 Gio, inchangés.
+#                         Une ligne par option de cache : remesure.sh les
+#                         retire par sed pour sa série SANS_CACHE=1.
 # =============================================================================
 
 # Flash-Next ou DeepSeek à froid : ~80 s ; marge pour un disque chargé.
@@ -103,8 +128,6 @@ macros:
   "gufo": >-
     gufo serve llm --host 127.0.0.1 --port ${PORT}
     --context 262144 --sessions ${env.GUFO_SESSIONS}
-    --cache-disk ${env.GUFO_CACHE} --cache-disk-bytes 17179869184
-    --cache-disk-staging-bytes 8589934592
   # Qwen sans raisonnement (sections nothink du service). Échantillonnage
   # officiel Qwen laissé à gufo depuis la 0.2.0 (gufo-org/gufo#282) : profil
   # sans raisonnement 0,7 / top-p 0,8 / top-k 20 / presence 1,5, exactement nos
@@ -135,6 +158,8 @@ models:
     name: "Qwen3.8-27B (gufo, DFlash 2)"
     cmd: >-
       ${gufo} --served-model-name qwen3.8-27b
+      --cache-disk ${env.GUFO_CACHE} --cache-disk-bytes 17179869184
+      --cache-disk-staging-bytes 8589934592
       --model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-UD-Q4_K_XL.gguf
       --speculative dflash2
       --dflash-model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q8_0.gguf
@@ -150,6 +175,7 @@ models:
     name: "Qwen3.8-Flash-Next (gufo, MTP)"
     cmd: >-
       ${gufo} --served-model-name qwen3.8-flash-next
+      --cache-disk ${env.GUFO_CACHE}/flash-next --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/qwen3.8-flash-next/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
       --speculative mtp
       --mtp-model ${env.MODELS_BASE}/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
@@ -173,6 +199,8 @@ models:
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-
       ${gufo} --served-model-name deepseek-v4-flash
+      --cache-disk ${env.GUFO_CACHE} --cache-disk-bytes 17179869184
+      --cache-disk-staging-bytes 8589934592
       --model ${env.MODELS_BASE}/gufo/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
       --speculative dspark
       --dspark-model ${env.MODELS_BASE}/gufo/DeepSeek-V4-Flash-DSpark-support-0731.gguf

@@ -117,7 +117,9 @@ de modèles à copier d'une machine à l'autre. Le `--cleanup` du service
 épargne ce dossier parce que ce runtime le **réserve** (`RT_PARC_RESERVE`,
 contrat) : aucun de ses modèles ne le référence, il le verrait sinon orphelin. Avant cette date ils étaient dans `GUFO_DATA/models`.
 
-Le cache disque de gufo (16 Gio au plus) est dans `GUFO_CACHE`, par défaut
+Le cache disque de gufo (16 Gio au plus pour le 27B et DeepSeek, autant dans
+son sous-dossier `flash-next/` depuis gufo 0.14.0, où Flash-Next ne partage
+plus son dossier) est dans `GUFO_CACHE`, par défaut
 `~/.local/state/llm-setup/gufo-cache`, à côté de celui du service
 (`GUFO_DATA/cache` avant le 09/10/2026). Il se reconstruit seul : inutile de
 le copier d'une machine à l'autre.
