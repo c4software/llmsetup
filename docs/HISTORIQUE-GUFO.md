@@ -20,6 +20,135 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.14.0 (13/10/2026), en essai, Flash-Next seul remesuré sur silentchuck
+
+Demande de l'utilisateur du 13/10/2026 (« on test oui flash-next ») : monter
+et remesurer Flash-Next seul. Image épinglée en `gufo-runtime:0.14.0`
+(`0c69a12`), publiée à 13:04 UTC, 19 minutes après la release.
+**Décision de garder ou non la version : pas encore prise.** Le 27B n'est
+pas remesuré. `remesure.sh flashnext` de 21:45 à 21:53 (`remesure.log` de
+`~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-10-13-0.14.0/`. 16/16, pas de boucle. Vérifié après
+la remesure : `GUFO_IMAGE` en 0.14.0 dans le `.env` d'usage,
+`gufo version 0.14.0 (6cdc73c)` dans le conteneur, Flash-Next préchargé, les
+huit modèles dans `/v1/models`, une requête avec `stop` en direct sur `:8009`
+(« 1 à 4 », `finish_reason` stop). Proxy, voix, transcription et image non
+revérifiés.
+
+Contenu (notes de release, diff de documentation v0.13.0...v0.14.0, PR #573
+et #460 lues) :
+
+- **#573, Flash-Next servi par le nouveau cache par composants** (carte 19
+  de la refonte ; le 27B et DeepSeek gardent l'ancien cache) : points de
+  reprise choisis entre slots vivants, RAM et disque ; pages du cache RAM
+  épinglées à la demande par pas d'environ 1 Gio, jusqu'à 89 % du budget,
+  en gardant 4 Gio à l'hôte (#572) ; lectures disque préparées par quatre
+  threads (annoncé : restauration à froid de 157k tokens en 1,3 à 1,4 s
+  contre 8,7 à 9,9 s). Changements de comportement annoncés :
+  - un seul serveur Flash-Next par dossier `--cache-disk` (fichier `LOCK`,
+    le second échoue au démarrage, sans attendre) ;
+  - **au premier démarrage, Flash-Next supprime du dossier les `*.kvc` et
+    `.tmp-*` de l'ancien format, ceux des autres modèles compris**,
+    écritures en cours comprises ;
+  - `--cache-disk-bytes` compte tous les fichiers, écritures inachevées
+    comprises ; un budget abaissé évince au démarrage, par ordre de création ;
+  - `--cache-disk-staging-bytes` ignoré par Flash-Next
+    (`event=option_ignored`), tampon interne de 1 Mio ; les grandes valeurs
+    conseillées jusque-là affamaient le cache (#562).
+- **#460, repli `hipMallocManaged`** quand le pool du device est épuisé
+  (poids en mémoire gérée). Mesuré en amont sans régression à ±1 % sur
+  gfx1151 tant que le tas suffit, ce qui est notre cas (GTT 124 Gio).
+- Rien pour le 27B ni pour DeepSeek. Quatre commits postérieurs à la
+  release, absents de l'image : #571 (noyaux de prefill large de Flash-Next),
+  #582, #585, #583.
+
+Confrontation des paramètres (13/10/2026) : `gufo serve llm --help` comparé
+entre les images 0.13.0 et 0.14.0 sur silentchuck, **aucune option ajoutée
+ni retirée, trois descriptions changées** (`--cache-ram-bytes` : Flash-Next
+en engage l'essentiel ; `--cache-disk` : dossier possédé par un processus ;
+`--cache-disk-staging-bytes` : pour Flash-Next, tampon de transfert de 1 Mio
+et non plus une limite de taille). Première montée depuis la 0.9.1 où
+`docs/SERVER.md` change le sens de nos réglages, d'où **deux changements de
+`gufo-llama-swap.yaml`, acceptés par l'utilisateur avant l'épinglage** :
+
+- Flash-Next a son dossier de cache, `GUFO_CACHE/flash-next` (créé par
+  `rt_gufo_avant_demarrage`, sous le montage existant) ; le 27B et DeepSeek
+  gardent `GUFO_CACHE`. Sans cela, les points de reprise du 27B étaient
+  supprimés par Flash-Next. 16 Gio chacun, donc 32 Gio au plus sur disque.
+- `--cache-disk-staging-bytes 8589934592` retiré de la ligne de Flash-Next,
+  gardé sur le 27B et DeepSeek. Les options de cache quittent la macro
+  commune `gufo` pour la ligne de chaque modèle.
+
+Aucun des tickets suivis (#200, #228, #239, #299) n'a bougé, aucune question
+ne nous est posée.
+
+**Machine changée le jour même, hors de cette montée** : limites de
+puissance du BIOS de silentchuck modifiées par l'utilisateur le 13/10/2026
+avant 19:14, relevé qu'il en donne le soir : `PowerLimit Setting` Balanced,
+`System Configuration` 120W, `SPL Control` Auto, `PPT Control` Manual,
+`Fast PPT Limit` 120000, `Slow PPT Limit` 110000, `Slow PPT Time Constant`
+0, `TjMax` 0. Valeurs d'avant non relevées. Trois séries 0.13.0 de
+l'utilisateur ce jour-là (19:14, 19:34, 19:47), prefill à 52k 1 430,6 puis
+1 292,9 puis 1 521,5 t/s, contre 1 597,0 à la référence du 12/10 : quel
+réglage pour quelle série, non noté. **La référence du 12/10 (22:19) ne vaut
+donc plus pour le prefill long** ; la 0.14.0 se compare à la série 0.13.0 de
+19:47, supposée prise aux mêmes limites (non vérifié).
+
+| Flash-Next, 1 session, silentchuck | 0.13.0, référence du 12/10 (22:19) | 0.13.0 (13/10, 19:47, limites de puissance changées) | 0.14.0 (13/10, 21:46) |
+|---|---|---|---|
+| banc HTTP, justesse | OK | tour 2 à 100 % : OK, reste non relu | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4k, `bench` (t/s) | non repris ici | non relu | 1 234 à 1 455 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 282 à 1 405 | non relu | 1 338 à 1 432 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 492 et 1 495 / 1 597,0 / 1 607,1 | 1 396 et 1 412 / 1 521,5 / 1 534,8 | 1 431 et 1 443 / 1 532,0 / 1 542,4 |
+| décode code (t/s) | 67,8 à 73,2 | non relu | 71,7 à 72,7 |
+| chargement, mémoire | 117,8 s, 108 805 Mio | non relu | 97,7 s, 109 611 Mio |
+| tour 2 du cache, premier token | non repris ici | 0,341 s | 0,175 s |
+| agentique, cache disque | 16/16, 49 requêtes, repris 98,8 %, prefill 6 s, décode 70 s à 53,7 t/s, acceptance 85,7 % | 49 requêtes, repris 98,9 %, prefill 6 s, décode 71 s à 52,5 t/s, acceptance 84,6 % | 16/16, 49 requêtes, repris 93,7 %, prefill 7 s, décode 70 s à 51,7 t/s, acceptance 85,7 % |
+| reprises disque / RAM / ratés | 3 / 46 / 0 | 3 / 46 / 0 | 0 / 46 / 3 (`no_compatible_boundary`) |
+| points de reprise disque écrits | 0 (66 refus `min_step`) | 0 (63 refus `min_step`) | 21 publiés (26 refus `min_step`) |
+| passes 1/2/3 (s) | 29,4 / 26,4 / 25,3 | non relu | 27,0 / 26,3 / 26,5 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 256 ms | 259 ms | 154 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16, aucun
+  `generation_failed`, aucun `device_lost`, aucun `backing_limited`, aucun
+  `ram_reduced`, aucune erreur dans les journaux hors le `404` connu du
+  préchargement.
+- **Prefill long : 4 % sous la référence du 12/10, non attribuable à la
+  0.14.0.** Contre la série 0.13.0 de 19:47, +0,7 % à 52k, +0,5 % à 32k,
+  +2,2 à +2,5 % à 6,5k : une série de chaque côté, limites de puissance
+  supposées égales, donc sans conclusion au-delà de « pas de baisse
+  visible ». Rien dans la release ne vise le prefill.
+- **Premier token des petites requêtes : 154 ms contre 256 à 259 ms**
+  (médiane, n = 18 contre 21), et le tour 2 du banc de cache à 0,175 s
+  contre 0,341 s. Seul gain net de la série, cohérent avec le nouveau cache
+  (lignes empruntées au lieu de copiées) ; une série.
+- **Reprise à 93,7 %, trois ratés** : le cache disque part de zéro (nouveau
+  dossier, nouveau format), les trois débuts de conversation que le disque
+  chaud reprenait en 0.13.0 sont recalculés (1 542 à 1 589 tokens chacun).
+  Ne se compare pas aux 98,8 %. À relire à la prochaine série, disque chaud.
+- **Nouveau cache disque exercé** : 21 points publiés pendant la boucle
+  (173 Mo pour 1,5k tokens), 7,7 Go dans `gufo-cache/flash-next` après la
+  série et la relance (`LOCK`, `v2/manifests`). Les 43 `.kvc` de l'ancien
+  dossier sont intacts. Budget RAM du cache : `automatic_bytes`
+  14 504 792 064, `max_bytes` 24 713 568 256, tampon de staging 1 048 576,
+  premier pas de pages en 60,5 ms. Durée des écritures non lue (champ non
+  repéré). Reprise après redémarrage et relecture du disque : non exercées.
+- **Décode inchangé** : code 71,7 à 72,7 t/s, agentique 51,7 t/s contre 52,5
+  à 19:47, acceptance 85,7 %.
+- **`journal.py` ne lit pas le nouveau schéma** (`component-cache-v1`) : il
+  affiche « points de reprise disque écrits 0, refusés 0 » là où le journal
+  porte 21 `event=published` et 26 `event=persistence_refused`. Chiffres du
+  tableau comptés à la main. À corriger avant la prochaine série.
+- Toujours là : `.out` agentique à 0 token et `failed to preload … 404` au
+  lancement du banc.
+
+Non mesuré : le 27B et DeepSeek (ancien cache, dossier inchangé : non
+redémarrés en 0.14.0), #460 (repli non atteint), la reprise après crash, le
+verrou du dossier (un seul serveur Flash-Next ; le banc et l'usage réel ne
+tournent jamais ensemble), une restauration disque profonde.
+
 ## Découpage en runtimes (09/10/2026) : gufo devient un runtime du dépôt
 
 Décision de l'utilisateur du 09/10/2026, après un essai jugé concluant et une

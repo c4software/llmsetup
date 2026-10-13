@@ -112,6 +112,18 @@ la synthèse et ce qui sert au travail courant.
   nos bancs (les lecteurs sont là, 133 threads contre 37). Décode en code
   70,2 à 71,7 t/s, agentique 53,1 t/s, acceptance 85,7 %. Reprise 99,1 % sans
   raté sur cache disque chaud, aucune écriture. 27B non remesuré.
+- **0.14.0** (13/10/2026, **en essai**, décision non prise) :
+  Flash-Next servi par le nouveau cache par composants (#573 ; le 27B et
+  DeepSeek gardent l'ancien), repli `hipMallocManaged` (#460). Flash-Next
+  supprime désormais les `*.kvc` des autres modèles dans son dossier et
+  ignore `--cache-disk-staging-bytes` : **yaml changé**, dossier
+  `GUFO_CACHE/flash-next` pour lui, staging retiré de sa ligne. Flash-Next
+  seul remesuré sur silentchuck, une série, 16/16, pas de boucle, aucune
+  erreur. Premier token des petites requêtes 154 ms contre 256 ms. Prefill
+  à 52k 1 532 t/s : 4 % sous la référence du 12/10, mais les limites de
+  puissance du BIOS ont été changées le 13/10, et +0,7 % contre la série
+  0.13.0 du même soir. Reprise 93,7 % sur cache disque froid (nouveau
+  dossier), 21 points publiés. 27B non remesuré.
 - **À vérifier à la prochaine release** : la refonte du cache (reprise après
   crash non exercée ; trois débuts de conversation recalculés par le 27B à
   la série 0.11.0 puis par Flash-Next à la série 0.12.0, pas en 0.13.0, cause
@@ -126,7 +138,13 @@ la synthèse et ce qui sert au travail courant.
   la machine de mesure (0.11.0 à 0.13.0 mesurées sur silentchuck seulement ;
   **plateforme changée le 12/10/2026 au soir**, BIOS 1.11, EC 0.17, VRAM
   1 Gio, `ttm.page_pool_size` : la référence est la série 0.13.0 de 22:19,
-  entrée « Plateforme de silentchuck » du journal) ;
+  entrée « Plateforme de silentchuck » du journal ; **limites de puissance
+  du BIOS changées le 13/10/2026**, valeurs d'avant non relevées : cette
+  référence ne vaut plus pour le prefill long, entrée v0.14.0 du journal) ;
+  la 0.14.0 (reprise sur cache disque chaud du nouveau format, reprise
+  après redémarrage, 27B et DeepSeek non redémarrés sous elle) ;
+  `bench/journal.py`, qui ne lit pas les événements du nouveau cache de
+  Flash-Next (`published`, `persistence_refused`) ;
   l'ordre de `remesure.sh` (les
   écritures lentes de Flash-Next sont apparues juste après le 27B, qui
   remplit et évince le cache disque ; en 0.10.0, Flash-Next mesuré seul
@@ -151,7 +169,7 @@ la synthèse et ce qui sert au travail courant.
   ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
   commit `d9a84f1` le 26/09/2026, sur la v0.1.1 le 28/09/2026 (27B et
   Flash-Next), la v0.2.0 le 29/09/2026 (27B, Flash-Next et DeepSeek), puis la
-  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0 et la v0.13.0 (Flash-Next seul de la v0.7.1 à la v0.8.1 et en v0.13.0, les deux Qwen de la v0.9.0 à la v0.12.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
+  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0 et la v0.14.0 (Flash-Next seul de la v0.7.1 à la v0.8.1, en v0.13.0 et en v0.14.0, les deux Qwen de la v0.9.0 à la v0.12.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
   précèdent toute release : la v0.1.0 n'est publiée que le 28/09/2026.
 - Pas un llama.cpp : noyaux spécialisés par modèle et par forme de matrice,
   en partie adaptés de llama.cpp / ggml (MIT, cf. leur
@@ -376,6 +394,7 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.11.0 (`e3c0d4c`) | 10/10/2026 | retenue | première livraison de la refonte du cache de continuation (#493 à #517 : index de préfixes, baux de slots, manifestes disque, publication avec reprise après crash, éviction), frontière vivante à la restauration d'un point de reprise emprunté (#476), noyaux de décodage de Flash-Next (#518), images dans les résultats d'outils (#506, non essayé) ; **mesurée sur silentchuck**, contre les séries 0.10.0 du 09/10 au soir sur cette machine, une série par modèle, 16/16 sur les deux, pas de boucle ; Flash-Next : décode à +6 à +8 % (71,5 à 72,5 t/s en code, 52,7 t/s en agentique), prefill long à +1,4 à +2,7 % (1 606 t/s à 52k, dans la dispersion), acceptance agentique 84,6 %, reprise 98,6 % sur cache disque chaud ; 27B au niveau de la 0.10.0, reprise 93,5 % avec trois débuts de conversation recalculés (cause non établie) ; cache disque de la 0.10.0 relu sans rejet, écriture au nouveau format exercée par le 27B seul (3 points en 231 à 236 ms), reprise après crash non exercée ; `.out` agentique à 0 token et `failed to preload … 404` sur silentchuck, dans les deux versions ; `--help` identique, aucun réglage changé |
 | v0.12.0 (`88090af`) | 11/10/2026 | retenue | snapshots de Flash-Next gardés dans la marge du device (#549, ferme #487 : `generation_failed` puis segfault quand la GTT est pleine), arguments des appels d'outils natifs diffusés au fil de l'eau (#534), adaptateur de continuation de Flash-Next livré inactif (#536), images et `count_tokens` sur `/v1/messages` (#510, #512, non essayés), `input_tokens` de Messages sans les lectures de cache (#530) ; mesurée sur silentchuck contre la 0.11.0, une série, 27B puis Flash-Next, 16/16 sur les deux, pas de boucle ; 27B identique ; Flash-Next : prefill long 1 à 2 % plus bas (1 589 t/s à 52k, dans la dispersion), décode en code 68,1 à 73,9 t/s et décode agentique 55,7 t/s (sans conclusion), acceptance 85,7 %, reprise 93,5 % avec trois débuts de conversation recalculés (cause non établie), 3 points écrits en 103 à 124 ms ; 27B repris à 98,8 % ; coût de #549 et gain de #534 non mesurés par nos bancs ; `--help` identique, aucun réglage changé |
 | v0.13.0 (`fcf8bf7`) | 12/10/2026 | retenue | 128 lecteurs n-gram pour Flash-Next (#551), `--stall-timeout-ms` (#541, sortie en `device_lost` sans progression, désactivée par défaut, non posée), `cache_prompt` sur `/v1/completions` et `/completion` (#557), `stream` booléen ou `null` (#544) ; Flash-Next seul remesuré sur silentchuck contre la 0.12.0, une série, mesuré seul, 16/16, pas de boucle ; prefill long à +0,2 à +0,6 % (1 599 t/s à 52k, dans la dispersion : gain de #551 non lisible dans nos bancs, 133 threads contre 37), décode en code 70,2 à 71,7 t/s, agentique 53,1 t/s, acceptance 85,7 %, reprise 99,1 % sans raté sur cache disque chaud, aucune écriture disque ; 27B non remesuré ; `--help` : une option ajoutée, aucun réglage changé |
+| v0.14.0 (`6cdc73c`) | 13/10/2026 | en essai | Flash-Next servi par le nouveau cache par composants (#573 : sélection entre slots, RAM et disque, pages épinglées à la demande, dossier `--cache-disk` possédé par un seul serveur qui y supprime les `*.kvc` de l'ancien format, `--cache-disk-staging-bytes` ignoré), repli `hipMallocManaged` (#460) ; **yaml changé** : dossier `GUFO_CACHE/flash-next` pour Flash-Next, staging retiré de sa ligne ; Flash-Next seul remesuré sur silentchuck, une série, 16/16, pas de boucle, aucune erreur ; premier token des petites requêtes 154 ms contre 256 ms ; prefill à 52k 1 532 t/s, 4 % sous la référence du 12/10 mais limites de puissance du BIOS changées le 13/10, +0,7 % contre la série 0.13.0 du même soir ; décode en code 71,7 à 72,7 t/s, agentique 51,7 t/s, acceptance 85,7 % ; reprise 93,7 % sur cache disque froid, 21 points publiés ; 27B non remesuré ; `--help` : aucune option ajoutée ni retirée |
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
@@ -497,9 +516,14 @@ depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
 l'échantillonnage suit les profils officiels des modèles (glouton avant), ses
 propres bancs restant en glouton. Les valeurs du tableau visent un usage
 agentique comparable au service ; aucune n'est un réglage interne du moteur.
-Dernière confrontation à la documentation amont : 12/10/2026, v0.13.0 (diff
+Dernière confrontation à la documentation amont : 13/10/2026, v0.14.0 (diff
 de documentation et `--help` des deux images comparés sur silentchuck) :
-une option ajoutée, `--stall-timeout-ms` (#541 : sortie en `device_lost`
+aucune option ajoutée ni retirée, mais le sens de trois options change pour
+Flash-Next (#573 : `--cache-disk` possédé par un seul serveur, qui y supprime
+les fichiers de l'ancien format ; `--cache-disk-staging-bytes` ignoré ;
+`--cache-ram-bytes` engagé par pas d'environ 1 Gio), d'où le dossier
+`GUFO_CACHE/flash-next` et le staging retiré de sa ligne ; en v0.13.0, une
+option ajoutée, `--stall-timeout-ms` (#541 : sortie en `device_lost`
 quand la génération ne progresse plus pendant ce délai, 0 par défaut donc
 désactivée, minimum 60000 ; non posée), aucune retirée, aucun défaut changé ;
 `--help` de la 0.12.0 identique à celui de la 0.11.0 et de la 0.10.0, lui-même identique
@@ -514,7 +538,7 @@ entières), un défaut changé, `--max-pending-per-client` (valeur de
 `--cache-ram-bytes` explicite peut dépasser le budget automatique (non posée) ;
 `--cache-disk` n'est plus le seul chemin de reprise d'un préfixe commun
 (#386), gardé après la remesure. Les
-confrontations datées (26/09, v0.1.1, v0.2.0, v0.4.0, v0.5.0, v0.7.0, v0.7.1, v0.8.0, v0.8.1, v0.9.0, v0.9.1, v0.10.0, v0.11.0, v0.12.0, v0.13.0) sont dans le
+confrontations datées (26/09, v0.1.1, v0.2.0, v0.4.0, v0.5.0, v0.7.0, v0.7.1, v0.8.0, v0.8.1, v0.9.0, v0.9.1, v0.10.0, v0.11.0, v0.12.0, v0.13.0, v0.14.0) sont dans le
 journal, à l'entrée de chaque version ; chaque montée de version y ajoute la
 sienne et met cette ligne à jour.
 
@@ -525,8 +549,8 @@ sienne et met cette ligne à jour.
 | `--max-tokens` | non posé (-1, jusqu'à EOS) | -1 depuis #276 (128 avant) | non indiqué | gufo, comme le service (llama.cpp à -1, aucun `n-predict` dans le ini) ; 32768 explicite jusqu'au 26/09/2026, quand le défaut de 128 coupait un client sans `max_tokens` |
 | échantillonnage | non posé (profil de gufo) ; temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 explicites pour Qwen, temp 1,0, top-k 40, top-p 0,95 pour DeepSeek jusqu'au 29/09/2026 | profil officiel du modèle depuis v0.2.0 (#282) : Qwen sans raisonnement 0,7 / 0,8 / 20 / 1,5, avec 1,0 / 0,95 / 20 / 0 ; DeepSeek 1,0 / 0,95 / top-k 0 ; glouton avant | aucun | gufo, depuis v0.2.0 : Qwen officiel, profil instruct, celui des sections nothink du service et de nos anciennes valeurs ; surchargeable par requête |
 | `--think` | off | raisonnement : Qwen effort xhigh, DeepSeek effort high depuis v0.2.0 (sans raisonnement avant) | non indiqué | nous : équivalent des sections nothink pour Qwen, mesuré le 02/10/2026 sur Flash-Next (0.2.0, boucle agentique pi, 3 passes) : `--think on --reasoning-effort xhigh` donne 16/16 aussi, mais 71,4 s par passe contre 30,9 s (x2,3, somme des médianes par scénario), 2,4 fois plus de tokens générés, décode 44,5 contre 50,4 t/s, acceptance MTP 76,2 contre 84,6 %, cache inchangé (93 %) ; à activer par requête côté client si besoin ; pour DeepSeek, raisonnement sans budget mesuré à +43 % de temps en agentique le 29/09/2026 (non posé entre la montée en 0.2.0 et cette mesure) |
-| `--cache-disk` | activé, 16 Gio | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations jusqu'à la 0.5.0 (mesuré) ; depuis la 0.7.0 la RAM l'apprend aussi (#386, mesuré le 04/10/2026 : reprise sans disque de 90 à 91,8 %, contre 93,6 % avec), gardé parce que le disque rapporte encore 1,4 à 1,8 point et 4 s de prefill sur le 27B, et que le cache RAM est perdu à chaque redémarrage et à chaque bascule de modèle par llama-swap ; 16 Gio car partagé entre les modèles et un point de reprise Flash-Next de session réelle pèse 1,5 Go (8 Gio en garde environ 5), et `docs/SERVER.md` demande plus que les défauts pour le 27B à contexte long. Passé au défaut de 8 Gio le matin du 26/09/2026, remis à 16 Gio le jour même |
-| `--cache-disk-staging-bytes` | 8 Gio | automatique : depuis v0.9.1 (#473) le plus petit de 1/8 de la RAM disponible et du budget disque ; de #279 à la 0.9.0, au plus 1 Gio en plus (512 Mio fixes avant) | non utilisé | nous : au défaut d'avant #473, les points de reprise du 27B étaient refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; depuis #473 le défaut suffit au 27B (10,6 Gio résolus le 08/10/2026, aucun refus) mais tomberait vers 2 Gio pour Flash-Next (estimation), où le huitième de la RAM borne ; non préalloué. Valeur que `docs/SERVER.md` recommande désormais pour Flash-Next à contexte plein |
+| `--cache-disk` | activé, 16 Gio | désactivé (8 Gio si activé depuis #279) | non utilisé | nous : seul chemin de reprise d'un préfixe commun entre conversations jusqu'à la 0.5.0 (mesuré) ; depuis la 0.7.0 la RAM l'apprend aussi (#386, mesuré le 04/10/2026 : reprise sans disque de 90 à 91,8 %, contre 93,6 % avec), gardé parce que le disque rapporte encore 1,4 à 1,8 point et 4 s de prefill sur le 27B, et que le cache RAM est perdu à chaque redémarrage et à chaque bascule de modèle par llama-swap ; 16 Gio car partagé entre les modèles et un point de reprise Flash-Next de session réelle pèse 1,5 Go (8 Gio en garde environ 5), et `docs/SERVER.md` demande plus que les défauts pour le 27B à contexte long. Passé au défaut de 8 Gio le matin du 26/09/2026, remis à 16 Gio le jour même ; depuis la 0.14.0 (13/10/2026) Flash-Next a son dossier, `GUFO_CACHE/flash-next`, 16 Gio aussi : il possède son dossier et y supprime les fichiers de l'ancien format, ceux des autres modèles compris (#573) ; le 27B et DeepSeek gardent `GUFO_CACHE` |
+| `--cache-disk-staging-bytes` | 8 Gio | automatique : depuis v0.9.1 (#473) le plus petit de 1/8 de la RAM disponible et du budget disque ; de #279 à la 0.9.0, au plus 1 Gio en plus (512 Mio fixes avant) | non utilisé | nous : au défaut d'avant #473, les points de reprise du 27B étaient refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; depuis #473 le défaut suffit au 27B (10,6 Gio résolus le 08/10/2026, aucun refus) mais tomberait vers 2 Gio pour Flash-Next (estimation), où le huitième de la RAM borne ; non préalloué. Valeur que `docs/SERVER.md` recommande désormais pour Flash-Next à contexte plein ; depuis la 0.14.0 (13/10/2026) retiré de la ligne de Flash-Next, qui l'ignore (tampon interne de 1 Mio, #573) et dont `docs/SERVER.md` ne le recommande plus ; gardé sur le 27B et DeepSeek |
 | spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
 | `--max-pending-per-client` | non posé (16 depuis la 0.9.0, 4 avant) | valeur de `--max-pending` (16) depuis v0.9.0 (#467), 4 avant | non indiqué | gufo ; derrière llama-swap, toutes les requêtes viennent de 127.0.0.1 : jusqu'à la 0.8.1, 4 en file au plus pour tous les clients réunis (aucun rejet vu), 16 depuis |
 | fichiers | Flash-Next UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q8_0 | | UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q4_K_M | gufo, sauf le drafter du 27B pris dans le parc (Q8_0, mesuré identique au Q4_K_M) |
