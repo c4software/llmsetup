@@ -20,12 +20,13 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
-## Release v0.14.0 (13/10/2026), en essai, Flash-Next seul remesuré sur silentchuck
+## Release v0.14.0 (13/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
 
 Demande de l'utilisateur du 13/10/2026 (« on test oui flash-next ») : monter
 et remesurer Flash-Next seul. Image épinglée en `gufo-runtime:0.14.0`
 (`0c69a12`), publiée à 13:04 UTC, 19 minutes après la release.
-**Décision de garder ou non la version : pas encore prise.** Le 27B n'est
+**Version retenue par l'utilisateur sur cette série** (« on garde la
+version 0.14.0 », le soir même). Le 27B n'est
 pas remesuré. `remesure.sh flashnext` de 21:45 à 21:53 (`remesure.log` de
 `~/llm/gufo-test`), journaux agentiques dans
 `resultats/agentic/2026-10-13-0.14.0/`. 16/16, pas de boucle. Vérifié après
@@ -141,7 +142,9 @@ Lecture :
 - **`journal.py` ne lit pas le nouveau schéma** (`component-cache-v1`) : il
   affiche « points de reprise disque écrits 0, refusés 0 » là où le journal
   porte 21 `event=published` et 26 `event=persistence_refused`. Chiffres du
-  tableau comptés à la main. À corriger avant la prochaine série.
+  tableau comptés à la main. Corrigé le soir même à la demande de
+  l'utilisateur (les deux formats lus) : rejoué sur les deux journaux, 21
+  écrits et 26 refus `min_step` en 0.14.0, 0 et 63 en 0.13.0 comme avant.
 - Toujours là : `.out` agentique à 0 token et `failed to preload … 404` au
   lancement du banc.
 

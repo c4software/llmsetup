@@ -12,6 +12,13 @@
 # spéculatif sur les réponses de plus de 20 tokens, et les points de reprise
 # du cache disque écrits (action=stored) et refusés (action=skipped, par
 # exemple reason=staging_capacity).
+# Deux formats de journal du cache, selon le modèle et la version : l'ancien
+# cache (event=disk_cache action=stored / skipped ; tous les modèles jusqu'à
+# gufo 0.13.0, le 27B et DeepSeek ensuite) et le cache par composants de
+# Flash-Next depuis gufo 0.14.0 (schema=component-cache-v1 : event=published
+# pour un point écrit, event=persistence_refused reason=… pour un refus). Sans
+# le second, la série 0.14.0 du 13/10/2026 affichait 0 point écrit et 0 refus
+# pour 21 et 26.
 #
 # Usage : journal.py <journal gufo>...
 import re, statistics as st, sys
@@ -33,6 +40,11 @@ def bilan(chemin):
             elif "action=skipped" in ligne:
                 r = re.search(r"reason=(\S+)", ligne)
                 refus[r.group(1) if r else "?"] = refus.get(r.group(1) if r else "?", 0) + 1
+        elif "[cache]" in ligne and "event=published " in ligne:
+            ecrits += 1
+        elif "[cache]" in ligne and "event=persistence_refused " in ligne:
+            r = re.search(r"reason=(\S+)", ligne)
+            refus[r.group(1) if r else "?"] = refus.get(r.group(1) if r else "?", 0) + 1
         if "event=completed" in ligne and "path=/v1/chat/completions" in ligne:
             req.append(dict(re.findall(r"(\w+)=(\S+)", ligne)))
     print(chemin)
