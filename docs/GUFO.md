@@ -22,7 +22,8 @@ la synthèse et ce qui sert au travail courant.
   « Versions : synthèse »), remesurée à chaque montée ; derrière llama-swap,
   en `--think off`, 2 sessions, cache disque 16 Gio et staging 8 Gio ;
   réglages dans « Paramètres de gufo et leur origine ».
-- **Tickets** : les ouverts sont dans le tableau « À surveiller ». Notre
+- **Tickets** : les ouverts qui bougent encore sont dans le tableau
+  « À surveiller ». Notre
   ticket #388 (boucle d'appels d'outils de Flash-Next) a été fermé le
   03/10/2026 ; sa synthèse est dans « Ticket #388 ».
 - **Cache en 0.7.0** : #386 (préfixe partagé repris sans `--cache-disk`)
@@ -333,15 +334,14 @@ plus de commandes `gh`.
 
 ### À surveiller
 
-Tickets ouverts seulement : un ticket fermé sort du tableau, ce qu'il a
-changé reste dans le journal (#388, fermé le 03/10/2026, a sa synthèse plus
-bas ; #259, fermé le 07/10/2026, est dans « Tickets : synthèse »).
+Tickets ouverts et vivants seulement : un ticket fermé, ou ouvert mais
+qui ne bouge plus, sort du tableau, ce qu'il a changé reste dans le journal
+et dans « Tickets : synthèse » (#388, fermé le 03/10/2026, a sa synthèse
+plus bas ; #200, #228 et #239, ouverts mais immobiles, retirés le
+14/10/2026).
 
-| Ticket | Sujet | État au 02/10/2026 (#239 : au 05/10/2026, #228 : au 08/10/2026) |
+| Ticket | Sujet | État au 02/10/2026 |
 |---|---|---|
-| #239 | n-gram (prompt lookup) | ouvert ; résultat négatif en greedy, clôture proposée, puis jugé « worth experimenting » par le mainteneur (25/09), après les premiers bugs ; porte aussi le pool persistant de #263 depuis le 28/09 ; le 05/10/2026, un tiers (alytaphoenix) propose une cascade n-gram CPU puis MTP, la mesure sur llama.cpp avec de vrais transcripts d'agent et renonce : n-gram seul au niveau du sans-spéculation (27,1 % d'acceptance), cascade 10 à 20 % plus lente que le MTP seul ; test local à la requête et en glouton, le pool persistant n'est pas mesuré ; aucune question pour nous |
-| #228 | ROCm 10 | verdict gufo : rester sur ROCm 7.2.3 (décode -5 % en ROCm 10) ; le 06/10/2026, jtsylve attribue la baisse à clang 23 et non aux bibliothèques ROCm 10 (clang 22 sur ROCm 10 plus rapide que l'image 0.8.1 en Q8), PR #459, mergée le 07/10/2026 et livrée en 0.9.1 (image toujours en clang 22) ; clang 23 change le texte glouton de Flash-Next, portes de qualité à repasser avant d'y passer |
-| #200 | runtime HRX + noyaux Loom | ouvert depuis août, +3,6 % de prefill 27B |
 | #299 | PR : Qwen3.6-35B-A3B (`qwen35moe`, GDN + MoE 256 experts, MTP, DFlash 2), par slimsami, ouverte le 27/09 | **suivie à la demande de l'utilisateur** (28/09) : même architecture qu'Ornith-1.5-35B-A3B, notre modèle agentique par défaut (fine-tune de Qwen3.6-35B-A3B). Annoncé sur UD-Q6_K_XL : prefill 1 790 à 2 702 t/s contre 1 057 à 1 202 pour llama.cpp Vulkan, DFlash 2 à 83,3 t/s en glouton ; MTP pas encore branché dans `gufo serve`. À vérifier si elle est mergée : notre Ornith est en Q4_K_M (la PR ne cite que Q6_K et Q8_0 pour les experts), et gufo refuse les quants hors de ses formats ; le 30/09, **mise en attente par le mainteneur** : pas de nouveau modèle ni de nouvelle quant avant un produit stable avec les modèles actuels |
 
 Constat du 29/09/2026 (v0.2.0), non revu depuis : rien n'est suivi en amont
@@ -368,7 +368,22 @@ Historique complet dans le journal.
   refus sur une série agentique), environ 2 Gio estimés pour Flash-Next ;
   notre staging de 8 Gio reste.
 - **#239, n-gram** : ouvert, deux commentaires de notre part le 24/09/2026,
-  conception à pool persistant à suivre à part.
+  conception à pool persistant à suivre à part. Résultat négatif en
+  glouton, puis jugé « worth experimenting » par le mainteneur (25/09) ;
+  porte le pool persistant de #263 depuis le 28/09. Le 05/10/2026, un tiers
+  mesure sur llama.cpp une cascade n-gram CPU puis MTP avec de vrais
+  transcripts d'agent : n-gram seul au niveau du sans-spéculation (27,1 %
+  d'acceptance), cascade 10 à 20 % plus lente que le MTP seul (pool
+  persistant non mesuré). Retiré du tableau le 14/10/2026, immobile.
+- **#228, ROCm 10** : verdict gufo, rester sur ROCm 7.2.3 (décode -5 % en
+  ROCm 10) ; baisse attribuée le 06/10/2026 à clang 23 et non aux
+  bibliothèques ROCm 10, PR #459 mergée le 07/10/2026 et livrée en 0.9.1
+  (image toujours en clang 22) ; clang 23 change le texte glouton de
+  Flash-Next, portes de qualité à repasser avant d'y passer. Ouvert,
+  retiré du tableau le 14/10/2026, immobile.
+- **#200, runtime HRX + noyaux Loom** : ouvert depuis août, +3,6 % de
+  prefill 27B ; dernier commentaire le 29/08/2026, retiré du tableau le
+  14/10/2026.
 - **#272, GPU occupé à 100 % au repos** : le nôtre, du 25/09/2026, fermé par
   #317 en v0.2.0. Cause : plus de 8 files de calcul matérielles ouvertes,
   tous processus confondus. De notre contournement (`GPU_MAX_HW_QUEUES=1`,
@@ -641,7 +656,7 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
    `docs/HISTORIQUE-GUFO.md` (contenu, choix, tableau contre la mesure
    précédente, confrontation des paramètres), ligne dans « Versions :
    synthèse » de « Suivi en amont », tableau « À surveiller » (tickets fermés
-   retirés), tableau des paramètres (date de confrontation) ;
+   ou immobiles retirés), tableau des paramètres (date de confrontation) ;
    réponses aux tickets où l'on nous a posé une question, **rédigées puis
    montrées à l'utilisateur avant publication**.
 9. **Remettre l'usage réel** : `remesure.sh` relance le runtime qui servait ;
