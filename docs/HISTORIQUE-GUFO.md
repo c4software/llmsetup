@@ -20,6 +20,90 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.15.0 (14/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
+
+Montée demandée par l'utilisateur le 14/10/2026 après la lecture de la
+checklist (0.15.0, Flash-Next seul remesuré). **Version retenue par
+l'utilisateur sur cette série**, le jour même. Image épinglée en
+`gufo-runtime:0.15.0` (`7a96d63`), digest `451341e2249d`, publiée à
+22:13 UTC le 13/10, 20 minutes après la release. Aucun réglage changé : le
+dossier `GUFO_CACHE/flash-next` et le staging retiré de Flash-Next datent
+de la 0.14.0. `remesure.sh flashnext` de 14:57 à 15:05 (`remesure.log` de
+`~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-10-14-0.15.0/`. 16/16, pas de boucle. Vérifié
+après la remesure : `GUFO_IMAGE` en 0.15.0 dans le `.env` d'usage,
+`gufo-8009` relancé avec Flash-Next. Proxy, voix, transcription et image non
+revérifiés.
+
+Contenu (notes de release v0.14.0...v0.15.0, PR #589, #571 et #588 lues) :
+
+- **#589, correctif de la 0.14.0** : les pages du cache RAM de Flash-Next
+  venaient de `hipHostMalloc`, qui demande au noyau des pages d'ordre élevé ;
+  la RAM de l'hôte étant presque toute au GPU, le noyau compactait la mémoire
+  et bloquait le travail GPU en cours. Désormais `mmap` + `hipHostRegister`,
+  premier segment engagé en tâche de fond au démarrage. Corrige #588
+  (signalé en amont sur une autre Strix Halo : décode -5,7 % en moyenne,
+  jusqu'à -18,6 %, prefill -22 %, chargement 28,6 s contre 76,4 s,
+  premier token de la requête de chauffe 3,2 s) ; nos bancs 0.14.0 n'avaient
+  rien vu de tel. Un utilisateur mesure encore, en 0.15.0 contre 0.14.0,
+  +3 à 4 % de prefill et -4 à -5 % de décode (commentaire de #589).
+- **#571, noyaux de prefill large de Flash-Next** (lots de 1 024 tokens et
+  plus), logits identiques octet pour octet ; annoncé : pp2048 1 853 contre
+  1 826 t/s, AR 1 774 t/s à d0 et 1 649 à d32K (1 708 et 1 536 publiés
+  avant).
+- #585 (écoute IPv6) et #582 (schémas de réponse sans
+  `additionalProperties`) : sans effet ici.
+
+Confrontation des paramètres (14/10/2026) : `gufo serve llm --help` comparé
+entre les images 0.14.0 et 0.15.0 sur silentchuck, **aucune option ajoutée
+ni retirée, une description changée** (`--cache-ram-bytes` : Flash-Next
+épingle le budget par pas d'environ 1 Gio au fil des captures au lieu de
+l'engager au démarrage). Aucun des tickets suivis (#200, #228, #239, #299)
+n'a bougé.
+
+| Flash-Next, 1 session, silentchuck | 0.14.0 (13/10, 21:46) | 0.15.0 (14/10, 14:58) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4k, `bench` (t/s) | 1 234 à 1 455 | 1 302 à 1 524 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 338 à 1 432 | 1 377 à 1 500 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 431 et 1 443 / 1 532,0 / 1 542,4 | 1 450 et 1 506 / 1 600,8 / 1 608,7 |
+| décode code (t/s) | 71,7 à 72,7 | 71,0 à 72,9 |
+| chargement, mémoire | 97,7 s, 109 611 Mio | 79,2 s, 109 831 Mio |
+| tour 2 du cache, premier token | 0,175 s | 0,181 s |
+| agentique, cache disque | 16/16, 49 requêtes, repris 93,7 %, prefill 7 s, décode 70 s à 51,7 t/s, acceptance 85,7 % | 16/16, 51 requêtes, repris 99,1 %, prefill 3 s, décode 76 s à 52,2 t/s, acceptance 84,6 % |
+| reprises disque / RAM / ratés | 0 / 46 / 3 (`no_compatible_boundary`) | 12 / 39 / 0 |
+| points de reprise disque écrits | 21 publiés (26 refus `min_step`) | 0 (46 refus `min_step`) |
+| tokens générés (boucle) | 3 628 | 3 984 |
+| passes 1/2/3 (s) | 27,0 / 26,3 / 26,5 | 27,5 / 28,5 / 29,4 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 154 ms | 166 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16, aucun
+  `generation_failed`, `device_lost`, `backing_limited`, `ram_reduced` ni
+  `option_ignored` dans le journal de gufo.
+- **Prefill : +4,3 à +4,5 % à 32k et 52k**, +1 à +4 % à 6,5k, +3 à +5 % en
+  court ; à 52k, 1 600,8 t/s, au niveau de la référence du 12/10 (1 597,0)
+  malgré les limites de puissance du 13/10. Cohérent avec #571 ; une série.
+- **Décode inchangé** : code 71,0 à 72,9 t/s, agentique 52,2 contre
+  51,7 t/s. Les -4 % vus en amont ne se voient pas ici.
+- **Passes 0,5 à 2,9 s plus longues** : la boucle génère 9,8 % de tokens en
+  plus (3 984 contre 3 628), surtout sur `stats.js` (14,2 / 16,3 / 18,6 s,
+  une passe corrige son propre test) ; débits égaux ou meilleurs, donc la
+  longueur des réponses et non le moteur.
+- **Chargement 79,2 s contre 97,7 s** : premier segment du cache engagé en
+  tâche de fond (#589) ; une série.
+- **Cache disque chaud du nouveau format exercé** : reprise 99,1 % sans
+  raté, 12 reprises disque, aucun point écrit (tous les préfixes déjà
+  connus) ; `gufo-cache/flash-next` à 16 Gio après la série, budget plein.
+  Reprise après redémarrage exercée de fait (cache écrit par la 0.14.0, relu
+  par la 0.15.0) ; reprise après crash non exercée.
+- Toujours là : `.out` agentique à 0 token et `failed to preload … 404` au
+  lancement du banc.
+
+Non mesuré : le 27B et DeepSeek (rien pour eux dans la release), #460
+(repli non atteint), le verrou du dossier.
+
 ## Release v0.14.0 (13/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
 
 Demande de l'utilisateur du 13/10/2026 (« on test oui flash-next ») : monter
