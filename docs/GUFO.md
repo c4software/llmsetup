@@ -133,6 +133,17 @@ la synthèse et ce qui sert au travail courant.
   1 601 t/s (+4,5 % contre la 0.14.0, au niveau de la référence du 12/10),
   décode inchangé (agentique 52,2 t/s), chargement 79 s contre 98 s. Reprise
   99,1 % sur cache disque chaud du nouveau format. 27B non remesuré.
+- **0.15.1** (retenue le 15/10/2026) : correctifs du cache de Flash-Next
+  (#596 : images gardées dans un préfixe capturé, reprise après annulation,
+  points résidents comptés dans l'espacement disque, mémoire des captures
+  préparée avant le prefill ; #602 : empreintes sautées sans cache disque,
+  sans effet chez nous). Aucun réglage changé. Flash-Next seul remesuré sur
+  silentchuck contre la 0.15.0, une série, 16/16, pas de boucle, aucune
+  erreur. Banc HTTP au niveau de la 0.15.0 (prefill à 52k 1 603 t/s, décode
+  en code 66,9 à 77,1 t/s), décode agentique 50,4 t/s contre 52,2 (une
+  série, sans conclusion), chargement 82 s. Reprise 98,5 % sur cache disque
+  chaud, aucun point écrit (60 refus `min_step`, comme les 46 de la 0.15.0),
+  aucun `persistence_incomplete` : rien de #597 vu. 27B non remesuré.
 - **À vérifier à la prochaine release** : la refonte du cache (reprise après
   crash non exercée ; trois débuts de conversation recalculés par le 27B à
   la série 0.11.0 puis par Flash-Next à la série 0.12.0, pas en 0.13.0, cause
@@ -177,7 +188,7 @@ la synthèse et ce qui sert au travail courant.
   ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
   commit `d9a84f1` le 26/09/2026, sur la v0.1.1 le 28/09/2026 (27B et
   Flash-Next), la v0.2.0 le 29/09/2026 (27B, Flash-Next et DeepSeek), puis la
-  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0, la v0.14.0 et la v0.15.0 (Flash-Next seul de la v0.7.1 à la v0.8.1 et de la v0.13.0 à la v0.15.0, les deux Qwen de la v0.9.0 à la v0.12.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
+  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0, la v0.14.0, la v0.15.0 et la v0.15.1 (Flash-Next seul de la v0.7.1 à la v0.8.1 et de la v0.13.0 à la v0.15.1, les deux Qwen de la v0.9.0 à la v0.12.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
   précèdent toute release : la v0.1.0 n'est publiée que le 28/09/2026.
 - Pas un llama.cpp : noyaux spécialisés par modèle et par forme de matrice,
   en partie adaptés de llama.cpp / ggml (MIT, cf. leur
@@ -418,7 +429,7 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.13.0 (`fcf8bf7`) | 12/10/2026 | retenue | 128 lecteurs n-gram pour Flash-Next (#551), `--stall-timeout-ms` (#541, sortie en `device_lost` sans progression, désactivée par défaut, non posée), `cache_prompt` sur `/v1/completions` et `/completion` (#557), `stream` booléen ou `null` (#544) ; Flash-Next seul remesuré sur silentchuck contre la 0.12.0, une série, mesuré seul, 16/16, pas de boucle ; prefill long à +0,2 à +0,6 % (1 599 t/s à 52k, dans la dispersion : gain de #551 non lisible dans nos bancs, 133 threads contre 37), décode en code 70,2 à 71,7 t/s, agentique 53,1 t/s, acceptance 85,7 %, reprise 99,1 % sans raté sur cache disque chaud, aucune écriture disque ; 27B non remesuré ; `--help` : une option ajoutée, aucun réglage changé |
 | v0.14.0 (`6cdc73c`) | 13/10/2026 | retenue | Flash-Next servi par le nouveau cache par composants (#573 : sélection entre slots, RAM et disque, pages épinglées à la demande, dossier `--cache-disk` possédé par un seul serveur qui y supprime les `*.kvc` de l'ancien format, `--cache-disk-staging-bytes` ignoré), repli `hipMallocManaged` (#460) ; **yaml changé** : dossier `GUFO_CACHE/flash-next` pour Flash-Next, staging retiré de sa ligne ; Flash-Next seul remesuré sur silentchuck, une série, 16/16, pas de boucle, aucune erreur ; premier token des petites requêtes 154 ms contre 256 ms ; prefill à 52k 1 532 t/s, 4 % sous la référence du 12/10 mais limites de puissance du BIOS changées le 13/10, +0,7 % contre la série 0.13.0 du même soir ; décode en code 71,7 à 72,7 t/s, agentique 51,7 t/s, acceptance 85,7 % ; reprise 93,7 % sur cache disque froid, 21 points publiés ; 27B non remesuré ; `--help` : aucune option ajoutée ni retirée |
 | v0.15.0 (`89d6185`) | 14/10/2026 | retenue | correctif de #588 (#589 : pages du cache de Flash-Next épinglées sans compactage de la RAM de l'hôte), noyaux de prefill large de Flash-Next (#571, logits identiques) ; Flash-Next seul remesuré sur silentchuck contre la 0.14.0, une série, 16/16, pas de boucle, aucune erreur ; prefill à 52k 1 601 t/s (+4,5 %, au niveau de la référence du 12/10), décode inchangé (code 71,0 à 72,9 t/s, agentique 52,2 t/s ; les -4 % vus en amont ne se voient pas), chargement 79 s contre 98 s ; reprise 99,1 % sur cache disque chaud du nouveau format, relu après la montée ; passes 0,5 à 2,9 s plus longues, réponses plus longues (+9,8 % de tokens) ; `--help` : une description changée, aucun réglage changé |
-| v0.15.1 (`f711612`) | 15/10/2026 | montée, remesure de Flash-Next en cours | correctifs du cache de Flash-Next : #596 (images gardées dans un préfixe capturé, reprise sans prefill d'une requête relancée après annulation, points encore en RAM comptés dans l'espacement disque, mémoire des captures préparée avant le prefill ; 48/48 suites fonctionnelles en amont, capture C1 de 16–18 à ~25 ms) et #602 (empreintes des poids sautées sans cache disque, sans effet chez nous qui gardons `--cache-disk`) ; restent ouverts #597 (cache disque de Flash-Next qui cesse d'écrire puis bloque le décode, notre configuration) et #598 (décode et chargement en retrait sur la 0.13.0 chez un utilisateur, non vu dans notre série 0.15.0) ; aucun réglage changé |
+| v0.15.1 (`f711612`) | 15/10/2026 | retenue | correctifs du cache de Flash-Next : #596 (images gardées dans un préfixe capturé, reprise sans prefill d'une requête relancée après annulation, points encore en RAM comptés dans l'espacement disque, mémoire des captures préparée avant le prefill ; 48/48 suites fonctionnelles en amont, capture C1 de 16–18 à ~25 ms) et #602 (empreintes des poids sautées sans cache disque, sans effet chez nous qui gardons `--cache-disk`) ; Flash-Next seul remesuré sur silentchuck contre la 0.15.0, une série, 16/16, pas de boucle, aucune erreur ; banc HTTP au niveau de la 0.15.0 (prefill à 52k 1 603 t/s contre 1 601, décode en code 66,9 à 77,1 t/s contre 71,0 à 75,2), décode agentique 50,4 t/s contre 52,2 (une série, sans conclusion), acceptance 85,7 %, chargement 82 s ; reprise 98,5 % sur cache disque chaud (7 restaurations disque), aucun point écrit, 60 refus `min_step`, aucun `persistence_incomplete` (rien de #597, ouvert, vu) ; #598 (décode et chargement en retrait sur la 0.13.0 chez un utilisateur) non reproduit ; 27B non remesuré ; `--help` non comparé ; aucun réglage changé |
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
