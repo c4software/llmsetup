@@ -20,6 +20,105 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.17.0 (17/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
+
+Montée demandée par l'utilisateur le 17/10/2026 après la lecture de la
+checklist (0.17.0 plutôt que 0.16.0, Flash-Next seul remesuré). **Version
+retenue par l'utilisateur sur cette série**, le jour même. Image épinglée en
+`gufo-runtime:0.17.0` (`fc17bc5`), digest `a3df87bca3d3`, publiée à
+09:38 UTC, 13 minutes après la release. Aucun réglage changé.
+`remesure.sh flashnext` de 17:49 à 17:57 (`remesure.log` de
+`~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-10-17-0.17.0/` (`avant/` = la série 0.15.1 du
+15/10). 16/16, pas de boucle. Vérifié après la remesure : `GUFO_IMAGE` en
+0.17.0 dans le `.env` d'usage, `gufo-8009` relancé, `/v1/models` complet,
+`stop` respecté sur une requête directe à `:8009`. Proxy, voix,
+transcription et image non revérifiés. La 0.15.1 (15/10) n'a pas d'entrée
+ici : son résumé est dans « Versions : synthèse » de `docs/GUFO.md`.
+
+Contenu (notes de release v0.15.1...v0.17.0, diff de documentation lu) :
+
+- **#603, vocabulaire réduit pour les brouillons MTP de Flash-Next** (0.16.0) :
+  les 98 304 premiers tokens plus une table de 1 024 lignes (tokens spéciaux
+  et déjà vus dans la requête), tête complète en repli. Utilisé en C1, en
+  échantillonnage (les deux profils par défaut compris) comme en glouton.
+  La cible vérifie toujours sur son vocabulaire complet : logits identiques
+  octet pour octet, mais le texte échantillonné peut changer d'un build à
+  l'autre. Annoncé : MTP glouton +5 à +12 %, échantillonnage par défaut +3 à
+  +10 %. Un arrêt des brouillons sur la confiance a été rejeté en revue.
+- **#615, points de reprise moins coûteux en contexte long** (0.16.0) ;
+  annoncé : AR pp128K +7,5 %.
+- **#610, `/health` en 503 « Loading » pendant le chargement** (0.16.0) au
+  lieu d'une connexion refusée : sans effet ici, llama-swap n'accepte qu'un
+  200 (`healthCheckTimeout: 300` gardé).
+- **#616, sidecar vision préparé au chargement** (0.17.0) : empreinte et
+  upload des poids de l'encodeur avant le dimensionnement du cache RAM, poids
+  résidents même sans image, démarrage en échec s'ils ne tiennent pas. Chez
+  nous, le `--mmproj` de Flash-Next : `event=vision_prepared
+  resident_bytes=903984064 identity_ms=425 upload_ms=52`. Budget RAM du cache
+  14,32 Go contre 14,42 en 0.15.1, mémoire utilisée inchangée (110 934 contre
+  110 904 Mio).
+- **Cache** (0.17.0) : réutilisation gardée quand `tool_choice` change
+  (#623), attente de publication disque bornée par le coût observé du
+  prefill (#621, une admission de 120 s ramenée à ~33 s en amont), éviction
+  disque après la récupération des orphelins du démarrage (#625).
+- **#622, sélections de l'attention creuse compactées une fois par ligne**
+  (0.17.0). #626 (coût de l'attention en profondeur) est mergé après la
+  release, pas dans cette image.
+- #614 (nombres JSON entiers gardés en notation décimale) et #592
+  (refactor) : sans effet attendu ici.
+
+Confrontation des paramètres (17/10/2026) : `gufo serve llm --help` comparé
+entre les images 0.15.1 et 0.17.0 sur silentchuck, **strictement identique**.
+Seul changement de sens : le mmproj résident (#616). Contournements
+inchangés (staging 8 Gio du 27B, `ttl: 60` des voix et de la transcription,
+`capabilities.context`, GGUF refusés). Tickets suivis : seul #299 a bougé
+(commentaire du 17/10 : MTP servi sur un fork, aucune question posée).
+
+| Flash-Next, 1 session, silentchuck | 0.15.1 (15/10, 12:15) | 0.17.0 (17/10, 17:50) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4k, `bench` (t/s) | 1 300 à 1 530 | 1 287 à 1 527 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 373 à 1 501 | 1 341 à 1 507 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 494 et 1 501 / 1 602,8 / 1 611,7 | 1 489 et 1 507 / 1 599,1 / 1 611,6 |
+| décode code (t/s) | 66,9 à 73,9 | 80,7 à 82,0 |
+| décode prose, `bench` (t/s) | 72,6 à 77,1 | 77,6 à 88,1 |
+| chargement, mémoire | 80,5 s, 110 904 Mio | 92,6 s, 110 934 Mio |
+| tour 2 du cache, premier token | 0,180 s | 0,170 s |
+| agentique, cache disque | 16/16, 53 requêtes, repris 98,5 %, prefill 5 s, décode 80 s à 50,4 t/s, acceptance 85,7 % | 16/16, 51 requêtes, repris 93,5 %, prefill 8 s, décode 67 s à 57,0 t/s, acceptance 84,6 % |
+| reprises disque / RAM / ratés | 7 / 46 / 0 | 0 / 48 / 3 (`no_compatible_boundary`) |
+| points de reprise disque écrits | 0 (60 refus `min_step`) | 3 (56 refus `min_step`) |
+| tokens générés (boucle) | 4 035 | 3 815 |
+| passes 1/2/3 (s) | 27,7 / 31,0 / 31,2 | 31,1 / 24,5 / 22,7 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 160 ms | 155 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16, aucun refus de
+  staging ni `persistence_incomplete` dans le journal de gufo.
+- **Décode : +10 à +20 % en code, +13 % en agentique**, acceptance
+  inchangée (84,6 % contre 85,7 %) : cohérent avec #603, qui accélère le
+  brouillon sans changer ce que la cible accepte. Une série.
+- **Prefill inchangé** à toutes les tailles : #622 ne se voit pas ici.
+- **Passes 2 et 3 de 21 à 27 % plus courtes**, boucle entière 78,3 s
+  contre 89,9 s ; la boucle génère 5,5 % de tokens en moins, le décode
+  explique l'essentiel.
+- **Passe 1 plus longue, reprise 93,5 %** : cache disque froid, aucune
+  restauration disque et trois ratés en tête de boucle
+  (`common_prefix_tokens` de 1 517, `nearest_checkpoint_tokens` 0), le
+  profil de la 0.14.0 sur dossier neuf. La série 0.15.0 avait relu le cache
+  écrit par la 0.14.0, celle-ci n'a pas relu celui de la 0.15.1 : cause non
+  établie (identités changées par l'empreinte du mmproj de #616, ou format
+  des points de reprise de #615 ?). Rien ne l'explique dans le journal.
+- **Chargement 92,6 s contre 80,5 s** (`load_completed` 96,1 s contre
+  82,4 s) : l'empreinte et l'upload du mmproj ne prennent que 0,5 s ; une
+  série, sans conclusion.
+- Toujours là : `.out` agentique à 0 token (le banc lit `/metrics`, que
+  gufo n'expose pas) et `failed to preload … 404` au lancement du banc.
+
+Non mesuré : le 27B et DeepSeek (rien de propre à eux dans les deux
+releases), la vision de Flash-Next (aucune requête image), #610.
+
 ## Release v0.15.0 (14/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
 
 Montée demandée par l'utilisateur le 14/10/2026 après la lecture de la
