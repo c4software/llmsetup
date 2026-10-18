@@ -20,6 +20,104 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.17.1 (18/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
+
+Montée demandée par l'utilisateur le 18/10/2026 après la lecture de la
+checklist (0.17.1, Flash-Next seul remesuré). Image épinglée en
+`gufo-runtime:0.17.1` (`951b8d5`), digest `cd509a010995`, publiée à
+09:57 UTC, 17 minutes après la release. Aucun réglage changé.
+`remesure.sh flashnext` de 14:58 à 15:09 (`remesure.log` de
+`~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-10-18-0.17.1/` (`avant/` = la série 0.17.0 du
+17/10). **Banc HTTP de cette série faussé** : de 15:00:54 à 15:04:14, cinq
+requêtes d'un client étranger au banc (conversations d'agent de 48k à 61k
+tokens, corps de 324 à 366 Ko, l'une de 3 306 tokens générés, une autre
+annulée) sont arrivées sur `:8009`, que le banc partage avec l'usage réel ;
+les mesures à 6,5k, 52k et du cache sont restées en file (jusqu'à 84 s de
+`queue_ms`, tour 2 du cache à 36,9 s de premier token pour 0,16 s de
+moteur), la troisième passe de `refactor` a été servie en même temps
+(58 t/s). Boucle agentique non touchée (aucune requête étrangère, aucune
+attente de plus d'une seconde). Banc HTTP seul relancé de 15:21 à 15:26
+(`run.sh gufo flashnext`, `run-http-0.17.1-bis.log`), sans autre client :
+ce sont ses chiffres ci-dessous. Vérifié après : `GUFO_IMAGE` en 0.17.1
+dans le `.env` d'usage, `gufo-8009` relancé, `/v1/models` complet, `stop`
+respecté sur une requête directe à `:8009`. Proxy, voix, transcription et
+image non revérifiés.
+
+Contenu (notes de release v0.17.0...v0.17.1, diff de documentation lu) :
+
+- **#626, attention moins coûteuse en profondeur** (prefill et décode,
+  mergée après la 0.17.0) ; annoncé en AR à 128K : prefill 1 555 t/s contre
+  1 517 (+2,5 %), décode 27,8 contre 27,5.
+- **#613, contexte répété copié dans les brouillons MTP** (« prompt
+  lookup ») : texte identique en amont, nombre de brouillons changé ; en
+  échantillonnage, 24 tokens générés concordants exigés avant une copie.
+  Nouvelles métriques `gufo_spec_lookup_tokens_total` et
+  `gufo_spec_lookup_accepted_tokens_total` (`docs/SERVER.md`). Chez nous,
+  dans la boucle agentique : 3 requêtes sur 53 l'utilisent, 17 tokens
+  copiés acceptés sur 23 proposés.
+- **#633, blocages du cache et du premier prompt de Flash-Next réduits**
+  (indexeur préparé avant la disponibilité, scratch réutilisés) et **#636**,
+  nouvelles tentatives refusées sur capacité avant la lecture de la requête.
+
+Confrontation des paramètres (18/10/2026) : `gufo serve llm --help` comparé
+entre les images 0.17.0 et 0.17.1 sur silentchuck, **strictement
+identique** ; le diff de documentation n'ajoute que les deux métriques
+ci-dessus. Contournements inchangés (staging 8 Gio du 27B, `ttl: 60` des
+voix et de la transcription, `capabilities.context`, GGUF refusés). Tickets
+suivis : seul #299 a bougé (commentaire de web2bruno du 17/10 : MTP servi
+pour le 35B sur son fork, retours de test demandés à qui sert ce GGUF ;
+rien à répondre, Ornith n'est pas servi par gufo).
+
+| Flash-Next, 1 session, silentchuck | 0.17.0 (17/10, 17:50) | 0.17.1 (18/10, 15:23) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4k, `bench` (t/s) | 1 287 à 1 527 | 1 276 à 1 566 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 341 à 1 507 | 1 427 à 1 553 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 489 et 1 507 / 1 599,1 / 1 611,6 | 1 545 et 1 564 / 1 666,8 / 1 677,8 |
+| décode code (t/s) | 80,7 à 82,0 | 93,9 à 96,2 |
+| décode prose, `bench` (t/s) | 77,6 à 88,1 | 91,6 / 57,9 / 59,1 (acceptance 97,2 / 72,9 / 81,9 %) |
+| chargement (`load_completed`), mémoire | 96,1 s, 110 934 Mio | 105,8 s, 111 271 Mio |
+| tour 2 du cache, premier token | 0,170 s | 0,174 s |
+| agentique, cache disque | 16/16, 51 requêtes, repris 93,5 %, prefill 8 s, décode 67 s à 57,0 t/s, acceptance 84,6 % | 16/16, 53 requêtes, repris 93,3 %, prefill 8 s, décode 72 s à 58,1 t/s, acceptance 92,3 % |
+| reprises disque / RAM / ratés | 0 / 48 / 3 (`no_compatible_boundary`) | 0 / 50 / 3 (`no_compatible_boundary`) |
+| points de reprise disque écrits | 3 (56 refus `min_step`) | 3 (50 refus `min_step`) |
+| tokens générés (boucle) | 3 815 | 4 167 |
+| passes 1/2/3 (s) | 31,1 / 24,5 / 22,7 | 31,5 / 23,4 / 27,9 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 155 ms | 152 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16, aucun refus de
+  staging ni `persistence_incomplete` dans le journal de gufo.
+- **Prefill +3 à +4 % de 6,5k à 52k**, cohérent avec #626 (+2,5 % annoncé
+  à 128K) ; prompt court dans la dispersion. Une série.
+- **Décode en code +16 %** (93,9 à 96,2 contre 80,7 à 82,0), acceptance
+  92,6 à 93,9 % sur les trois passes. Décode agentique +2 % seulement, mais
+  acceptance agentique 92,3 % contre 84,6 % : le prompt lookup (#613) ne
+  servant qu'à 3 requêtes, il n'explique pas à lui seul la hausse. Une
+  série.
+- **Décode en prose dispersé** : passes 2 et 3 à 58 et 59 t/s pour une
+  acceptance de 72,9 et 81,9 % (1 000 et 134 tokens générés, texte
+  échantillonné différent à chaque passe depuis #603) ; la passe 1 à 91,6
+  t/s pour 97,2 %. Le décode suit l'acceptance, pas le moteur.
+- **Passe 3 plus longue** : `stats.js` à 18,1 s, le modèle écrit une valeur
+  attendue fausse dans son test puis la corrige (vu aussi en passe 1).
+  Comportement du modèle ; boucle entière 82,8 s contre 78,3 s, 9 % de
+  tokens générés en plus.
+- **Toujours là** : les 3 ratés `no_compatible_boundary` en tête de boucle
+  (cache disque froid, aucune restauration disque, cause non établie), le
+  `.out` agentique à 0 token et `failed to preload … 404` au lancement du
+  banc. Chargement 105,8 s (79,2 s à la première série du jour) : dispersé,
+  sans conclusion.
+- **Leçon de mesure** : le banc reprend le port 8009 de l'usage réel ; un
+  client resté pointé sur silentchuck fausse les mesures sans erreur.
+  Relire `queue_ms` et les `body_bytes` des requêtes reçues avant de lire
+  les débits.
+
+Non mesuré : le 27B et DeepSeek (rien de propre à eux dans la release), la
+vision de Flash-Next.
+
 ## Release v0.17.0 (17/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
 
 Montée demandée par l'utilisateur le 17/10/2026 après la lecture de la
