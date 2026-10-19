@@ -20,6 +20,103 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.18.0 (19/10/2026), montée le jour même, Flash-Next seul remesuré sur silentchuck
+
+Montée demandée par l'utilisateur le 19/10/2026 après la lecture de la
+checklist (0.18.0, Flash-Next seul remesuré). Image épinglée en
+`gufo-runtime:0.18.0` (`92cd269`), digest `4d784ef0043e`, publiée à
+12:58 UTC, 20 minutes après la release. Aucun réglage changé.
+`remesure.sh flashnext` de 22:06 à 22:14 (`remesure.log` de
+`~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-10-19-0.18.0/` (`avant/` = la série 0.17.1 du
+18/10). Banc HTTP propre : 12 requêtes reçues, toutes du banc, `queue_ms`
+au plus 67,6 ms (tour 1 du cache), aucun client étranger. Vérifié après :
+`GUFO_IMAGE` en 0.18.0 dans le `.env` d'usage, `gufo-8009` relancé,
+`/v1/models` complet, `stop` respecté sur une requête directe à `:8009`.
+Proxy, voix, transcription et image non revérifiés.
+
+Contenu (notes de release v0.17.1...v0.18.0, diff de documentation lu) :
+
+- **#653, blocages du prompt et du décode de Flash-Next réduits** : la
+  migration de pages de la mémoire hôte suspendait toutes les files GPU du
+  processus ; zones de sauvegarde des files, arènes de lancement et de copie
+  non paginées dans le patch ROCr embarqué, épinglage long des tampons hôte
+  de HIP, cache agrandi par segments d'environ 128 Mio avant le prefill.
+  Annoncé : écart maximal entre deux tokens de 98 à 101 ms contre 208 à
+  283, prefill inchangé (1 647 contre 1 654 t/s à 16k).
+- **#477, instantanés du cache disque hors du cache de pages** et **#637,
+  cache de pages récupérable compté comme disponible dans le cgroup** :
+  concernent directement notre `--cache-disk` en conteneur.
+- **#650, état récurrent dédoublé dans deux tampons au lieu d'être copié**
+  (Qwen) : 27B annoncé à sorties identiques, décode amélioré à chaque
+  profondeur. Non mesuré ici.
+- **#643, changement de sens des outils** : sur Chat et Responses, un
+  `strict` absent, `null` ou `false` garde le schéma fourni (champs
+  optionnels optionnels, comme llama.cpp) ; Responses tentait avant une
+  normalisation stricte. Boucle agentique toujours à 16/16.
+- **#524, `--reasoning-budget N`** et ses équivalents par requête
+  (`reasoning_budget_tokens`, `thinking.budget_tokens`) ; **non posé** : le
+  raisonnement se règle par le client.
+- **#638, vocabulaire des sorties structurées préparé au chargement** :
+  `event=structured_output_prepared`, 248 320 tokens en 26,4 ms, +32 Mio de
+  RSS chez nous. **#645**, cache des images prétraitées (128 Mio, non
+  essayé).
+
+Confrontation des paramètres (19/10/2026) : `gufo serve llm --help`
+comparé entre les images 0.17.1 et 0.18.0 sur silentchuck, une seule option
+ajoutée, `--reasoning-budget` (défaut -1, illimité), aucune retirée, aucun
+défaut changé. Contournements inchangés (staging 8 Gio du 27B, `ttl: 60` des
+voix et de la transcription, `capabilities.context`, GGUF refusés). Tickets
+suivis : seul #299 a bougé (rebasée le 19/10 sur la 0.17.1, MTP de
+web2bruno intégré dans `gufo serve` ; toujours ouverte, rien à répondre).
+
+| Flash-Next, 1 session, silentchuck | 0.17.1 (18/10, 15:23) | 0.18.0 (19/10, 22:08) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4k, `bench` (t/s) | 1 276 à 1 566 | 1 301 à 1 566 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 427 à 1 553 | 1 391 à 1 533 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 545 et 1 564 / 1 666,8 / 1 677,8 | 1 547 et 1 569 / 1 672,1 / 1 651,4 |
+| décode code (t/s) | 93,9 à 96,2 (acceptance 92,6 à 93,9 %) | 89,9 à 92,8 (acceptance 90,6 à 91,8 %) |
+| décode prose, `bench` (t/s) | 91,6 / 57,9 / 59,1 (acceptance 97,2 / 72,9 / 81,9 %) | 88,1 / 89,6 / 86,4 (acceptance 94,0 / 95,5 / 93,4 %) |
+| chargement (`load_completed`), mémoire | 105,8 s, 111 271 Mio | 94,8 s, 111 108 Mio |
+| tour 2 du cache, premier token | 0,174 s | 0,174 s |
+| agentique, cache disque | 16/16, 53 requêtes, repris 93,3 %, prefill 8 s, décode 72 s à 58,1 t/s, acceptance 92,3 % | 16/16, 53 requêtes, repris 93,8 %, prefill 8 s, décode 73 s à 56,7 t/s, acceptance 93,5 % |
+| reprises disque / RAM / ratés | 0 / 50 / 3 (`no_compatible_boundary`) | 0 / 50 / 3 (`no_compatible_boundary`) |
+| points de reprise disque écrits | 3 (50 refus `min_step`) | 3 (50 refus `min_step`) |
+| tokens générés (boucle) | 4 167 | 4 141 |
+| passes 1/2/3 (s) | 31,5 / 23,4 / 27,9 | 27,5 / 30,0 / 26,3 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 152 ms | 156 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16, aucun refus de
+  staging, `persistence_incomplete`, `generation_failed` ni `device_lost`
+  dans les journaux de gufo.
+- **Prefill au niveau de la 0.17.1** (-1,6 % à 32k, +0,3 % à 52k, prompt
+  court dans la dispersion), comme annoncé par #653. Une série.
+- **Décode en code -4 %** (89,9 à 92,8 contre 93,9 à 96,2), avec une
+  acceptance 2 points plus basse : il suit l'acceptance (texte échantillonné
+  différent à chaque passe), sans conclusion sur le moteur. Décode
+  agentique -2 % (56,7 contre 58,1 t/s) pour une acceptance de 93,5 %
+  contre 92,3 : dans la dispersion d'une série.
+- **Décode en prose regroupé** : 86 à 90 t/s sur les trois passes, avec
+  une acceptance de 93 à 96 %, au lieu de 58 à 92 en 0.17.1. Les passes
+  lentes de la 0.17.1 suivaient leur acceptance ; ce regroupement ne
+  prouve pas un gain de #653.
+- **Boucle entière 83,8 s contre 82,8 s**, même nombre de tokens générés à
+  1 % près ; passe 2 plus longue (`stats.js` à 20,4 s, le modèle écrit une
+  valeur attendue fausse dans son test puis la corrige, comme en 0.17.1).
+- **Chargement 94,8 s contre 105,8 s** (115,0 s vus par le banc, routeur
+  compris) : dans la dispersion déjà notée (79,2 à 105,8 s en 0.17.1).
+- **Toujours là** : les 3 ratés `no_compatible_boundary` en tête de boucle
+  (cache disque froid, aucune restauration disque, cause non établie), le
+  `.out` agentique à 0 token.
+
+Non mesuré : le 27B (#650 le concerne : à remesurer à la prochaine release
+qui le touche) et DeepSeek, la vision de Flash-Next, l'effet de #477 et
+#637 sur un cache disque qui se remplit (3 écritures seulement dans la
+série).
+
 ## Release v0.17.1 (18/10/2026), retenue le jour même, Flash-Next seul remesuré sur silentchuck
 
 Montée demandée par l'utilisateur le 18/10/2026 après la lecture de la
