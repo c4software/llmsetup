@@ -57,9 +57,12 @@ Contenu (notes de release v0.18.0...v0.19.0, diff de documentation lu) :
   mainteneur le jour même : pas dans gufo, Qwen n'a pas été entraîné sur
   cette forme et aucun autre moteur ne réécrit les rôles ainsi ; Qwen Code
   met lui-même ses rappels dans le message user, en blocs
-  `<system-reminder>` (fermeture de #523). llm-proxy enveloppe depuis ses
-  rappels fondus dans ce bloc, préfixe toujours stable (141 à 240 tokens
-  recalculés par tour). Ligne #522 retirée du tableau.
+  `<system-reminder>` (fermeture de #523). Cet enveloppement, essayé dans
+  llm-proxy le même jour, en a été retiré à la demande de l'utilisateur :
+  le proxy reste tel quel. Remesuré ensuite sur la 0.19.0 : en direct, le
+  cache plafonne à 15 782 tokens et chaque tour en recalcule 1 111 à
+  3 797 ; par le proxy, 127 à 141 (premier token 0,42 s contre 0,9 à
+  3,0 s). Ligne #522 retirée du tableau.
 - Hors release, sur `main` après la 0.19.0 : **#676**, plus de `"\n"` comme
   contenu entre des appels d'outils parallèles.
 
