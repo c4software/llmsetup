@@ -53,7 +53,13 @@ Contenu (notes de release v0.18.0...v0.19.0, diff de documentation lu) :
   l'historique est recalculé à chaque tour (#522). Mesuré le 20/10 sur la
   0.18.0 : par llm-proxy, qui les laisse à leur place en message `user`,
   le préfixe reste stable (127 à 141 tokens recalculés par tour contre
-  1 091 à 2 363 en direct) ; commentaire posté sur #522.
+  1 091 à 2 363 en direct) ; commentaire posté sur #522. Réponse du
+  mainteneur le jour même : pas dans gufo, Qwen n'a pas été entraîné sur
+  cette forme et aucun autre moteur ne réécrit les rôles ainsi ; Qwen Code
+  met lui-même ses rappels dans le message user, en blocs
+  `<system-reminder>` (fermeture de #523). llm-proxy enveloppe depuis ses
+  rappels fondus dans ce bloc, préfixe toujours stable (141 à 240 tokens
+  recalculés par tour). Ligne #522 retirée du tableau.
 - Hors release, sur `main` après la 0.19.0 : **#676**, plus de `"\n"` comme
   contenu entre des appels d'outils parallèles.
 
