@@ -185,6 +185,22 @@ la synthèse et ce qui sert au travail courant.
   acceptance 2 points plus basse), prose regroupée à 86 à 90 t/s,
   agentique 56,7 t/s, acceptance agentique 93,5 %. Mêmes 3 ratés
   `no_compatible_boundary`. 27B non remesuré.
+- **0.19.0** (montée le 20/10/2026) : petite tête MTP pour les requêtes
+  échantillonnées à plusieurs sessions (#655) et brouillons gloutons
+  tarifés à l'occupation du décode (#664, Flash-Next), somme des blocs
+  q8_1 corrigée (#667), vérification du 27B en wave64 (#660), `/props` au
+  format de llama-server (#669). `--help` identique, aucun réglage changé.
+  27B et Flash-Next remesurés sur silentchuck, une série chacun, 16/16, pas
+  de boucle, aucune erreur, aucun raté de cache. Flash-Next contre la
+  0.18.0 : banc HTTP au même niveau (prefill 1 667 t/s à 52k, décode en
+  code 89,1 à 93,7 t/s), agentique 59,5 t/s contre 56,7 (+5 %) avec une
+  acceptance de 88,4 % contre 93,5 (brouillons tarifés par #664), reprise
+  98,6 % sur cache disque chaud, chargement 99 s (115 la veille). 27B contre
+  la 0.15.1, sa dernière mesure : décode en code 66,1 à 67,3 t/s (65,1 à
+  65,3), prefill à 52k 506 t/s (497), agentique 42,7 t/s (42,1),
+  acceptance 70,8 % (70,2), reprise 98,4 %, chargement 43 s. Passes 26,4 /
+  26,1 / 21,9 s pour Flash-Next (27,5 / 30,0 / 26,3), 38,7 / 37,9 / 46,7 s
+  pour le 27B (43,2 / 37,4 / 40,1). Détail dans `HISTORIQUE-GUFO.md`.
 - **À vérifier à la prochaine release** : la refonte du cache (reprise après
   crash non exercée ; trois débuts de conversation recalculés par le 27B à
   la série 0.11.0 puis par Flash-Next à la série 0.12.0, pas en 0.13.0, cause
@@ -229,7 +245,7 @@ la synthèse et ce qui sert au travail courant.
   ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
   commit `d9a84f1` le 26/09/2026, sur la v0.1.1 le 28/09/2026 (27B et
   Flash-Next), la v0.2.0 le 29/09/2026 (27B, Flash-Next et DeepSeek), puis la
-  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0, la v0.14.0, la v0.15.0, la v0.15.1, la v0.17.0, la v0.17.1 et la v0.18.0 (Flash-Next seul de la v0.7.1 à la v0.8.1, de la v0.13.0 à la v0.15.0 et de la v0.17.0 à la v0.18.0, les deux Qwen de la v0.9.0 à la v0.12.0 et en v0.15.1, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
+  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0, la v0.14.0, la v0.15.0, la v0.15.1, la v0.17.0, la v0.17.1, la v0.18.0 et la v0.19.0 (Flash-Next seul de la v0.7.1 à la v0.8.1, de la v0.13.0 à la v0.15.0 et de la v0.17.0 à la v0.18.0, les deux Qwen de la v0.9.0 à la v0.12.0, en v0.15.1 et en v0.19.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
   précèdent toute release : la v0.1.0 n'est publiée que le 28/09/2026.
 - Pas un llama.cpp : noyaux spécialisés par modèle et par forme de matrice,
   en partie adaptés de llama.cpp / ggml (MIT, cf. leur
@@ -475,6 +491,7 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.17.0 (`2af314b`) | 17/10/2026 | retenue | 0.16.0 sautée ; MTP de Flash-Next proposé sur un vocabulaire réduit (#603 : logits de la cible identiques, texte échantillonné pouvant différer), surcoût des points de reprise réduit en contexte long (#615), `/health` en 503 pendant le chargement (#610, sans effet : llama-swap attend un 200), cache réutilisé quand `tool_choice` change (#623), attente de publication disque bornée par le coût du prefill (#621), éviction disque après récupération des orphelins (#625), attention creuse compactée (#622), sidecar vision préparé au chargement et résident (#616 : `event=vision_prepared`, 904 Mo pour le mmproj de Flash-Next, budget RAM du cache 14,32 Go contre 14,42) ; `--help` identique à celui de la 0.15.1 ; Flash-Next seul remesuré sur silentchuck contre la 0.15.1, une série, 16/16, pas de boucle, aucune erreur ; décode en code 80,7 à 82,0 t/s contre 66,9 à 73,9, agentique 57,0 t/s contre 50,4, acceptance 84,6 %, passes 31,1 / 24,5 / 22,7 s contre 27,7 / 31,0 / 31,2 ; prefill inchangé (1 599 t/s à 52k contre 1 603) ; reprise 93,5 % sur cache disque froid (aucune restauration disque, 3 ratés `no_compatible_boundary` en tête de boucle, cause non établie), chargement 92,6 s contre 80,5 ; 27B et DeepSeek non remesurés ; aucun réglage changé |
 | v0.17.1 (`a8ed7af`) | 18/10/2026 | retenue | attention moins coûteuse en profondeur (#626, annoncé AR pp128K +2,5 %), contexte répété copié dans les brouillons MTP de Flash-Next (#613, prompt lookup : 3 requêtes agentiques sur 53 l'utilisent), blocages du cache et du premier prompt réduits (#633), tentatives refusées sur capacité avant lecture (#636) ; `--help` identique à celui de la 0.17.0 ; Flash-Next seul remesuré sur silentchuck contre la 0.17.0, une série, 16/16, pas de boucle, aucune erreur ; banc HTTP rejoué (cinq requêtes d'un client étranger sur `:8009` pendant le premier) ; prefill +3 à +4 % de 6,5k à 52k (1 667 t/s à 52k contre 1 599), décode en code 93,9 à 96,2 t/s contre 80,7 à 82,0, prose dispersée suivant l'acceptance (58 à 92 t/s), agentique 58,1 t/s contre 57,0, acceptance 92,3 % contre 84,6 %, passes 31,5 / 23,4 / 27,9 s ; reprise 93,3 % sur cache disque froid, mêmes 3 ratés `no_compatible_boundary` ; chargement 105,8 s ; 27B et DeepSeek non remesurés ; aucun réglage changé |
 | v0.18.0 (`6c682a2`) | 19/10/2026 | montée | blocages du prompt et du décode de Flash-Next réduits (#653 : pages hôte protégées du compactage, patch ROCr requalifié), instantanés du cache disque hors du cache de pages (#477), cache de pages récupérable compté dans le cgroup (#637), état récurrent dédoublé (#650, 27B), schémas d'outils non stricts conservés sur Chat et Responses (#643), `--reasoning-budget` (#524, non posé), vocabulaire des sorties structurées préparé au chargement (#638, 26,4 ms) ; `--help` : une option ajoutée ; Flash-Next seul remesuré sur silentchuck contre la 0.17.1, une série, 16/16, pas de boucle, aucune erreur, aucun client étranger ; prefill au niveau de la 0.17.1 (1 672 t/s à 52k), décode en code 89,9 à 92,8 t/s contre 93,9 à 96,2 (acceptance 2 points plus basse), prose 86 à 90 t/s, agentique 56,7 t/s contre 58,1, acceptance 93,5 % contre 92,3 %, passes 27,5 / 30,0 / 26,3 s ; reprise 93,8 % sur cache disque froid, mêmes 3 ratés `no_compatible_boundary` ; chargement 94,8 s ; 27B et DeepSeek non remesurés ; aucun réglage changé |
+| v0.19.0 (`7b27845`) | 20/10/2026 | montée | petite tête MTP pour les requêtes échantillonnées à plusieurs sessions (#655) et brouillons gloutons tarifés à l'occupation du décode (#664, Flash-Next), somme des blocs q8_1 corrigée (#667), vérification du 27B en wave64 (#660), `/props` au format de llama-server (#669) ; `--help` identique ; 27B et Flash-Next remesurés sur silentchuck, une série chacun, 16/16, pas de boucle, aucune erreur, aucun raté de cache ; Flash-Next contre la 0.18.0 : banc HTTP au même niveau (1 667 t/s à 52k, décode en code 89,1 à 93,7 t/s), agentique 59,5 t/s contre 56,7, acceptance 88,4 % contre 93,5 %, passes 26,4 / 26,1 / 21,9 s, reprise 98,6 % sur cache disque chaud, chargement 99 s ; 27B contre la 0.15.1 : décode en code 66,1 à 67,3 t/s contre 65,1 à 65,3, prefill à 52k 506 t/s contre 497, agentique 42,7 t/s contre 42,1, acceptance 70,8 % contre 70,2 %, reprise 98,4 %, chargement 43 s ; DeepSeek non remesuré ; aucun réglage changé |
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
@@ -596,9 +613,11 @@ depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
 l'échantillonnage suit les profils officiels des modèles (glouton avant), ses
 propres bancs restant en glouton. Les valeurs du tableau visent un usage
 agentique comparable au service ; aucune n'est un réglage interne du moteur.
-Dernière confrontation à la documentation amont : 19/10/2026, v0.18.0 (diff
-de documentation depuis la v0.17.1 et `--help` des deux images comparés sur
-silentchuck) : une option ajoutée, `--reasoning-budget` (#524, défaut -1
+Dernière confrontation à la documentation amont : 20/10/2026, v0.19.0 (diff
+de documentation depuis la v0.18.0 et `--help` des deux images comparés sur
+silentchuck) : `--help` identique, un seul changement de sens, `/props`
+qui décrit le serveur au format de llama-server au lieu d'un
+emplacement vide (#669) ; en v0.18.0 (19/10/2026) : une option ajoutée, `--reasoning-budget` (#524, défaut -1
 illimité, non posée : le raisonnement se règle par le client), aucune
 retirée, aucun défaut changé ; un changement de sens, les schémas d'outils
 sans `strict` conservés tels quels sur Responses (#643) ; en v0.17.1

@@ -20,6 +20,112 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.19.0 (20/10/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 20/10/2026 après la lecture de la
+checklist (0.19.0, 27B et Flash-Next remesurés). Image épinglée en
+`gufo-runtime:0.19.0` (`c8d88a8`), digest `51be93845170`, publiée à
+11:21 UTC, 14 minutes après la release. Aucun réglage changé.
+`remesure.sh 27b flashnext` de 14:38 à 14:55 (`remesure.log` de
+`~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-10-20-0.19.0/` (`avant/` = la série 0.18.0 du
+19/10 pour Flash-Next, la série 0.15.1 du 15/10 pour le 27B). Banc HTTP :
+12 requêtes reçues par modèle, toutes du banc. Le service d'usage réel est
+relancé à la fin (`gufo-8009` répond, Flash-Next préchargé). Proxy, voix,
+transcription et image non revérifiés.
+
+Contenu (notes de release v0.18.0...v0.19.0, diff de documentation lu) :
+
+- **#655, petite tête MTP pour les requêtes échantillonnées** sur un
+  serveur à plusieurs sessions (Flash-Next) : concerne le service d'usage
+  (`--sessions 2`), pas le banc, qui tourne à une session.
+- **#664, brouillons MTP gloutons tarifés à l'occupation du décode**
+  (Flash-Next) et **#667, somme des blocs q8_1 corrigée** (Flash-Next).
+- **#660, vérification du 27B en wave64** : annoncée à sorties identiques
+  (QUALITY.md du 27B, revue du 19/10).
+- **#669, `/props` au format de llama-server** : modèle, build, contexte,
+  sessions, échantillonnage par défaut, vision. Étudié pour llm-proxy le
+  20/10 : rien à en tirer, le contexte vient déjà du `/v1/models` de
+  llama-swap (`meta.n_ctx`), et derrière llama-swap `/props` ne se lit
+  qu'en chargeant le modèle (`/upstream/<modèle>/props`).
+- **#672, Claude Code déclaré non pris en charge avec Qwen** (doc) : les
+  rappels `system` de Claude Code sont remontés en tête et tout
+  l'historique est recalculé à chaque tour (#522). Mesuré le 20/10 sur la
+  0.18.0 : par llm-proxy, qui les laisse à leur place en message `user`,
+  le préfixe reste stable (127 à 141 tokens recalculés par tour contre
+  1 091 à 2 363 en direct) ; commentaire posté sur #522.
+- Hors release, sur `main` après la 0.19.0 : **#676**, plus de `"\n"` comme
+  contenu entre des appels d'outils parallèles.
+
+Confrontation des paramètres (20/10/2026) : `gufo serve llm --help`
+comparé entre les images 0.18.0 et 0.19.0 sur silentchuck, identique.
+Contournements inchangés (staging 8 Gio du 27B, `ttl: 60` des voix et de
+la transcription, `capabilities.context`, GGUF refusés). Tickets suivis :
+#299 toujours ouverte ; #524 ajoutée au tableau (budget par requête sur
+Chat Completions, attendu par llm-proxy).
+
+| Flash-Next, 1 session, silentchuck | 0.18.0 (19/10, 22:08) | 0.19.0 (20/10, 14:46) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4k, `bench` (t/s) | 1 301 à 1 566 | 1 284 à 1 554 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 391 à 1 533 | 1 363 à 1 546 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 547 et 1 569 / 1 672,1 / 1 651,4 | 1 347 et 1 560 / 1 666,8 / 1 679,2 |
+| décode code (t/s) | 89,9 à 92,8 (acceptance 90,6 à 91,8 %) | 89,1 à 93,7 (acceptance 91,8 à 92,5 %) |
+| décode prose, `bench` (t/s) | 88,1 / 89,6 / 86,4 (acceptance 94,0 / 95,5 / 93,4 %) | 88,6 / 89,2 / 85,4 (acceptance 99,2 / 95,5 / 92,6 %) |
+| chargement (`load_completed`), mémoire | 94,8 s, 111 108 Mio | 96,8 s, 110 727 Mio |
+| tour 2 du cache, premier token | 0,174 s | 0,174 s |
+| agentique, cache disque | 16/16, 53 requêtes, repris 93,8 %, prefill 8 s, décode 73 s à 56,7 t/s, acceptance 93,5 % | 16/16, 51 requêtes, repris 98,6 %, prefill 5 s, décode 65 s à 59,5 t/s, acceptance 88,4 % |
+| reprises disque / RAM / ratés | 0 / 50 / 3 (`no_compatible_boundary`) | 4 / 47 / 0 |
+| points de reprise disque écrits | 3 (50 refus `min_step`) | 0 (54 refus `min_step`) |
+| tokens générés (boucle) | 4 141 | 3 844 |
+| passes 1/2/3 (s) | 27,5 / 30,0 / 26,3 | 26,4 / 26,1 / 21,9 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 156 ms | 158 ms |
+
+| 27B, 1 session, silentchuck | 0.15.1 (15/10, 13:09) | 0.19.0 (20/10, 14:39) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,4k, `bench` (t/s) | 502 à 520 | 510 à 529 |
+| prefill court, 1,6k, `refactor` (t/s) | 502 à 503 | 509 à 511 |
+| prefill à 6,5k / 52k / 32k (t/s) | 556 et 556 / 497,3 / 533,5 | 563 et 563 / 505,5 / 540,8 |
+| décode code (t/s) | 65,1 à 65,3 | 66,1 à 67,3 (acceptance 96,1 à 97,8 %) |
+| décode prose, `bench` (t/s) | 50,0 / 38,9 / 48,1 | 47,5 / 47,7 / 49,9 (acceptance 69,0 / 69,0 / 72,4 %) |
+| chargement (`load_completed`), mémoire | 23,8 s (série agentique) | 39,1 s, 82 160 Mio |
+| tour 2 du cache, premier token | 0,584 s | 0,548 s |
+| agentique, cache disque | 16/16, 49 requêtes, repris 93,6 %, prefill 18 s, décode 101 s à 42,1 t/s, acceptance 70,2 % | 16/16, 52 requêtes, repris 98,4 %, prefill 12 s, décode 106 s à 42,7 t/s, acceptance 70,8 % |
+| reprises disque / RAM / ratés | 1 / 45 / 3 (`no_checkpoint` 1, `prefix_changed` 2) | 3 / 49 / 0 |
+| points de reprise disque écrits | 3 (78 refus `min_step`) | 0 (96 refus `min_step`) |
+| tokens générés (boucle) | 4 237 | 4 506 |
+| passes 1/2/3 (s) | 43,2 / 37,4 / 40,1 | 38,7 / 37,9 / 46,7 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 367 ms | 348 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16 sur les deux
+  modèles, aucun `persistence_incomplete`, `generation_failed` ni
+  `device_lost` dans les journaux de gufo, aucun refus de staging.
+- **Flash-Next, banc HTTP au niveau de la 0.18.0** : prefill identique
+  à 52k, décode en code et en prose dans la dispersion. Seul le premier
+  `prefill4k` est plus bas (1 347 t/s, le second à 1 560) : une passe, sans
+  conclusion.
+- **Flash-Next, décode agentique +5 % (59,5 contre 56,7 t/s) pour une
+  acceptance 5 points plus basse** (88,4 contre 93,5 %) : cohérent avec
+  #664, qui propose des brouillons selon leur coût au lieu de les
+  maximiser, mais une série seulement. Boucle entière 74,4 s contre 83,8.
+- **Plus aucun raté de cache** : les 3 `no_compatible_boundary` de tête
+  de boucle de Flash-Next (vus depuis la 0.17.0) et les 3 ratés du 27B ont
+  disparu, avec 4 et 3 reprises disque. Le cache disque était chaud (la
+  série 0.18.0 de la veille pour Flash-Next) : la disparition des ratés
+  n'est pas attribuée à la 0.19.0.
+- **27B, contre la 0.15.1 cinq versions plus tôt** : décode en code
+  +2 %, prefill +1 à +2 %, agentique au même niveau ; #650 (0.18.0) et
+  #660 (0.19.0) annonçaient un gain de décode, petit ici. Décode en prose
+  regroupé (47,5 à 49,9 au lieu de 38,9 à 50,0). Chargement 39,1 s contre
+  23,8 (cache de pages froid ou non, non vérifié).
+
+Non mesuré : DeepSeek, la vision de Flash-Next, #655 (le banc tourne à une
+session, le service à deux), l'effet sur le service d'usage à deux
+sessions.
+
 ## Release v0.18.0 (19/10/2026), montée le jour même, Flash-Next seul remesuré sur silentchuck
 
 Montée demandée par l'utilisateur le 19/10/2026 après la lecture de la
