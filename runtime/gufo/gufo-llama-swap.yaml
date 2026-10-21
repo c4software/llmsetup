@@ -102,6 +102,18 @@
 #                           retirer l'option de ses lignes de commande ;
 #                         - le 27B et DeepSeek gardent GUFO_CACHE et le
 #                           staging de 8 Gio, inchangés.
+#                         Depuis la 0.20.0 (gufo-org/gufo#540, le 27B passe
+#                         au cache par composants, en AR comme en DFlash2),
+#                         le 27B suit les mêmes règles que Flash-Next : son
+#                         dossier, GUFO_CACHE/qwen3.8-27b (créé par
+#                         runtime.sh), sans quoi il supprimerait au premier
+#                         démarrage les *.kvc de DeepSeek dans GUFO_CACHE et
+#                         en prendrait le verrou ; plus de staging (ignoré,
+#                         event=option_ignored, docs/SERVER.md demande de
+#                         retirer l'option). Son ancien cache est perdu, il
+#                         se reremplit. DeepSeek reste seul dans GUFO_CACHE
+#                         avec le staging de 8 Gio (docs/SERVER.md de gufo :
+#                         « For DeepSeek, … »).
 #                         Une ligne par option de cache : remesure.sh les
 #                         retire par sed pour sa série SANS_CACHE=1.
 # =============================================================================
@@ -158,8 +170,7 @@ models:
     name: "Qwen3.8-27B (gufo, DFlash 2)"
     cmd: >-
       ${gufo} --served-model-name qwen3.8-27b
-      --cache-disk ${env.GUFO_CACHE} --cache-disk-bytes 17179869184
-      --cache-disk-staging-bytes 8589934592
+      --cache-disk ${env.GUFO_CACHE}/qwen3.8-27b --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-UD-Q4_K_XL.gguf
       --speculative dflash2
       --dflash-model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q8_0.gguf
