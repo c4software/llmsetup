@@ -20,6 +20,156 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.20.0 (21/10/2026), montée le jour même, les trois modèles remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 21/10/2026 après la lecture de la
+checklist (0.20.0, dossier de cache propre au 27B, 27B, Flash-Next et
+DeepSeek remesurés). Image épinglée en `gufo-runtime:0.20.0` (`2021203`),
+digest `7d634b171e67`, publiée à 11:51 UTC, 18 minutes après la release.
+`remesure.sh 27b flashnext deepseek` de 15:40 à 16:20 (`remesure.log` de
+`~/llm/gufo-test`), puis `TAG=2026-10-21-0.20.0-passe2 remesure.sh 27b` de
+16:39 à 16:48 (`remesure-passe2.log`) ; journaux agentiques dans
+`resultats/agentic/2026-10-21-0.20.0/` et `…-0.20.0-passe2/` (`avant/` = la
+série 0.19.0 du 20/10 pour les deux Qwen, la série 0.2.0 du 29/09 pour
+DeepSeek). Le service d'usage réel est relancé à la fin (Flash-Next
+préchargé). Proxy, voix, transcription et image non revérifiés.
+
+Contenu (notes de release v0.19.0...v0.20.0, diff de documentation lu) :
+
+- **#540, cache par composants pour le 27B**, en AR comme en DFlash2 :
+  points de reprise avec KV, état récurrent, identité des images, frontière
+  échantillonnée et état du drafter DFlash2 ; prefill achevé gardé après
+  annulation ; MTP non pris en charge sur le 27B. Mêmes règles que
+  Flash-Next depuis la 0.14.0 (`docs/SERVER.md`, `docs/CLI.md`) : un seul
+  serveur possède son dossier et y supprime au démarrage les `*.kvc` de
+  l'ancien format, ceux des autres modèles compris ;
+  `--cache-disk-staging-bytes` ignoré (`event=option_ignored`), tampon
+  interne de 1 Mio. **yaml changé, accepté par l'utilisateur avant
+  l'épinglage** : dossier `GUFO_CACHE/qwen3.8-27b` (créé par
+  `rt_gufo_avant_demarrage`), staging retiré de la ligne du 27B. Sans cela,
+  le 27B effaçait le cache de DeepSeek, resté seul dans `GUFO_CACHE` avec
+  ses 8 Gio de staging (`docs/SERVER.md` : « For DeepSeek, … »). Le
+  `QUALITY.md` du 27B garde un échec strict en vision Q4 (prefill à froid
+  contre historique décodé) ; le rollback spéculatif ne recopie plus les
+  lignes d'attention (décode DFlash2 concurrent revenu à 53 ms par token).
+- **#676**, plus de `"\n"` comme contenu entre des appels d'outils
+  parallèles : la ligne de suivi de `GUFO.md` est retirée.
+- **#680** (cache sans réinitialisations répétées ni recherches complètes),
+  **#681** (petites projections F16/BF16 de Flash-Next), **#683** (lignes
+  n-gram préchargées entre points de reprise), **#609** (chargement de
+  DeepSeek quand les poids dépassent le pool du device), **#686**
+  (`Expect: 100-continue`). #690 (prefill large de Flash-Next) est mergée
+  25 minutes avant le commit de release mais absente du CHANGELOG.
+
+Confrontation des paramètres (21/10/2026) : `gufo serve llm --help`
+comparé entre les images 0.19.0 et 0.20.0 sur silentchuck, identique.
+`gufo-amont.sh diff` veut les tags avec leur `v` (`0.19.0 0.20.0` répond
+404). Contournements : staging 8 Gio gardé pour DeepSeek seul ; `ttl: 60`,
+`capabilities.context` et GGUF refusés inchangés. #299 toujours ouverte
+(rebasée sur `f020bd3a`, échecs MTP au redémarrage du cache disque encore
+ouverts) : refus du GGUF Ornith maintenu.
+
+Vérifié après la série : `gufo-cache/qwen3.8-27b` à 10 Go, les `*.kvc` de
+DeepSeek intacts dans `gufo-cache`, aucun `option_ignored`, aucun
+`device_lost`, `generation_failed` ni `persistence_incomplete` ; seule
+erreur, le `failed to preload … 404` connu du lancement.
+
+| 27B, 1 session, silentchuck | 0.19.0 (20/10, 14:39) | 0.20.0, dossier neuf (21/10, 15:40) | 0.20.0, disque chaud (21/10, 16:39) |
+|---|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK | idem ; un `bench` à `?`, code juste coupé à 1 000 tokens avant `class Inventory` |
+| prefill court, 1,4k, `bench` (t/s) | 510 à 529 | 516 à 528 | 512 à 522 |
+| prefill court, 1,6k, `refactor` (t/s) | 509 à 511 | 511 à 514 | 513 à 514 |
+| prefill à 6,5k / 52k / 32k (t/s) | 563 et 563 / 505,5 / 540,8 | 567 et 567 / 505,9 / 542,2 | 566 et 566 / 505,5 / 541,9 |
+| décode code (t/s) | 66,1 à 67,3 | 67,2 / 44,8 / 67,3 | 67,4 / 41,0 / 67,3 |
+| décode prose, `bench` (t/s) | 47,5 / 47,7 / 49,9 | 47,4 / 45,3 / 42,9 | 40,3 / 47,6 / 50,9 |
+| chargement (banc / boucle), mémoire | 39,1 s, 82 160 Mio | 24,7 / 26,3 s, 64 398 Mio | 25,5 / 14,8 s |
+| tour 2 du cache, premier token | 0,548 s | 0,421 s | 0,423 s |
+| agentique, cache disque | 16/16, 52 requêtes, repris 98,4 %, prefill 12 s, décode 106 s à 42,7 t/s, acceptance 70,8 % | 16/16, 50 requêtes, repris 93,7 %, prefill 17 s, décode 99 s à 44,3 t/s, acceptance 70,0 % | 16/16, 54 requêtes, repris 98,2 %, prefill 12 s, décode 106 s à 42,5 t/s, acceptance 72,1 % |
+| reprises disque / RAM / ratés | 3 / 49 / 0 | 0 / 47 / 3 (`no_compatible_boundary`) | 4 / 50 / 0 |
+| points de reprise disque écrits | 0 (96 refus `min_step`) | 3 (56 refus `min_step`) | 0 (67 refus `min_step`) |
+| tokens générés (boucle) | 4 506 | 4 374 | 4 487 |
+| passes 1/2/3 (s) | 38,7 / 37,9 / 46,7 | 44,4 / 37,4 / 35,6 | 43,6 / 38,6 / 40,2 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 348 ms | 334 ms | 334 ms |
+
+| Flash-Next, 1 session, silentchuck | 0.19.0 (20/10, 14:46) | 0.20.0 (21/10, 15:48) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK | sanity, aiguilles, tour 2 à 100 % : OK ; `bench` à `?` comme en 0.19.0 (appels d'outils en texte, 146 tokens) |
+| prefill court, 1,4k, `bench` (t/s) | 1 284 à 1 554 | 1 244 à 1 558 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 363 à 1 546 | 1 359 à 1 546 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 347 et 1 560 / 1 666,8 / 1 679,2 | 1 453 et 1 580 / 1 664,4 / 1 681,0 |
+| décode code (t/s) | 89,1 à 93,7 | 97,8 / 95,1 / 55,9 (la troisième passe raisonne en prose dans la réponse, texte cohérent) |
+| chargement (banc / boucle), mémoire | 96,8 / 123,3 s, 110 727 Mio | 102,3 / 157,9 s, 110 584 Mio |
+| tour 2 du cache, premier token | 0,174 s | 0,168 s |
+| agentique, cache disque | 16/16, 51 requêtes, repris 98,6 %, prefill 5 s, décode 65 s à 59,5 t/s, acceptance 88,4 % | 16/16, 53 requêtes, repris 98,4 %, prefill 5 s, décode 75 s à 58,4 t/s, acceptance 88,0 % |
+| reprises disque / RAM / ratés | 4 / 47 / 0 | 4 / 49 / 0 |
+| points de reprise disque écrits | 0 (54 refus `min_step`) | 0 (59 refus `min_step`) |
+| tokens générés (boucle) | 3 844 | 4 365 |
+| passes 1/2/3 (s) | 26,4 / 26,1 / 21,9 | 30,7 / 30,5 / 23,7 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 158 ms | 149 ms |
+
+| DeepSeek V4 Flash, 1 session, silentchuck | 0.2.0 (29/09, agentique seul) | 0.20.0 (21/10, 15:53) |
+|---|---|---|
+| banc HTTP, justesse | — | sanity, aiguilles, tour 2 à 100 % : OK |
+| prefill court, 1,5k / 1,6k (t/s) | — | 390 à 423 / 431 à 432 |
+| prefill à 5,3k / 42k / 26k (t/s) | — | 441 et 442 / 454,5 / 459,6 |
+| décode code / prose (t/s) | — | 38,5 à 38,9 / 30,7 à 35,5 |
+| chargement (banc / boucle), mémoire | 71,6 s (boucle) | 172,4 / 287,2 s, 114 448 Mio |
+| tour 2 du cache, premier token | — | 0,837 s |
+| agentique, cache disque | 16/16, 52 requêtes, repris 88,9 %, prefill 51 s, décode 331 s à 27,3 t/s, acceptance 73,0 % | 16/16, 62 requêtes, repris 92,2 %, prefill 54 s, décode 249 s à 29,6 t/s, acceptance 87,1 % |
+| reprises disque / RAM / ratés | 12 / 37 / 3 (`no_checkpoint` 1, `prefix_changed` 2) | 0 / 58 / 4 (`no_checkpoint` 1, `prefix_changed` 3) |
+| points de reprise disque écrits | 72 (aucun refus) | 6 (138 refus `min_step`) |
+| tokens générés (boucle) | 9 044 | 7 373 |
+| passes 1/2/3 (s) | — | 91,5 / 144,8 / 68,0 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 574 ms | 696 ms |
+
+Comparaison aux tables « single user » des `BENCHMARKS.md` de gufo v0.20.0
+(Q4 DFlash2 mesurée le 19/10, Q4 MTP le 18/10, IQ2XXS DSpark le 24/09 ;
+glouton, profil `performance`, sans puissance publiée), à la demande de
+l'utilisateur. L'annonce est ramenée à la limite de silentchuck (PPT
+110 W) par l'effet mesuré le 13/10 en 0.13.0 sur Flash-Next : −4,7 % de
+prefill à 52k, −2,2 % de décode agentique. Prefill annoncé moyenné sur la
+longueur de nos prompts (gufo mesure 2 048 tokens après un préfixe en
+cache, nos prompts partent de zéro) ; décode comparé à la ligne « texte
+répétitif », la plus proche d'une réécriture de code, nos bancs
+échantillonnant à 0,7. Médianes, les deux séries du 27B réunies :
+
+| part de l'annonce ramenée à 110 W | prefill ~1,5k | prefill 6,5k (5,3k) | prefill 52k (42k) | décode en code |
+|---|---|---|---|---|
+| 27B | 96 % (514 contre 534 t/s) | 110 % | 121 % | 106 % (67,2 contre 63,3) |
+| Flash-Next | 94 % (1 536 contre 1 633) | 94 % | 107 % | 83 % (95,1 contre 114,3) |
+| DeepSeek | 99 % (427 contre 430) | 108 % | 128 % | 150 % (38,9 contre 26,0) |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16 sur les trois
+  modèles, aucune erreur dans les journaux de gufo hors le `404` connu.
+- **27B, nouveau cache** : la première série, sur un dossier vide,
+  recalcule les trois débuts de conversation (1 542 à 1 589 tokens),
+  comme Flash-Next à sa première série en 0.14.0 ; la seconde, sur disque
+  chaud, les reprend par le disque, sans raté, à 98,2 %. Mémoire en
+  baisse de 17,8 Gio au banc HTTP (64 398 contre 82 160 Mio), tour 2 du
+  cache à 0,42 s contre 0,55. Banc HTTP au niveau de la 0.19.0 ; le décode
+  en code dépend de l'acceptance (deux régimes, 41 à 45 et 67 t/s, une
+  passe sur trois dans le bas à chaque série), agentique au même niveau.
+- **Flash-Next au niveau de la 0.19.0** : prefill identique, décode en code
+  un peu plus haut sur deux passes (95 et 98 contre 89 à 94 t/s), boucle
+  plus longue de 11 s (521 tokens générés de plus). Chargement plus long
+  (158 s dans la boucle contre 123), sans explication.
+- **DeepSeek** : décode agentique +8 % et acceptance +14 points contre la
+  0.2.0, sa dernière mesure trois semaines plus tôt. **Chargement à 172 puis 287 s contre
+  72 s** : #609 change le chargement de DeepSeek au-delà du pool du device,
+  à vérifier au prochain chargement (cache de pages, ordre des bancs).
+- **Contre l'annonce** : prefill court à 94 à 99 %, cohérent avec la
+  limite de puissance. Prefill long au-dessus de l'annonce : effet de
+  méthode (prompt depuis zéro contre 2 048 tokens à une profondeur donnée),
+  pas un gain. Seul vrai retard, le décode de Flash-Next (83 %),
+  échantillonnage à 0,7 contre glouton. DeepSeek au-dessus parce que son
+  annonce date de la 0.1.x.
+
+Non mesuré : la vision des deux Qwen (#540 garde un échec strict en
+vision Q4), le service d'usage à deux sessions, la reprise après crash du
+nouveau cache du 27B.
+
 ## Release v0.19.0 (20/10/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 20/10/2026 après la lecture de la
