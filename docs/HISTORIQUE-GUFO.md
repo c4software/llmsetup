@@ -20,6 +20,114 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.21.0 (22/10/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
+
+Montée acceptée par l'utilisateur le 22/10/2026 après la lecture de la
+checklist (27B et Flash-Next remesurés, DeepSeek non). Image épinglée en
+`gufo-runtime:0.21.0` (`807f759`), digest `2b481357c27c`, publiée à
+12:04 UTC, 15 minutes après la release. `remesure.sh 27b flashnext` de
+14:10 à 14:27 (`remesure.log` de `~/llm/gufo-test`), puis
+`TAG=2026-10-22-0.21.0-passe2 remesure.sh 27b flashnext` de 14:28 à 14:45
+(`remesure-passe2.log`) ; journaux agentiques dans
+`resultats/agentic/2026-10-22-0.21.0/` et `…-0.21.0-passe2/` (`avant/` = la
+série précédente). Le service d'usage réel est relancé à la fin (Flash-Next
+préchargé). Proxy, voix, transcription et image non revérifiés.
+
+Contenu (notes de release v0.20.0...v0.21.0, diff de documentation lu) :
+
+- **#688, capture du prompt DFlash2 du 27B en mémoire épinglée bornée**,
+  mergée 1 h 30 avant le commit de release et absente du CHANGELOG, mais
+  dans le tag (vérifié par la comparaison des commits). Depuis #653 le
+  runtime ROCr patché rend lentes les grandes copies vers la mémoire non
+  épinglée ; chaque session épingle désormais 400 Mio au chargement (au
+  plus 4 096 lignes × 5 couches × 5 120 × 4 o), comptés dans le
+  `ResourceLedger` du cache **en plus** de son budget
+  (`slot_pinned_bytes=419430400` dans `event=configured`). Annoncé : prefill
+  froid -1,5 à -2,5 % de temps, premier token d'un voisin après annulation
+  de 235 à 205 ms.
+- **#699, décode échantillonné de Flash-Next** : candidats exacts choisis
+  sur le GPU (top-k borné, tokens pénalisés compris), proposition neuronale
+  sautée sur une copie déjà établie (24 tokens et au moins trois copies),
+  descripteur RoPE d'image préparé avant la capture des graphes texte.
+  Annoncé : +1 à 2,5 % en recopie de code, plat en code neuf et en
+  réflexion ; C2 glouton mixte non conclusif.
+- **#350, YaRN en option** pour Flash-Next au-delà de son contexte natif de
+  262144 : `--enable-yarn` exigé au-dessus, refusé à 262144 et en dessous,
+  facteur = contexte / 262144 appliqué à toutes les requêtes. Sans objet
+  chez nous (`--context 262144`). Le format des instantanés passe de 14 à
+  15 et invalide une fois le cache disque de Flash-Next.
+- #709 (`os_info`) et #702 (banc amont interrompu) : outillage, sans effet.
+
+Confrontation des paramètres (22/10/2026) : `gufo serve llm --help`
+comparé entre les images 0.20.0 et 0.21.0 sur silentchuck, une seule
+ligne ajoutée, `--enable-yarn`. Contournements inchangés : staging 8 Gio
+pour DeepSeek seul ; `ttl: 60`, `capabilities.context` et GGUF refusés.
+#299 toujours ouverte (les 0 brouillons DFlash2 du 35B venaient de leur
+conversion, numpy 1.26 sous Python 3.14) : refus du GGUF Ornith maintenu.
+
+Vérifié après les séries : aucun client étranger sur `:8009` (`queue_ms`
+au plus 15 ms ; le seul `body_bytes` de 8 Mio est la limite annoncée par
+`event=listening`), aucun `device_lost`, `generation_failed`,
+`persistence_incomplete` ni `option_ignored` ; seule erreur, le
+`failed to preload … 404` connu du lancement.
+
+| 27B, 1 session, silentchuck | 0.20.0, disque chaud (21/10, 16:39) | 0.21.0, disque invalidé (22/10, 14:10) | 0.21.0, disque chaud (22/10, 14:28) |
+|---|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK ; un `bench` à `?` | sanity, aiguilles, tour 2 à 100 % : OK | idem ; un `bench` à `?`, code juste coupé à 1 000 tokens avant `class Inventory`, comme en 0.20.0 |
+| prefill court, 1,4k, `bench` (t/s) | 512 à 522 | 520 à 529 | 523 à 524 |
+| prefill court, 1,6k, `refactor` (t/s) | 513 à 514 | 523 à 525 | 521 à 522 |
+| prefill à 6,5k / 52k / 32k (t/s) | 566 et 566 / 505,5 / 541,9 | 581 et 580 / 515,5 / 553,4 | 580 et 579 / 515,2 / 552,1 |
+| décode code (t/s) | 67,4 / 41,0 / 67,3 | 67,4 / 66,7 / 60,8 | 67,3 / 66,7 / 67,7 |
+| décode prose, `bench` (t/s) | 40,3 / 47,6 / 50,9 | 48,3 / 45,7 / 48,9 | 47,8 / 42,7 / 48,7 |
+| chargement (banc), mémoire | 25,5 s | 26,2 s, 64 020 Mio | 13,3 s, 63 871 Mio |
+| tour 2 du cache, premier token | 0,423 s | 0,424 s | 0,422 s |
+| agentique, cache disque | 16/16, 54 requêtes, repris 98,2 %, prefill 12 s, décode 106 s à 42,5 t/s, acceptance 72,1 % | 16/16, 49 requêtes, repris 93,5 %, prefill 16 s, décode 101 s à 44,3 t/s, acceptance 72,1 % | 16/16, 51 requêtes, repris 98,4 %, prefill 11 s, décode 100 s à 43,8 t/s, acceptance 70,0 % |
+| reprises disque / RAM / ratés | 4 / 50 / 0 | 0 / 46 / 3 (`no_compatible_boundary`) | 4 / 47 / 0 |
+| points de reprise disque écrits | 0 (67 refus `min_step`) | 3 (51 refus `min_step`) | 0 (66 refus `min_step`) |
+| tokens générés (boucle) | 4 487 | 4 484 | 4 388 |
+| passes 1/2/3 (s) | 43,6 / 38,6 / 40,2 | 47,1 / 35,6 / 36,4 | 45,0 / 36,7 / 34,4 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 334 ms | 335 ms | 336 ms |
+
+| Flash-Next, 1 session, silentchuck | 0.20.0 (21/10, 15:48) | 0.21.0, disque invalidé (22/10, 14:18) | 0.21.0, disque chaud (22/10, 14:35) |
+|---|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK ; `bench` à `?` (appels d'outils en texte) | idem, `bench` à `?` comme depuis la 0.19.0 (92 à 194 tokens) | idem (146 à 198 tokens) |
+| prefill court, 1,4k, `bench` (t/s) | 1 244 à 1 558 | 1 304 à 1 557 | 1 281 à 1 558 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 359 à 1 546 | 1 368 à 1 541 | 1 353 à 1 535 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 453 et 1 580 / 1 664,4 / 1 681,0 | 1 432 et 1 575 / 1 673,0 / 1 677,8 | 1 563 et 1 578 / 1 670,7 / 1 651,7 |
+| décode code (t/s) | 97,8 / 95,1 / 55,9 | 94,7 / 90,8 / 90,5 | 94,0 / 95,0 / 92,4 |
+| chargement (banc), mémoire | 102,3 s, 110 584 Mio | 97,3 s, 110 725 Mio | 93,3 s, 110 792 Mio |
+| tour 2 du cache, premier token | 0,168 s | 0,169 s | 0,169 s |
+| agentique, cache disque | 16/16, 53 requêtes, repris 98,4 %, prefill 5 s, décode 75 s à 58,4 t/s, acceptance 88,0 % | 16/16, 51 requêtes, repris 93,3 %, prefill 7 s, décode 65 s à 59,2 t/s, acceptance 89,7 % | 16/16, 51 requêtes, repris 98,8 %, prefill 4 s, décode 69 s à 56,8 t/s, acceptance 89,7 % |
+| reprises disque / RAM / ratés | 4 / 49 / 0 | 0 / 48 / 3 (`no_compatible_boundary`) | 4 / 47 / 0 |
+| points de reprise disque écrits | 0 (59 refus `min_step`) | 3 (45 refus `min_step`) | 0 (47 refus `min_step`) |
+| tokens générés (boucle) | 4 365 | 3 843 | 3 939 |
+| passes 1/2/3 (s) | 30,7 / 30,5 / 23,7 | 26,6 / 21,9 / 26,2 | 27,0 / 23,5 / 27,6 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 149 ms | 146 ms | 159 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16 sur les deux
+  modèles et les deux séries.
+- **Cache disque invalidé sur les deux Qwen**, pas sur Flash-Next seul
+  comme l'annonce #350 : la première série recalcule les trois débuts de
+  conversation des deux modèles, la seconde les reprend par le disque, sans
+  raté, à 98,4 et 98,8 % (98,2 et 98,4 % en 0.20.0).
+- **27B, #688 visible** : prefill +2 % à toutes les longueurs (515 contre
+  505,5 t/s à 52k, 580 contre 566 à 6,5k, 522 à 525 contre 513 à 514 au
+  refactor), dans la fourchette annoncée. Les 400 Mio épinglés ne se voient
+  pas dans la mémoire relevée (63 871 à 64 020 contre 64 398 Mio). Décode
+  et agentique au même niveau ; les passes 2 et 3 plus courtes de 2 à 6 s.
+- **Flash-Next au niveau de la 0.20.0** : prefill identique, décode en code
+  90 à 95 t/s (sans la passe de prose de raisonnement de la 0.20.0),
+  agentique 56,8 à 59,2 t/s contre 58,4 ; le gain de #699, annoncé à 1 à
+  2,5 % en recopie, est sous le bruit de notre banc. Boucle plus courte
+  (passes de 22 à 28 s contre 24 à 31), mais avec 400 à 500 tokens générés
+  de moins : réponses plus courtes, pas un gain de débit.
+
+Non mesuré : la vision des deux Qwen (#699 touche la reprise d'image de
+Flash-Next), le service d'usage à deux sessions (#688 y épinglerait
+800 Mio pour le 27B), DeepSeek.
+
 ## Release v0.20.0 (21/10/2026), montée le jour même, les trois modèles remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 21/10/2026 après la lecture de la

@@ -221,6 +221,24 @@ la synthèse et ce qui sert au travail courant.
   agentique 29,6 t/s contre 27,3, acceptance 87,1 % contre 73,0, reprise
   92,2 % contre 88,9, mais **chargement 172 à 287 s** contre 72 s, à suivre
   (#609 change son chargement). Détail dans `HISTORIQUE-GUFO.md`.
+- **0.21.0** (montée le 22/10/2026) : capture du prompt DFlash2 du 27B en
+  mémoire épinglée bornée (#688, absente du CHANGELOG : 400 Mio épinglés
+  par session dès le chargement, `slot_pinned_bytes`, comptés en plus du
+  budget du cache), décode échantillonné de Flash-Next allégé (#699), YaRN
+  en option au-delà de 262144 (#350 : `--enable-yarn`, seule option
+  ajoutée, refusée à notre `--context 262144`). Aucun réglage changé. Le
+  format des instantanés change : la première série part à froid sur
+  **les deux** Qwen (3 ratés `no_compatible_boundary` chacun, reprise
+  93,3 à 93,5 %), pas seulement sur Flash-Next comme annoncé ; la seconde,
+  sur disque chaud, reprend 98,4 % (27B) et 98,8 % (Flash-Next). 27B et
+  Flash-Next remesurés deux fois sur silentchuck, 16/16, pas de boucle,
+  aucune erreur, aucun client étranger. 27B : prefill +2 % partout (515 t/s
+  à 52k contre 505,5, 579 à 580 à 6,5k contre 566), ce qu'annonce #688 ;
+  décode, agentique (43,8 à 44,3 t/s) et mémoire (63 871 à 64 020 Mio)
+  inchangés. Flash-Next au niveau de la 0.20.0 (1 671 à 1 673 t/s à 52k,
+  décode en code 90,5 à 95,0 t/s, agentique 56,8 à 59,2 t/s, acceptance
+  89,7 %) : le gain de #699 reste sous le bruit du banc. Détail dans
+  `HISTORIQUE-GUFO.md`.
 - **À vérifier à la prochaine release** : la refonte du cache (reprise après
   crash non exercée ; trois débuts de conversation recalculés par le 27B à
   la série 0.11.0 puis par Flash-Next à la série 0.12.0, pas en 0.13.0, cause
@@ -265,7 +283,7 @@ la synthèse et ce qui sert au travail courant.
   ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
   commit `d9a84f1` le 26/09/2026, sur la v0.1.1 le 28/09/2026 (27B et
   Flash-Next), la v0.2.0 le 29/09/2026 (27B, Flash-Next et DeepSeek), puis la
-  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0, la v0.14.0, la v0.15.0, la v0.15.1, la v0.17.0, la v0.17.1, la v0.18.0, la v0.19.0 et la v0.20.0 (Flash-Next seul de la v0.7.1 à la v0.8.1, de la v0.13.0 à la v0.15.0 et de la v0.17.0 à la v0.18.0, les deux Qwen de la v0.9.0 à la v0.12.0, en v0.15.1 et en v0.19.0, les trois en v0.20.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
+  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0, la v0.14.0, la v0.15.0, la v0.15.1, la v0.17.0, la v0.17.1, la v0.18.0, la v0.19.0, la v0.20.0 et la v0.21.0 (Flash-Next seul de la v0.7.1 à la v0.8.1, de la v0.13.0 à la v0.15.0 et de la v0.17.0 à la v0.18.0, les deux Qwen de la v0.9.0 à la v0.12.0, en v0.15.1 et en v0.19.0, les trois en v0.20.0, les deux Qwen en v0.21.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
   précèdent toute release : la v0.1.0 n'est publiée que le 28/09/2026.
 - Pas un llama.cpp : noyaux spécialisés par modèle et par forme de matrice,
   en partie adaptés de llama.cpp / ggml (MIT, cf. leur
@@ -513,6 +531,7 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.18.0 (`6c682a2`) | 19/10/2026 | montée | blocages du prompt et du décode de Flash-Next réduits (#653 : pages hôte protégées du compactage, patch ROCr requalifié), instantanés du cache disque hors du cache de pages (#477), cache de pages récupérable compté dans le cgroup (#637), état récurrent dédoublé (#650, 27B), schémas d'outils non stricts conservés sur Chat et Responses (#643), `--reasoning-budget` (#524, non posé), vocabulaire des sorties structurées préparé au chargement (#638, 26,4 ms) ; `--help` : une option ajoutée ; Flash-Next seul remesuré sur silentchuck contre la 0.17.1, une série, 16/16, pas de boucle, aucune erreur, aucun client étranger ; prefill au niveau de la 0.17.1 (1 672 t/s à 52k), décode en code 89,9 à 92,8 t/s contre 93,9 à 96,2 (acceptance 2 points plus basse), prose 86 à 90 t/s, agentique 56,7 t/s contre 58,1, acceptance 93,5 % contre 92,3 %, passes 27,5 / 30,0 / 26,3 s ; reprise 93,8 % sur cache disque froid, mêmes 3 ratés `no_compatible_boundary` ; chargement 94,8 s ; 27B et DeepSeek non remesurés ; aucun réglage changé |
 | v0.19.0 (`7b27845`) | 20/10/2026 | montée | petite tête MTP pour les requêtes échantillonnées à plusieurs sessions (#655) et brouillons gloutons tarifés à l'occupation du décode (#664, Flash-Next), somme des blocs q8_1 corrigée (#667), vérification du 27B en wave64 (#660), `/props` au format de llama-server (#669) ; `--help` identique ; 27B et Flash-Next remesurés sur silentchuck, une série chacun, 16/16, pas de boucle, aucune erreur, aucun raté de cache ; Flash-Next contre la 0.18.0 : banc HTTP au même niveau (1 667 t/s à 52k, décode en code 89,1 à 93,7 t/s), agentique 59,5 t/s contre 56,7, acceptance 88,4 % contre 93,5 %, passes 26,4 / 26,1 / 21,9 s, reprise 98,6 % sur cache disque chaud, chargement 99 s ; 27B contre la 0.15.1 : décode en code 66,1 à 67,3 t/s contre 65,1 à 65,3, prefill à 52k 506 t/s contre 497, agentique 42,7 t/s contre 42,1, acceptance 70,8 % contre 70,2 %, reprise 98,4 %, chargement 43 s ; DeepSeek non remesuré ; aucun réglage changé |
 | v0.20.0 (`0c03748`) | 21/10/2026 | montée | cache par composants pour le 27B en AR et DFlash2 (#540 : dossier possédé, staging ignoré, **yaml changé** : `GUFO_CACHE/qwen3.8-27b`, staging retiré de sa ligne), #676, cache sans réinitialisations répétées (#680), petites projections F16/BF16 de Flash-Next (#681), lignes n-gram préchargées (#683), chargement de DeepSeek au-delà du pool (#609) ; `--help` identique ; les trois modèles remesurés sur silentchuck, 16/16, pas de boucle, aucune erreur, le 27B deux fois ; 27B contre la 0.19.0 : prefill à 52k 506 t/s (505,5), décode en code 67,1 à 67,4 t/s quand l'acceptance tient (66,1 à 67,3), mémoire 64 398 Mio contre 82 160, agentique 44,3 puis 42,5 t/s (42,7), acceptance 70,0 puis 72,1 %, reprise 93,7 % sur dossier neuf (3 ratés `no_compatible_boundary`) puis 98,2 % sur disque chaud (aucun raté) ; Flash-Next contre la 0.19.0 : prefill à 52k 1 664 t/s (1 667), décode en code 95,1 et 97,8 t/s (une passe à 55,9 en prose de raisonnement), agentique 58,4 t/s (59,5), acceptance 88,0 %, reprise 98,4 %, chargement 102 à 158 s (97 à 123) ; DeepSeek contre la 0.2.0 : agentique 29,6 t/s (27,3), acceptance 87,1 % (73,0), reprise 92,2 % (88,9), premier token 696 ms (574), chargement 172 à 287 s (72) ; aucun autre réglage changé |
+| v0.21.0 (`7110c79`) | 22/10/2026 | montée | capture du prompt DFlash2 du 27B en mémoire épinglée bornée (#688, absente du CHANGELOG : 400 Mio épinglés par session au chargement, comptés en plus du budget du cache), décode échantillonné de Flash-Next allégé (#699), YaRN en option au-delà de 262144 (#350) ; `--help` : `--enable-yarn` ajoutée, sans objet à notre `--context 262144` ; format des instantanés changé, première série à froid sur les deux Qwen (3 ratés `no_compatible_boundary`, reprise 93,5 et 93,3 %) ; 27B et Flash-Next remesurés deux fois sur silentchuck, 16/16, pas de boucle, aucune erreur ; 27B contre la 0.20.0 : prefill à 52k 515 t/s (505,5), à 6,5k 579 à 580 (566), décode en code 60,8 à 67,7 t/s, mémoire 63 871 à 64 020 Mio (64 398), agentique 44,3 puis 43,8 t/s (42,5), acceptance 72,1 puis 70,0 %, reprise 98,4 % sur disque chaud (98,2) ; Flash-Next contre la 0.20.0 : prefill à 52k 1 671 à 1 673 t/s (1 664), décode en code 90,5 à 95,0 t/s (95,1 et 97,8), agentique 59,2 puis 56,8 t/s (58,4), acceptance 89,7 % (88,0), reprise 98,8 % sur disque chaud (98,4), chargement 93 à 97 s (102) ; DeepSeek non remesuré ; aucun réglage changé |
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
@@ -634,9 +653,12 @@ depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
 l'échantillonnage suit les profils officiels des modèles (glouton avant), ses
 propres bancs restant en glouton. Les valeurs du tableau visent un usage
 agentique comparable au service ; aucune n'est un réglage interne du moteur.
-Dernière confrontation à la documentation amont : 21/10/2026, v0.20.0 (diff
-de documentation depuis la v0.19.0 et `--help` des deux images comparés sur
-silentchuck) : `--help` identique, mais le sens de deux options change
+Dernière confrontation à la documentation amont : 22/10/2026, v0.21.0 (diff
+de documentation depuis la v0.20.0 et `--help` des deux images comparés sur
+silentchuck) : une option ajoutée, `--enable-yarn` (#350, YaRN statique de
+Flash-Next, exigée au-delà de 262144 et refusée en deçà, donc sans objet
+pour notre `--context 262144`), aucun défaut changé ; en v0.20.0
+(21/10/2026) : `--help` identique, mais le sens de deux options change
 pour le 27B comme pour Flash-Next en 0.14.0 (#540 : `--cache-disk` possédé
 par un seul serveur, qui y supprime les fichiers de l'ancien format ;
 `--cache-disk-staging-bytes` ignoré), d'où le dossier
