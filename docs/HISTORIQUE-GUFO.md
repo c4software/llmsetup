@@ -20,6 +20,123 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.22.0 (23/10/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
+
+Montée acceptée par l'utilisateur le 23/10/2026 après la lecture de la
+checklist (27B et Flash-Next remesurés, DeepSeek non). Image épinglée en
+`gufo-runtime:0.22.0` (`533d713`), digest `76bcab3ffea7`, publiée environ
+15 minutes après la release (11:02 UTC). `remesure.sh 27b flashnext` de
+13:59 à 14:15 (`remesure.log` de `~/llm/gufo-test`), puis, le cache disque
+du 27B étant reparti à froid, `TAG=2026-10-23-0.22.0-passe2 remesure.sh
+27b` de 14:16 à 14:26 (`remesure-passe2.log`) ; journaux agentiques dans
+`resultats/agentic/2026-10-23-0.22.0/` et `…-0.22.0-passe2/` (`avant/` =
+la série précédente). Le service d'usage réel est relancé à la fin.
+Proxy, voix, transcription et image non revérifiés.
+
+Contenu (notes de release v0.21.0...v0.22.0, diff de documentation lu) :
+
+- **#705, DFlash2 du 27B accéléré**, mergée 20 minutes avant le commit de
+  release et absente du CHANGELOG, mais dans le tag (vérifié par la
+  comparaison des commits). Le brouillon réutilise l'index de recherche
+  dans l'historique du prompt de Flash-Next (copies vérifiées par la cible,
+  24 tokens de correspondance, 12 en glouton quand l'acceptance neuronale
+  faiblit, sources à cheval sur une frontière de message écartées), les
+  pénalités de répétition, fréquence et présence entrent dans la
+  probabilité du brouillon, le dernier niveau du prefill ne calcule plus
+  que la tuile utile, et deux noyaux de vérification exacts (Q4 à quatre
+  tokens, IQ4_XS à cinq). Annoncé en Q4 : recopie échantillonnée 70,4
+  contre 77,2 t/s, répétition à 32k 24,0 contre 53,9, mais code 54,9
+  contre 54,1, texte mixte 27,0 contre 27,0, prefill à 32k +2 %.
+- **#707**, Flash-Next : arène `qfn_mmq` propre à chaque stream HIP
+  (justesse, streams concurrents). **#714** : projections BF16 de
+  l'indexeur sommées dans l'ordre K pour chaque token (déterminisme).
+  **#703** : brouillons MTP échantillonnés sans graine tarifés à
+  l'occupation du décode.
+- **#677**, cache : RAM libérée avant d'écrire sur disque un checkpoint
+  plus gros que la RAM disponible.
+- #722 : `detail` des images accepté en `low`, `high`, `original`, traité
+  comme `auto`. #711, #713, #729 : « leaves » `src/core/platform/` du
+  portage Windows (#254), code POSIX déplacé à l'identique, sans effet.
+
+Confrontation des paramètres (23/10/2026) : `gufo serve llm --help`
+identique entre les images 0.21.0 et 0.22.0 sur silentchuck. Aucun
+changement du format des instantanés repéré dans le diff, mais le cache
+disque du 27B est bien invalidé (#705 change l'état privé du DFlash2).
+GGUF servis comparés aux identités publiées par gufo
+(`docs/models/*/artifacts/model-identities.json`) et à la tête des repos
+HF : conformes, y compris le 27B UD-Q4_K_XL republié par unsloth le
+19/08/2026 (sha256 `3f227079…` vérifié sur silentchuck) ; seul écart, le
+drafter DFlash2 en Q8_0 au lieu du Q4_K_M conseillé, déjà connu. Les
+têtes MTP republiées par unsloth les 05 et 06/10 sont les variantes non
+shared, que gufo n'utilise pas. Contournements inchangés. #299 toujours
+ouverte (rebasée sur la 0.21.0) : refus du GGUF Ornith maintenu.
+
+Vérifié après les séries : aucun client étranger sur `:8009` (`queue_ms`
+au plus 62 ms pour Flash-Next et 104 ms pour le 27B, chaque fois une
+requête seule en file, `queue_depth=1`, dont c'est la restauration disque,
+`cache_restore_ms` 54 à 102 ms ; le seul `body_bytes` de 8 Mio est la
+limite annoncée), aucun `device_lost`, `generation_failed`,
+`persistence_incomplete` ni `option_ignored` ; seule erreur, le
+`failed to preload … 404` connu du lancement.
+
+| 27B, 1 session, silentchuck | 0.21.0, disque chaud (22/10, 14:28) | 0.22.0, disque invalidé (23/10, 13:59) | 0.22.0, disque chaud (23/10, 14:16) |
+|---|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK ; un `bench` à `?` | sanity, aiguilles, tour 2 à 100 % : OK | idem ; un `bench` à `?` |
+| prefill court, 1,4k, `bench` (t/s) | 523 à 524 | 528 à 532 | 528 à 529 |
+| prefill court, 1,6k, `refactor` (t/s) | 521 à 522 | 527,5 à 529 | 526 à 527 |
+| prefill à 6,5k / 52k / 32k (t/s) | 580 et 579 / 515,2 / 552,1 | 586 et 585 / 524,5 / 561,7 | 585 et 584 / 523,3 / 560,9 |
+| décode code (t/s) | 67,3 / 66,7 / 67,7 | 68,2 / 35,0 / 68,7 | 67,6 / 37,1 / 68,1 |
+| décode prose, `bench` (t/s) | 47,8 / 42,7 / 48,7 | 48,0 / 51,2 / 44,7 | 49,0 / 52,6 / 42,8 |
+| chargement (banc), mémoire | 13,3 s, 63 871 Mio | 24,4 s, 64 068 Mio | 14,3 s, 63 958 Mio |
+| tour 2 du cache, premier token | 0,422 s | 0,437 s | 0,422 s |
+| agentique, cache disque | 16/16, 51 requêtes, repris 98,4 %, prefill 11 s, décode 100 s à 43,8 t/s, acceptance 70,0 % | 16/16, 49 requêtes, repris 93,5 %, prefill 18 s, décode 94 s à 43,2 t/s, acceptance 71,0 % | 16/16, 53 requêtes, repris 98,5 %, prefill 12 s, décode 102 s à 43,0 t/s, acceptance 71,0 % |
+| reprises disque / RAM / ratés | 4 / 47 / 0 | 0 / 46 / 3 (`no_compatible_boundary`) | 4 / 49 / 0 |
+| points de reprise disque écrits | 0 (66 refus `min_step`) | 3 (60 refus `min_step`) | 0 (68 refus `min_step`) |
+| tokens générés (boucle) | 4 388 | 4 051 | 4 365 |
+| passes 1/2/3 (s) | 45,0 / 36,7 / 34,4 | 44,1 / 33,4 / 38,9 | 42,5 / 43,4 / 32,5 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 336 ms | 335 ms | 336 ms |
+
+| Flash-Next, 1 session, silentchuck | 0.21.0, disque chaud (22/10, 14:35) | 0.22.0, disque chaud (23/10, 14:07) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK ; `bench` à `?` (146 à 198 tokens) | idem, `bench` à `?` (94 à 146 tokens) |
+| prefill court, 1,4k, `bench` (t/s) | 1 281 à 1 558 | 1 285 à 1 553 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 353 à 1 535 | 1 381 à 1 545 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 563 et 1 578 / 1 670,7 / 1 651,7 | 1 568 et 1 561 / 1 668,3 / 1 676,2 |
+| décode code (t/s) | 94,0 / 95,0 / 92,4 | 96,0 / 94,3 / 92,4 |
+| chargement (banc), mémoire | 93,3 s, 110 792 Mio | 80,4 s, 110 277 Mio |
+| tour 2 du cache, premier token | 0,169 s | 0,154 s |
+| agentique, cache disque | 16/16, 51 requêtes, repris 98,8 %, prefill 4 s, décode 69 s à 56,8 t/s, acceptance 89,7 % | 16/16, 56 requêtes, repris 98,1 %, prefill 5 s, décode 70 s à 61,0 t/s, acceptance 89,5 % |
+| reprises disque / RAM / ratés | 4 / 47 / 0 | 4 / 52 / 0 |
+| points de reprise disque écrits | 0 (47 refus `min_step`) | 1 (59 refus `min_step`) |
+| tokens générés (boucle) | 3 939 | 4 271 |
+| passes 1/2/3 (s) | 27,0 / 23,5 / 27,6 | 24,8 / 32,3 / 23,0 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 159 ms | 147 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16 sur les deux
+  modèles et les trois séries.
+- **Cache disque du 27B invalidé**, sans changement de format annoncé :
+  la première série recalcule les trois débuts de conversation, la seconde
+  les reprend par le disque, sans raté, à 98,5 %. Flash-Next garde son
+  cache (98,1 %, 4 reprises disque dès la première série).
+- **27B, #705 invisible dans notre boucle** : prefill +1 à 2 % à toutes
+  les longueurs (le dernier niveau allégé), agentique 43,0 à 43,2 t/s
+  contre 43,8, acceptance 71,0 % contre 70,0 : nos scénarios recopient peu
+  de passages longs, et le gain annoncé porte sur la recopie. La passe 2
+  du `refactor` (échantillonnée) part dans les deux séries en prose de
+  réflexion (« J'ai commencé à répondre mais j'ai coupé… ») au lieu des
+  blocs de code, d'où 35,0 et 37,1 t/s contre 66,7 en 0.21.0 ; même
+  passe à 41,0 en 0.20.0. Contenu de la réponse, pas lenteur du moteur, à
+  suivre si cela se répète.
+- **Flash-Next au niveau de la 0.21.0** au banc HTTP ; agentique 61,0 t/s
+  contre 56,8 avec la même acceptance, et 330 tokens générés de plus ;
+  chargement 80 s contre 93. #707 et #714 sont des corrections de justesse
+  sans effet visible ici.
+
+Non mesuré : la vision des deux Qwen (#722), le service d'usage à deux
+sessions (#707 concerne les streams concurrents), DeepSeek.
+
 ## Release v0.21.0 (22/10/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
 
 Montée acceptée par l'utilisateur le 22/10/2026 après la lecture de la
