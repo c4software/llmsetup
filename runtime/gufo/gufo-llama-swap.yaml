@@ -163,9 +163,15 @@ macros:
 # transmet alors pas, et l'extension pi/omp retombe sur 128K. Doit rester égal
 # au --context de la macro gufo.
 models:
-  # Qwen3.8-27B, fichiers partagés avec le runtime llama-cpp-rocm-strix
-  # (--setup 27b ici, ou son propre --setup) : cible UD-Q4_K_XL,
-  # drafter DFlash 2 Q8_0 (adaptatif, 7 tokens max, défauts gufo).
+  # Qwen3.8-27B (--setup 27b) : cible UD-Q4_K_XL partagée avec le runtime
+  # llama-cpp-rocm-strix (son propre --setup la prend aussi), drafter DFlash 2
+  # Q4_K_M (adaptatif, 7 tokens max, défauts gufo) et mmproj BF16 propres à
+  # gufo, dans MODELS_BASE/gufo/qwen3.8-27b. Le Q4_K_M est le drafter conseillé
+  # par le guide du 27B de gufo, avec l'une ou l'autre cible ; le Q8_0 du parc,
+  # servi jusqu'au 24/10/2026, avait été mesuré identique le 25/09/2026.
+  # Vision depuis le 24/10/2026 : mmproj passé explicitement (gufo ne le
+  # trouve seul qu'à côté de la cible, dans un dossier du parc que le
+  # --cleanup de l'autre runtime purgerait), poids chargés à la première image.
   "qwen3.8-27b":
     name: "Qwen3.8-27B (gufo, DFlash 2)"
     cmd: >-
@@ -173,7 +179,8 @@ models:
       --cache-disk ${env.GUFO_CACHE}/qwen3.8-27b --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-UD-Q4_K_XL.gguf
       --speculative dflash2
-      --dflash-model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q8_0.gguf
+      --dflash-model ${env.MODELS_BASE}/gufo/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
+      --mmproj ${env.MODELS_BASE}/gufo/qwen3.8-27b/mmproj-BF16.gguf
       ${qwen}
     checkEndpoint: /health
     capabilities:

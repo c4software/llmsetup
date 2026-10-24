@@ -7,8 +7,10 @@
 #
 # Usage :
 #   runtime/gufo/download.sh image       docker pull de l'image (8,3 Go)
-#   runtime/gufo/download.sh 27b         Qwen3.8-27B UD-Q4_K_XL unsloth et son drafter
-#                                        DFlash 2 Q8_0 z-lab, dans MODELS_BASE/qwen3.8-27b
+#   runtime/gufo/download.sh 27b         Qwen3.8-27B UD-Q4_K_XL unsloth, dans
+#                                        MODELS_BASE/qwen3.8-27b, plus son drafter
+#                                        DFlash 2 Q4_K_M z-lab et son mmproj BF16
+#                                        (≈ 2 Go), dans MODELS_BASE/gufo/qwen3.8-27b
 #   runtime/gufo/download.sh flashnext   Flash-Next UD-Q4_K_XL unsloth, 4 shards (≈ 104 Go),
 #                                        plus la tête MTP shared Q8_0 et le mmproj BF16,
 #                                        dans MODELS_BASE/qwen3.8-flash-next
@@ -22,7 +24,8 @@
 #                                        qwen-image) : la seule variante servie
 #   runtime/gufo/download.sh all         tout ce qui précède
 #
-# Le 27B (cible et drafter DFlash 2 Q8_0), la tête MTP et le mmproj de
+# La cible du 27B (et son drafter DFlash 2 Q8_0 jusqu'au 24/10/2026, remplacé
+# par le Q4_K_M conseillé par gufo, propre à ce runtime), la tête MTP et le mmproj de
 # Flash-Next sont des fichiers que gufo PARTAGE avec le runtime
 # llama-cpp-rocm-strix, dont le --setup les télécharge aussi (son
 # lib/models.sh). Jusqu'au 09/10/2026 gufo comptait sur lui ; un runtime
@@ -55,7 +58,15 @@ telecharge() {
     image) docker pull "$IMG" ;;
     27b)
       du_parc qwen3.8-27b unsloth/Qwen3.8-27B-GGUF Qwen3.8-27B-UD-Q4_K_XL.gguf
-      du_parc qwen3.8-27b z-lab/Qwen3.8-27B-DFlash2-GGUF Qwen3.8-27B-DFlash2-Q8_0.gguf ;;
+      # Drafter et mmproj : gufo n'épingle pas de révision pour le 27B, celles
+      # ci-dessous sont les têtes des repos le 24/10/2026 (2d9571f : le Q4_K_M
+      # mesuré le 25/09/2026).
+      hf download z-lab/Qwen3.8-27B-DFlash2-GGUF \
+        --revision 2d9571f8ce46e151f61c6499c99dee6079e1d610 \
+        Qwen3.8-27B-DFlash2-Q4_K_M.gguf --local-dir "$DL/qwen3.8-27b"
+      hf download unsloth/Qwen3.8-27B-GGUF \
+        --revision 4ca720788d1e01f1bff70c033e0d0028fd02e502 \
+        mmproj-BF16.gguf --local-dir "$DL/qwen3.8-27b" ;;
     flashnext)
       hf download unsloth/Qwen3.8-Flash-Next-GGUF \
         --revision 38bb39ee97821de2c9009abb7e93950eec396e66 \

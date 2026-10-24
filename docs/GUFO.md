@@ -655,7 +655,9 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   épinglées par gufo (Flash-Next UD-Q4_K_XL unsloth `38bb39e`, 104 Go ;
   DeepSeek IQ2XXS antirez `1cd7b56`, 87 Go, et DSpark `e7f0403`, 6 Go ;
   le drafter DFlash 2 Q4_K_M `2d9571f`, 1,1 Go, téléchargé pour la
-  comparaison au Q8_0, mesuré identique et supprimé le 25/09/2026). Présents
+  comparaison au Q8_0, mesuré identique et supprimé le 25/09/2026, puis
+  servi depuis le 24/10/2026 avec le mmproj BF16 du 27B `4ca7207`, 0,9 Go,
+  tous deux dans `~/models/gufo/qwen3.8-27b`). Présents
   sur bigchuck (191 Go dans `~/models/gufo`, `GUFO_DATA/models` avant le
   09/10/2026).
 - `runtime/gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
@@ -751,7 +753,7 @@ sienne et met cette ligne à jour.
 | `--cache-disk-staging-bytes` | 8 Gio | automatique : depuis v0.9.1 (#473) le plus petit de 1/8 de la RAM disponible et du budget disque ; de #279 à la 0.9.0, au plus 1 Gio en plus (512 Mio fixes avant) | non utilisé | nous : au défaut d'avant #473, les points de reprise du 27B étaient refusés dès ~8k tokens (4,5k avant #279), et le 26/09/2026 ceux de nos sessions Flash-Next (1,39 à 1,50 Go) l'ont été (`reason=staging_capacity`, journalisé depuis #279) ; depuis #473 le défaut suffit au 27B (10,6 Gio résolus le 08/10/2026, aucun refus) mais tomberait vers 2 Gio pour Flash-Next (estimation), où le huitième de la RAM borne ; non préalloué. Valeur que `docs/SERVER.md` recommande désormais pour Flash-Next à contexte plein ; depuis la 0.14.0 (13/10/2026) retiré de la ligne de Flash-Next, qui l'ignore (tampon interne de 1 Mio, #573) et dont `docs/SERVER.md` ne le recommande plus ; depuis la 0.20.0 (21/10/2026) retiré aussi de la ligne du 27B, qui l'ignore de même (#540) ; gardé sur DeepSeek seul, pour qui `docs/SERVER.md` décrit encore le défaut |
 | spéculatif (adaptatif, 7 tokens max), `--prefill-chunk` 512 | inchangés | défauts gufo | défauts gufo | gufo |
 | `--max-pending-per-client` | non posé (16 depuis la 0.9.0, 4 avant) | valeur de `--max-pending` (16) depuis v0.9.0 (#467), 4 avant | non indiqué | gufo ; derrière llama-swap, toutes les requêtes viennent de 127.0.0.1 : jusqu'à la 0.8.1, 4 en file au plus pour tous les clients réunis (aucun rejet vu), 16 depuis |
-| fichiers | Flash-Next UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q8_0 | | UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q4_K_M | gufo, sauf le drafter du 27B pris dans le parc (Q8_0, mesuré identique au Q4_K_M) |
+| fichiers | Flash-Next UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q4_K_M, mmproj BF16 du 27B et de Flash-Next | | UD-Q4_K_XL, MTP shared Q8_0, DFlash 2 Q4_K_M, mmproj BF16 | gufo ; drafter du 27B pris dans le parc (Q8_0, mesuré identique au Q4_K_M) jusqu'au 24/10/2026, 27B sans vision avant cette date |
 
 Les chiffres agentiques avec cache disque ont été mesurés avec ces réglages ;
 gufo « nu » (sans cache disque) était à égalité avec le service sur le 27B.

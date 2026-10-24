@@ -27,7 +27,7 @@ de tourner :
 export LLM_RUNTIME=gufo                # pour les --setup qui suivent
 ./setup-llm.sh --setup image           # l'image de gufo (8,3 Go)
 ./setup-llm.sh --setup flashnext       # Flash-Next UD-Q4_K_XL (104 Go), tête MTP et mmproj
-./setup-llm.sh --setup 27b             # Qwen3.8-27B et son drafter DFlash 2 (déjà là si le service est installé)
+./setup-llm.sh --setup 27b             # Qwen3.8-27B (déjà là si le service est installé), drafter DFlash 2 Q4_K_M et mmproj
 ./setup-llm.sh --setup deepseek        # DeepSeek IQ2XXS + DSpark (93 Go), si voulu
 ./setup-llm.sh --setup tts             # synthèse vocale, trois variantes (13,5 Go), si voulu
 ./setup-llm.sh --setup asr             # transcription (4,7 Go), si voulu
@@ -88,7 +88,7 @@ requêtes de gufo.
 | `Dockerfile.routeur` | L'image : celle de gufo plus le binaire llama-swap, épinglé par version et SHA-256 ; construite par compose |
 | `IMAGE` | L'image de gufo épinglée, une ligne (`ghcr.io/gufo-org/toolboxes/gufo-runtime:<version>`) : SEUL endroit à éditer pour changer de version. Défaut de `GUFO_IMAGE` pour `runtime.sh`, `download.sh`, `bench/remesure.sh` et `tools/gufo-amont.sh` ; `Dockerfile.routeur` la reçoit du `.env` |
 | `gufo-llama-swap.yaml` | La SEULE description des lignes de commande de gufo, modèle par modèle, versionnée, sans valeur machine (`${env.VAR}`) : réglages et leur origine, groupe exclusif, préchargement |
-| `download.sh image\|27b\|flashnext\|deepseek\|tts\|asr\|qwen-image\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --setup <quoi>`) ; le 27B, la tête MTP et le mmproj de Flash-Next, partagés avec le service, aux mêmes chemins et sans révision épinglée (un fichier présent n'est jamais repris) |
+| `download.sh image\|27b\|flashnext\|deepseek\|tts\|asr\|qwen-image\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --setup <quoi>`) ; la cible du 27B, la tête MTP et le mmproj de Flash-Next, partagés avec le service, aux mêmes chemins et sans révision épinglée (un fichier présent n'est jamais repris) |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
 | `tools/gufo-amont.sh` | Suivi de gufo en amont, en lecture seule (`gh api`) : releases, images publiées, commits, état des tickets suivis ; `ticket <n> [k]`, `diff <de> [à]`, `release [tag]`, `commits [date]`, `images [n]`. À la racine (`tools/`) avant le 09/10/2026 : **une autorisation locale sur l'ancien chemin (`.claude/settings.local.json`) est à mettre à jour** |
