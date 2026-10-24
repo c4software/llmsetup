@@ -168,7 +168,10 @@ models:
   # Q4_K_M (adaptatif, 7 tokens max, défauts gufo) et mmproj BF16 propres à
   # gufo, dans MODELS_BASE/gufo/qwen3.8-27b. Le Q4_K_M est le drafter conseillé
   # par le guide du 27B de gufo, avec l'une ou l'autre cible ; le Q8_0 du parc,
-  # servi jusqu'au 24/10/2026, avait été mesuré identique le 25/09/2026.
+  # servi jusqu'au 24/10/2026, avait été mesuré identique le 25/09/2026 ;
+  # remesuré le 24/10/2026 (0.23.0, silentchuck) contre le Q8_0 en 0.22.0 :
+  # 16/16 agentique, prefill identique, décode +4 à +6 % en prose, agentique
+  # 44,9 t/s contre 43,0, acceptance 71,0 % inchangée, +0,9 Gio (mmproj).
   # Vision depuis le 24/10/2026 : mmproj passé explicitement (gufo ne le
   # trouve seul qu'à côté de la cible, dans un dossier du parc que le
   # --cleanup de l'autre runtime purgerait), poids chargés à la première image.

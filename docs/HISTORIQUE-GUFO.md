@@ -34,6 +34,24 @@ non). Image épinglée en `gufo-runtime:0.23.0` (`b26d90e`), digest
 la série précédente). Le service d'usage réel est relancé à la fin.
 Proxy, voix, transcription et image non revérifiés.
 
+Le soir même (`9274dea`, à la demande de l'utilisateur), le 27B passe au
+drafter DFlash 2 Q4_K_M que conseille `docs/models/qwen3.8-27b/README.md`
+de gufo (z-lab `2d9571f`, Q8_0 du parc avant, mesuré identique le
+25/09/2026) et gagne la vision (mmproj BF16 unsloth `4ca7207`, `--mmproj`),
+tous deux dans `~/models/gufo/qwen3.8-27b` ; téléchargés par curl aux mêmes
+révisions (pas de `hf` sur silentchuck), sha256 conformes à HF. Image
+vérifiée : un carré rouge PNG, réponse « Rouge » (`event=vision_prepared`,
+928 Mo). `TAG=2026-10-24-0.23.0-27b-q4km remesure.sh 27b` de 23:05 à 23:15
+(`remesure-27b-q4km.log`), 16/16, `queue_depth=1` partout, `queue_ms` sous
+10 ms. Contre la 0.22.0 en Q8_0 (23/10/2026) : prefill 524,2 t/s à 52k
+(523,3), 585 à 586 à 6,5k (584 à 585) ; décode en prose 50,9 / 54,7 / 45,5
+t/s (49,0 / 52,6 / 42,8), en code 68,6 / 34,4 / 68,4 (67,6 / 37,1 / 68,1) ;
+mémoire 64 905 Mio (63 958 à 64 068 : le mmproj reste résident) ;
+chargement 14,5 s ; agentique 44,9 t/s (43,0), acceptance 71,0 % (71,0),
+reprise 93,7 % sur cache disque invalidé par le changement (3 ratés
+`no_compatible_boundary`) contre 98,5 % sur disque chaud. Le « ? » de
+`bench` passe 3 était déjà là le 23/10.
+
 Contenu (notes de release v0.22.0...v0.23.0, diff de documentation lu) :
 
 - **#742, Flash-Next** : deux changements. La boucle du sélecteur bornée
