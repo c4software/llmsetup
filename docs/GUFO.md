@@ -257,6 +257,21 @@ la synthèse et ce qui sert au travail courant.
   66,7). Flash-Next : banc HTTP au niveau de la 0.21.0, agentique 61,0 t/s
   contre 56,8 (acceptance 89,5 %, reprise 98,1 %), chargement 80 s contre
   93. Détail dans `HISTORIQUE-GUFO.md`.
+- **0.23.0** (montée le 24/10/2026) : Flash-Next, boucle du sélecteur
+  bornée et coûts mesurés de la petite tête de brouillon en échantillonné
+  (#742), petite tête ouverte au greedy seul ou contraint (#733, #739),
+  poids lus par `mapped_file` (#734, #738), EmbeddingGemma 2 hors parc
+  (#700). La partie sélecteur de #742 ne vaut que sous Clang 23 et plus :
+  l'image publiée est en ROCm 7.2.3 / Clang 22 (ROCm 10.1 / Clang 24 =
+  build d'évaluation amont sans image, on reste sur l'image publiée).
+  `--help` identique, aucun réglage changé. Cache disque de Flash-Next
+  invalidé (3 ratés `no_compatible_boundary`, reprise 93,7 %), d'où une
+  seconde série : reprise 98,9 %. Flash-Next seul remesuré sur
+  silentchuck, 16/16, pas de boucle, aucune erreur, aucun client étranger.
+  Banc HTTP au niveau de la 0.22.0 (1 674 à 1 678 t/s à 52k, décode en
+  code 93,7 à 97,7 t/s) ; agentique 58,4 puis 58,7 t/s contre 61,0,
+  acceptance 89,7 %, dans la dispersion entre séries ; chargement 84 à
+  87 s contre 80. Détail dans `HISTORIQUE-GUFO.md`.
 - **À vérifier à la prochaine release** : la refonte du cache (reprise après
   crash non exercée ; trois débuts de conversation recalculés par le 27B à
   la série 0.11.0 puis par Flash-Next à la série 0.12.0, pas en 0.13.0, cause
@@ -301,7 +316,7 @@ la synthèse et ce qui sert au travail courant.
   ROCm 7.2.3 embarqué, `gufo diagnose` en PASS sur bigchuck), remesuré au
   commit `d9a84f1` le 26/09/2026, sur la v0.1.1 le 28/09/2026 (27B et
   Flash-Next), la v0.2.0 le 29/09/2026 (27B, Flash-Next et DeepSeek), puis la
-  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0, la v0.14.0, la v0.15.0, la v0.15.1, la v0.17.0, la v0.17.1, la v0.18.0, la v0.19.0, la v0.20.0, la v0.21.0 et la v0.22.0 (Flash-Next seul de la v0.7.1 à la v0.8.1, de la v0.13.0 à la v0.15.0 et de la v0.17.0 à la v0.18.0, les deux Qwen de la v0.9.0 à la v0.12.0, en v0.15.1 et en v0.19.0, les trois en v0.20.0, les deux Qwen en v0.21.0 et en v0.22.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
+  v0.4.0, la v0.5.0, la v0.7.0, la v0.7.1, la v0.8.0, la v0.8.1, la v0.9.0, la v0.9.1, la v0.10.0, la v0.11.0, la v0.12.0, la v0.13.0, la v0.14.0, la v0.15.0, la v0.15.1, la v0.17.0, la v0.17.1, la v0.18.0, la v0.19.0, la v0.20.0, la v0.21.0, la v0.22.0 et la v0.23.0 (Flash-Next seul de la v0.7.1 à la v0.8.1, de la v0.13.0 à la v0.15.0, de la v0.17.0 à la v0.18.0 et en v0.23.0, les deux Qwen de la v0.9.0 à la v0.12.0, en v0.15.1 et en v0.19.0, les trois en v0.20.0, les deux Qwen en v0.21.0 et en v0.22.0, sur silentchuck depuis la v0.11.0 ; « Suivi en amont »). Les deux premières mesures
   précèdent toute release : la v0.1.0 n'est publiée que le 28/09/2026.
 - Pas un llama.cpp : noyaux spécialisés par modèle et par forme de matrice,
   en partie adaptés de llama.cpp / ggml (MIT, cf. leur
@@ -551,6 +566,7 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.20.0 (`0c03748`) | 21/10/2026 | montée | cache par composants pour le 27B en AR et DFlash2 (#540 : dossier possédé, staging ignoré, **yaml changé** : `GUFO_CACHE/qwen3.8-27b`, staging retiré de sa ligne), #676, cache sans réinitialisations répétées (#680), petites projections F16/BF16 de Flash-Next (#681), lignes n-gram préchargées (#683), chargement de DeepSeek au-delà du pool (#609) ; `--help` identique ; les trois modèles remesurés sur silentchuck, 16/16, pas de boucle, aucune erreur, le 27B deux fois ; 27B contre la 0.19.0 : prefill à 52k 506 t/s (505,5), décode en code 67,1 à 67,4 t/s quand l'acceptance tient (66,1 à 67,3), mémoire 64 398 Mio contre 82 160, agentique 44,3 puis 42,5 t/s (42,7), acceptance 70,0 puis 72,1 %, reprise 93,7 % sur dossier neuf (3 ratés `no_compatible_boundary`) puis 98,2 % sur disque chaud (aucun raté) ; Flash-Next contre la 0.19.0 : prefill à 52k 1 664 t/s (1 667), décode en code 95,1 et 97,8 t/s (une passe à 55,9 en prose de raisonnement), agentique 58,4 t/s (59,5), acceptance 88,0 %, reprise 98,4 %, chargement 102 à 158 s (97 à 123) ; DeepSeek contre la 0.2.0 : agentique 29,6 t/s (27,3), acceptance 87,1 % (73,0), reprise 92,2 % (88,9), premier token 696 ms (574), chargement 172 à 287 s (72) ; aucun autre réglage changé |
 | v0.21.0 (`7110c79`) | 22/10/2026 | montée | capture du prompt DFlash2 du 27B en mémoire épinglée bornée (#688, absente du CHANGELOG : 400 Mio épinglés par session au chargement, comptés en plus du budget du cache), décode échantillonné de Flash-Next allégé (#699), YaRN en option au-delà de 262144 (#350) ; `--help` : `--enable-yarn` ajoutée, sans objet à notre `--context 262144` ; format des instantanés changé, première série à froid sur les deux Qwen (3 ratés `no_compatible_boundary`, reprise 93,5 et 93,3 %) ; 27B et Flash-Next remesurés deux fois sur silentchuck, 16/16, pas de boucle, aucune erreur ; 27B contre la 0.20.0 : prefill à 52k 515 t/s (505,5), à 6,5k 579 à 580 (566), décode en code 60,8 à 67,7 t/s, mémoire 63 871 à 64 020 Mio (64 398), agentique 44,3 puis 43,8 t/s (42,5), acceptance 72,1 puis 70,0 %, reprise 98,4 % sur disque chaud (98,2) ; Flash-Next contre la 0.20.0 : prefill à 52k 1 671 à 1 673 t/s (1 664), décode en code 90,5 à 95,0 t/s (95,1 et 97,8), agentique 59,2 puis 56,8 t/s (58,4), acceptance 89,7 % (88,0), reprise 98,8 % sur disque chaud (98,4), chargement 93 à 97 s (102) ; DeepSeek non remesuré ; aucun réglage changé |
 | v0.22.0 (`7b1bf04`) | 23/10/2026 | montée | DFlash2 du 27B accéléré (#705, absente du CHANGELOG : recopie depuis l'historique du prompt, pénalités dans le brouillon, dernier niveau du prefill allégé), arène `qfn_mmq` par stream HIP (#707) et indexeur BF16 en ordre fixe (#714) pour Flash-Next, brouillons MTP échantillonnés tarifés à l'occupation (#703), RAM libérée avant un checkpoint disque trop gros (#677), « leaves » du portage Windows (#711, #713, #729, sans effet sous Linux) ; `--help` identique ; cache disque du 27B invalidé (3 ratés `no_compatible_boundary`, reprise 93,5 %), pas celui de Flash-Next ; 27B remesuré deux fois et Flash-Next une fois sur silentchuck, 16/16, pas de boucle, aucune erreur ; 27B contre la 0.21.0 : prefill à 52k 523 à 524,5 t/s (515), à 6,5k 584 à 586 (580), décode en code 67,6 à 68,7 t/s mais 35,0 et 37,1 sur la passe 2 (prose de réflexion, deux séries), mémoire 63 958 à 64 068 Mio (63 871), agentique 43,2 puis 43,0 t/s (43,8), acceptance 71,0 % (70,0), reprise 98,5 % sur disque chaud (98,4) ; Flash-Next contre la 0.21.0 : prefill à 52k 1 668 t/s (1 671), décode en code 92,4 à 96,0 t/s (92,4 à 95,0), agentique 61,0 t/s (56,8), acceptance 89,5 % (89,7), reprise 98,1 % (98,8), chargement 80 s (93) ; DeepSeek non remesuré ; aucun réglage changé |
+| v0.23.0 (`1fafd5a`) | 24/10/2026 | montée | Flash-Next : boucle du sélecteur bornée (#742, Clang 23 et plus seulement, sans effet sur l'image publiée en ROCm 7.2.3 / Clang 22) et coûts mesurés de la petite tête de brouillon en échantillonné (#742), petite tête ouverte au greedy seul ou contraint (#733, #739) ; poids et shards lus par `mapped_file` (#734, #738) ; EmbeddingGemma 2 sur `/v1/embeddings` (#700, #751, hors parc) ; `--help` identique ; cache disque de Flash-Next invalidé (3 ratés `no_compatible_boundary`, reprise 93,7 %) ; Flash-Next remesuré deux fois sur silentchuck, 16/16, pas de boucle, aucune erreur ; contre la 0.22.0 : prefill à 52k 1 674 à 1 678 t/s (1 668), décode en code 93,7 à 97,7 t/s (92,4 à 96,0), agentique 58,4 puis 58,7 t/s (61,0), acceptance 89,7 % (89,5), reprise 98,9 % sur disque chaud (98,1), chargement 84 à 87 s (80) ; 27B et DeepSeek non remesurés ; aucun réglage changé |
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
@@ -672,9 +688,11 @@ depuis d5fd781 et #276, contexte et longueur de génération suivent llama.cpp
 l'échantillonnage suit les profils officiels des modèles (glouton avant), ses
 propres bancs restant en glouton. Les valeurs du tableau visent un usage
 agentique comparable au service ; aucune n'est un réglage interne du moteur.
-Dernière confrontation à la documentation amont : 23/10/2026, v0.22.0 (diff
-de documentation depuis la v0.21.0 et `--help` des deux images comparés sur
-silentchuck) : `--help` identique, un seul changement de sens, `detail`
+Dernière confrontation à la documentation amont : 24/10/2026, v0.23.0 (diff
+de documentation depuis la v0.22.0 et `--help` des deux images comparés sur
+silentchuck) : `--help` identique, aucun changement de sens pour `serve
+llm` (seul ajout, la sous-commande `serve embedding`, hors parc) ; en
+v0.22.0 (23/10/2026) : `--help` identique, un seul changement de sens, `detail`
 des images accepté en `low`, `high` et `original`, tous traités comme
 `auto` (#722) ; GGUF servis vérifiés contre les identités publiées par
 gufo (`artifacts/model-identities.json`, sha256 du 27B UD-Q4_K_XL

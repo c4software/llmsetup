@@ -20,6 +20,89 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.23.0 (24/10/2026), montée le jour même, Flash-Next remesuré sur silentchuck
+
+Montée acceptée par l'utilisateur le 24/10/2026 après la lecture de la
+checklist (Flash-Next seul remesuré : rien ne change pour le 27B ; DeepSeek
+non). Image épinglée en `gufo-runtime:0.23.0` (`b26d90e`), digest
+`ec8c3f0bf061`, publiée à 10:40 UTC, 19 minutes après la release.
+`remesure.sh flashnext` de 14:26 à 14:35 (`remesure.log` de
+`~/llm/gufo-test`), puis, le cache disque étant reparti à froid,
+`TAG=2026-10-24-0.23.0-passe2 remesure.sh flashnext` de 15:24 à 15:32
+(`remesure-passe2.log`) ; journaux agentiques dans
+`resultats/agentic/2026-10-24-0.23.0/` et `…-0.23.0-passe2/` (`avant/` =
+la série précédente). Le service d'usage réel est relancé à la fin.
+Proxy, voix, transcription et image non revérifiés.
+
+Contenu (notes de release v0.22.0...v0.23.0, diff de documentation lu) :
+
+- **#742, Flash-Next** : deux changements. La boucle du sélecteur bornée
+  (débordements de registres 304 contre 18 sous Clang 24, scoreur isolé
+  109,3 contre 76,3 µs) n'est compilée qu'à partir de Clang 23 : l'image
+  publiée est construite par la toolchain Nix ROCm 7.2.3 / Clang 22
+  (`rocm-runtime-7.2.3`, `clang-22.0.0-rocm`, vérifié dans l'image sur
+  silentchuck), qui garde le déroulage d'origine, donc sans effet chez
+  nous. Les coûts mesurés de la petite tête de brouillon en échantillonné
+  (C1, seule requête) valent pour tout compilateur et touchent notre usage
+  (pi échantillonne) ; annoncés quasi plats sur la toolchain 7.2.3.
+  ROCm 10.1 / Clang 24 reste un build d'évaluation amont (#741, #755,
+  `docs/models/qwen3.8-flash-next/ROCM.md`), sans image publiée : décidé de
+  rester sur l'image publiée.
+- **#733, #739**, Flash-Next : petite tête de brouillon ouverte au greedy
+  seul et au greedy avec pénalités ou contraintes ; sans effet sur pi.
+- **#734, #738** : poids et shards GGUF lus par la « leaf » `mapped_file`,
+  chargement de tous les modèles.
+- #700, #751 : EmbeddingGemma 2 sur `/v1/embeddings` (`gufo serve
+  embedding`), hors parc. #754 : documentation du portage Windows.
+
+Confrontation des paramètres (24/10/2026) : `gufo serve llm --help`
+identique entre les images 0.22.0 et 0.23.0 sur silentchuck (71 lignes),
+aucun changement de sens repéré dans le diff de `docs/SERVER.md` et
+`docs/CLI.md` pour `serve llm`. Le `--served-model-name` répétable (#736)
+est mergé après le tag. Contournements inchangés. #299 toujours ouverte
+(correctif long-context `8e509128`, arènes par stream #740) : refus du GGUF
+Ornith maintenu. Aucun réglage changé.
+
+Vérifié après les séries : aucun client étranger sur `:8009` (`queue_ms`
+au plus 7 puis 88 ms, chaque fois une requête seule en file,
+`queue_depth=1`, dont c'est la restauration disque ; le seul `body_bytes`
+de 8 Mio est la limite annoncée), aucun `device_lost`,
+`generation_failed`, `persistence_incomplete` ni `option_ignored`.
+
+| Flash-Next, 1 session, silentchuck | 0.22.0, disque chaud (23/10, 14:07) | 0.23.0, disque invalidé (24/10, 14:26) | 0.23.0, disque chaud (24/10, 15:24) |
+|---|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK ; `bench` à `?` (94 à 146 tokens) | idem, `bench` à `?` (141 à 197 tokens) | idem, `bench` à `?` (93 à 197 tokens) |
+| prefill court, 1,4k, `bench` (t/s) | 1 285 à 1 553 | 1 330 à 1 570 | 1 056 à 1 572 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 381 à 1 545 | 1 411 à 1 551 | 1 405 à 1 554 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 568 et 1 561 / 1 668,3 / 1 676,2 | 1 581 et 1 588 / 1 678,3 / 1 686,7 | 1 578 et 1 583 / 1 674,4 / 1 684,4 |
+| décode code (t/s) | 96,0 / 94,3 / 92,4 | 93,7 / 96,4 / 97,7 | 94,9 / 93,9 / 95,3 |
+| chargement (banc), mémoire | 80,4 s, 110 277 Mio | 86,6 s, 110 391 Mio | 83,5 s, 111 189 Mio |
+| tour 2 du cache, premier token | 0,154 s | 0,153 s | 0,154 s |
+| agentique, cache disque | 16/16, 56 requêtes, repris 98,1 %, prefill 5 s, décode 70 s à 61,0 t/s, acceptance 89,5 % | 16/16, 51 requêtes, repris 93,7 %, prefill 7 s, décode 67 s à 58,4 t/s, acceptance 89,7 % | 16/16, 49 requêtes, repris 98,9 %, prefill 4 s, décode 63 s à 58,7 t/s, acceptance 89,7 % |
+| reprises disque / RAM / ratés | 4 / 52 / 0 | 0 / 48 / 3 (`no_compatible_boundary`) | 4 / 45 / 0 |
+| points de reprise disque écrits | 1 (59 refus `min_step`) | 3 (45 refus `min_step`) | 0 (49 refus `min_step`) |
+| tokens générés (boucle) | 4 271 | 3 914 | 3 692 |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 147 ms | 146 ms | 146 ms |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16 dans les deux
+  séries.
+- **Cache disque de Flash-Next invalidé**, sans changement de format
+  annoncé : la première série recalcule les trois débuts de conversation,
+  la seconde les reprend par le disque, sans raté, à 98,9 %.
+- **Banc HTTP au niveau de la 0.22.0** : prefill à 52k 1 674 à 1 678 t/s
+  contre 1 668, décode en code 93,7 à 97,7 contre 92,4 à 96,0. Le 1 056 t/s
+  est la première requête `bench` de la seconde série, isolée (1 562 et
+  1 572 ensuite).
+- **Agentique 58,4 puis 58,7 t/s contre 61,0** (-4 %), acceptance
+  inchangée (89,7 %), 3 692 tokens générés contre 4 271 et 63 s de décode
+  contre 70 : dans la dispersion d'une série à l'autre (56,8 en 0.21.0).
+  Le gain du sélecteur de #742 est invisible, comme attendu sous Clang 22.
+
+Non mesuré : le 27B (rien de neuf hormis la lecture des poids par
+`mapped_file`), le service d'usage à deux sessions, DeepSeek.
+
 ## Release v0.22.0 (23/10/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
 
 Montée acceptée par l'utilisateur le 23/10/2026 après la lecture de la
