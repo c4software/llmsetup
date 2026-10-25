@@ -449,9 +449,9 @@ Limites : 14 Gio de marge seulement avec Flash-Next, la voix et la
 transcription chargés (DeepSeek laisse un peu plus, le 27B beaucoup plus) ;
 une image coûte la bascule du LLM dans les deux sens ; le flux WebSocket de la
 synthèse passe par `/upstream/<modèle>/`, pas par une route de llama-swap ;
-voix et transcription déchargées après 60 s sans requête et limitées à une
-file matérielle, sinon le GPU reste occupé à 100 % au repos (#272, section
-« Suivi en amont »).
+voix et transcription limitées à une file matérielle et transcription
+déchargée après 60 s sans requête (voix aussi jusqu'au 25/10/2026), sinon le
+GPU reste occupé à 100 % au repos (#272, section « Suivi en amont »).
 
 Depuis les clients, par le proxy (`http://llmproxy`, modèles préfixés
 `bigchuck/`) : llm-proxy relaie la synthèse, la génération et l'édition
@@ -534,7 +534,8 @@ Historique complet dans le journal.
 - **#272, GPU occupé à 100 % au repos** : le nôtre, du 25/09/2026, fermé par
   #317 en v0.2.0. Cause : plus de 8 files de calcul matérielles ouvertes,
   tous processus confondus. De notre contournement (`GPU_MAX_HW_QUEUES=1`,
-  `ttl: 60`), seul `ttl: 60` reste sur la voix et la transcription.
+  `ttl: 60`), seul `ttl: 60` reste, sur la transcription seule depuis le
+  25/10/2026 (retiré des voix).
 - **#368, régression de la v0.4.0 sur les requêtes avec outils** : le nôtre,
   du 01/10/2026, fermé (ralentissement corrigé par #373 en 0.5.0).
 - **#388** : section « Ticket #388 » plus bas.
@@ -802,8 +803,8 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
      ligne tient-elle encore (défauts du cache disque et du staging,
      `--context`, `--sessions`, `--max-tokens`, échantillonnage, `--think`) ?
 3. **Contournements encore utiles ?** (lecture) : staging 8 Gio de DeepSeek (#259, #279),
-   `ttl: 60` sur la voix et la transcription (#272, pour Qwen-Image au
-   défaut du runtime depuis v0.2.0), `capabilities.context` de llama-swap,
+   `ttl: 60` sur la transcription (#272, pour Qwen-Image au défaut du
+   runtime depuis v0.2.0 ; retiré des voix le 25/10/2026), `capabilities.context` de llama-swap,
    GGUF refusés (Flash-Next Signal en `IQ4_NL`, DeepSeek UD-IQ3_XXS, Ornith
    Q4_K_M si #299 est mergée).
 4. **Questions à l'utilisateur**, avant tout changement : monter de version
