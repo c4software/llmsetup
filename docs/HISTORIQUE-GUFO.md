@@ -20,6 +20,135 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.26.0 (28/10/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
+
+Montée acceptée par l'utilisateur le 28/10/2026 après la lecture de la
+checklist (0.25.0 sautée : embeddings, `detail: low`, #773 annulée par
+#815, rien pour nous ; 27B et Flash-Next remesurés, RSS de la voix et de la
+transcription mesuré ; DeepSeek non). Image épinglée en
+`gufo-runtime:0.26.0` (`78d7418`), digest `c0df630a7048`, publiée à
+12:36 UTC, 17 minutes après la release. `remesure.sh 27b flashnext` de
+14:11 à 14:28 (`remesure.log` de `~/llm/gufo-test`), journaux agentiques
+dans `resultats/agentic/2026-10-28-0.26.0/` (`avant/` = la série
+précédente de chaque modèle : 27B du 24/10 au soir en 0.23.0, Flash-Next
+du 25/10 en 0.24.0). Puis, à la demande de l'utilisateur, bissection du
+prefill du 27B (`bissection.sh` et `bissection.log` de `~/llm/gufo-test`,
+14:38 à 14:58, `run.sh gufo 27b` par image avec `GUFO_IMAGE` et
+`BANC_SANS_RELANCE=1`, l'usage réel relancé à la fin en 0.26.0, vérifié
+par `gufo --version` dans le conteneur). Proxy (requête avec `stop`), voix
+et transcription vérifiés après les séries.
+
+Contenu (notes de release v0.24.0...v0.26.0, diff de documentation lu) :
+
+- **#847, toolchain Linux passée à ROCm 10.1 / Clang 24 seule**, image
+  comprise (toolboxes#24) ; l'amont ne revendique pas de requalification
+  complète des modèles ni des performances. Le
+  `docs/models/qwen3.8-27b/ROCM.md` amont mesure -3 à -4,5 % de prefill
+  sur le 27B (pp2048, 7.2.3 contre 10.1) et -7,8 % sur une calibration de
+  2 055 tokens, hors de leur seuil de 5 %, attribués aux GEMM quantifiées
+  de la cible (plus la projection BF16 du drafter) ; essais
+  d'ordonnancement et de tuiles rejetés.
+- **#758 puis #850, Flash-Next** : prefill DeltaNet par blocs (F16) mergé
+  puis retiré le même jour, il faussait des décisions gloutonnes (un écho
+  de XML court répondu par « Hello! I'm here to help... ») et montait la
+  NLL ; seuls les deux side streams restent, sans perte. Annoncé -1 % en
+  pp512 et -4 à -5 % en pp2048/4096 contre le main qui l'avait, donc
+  contre une version que nous n'avons jamais servie.
+- **#708, Qwen** : poids en mémoire GPU (`hipMalloc`) quand la heap a la
+  place, la copie hôte enregistrée en repli, et upload par le cache de
+  pages ; annoncé sur le 27B Q8 : RSS 32,2 à 2,3 Gio, GTT 5,4 à 35,4 Gio,
+  chargement à chaud 1,3 à 6,9 s ramené à 1,9 à 2,1 s.
+- **#845 (la nôtre), audio** : pages des safetensors de TTS et ASR rendues
+  après l'upload, par le tampon de `WeightUpload` (commit de fedeizzo).
+- Serveur : requête vidée avant la fermeture du répondeur de chargement
+  (#795, démarrage à froid derrière llama-swap), plus de 128 outils
+  (#827), `/apply-template` (#821), `--cache-ram-bytes off` (#783, sans
+  usage ici). Le reste : embeddings (audio, `/embeddings` de llama.cpp,
+  troncature), portage Windows, CI.
+
+Confrontation des paramètres (28/10/2026) : `gufo serve llm --help` des
+images 0.24.0 et 0.26.0 comparé sur silentchuck, seule la ligne de
+`--cache-ram-bytes` change (valeur `off` acceptée), aucun défaut changé ;
+diff de `docs/SERVER.md` et `docs/CLI.md` sans changement de sens pour nos
+modèles (`detail: low` borne désormais les images Qwen à 512 x 512, les
+autres valeurs restent `auto`). Contournements inchangés. #299 toujours
+ouverte, le travail du 35B part vers un fork (« Strycast ») : refus du GGUF
+Ornith maintenu. Aucun réglage changé.
+
+Vérifié après les séries : aucun client étranger sur `:8009`
+(`queue_depth=1` sur les 53 requêtes de chaque modèle, `queue_ms` au plus
+9 et 12 ms ; le seul `body_bytes` de 8 Mio est la limite annoncée), aucun
+`device_lost`, `generation_failed`, `persistence_incomplete`,
+`option_ignored` ni refus de staging.
+
+| 27B, 1 session, silentchuck | 0.23.0, Q4_K_M + vision (24/10, 23:05) | 0.26.0 (28/10, 14:11) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK ; `bench` passe 3 à `?` | idem, `bench` passe 1 à `?` |
+| prefill court, 1,4k, `bench` (t/s) | 529 à 533 | 509 à 522 |
+| prefill court, 1,6k, `refactor` (t/s) | 527 à 529 | 506 à 508 |
+| prefill à 6,5k / 52k / 32k (t/s) | 586 et 585 / 524,2 / 561,3 | 554 et 553 / 494,2 / 528,3 |
+| décode prose / code (t/s) | 50,9 / 54,7 / 45,5 ; 68,6 / 34,4 / 68,4 | 42,5 / 44,1 / 54,7 ; 67,9 / 62,3 / 67,7 |
+| chargement (banc), mémoire | 14,5 s, 64 905 Mio | 30,9 s à froid (15,2 s à chaud, bissection), 65 041 Mio |
+| agentique, cache disque | 16/16, repris 93,7 %, décode 44,9 t/s, acceptance 71,0 % | 16/16, 53 requêtes, repris 93,8 %, prefill 18 s, décode 104 s à 43,6 t/s, acceptance 71,0 % |
+| reprises disque / RAM / ratés | 0 / 47 / 3 | 0 / 50 / 3 (`no_compatible_boundary`) |
+| points de reprise disque écrits | 3 (49 refus `min_step`) | 3 (60 refus `min_step`) |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 334 ms | 319 ms |
+
+| Flash-Next, 1 session, silentchuck | 0.24.0 (25/10, 17:34) | 0.26.0 (28/10, 14:18) |
+|---|---|---|
+| banc HTTP, justesse | sanity, aiguilles, tour 2 à 100 % : OK ; `bench` à `?` | idem, `bench` à `?` |
+| prefill court, 1,4k, `bench` (t/s) | 1 306 / 1 499 / 1 496 | 1 307 / 1 587 / 1 583 |
+| prefill court, 1,6k, `refactor` (t/s) | 1 363 / 1 546 / 1 550 | 1 232 / 1 572 / 1 572 |
+| prefill à 6,5k / 52k / 32k (t/s) | 1 576 et 1 586 / 1 678,0 / 1 685,2 | 1 577 et 1 576 / 1 653,8 / 1 665,1 |
+| décode code (t/s) | 97,5 / 97,0 / 102,2 | 94,6 / 95,4 / 97,7 |
+| chargement (banc), mémoire | 148,6 s, 110 727 Mio | 84,6 s, 110 299 Mio |
+| tour 2 du cache, prefill horloge | 221,6 t/s | 222,7 t/s |
+| agentique, cache disque | 16/16, 51 requêtes, repris 98,1 %, prefill 5 s, décode 64 s à 59,7 t/s, acceptance 89,7 % | 16/16, 53 requêtes, repris 93,4 %, prefill 8 s, décode 71 s à 59,4 t/s, acceptance 84,4 % |
+| reprises disque / RAM / ratés | 4 / 47 / 0 | 0 / 50 / 3 (`no_compatible_boundary`) |
+| points de reprise disque écrits | 0 (54 refus `min_step`) | 3 (64 refus `min_step`) |
+| premier token, requêtes de moins de 100 tokens recalculés (médiane) | 146 ms | 141 ms |
+
+Bissection du prefill du 27B, même série, même machine, prefill horloge en
+t/s :
+
+| image | toolchain | #708 | `bench` 1,4k | `refactor` 1,6k | 6,5k | 52k | 32k | chargement |
+|---|---|---|---|---|---|---|---|---|
+| 0.25.0 | ROCm 7.2.3 | non | 531 à 534 | 529 à 530 | 585,5 et 584,5 | 523,9 | 560,6 | 24,1 s |
+| edge `9974cb4` (#847) | ROCm 10.1 | non | 506 à 516 | 506 à 507 | 551,3 et 550,7 | 493,1 | 527,5 | 14,8 s |
+| 0.26.0 (témoin) | ROCm 10.1 | oui | 506 à 516 | 506 à 507 | 552,4 et 551,4 | 492,6 | 528,1 | 15,2 s |
+
+Lecture :
+
+- **Pas de régression de justesse ni de boucle** : 16/16 sur les deux
+  modèles, appel froid compris.
+- **Prefill du 27B -4 à -6 %, dû tout entier à ROCm 10.1** : la 0.25.0
+  refait la 0.24.0 au point près (524 t/s à 52k), l'image de #847 seule
+  perd déjà tout (493), #708 n'y ajoute rien (492,6). C'est l'écart que
+  documente l'amont (`ROCM.md` du 27B), un peu plus fort chez nous à long
+  contexte (-6 % à 52k contre -4,4 % à 16K chez eux). Pas de ticket : connu
+  et attribué. La boucle agentique ne le voit presque pas (prefill 18 s sur
+  122, décode 43,6 t/s contre 44,9).
+- **Flash-Next : ROCm 10.1 compense le retrait de #758** : prefill court
+  +6 %, long -1,2 à -1,4 %, décode en code -2 à -4 %, agentique au même
+  niveau (59,4 t/s contre 59,7). Acceptance du MTP 84,4 % contre 89,7 %
+  sans effet sur le décode : à revoir à la série suivante.
+- **Caches disque des deux Qwen invalidés** (3 ratés
+  `no_compatible_boundary` chacun, sans changement de format annoncé) :
+  reprise de première série à 93,4 et 93,8 %, comme à chaque invalidation.
+- **Chargement** : les 30,9 s du 27B sont un chargement à froid juste après
+  le pull de l'image, 14,8 et 15,2 s ensuite (14,5 en 0.23.0) ; les
+  148,6 s de Flash-Next en 0.24.0 ne se reproduisent pas (84,6 s, dans
+  l'historique de 77 à 115 s).
+- **Mémoire inchangée** au total (65 041 et 110 299 Mio) : avec #708 les
+  poids passent du RSS du processus à la GTT, la somme mesurée ne bouge
+  pas.
+- **RSS de la voix et de la transcription après #845** (préchargées par
+  `/upstream/<modèle>/health`, `smaps_rollup`) : TTS Base 197 Mio contre
+  4,2 Gio le 27/10, ASR 188 Mio contre 1,8 Gio, `Private_Clean` 5,8 et
+  2,0 Mio. Aller-retour TTS CustomVoice (`serena`) puis ASR : phrase
+  rendue à l'identique. `MemAvailable` à 6,2 Gio avec Flash-Next et les
+  deux audio chargés.
+
 ## Release v0.23.0 (24/10/2026), montée le jour même, Flash-Next remesuré sur silentchuck
 
 Montée acceptée par l'utilisateur le 24/10/2026 après la lecture de la
