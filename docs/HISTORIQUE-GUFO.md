@@ -126,7 +126,8 @@ Lecture :
   perd déjà tout (493), #708 n'y ajoute rien (492,6). C'est l'écart que
   documente l'amont (`ROCM.md` du 27B), un peu plus fort chez nous à long
   contexte (-6 % à 52k contre -4,4 % à 16K chez eux). Pas de ticket : connu
-  et attribué. La boucle agentique ne le voit presque pas (prefill 18 s sur
+  et attribué ; confirmation chiffrée (tableau de la bissection) en
+  commentaire de #768, la PR qui a écrit ce `ROCM.md`, le 28/10/2026. La boucle agentique ne le voit presque pas (prefill 18 s sur
   122, décode 43,6 t/s contre 44,9).
 - **Flash-Next : ROCm 10.1 compense le retrait de #758** : prefill court
   +6 %, long -1,2 à -1,4 %, décode en code -2 à -4 %, agentique au même
