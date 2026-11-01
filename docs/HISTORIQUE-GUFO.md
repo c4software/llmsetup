@@ -20,6 +20,38 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.28.1 (01/11/2026), montée le lendemain, 27B et Flash-Next remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 01/11/2026, machine libre (0.28.0
+incluse, jamais servie seule ; DeepSeek non remesuré). Image épinglée en
+`gufo-runtime:0.28.1` (`12effe3`), digest `faaa6e21afb9`.
+`remesure.sh 27b flashnext` de 13:27 à 13:45 (`remesure.log` de
+`~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-11-01-0.28.1/` (`avant/` = la série du 29/10 en
+0.27.0). Une série, 16/16 sur les deux, pas de boucle. Requête avec `stop`
+vérifiée en direct sur `:8009` après les séries, pas par le proxy. Le seul
+`[ERROR]` des journaux, « failed to preload model ... status 404 », figure
+déjà dans ceux de la 0.27.0.
+
+Lecture :
+
+- **#882, Flash-Next** : acceptance agentique 92,0 % contre 85,5 %, décode
+  agentique 60,8 contre 59,7 t/s, décode des 8 tokens suivant un prefill 80 à
+  82 t/s contre 50 à 53. Le +11 % annoncé ne se retrouve pas en décode long
+  (code 92,6 à 96,2 t/s contre 92,6 à 97,0).
+- **#874, 27B** : agentique 45,9 contre 44,6 t/s, acceptance 70,0 % contre
+  70,8, 16 scénarios en 108,2 s contre 115,7. Une seule série, dans l'ordre
+  de grandeur de la dispersion passée.
+- **Reprise du 27B** : 4 reprises disque sans raté, contre 3 ratés
+  `no_compatible_boundary` à la série d'avant, prefill agentique 9 s contre
+  17. Aucun commit de la montée ne vise ce point : cause non établie, à
+  confirmer sur la prochaine série.
+- **Flash-Next** : prefill à 52k 1 633 contre 1 654 t/s (-1,3 %, une
+  mesure), chargement 106,5 s contre 87,4, non expliqué ; mémoire 109 816
+  Mio contre 110 070.
+
+Le détail chiffré est dans « Versions : synthèse ».
+
 ## Release v0.26.0 (28/10/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
 
 Montée acceptée par l'utilisateur le 28/10/2026 après la lecture de la
