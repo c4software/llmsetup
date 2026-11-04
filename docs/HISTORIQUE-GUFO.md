@@ -51,9 +51,15 @@ Lecture :
   93,2 % contre 98,4 (Flash-Next), prefill agentique 17 s contre 9 et 9 s
   contre 5. #877 passe les instantanés au format 19, qui invalide une fois
   les enregistrements disque de Flash-Next, et aligne ses points de reprise
-  sur 4 tokens : cache disque froid sur cette série, cause probable, non
-  établie pour le 27B (même motif qu'en 0.27.0) ; à confirmer sur la
-  prochaine série, cache disque chaud.
+  sur 4 tokens : cache disque froid sur cette série. **Confirmé** par une
+  seconde série agentique à cache chaud, demandée par l'utilisateur (17:25,
+  debug, sessions pi gardées, journaux dans `cache-chaud/`) : aucun raté,
+  4 reprises disque sur chaque modèle, reprise 98,5 % (27B) et 97,9 %
+  (Flash-Next), prefill agentique 9 s et 6 s, 16 scénarios en 113,3 s
+  (27B, +4,7 % sur la 0.28.1) et 76,5 s (Flash-Next, +5,4 %), décode
+  agentique 44,6 t/s (45,9) et 63,8 t/s (60,8, +5 %), acceptance 71,0 % et
+  92,0 %. L'écart de temps mur restant tient surtout à `stats.js`, le
+  scénario le plus variable d'une passe à l'autre.
 - **Temps mur** : 16 scénarios en 121,7 s contre 108,2 (27B) et 81,1 s
   contre 72,6 (Flash-Next), +12 % sur les deux. La reprise explique une
   partie (8 s et 4 s de prefill en plus) ; Flash-Next a en outre raté un
