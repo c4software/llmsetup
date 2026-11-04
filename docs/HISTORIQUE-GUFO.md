@@ -20,6 +20,60 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.29.0 (04/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 04/11/2026, machine libre (DeepSeek non
+remesuré). Image épinglée en `gufo-runtime:0.29.0` (`883f67b`), digest
+`9d77753a051f`, publiée 19 min après la release. `remesure.sh 27b
+flashnext` de 16:59 à 17:17 (`remesure.log` de `~/llm/gufo-test`), journaux
+agentiques dans `resultats/agentic/2026-11-04-0.29.0/` (`avant/` = la série
+du 01/11 en 0.28.1). Une série, 16/16 sur les deux, pas de boucle, aucune
+erreur dans les journaux de gufo.
+
+Première version où tous les modèles sont des extensions compilées dans le
+binaire (#911 à #942). `gufo diagnose --section extensions` sur l'image :
+API 0.1.18, sélection `discovery`, `qwen`, `qwen38_flash_next`,
+`deepseek_v4_flash`, voix, transcription et Qwen-Image présents, tous
+leurs providers `available` ; `--speculative` accepte toujours `dflash2`,
+`mtp` et `dspark`, `--mtp-model` est toujours là. Les modèles hors de
+`extensions.lock` (LFM3 de gufo-org, extensions tierces) demandent une
+image construite par nous, hors du modèle « une ligne dans `IMAGE` ».
+`--help` de `serve llm` : `--api-key` retiré (#957, inutilisé ici),
+`--enable-yarn` reformulé (YaRN par session, #905, inutilisé : contexte
+natif) ; aucun défaut changé.
+
+Lecture :
+
+- **Reprise** : 3 ratés `no_compatible_boundary` sur chacun des deux
+  modèles, aux mêmes requêtes (5, 7 et 15, premières requêtes de scénario
+  à 1 542 à 1 589 tokens) qui étaient servies par le cache disque à la
+  série d'avant (4 reprises disque). Reprise 94,0 % contre 98,9 (27B) et
+  93,2 % contre 98,4 (Flash-Next), prefill agentique 17 s contre 9 et 9 s
+  contre 5. #877 passe les instantanés au format 19, qui invalide une fois
+  les enregistrements disque de Flash-Next, et aligne ses points de reprise
+  sur 4 tokens : cache disque froid sur cette série, cause probable, non
+  établie pour le 27B (même motif qu'en 0.27.0) ; à confirmer sur la
+  prochaine série, cache disque chaud.
+- **Temps mur** : 16 scénarios en 121,7 s contre 108,2 (27B) et 81,1 s
+  contre 72,6 (Flash-Next), +12 % sur les deux. La reprise explique une
+  partie (8 s et 4 s de prefill en plus) ; Flash-Next a en outre raté un
+  test à sa troisième passe de `stats.js` avant de le corriger (17,1 s
+  contre 12,9 à 13,3), réponse finale en anglais.
+- **Flash-Next** : prefill court 1 630 à 1 635 t/s contre 1 577 à 1 580
+  (+3,4 %), à 52k 1 703 contre 1 633 (+4,3 %, une mesure), chargement 95,5 s
+  contre 106,5, mémoire 108 907 Mio contre 109 816. Décode en code 91,3 à
+  94,8 t/s contre 92,6 à 96,2, sur des réponses plus courtes (1 179 à 1 370
+  tokens au lieu de 1 500) : le texte a changé, la comparaison n'est pas à
+  réponse égale. Agentique 59,8 t/s contre 60,8, acceptance 92,6 % contre
+  92,0.
+- **27B** : #988 (vocabulaire de brouillon réduit) et #995 (GEMV K-quant,
+  annoncé +1,2 à +1,6 %) ne se voient pas : décode en prose 47,1 à 50,4 t/s
+  contre 48,2 à 53,1, agentique 44,3 contre 45,9 t/s, acceptance 70,0 %
+  inchangée ; prefill inchangé (495 t/s à 52k contre 494, 554 à 6,5k).
+  Chargement 24,5 s contre 29,3, mémoire 63 500 Mio contre 64 734.
+
+Le détail chiffré est dans « Versions : synthèse ».
+
 ## Release v0.28.1 (01/11/2026), montée le lendemain, 27B et Flash-Next remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 01/11/2026, machine libre (0.28.0
