@@ -21,7 +21,8 @@
 # - identiques : prompts dont les 256 tokens sont les mêmes ;
 # - préfixe : longueur moyenne du début identique, en tokens ;
 # - KL : divergence de Kullback-Leibler de la référence vers le candidat,
-#   approchée sur les 20 meilleurs tokens de la référence (un token absent
+#   approchée sur les 20 meilleurs tokens de la référence, réunis par texte
+#   (agreger : des tokens distincts peuvent avoir les mêmes octets ; un absent
 #   du top 20 du candidat y prend le plus petit logprob de ce top 20), en
 #   nats par token : moyenne, 99e centile et maximum ;
 # - écart top-1/top-2 de la référence aux points de divergence (médiane) :
@@ -32,7 +33,7 @@
 # Garde-fous : une réponse sans logprobs arrête tout (une métrique à zéro
 # passerait pour une identité parfaite) ; une réponse dégénérée (moins de
 # 20 % de tokens distincts) est comptée et signalée.
-import json, statistics, sys, time, urllib.request
+import json, math, statistics, sys, time, urllib.request
 
 MAX_TOKENS = 256
 TOP = 20
@@ -82,6 +83,19 @@ def degeneree(toks):
     return len(toks) >= 50 and len({t[0] for t in toks}) < 0.2 * len(toks)
 
 
+def agreger(top):
+    """Top 20 -> {octets: logprob}, les candidats aux mêmes octets réunis
+    (somme des probabilités). Mesuré le 06/11/2026 : gufo renvoie des tokens
+    sans texte (octets vides), parfois les 20 d'une position ; un dict qui
+    n'en gardait qu'un donnait une KL de 19,6 entre deux collectes BF16
+    identiques. C'est la distribution sur le texte produit, ce que l'on
+    compare."""
+    d = {}
+    for t, lp in top:
+        d[t] = lp if t not in d else max(d[t], lp) + math.log1p(math.exp(-abs(d[t] - lp)))
+    return d
+
+
 def compare1(ref, cand):
     kls, prefixes, ecarts = [], [], []
     identiques = degen = 0
@@ -99,13 +113,13 @@ def compare1(ref, cand):
         fin = n if d is None else d + 1
         prefixes.append(n if d is None else d)
         if d is not None:
-            top = sorted((x[1] for x in a[d][2]), reverse=True)
+            top = sorted(agreger(a[d][2]).values(), reverse=True)
             ecarts.append(top[0] - top[1] if len(top) > 1 else 0.0)
         for k in range(fin):
-            pc = {x[0]: x[1] for x in b[k][2]}
+            pr, pc = agreger(a[k][2]), agreger(b[k][2])
             plancher = min(pc.values())
-            kls.append(sum(2.718281828459045 ** lr * (lr - pc.get(t, plancher))
-                           for t, lr in a[k][2]))
+            kls.append(sum(math.exp(lr) * (lr - pc.get(t, plancher))
+                           for t, lr in pr.items()))
     return {"prompts": len(ref), "identiques": identiques,
             "prefixe": round(statistics.mean(prefixes), 1),
             "positions": len(kls), "kl_moyen": round(statistics.mean(kls), 5),
