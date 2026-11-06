@@ -19,9 +19,12 @@ y bascule, les deux étant exclusifs.
 
 ## Mise en route, depuis un clone
 
-Sur la machine du service (bigchuck). L'installation se fait sans basculer
-(`LLM_RUNTIME=gufo` vise ce runtime pour une commande), le service continuant
-de tourner :
+Sur la machine du service (silentchuck), un Strix Halo (gfx1151) : l'image
+et ses noyaux HIP ne visent que lui. Prérequis : ceux du README racine
+(docker activé au boot, groupes `docker`, `render` et `video`), plus le CLI
+`hf` de Hugging Face, dont `download.sh` se sert pour les poids.
+L'installation se fait sans basculer (`LLM_RUNTIME=gufo` vise ce runtime
+pour une commande), le service continuant de tourner :
 
 ```bash
 export LLM_RUNTIME=gufo                # pour les --setup qui suivent
@@ -42,6 +45,33 @@ unset LLM_RUNTIME
 
 Pour un essai sans rien mémoriser : `LLM_RUNTIME=gufo ./setup-llm.sh --start`
 arrête le service et lance gufo, `./setup-llm.sh --start` reprend le service.
+
+### Ce que fait le démarrage
+
+`--runtime gufo`, `--start` et `--restart` passent par le pilotage commun
+(`lib/svc.sh`) et les fonctions de `runtime.sh`, dans cet ordre :
+
+1. **Vérification, avant de toucher à quoi que ce soit** (`rt_gufo_check`) :
+   docker présent, `docker-compose.yml` du dépôt présent, image de `IMAGE`
+   présente (sinon le message renvoie à `--setup image`), gid numériques de
+   `render` et `video`. Avec `--runtime`, si le démarrage échoue ensuite,
+   l'ancien runtime est remis.
+2. **Le `.env`**, généré dans `~/llm/gufo-test/.env` (jamais à éditer :
+   réécrit à chaque démarrage), avec le modèle préchargé ; puis les dossiers
+   que le compose monte (`GUFO_DATA`, le cache disque et ses sous-dossiers
+   par modèle), créés pour ne pas l'être en root par docker.
+3. **`docker compose up`** de ce compose : il construit l'image « routeur »
+   (`Dockerfile.routeur` : l'image de gufo plus le binaire llama-swap épinglé
+   par SHA-256) ; llama-swap écoute sur `:8009` et lance gufo selon
+   `gufo-llama-swap.yaml`.
+4. **Attente** de `/health` de llama-swap, puis du chargement du modèle
+   préchargé (Flash-Next par défaut, environ 100 s à froid).
+5. **Au redémarrage de la machine**, docker relance le dernier runtime
+   démarré (`restart: unless-stopped`) ; l'autre, arrêté volontairement par
+   le pilotage, ne repart pas.
+
+La version de gufo ne bouge jamais seule : éditer la ligne de `IMAGE`, puis
+`--setup image` et `--restart` (checklist de `docs/GUFO.md`).
 
 gufo démarre **toujours derrière llama-swap** (la voie que gufo recommande) :
 le client choisit `qwen3.8-27b`, `qwen3.8-flash-next` ou `deepseek-v4-flash`
