@@ -79,6 +79,33 @@ Lecture :
 
 Le détail chiffré est dans « Versions : synthèse ».
 
+## Table n-gram de Flash-Next en Q8_0 et BF16 (06/11/2026), silentchuck
+
+Demandé par l'utilisateur après la montée en 0.31.0 : la révision Dynamic 3.1
+isole la table n-gram dans le shard 4/4 et Unsloth publie des tables de
+rechange (synthèse dans `docs/GUFO.md`, « Table n-gram de Flash-Next »).
+
+- **A/B de débits en Q8_0**, script ponctuel hors dépôt
+  (`~/llm/gufo-test/engram-q8-ab.sh`, 21:57 à 22:19, journaux dans
+  `resultats/agentic/2026-11-06-0.31.0-engram-q8/`) : chargement 96,6 s,
+  mémoire 109 887 Mio (110 117 en IQ4_NL), prefill court 1 644 à 1 651 t/s,
+  à 52k 1 726 (1 701), décode en code 94,5 à 95,6 t/s (94,0 à 97,3) ; boucle
+  pi 16/16 à froid (reprise 93,1 %, 59,4 t/s, acceptance 89,7 %, 76,6 s) et à
+  chaud (98,9 %, 58,3 t/s, 91,4 %, 72,5 s ; 62,5 t/s, 94,1 %, 70,5 s en
+  IQ4_NL). Rien de net en débit, d'où la mesure de qualité.
+- **Divergence contre BF16**, `bench/table-ngram.sh bf16 bf16 q8_0 iq4_nl`
+  (22:25 à 23:01, collectes dans `resultats/divergence/2026-11-06-2225-0.31.0/`,
+  bilan dans `resultats/divergence.tsv`) : table BF16 téléchargée en 12 min,
+  chargements 73 à 103 s, mémoire 113 Gio avec chacune. Seconde BF16
+  identique à la première sur les 40 prompts ; Q8_0 7/40 identiques, préfixe
+  97 tokens, KL 0,00083 nat/token (p99 0,0119) ; IQ4_NL 6/40, 92,9 tokens,
+  KL 0,00096 (p99 0,0139). Premier bilan faux (KL max 19,6 entre les deux
+  BF16) : gufo renvoie des tokens sans texte, parfois les 20 d'une position,
+  que la comparaison écrasait ; corrigé (candidats réunis par texte) et
+  recalculé sur les mêmes collectes, lignes fausses retirées du TSV.
+
+Verdict : IQ4_NL livrée gardée, la Q8_0 ne rapproche presque pas de la BF16.
+
 ## Release v0.29.0 (04/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 04/11/2026, machine libre (DeepSeek non

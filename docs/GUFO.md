@@ -586,6 +586,56 @@ deux tableaux de remesure y sont aussi (« Mesures d'une version à l'autre »).
 | v0.29.0 (`883f67b`) | 04/11/2026 | montée | tous les modèles en extensions compilées (#911 à #942 ; `diagnose --section extensions` : `qwen`, `qwen38_flash_next`, `deepseek_v4_flash` présents, options spéculatives inchangées) ; 27B, vocabulaire de brouillon DFlash2 réduit (#988) et GEMV K-quant (#995) ; Flash-Next, prefill fusionné (#895, #890, #894), passes de 4 096 lignes (#954), points de reprise alignés sur 4 et format d'instantané 19 (#877) ; `--api-key` retiré (#957) ; `--help` de `serve llm` sans défaut changé ; 27B et Flash-Next remesurés sur silentchuck, une série, 16/16, pas de boucle ; 27B contre la 0.28.1 : prefill à 52k 495 t/s (494), à 6,5k 554 (553), décode en prose 47,1 à 50,4 t/s (48,2 à 53,1), agentique 44,3 t/s (45,9), acceptance 70,0 % (70,0), mémoire 63 500 Mio (64 734), chargement 24,5 s (29,3), 16 scénarios en 121,7 s (108,2), 3 ratés `no_compatible_boundary` en tête de scénario (4 reprises disque avant), prefill agentique 17 s (9) ; Flash-Next contre la 0.28.1 : prefill court 1 633 t/s (1 577, +3,4 %), à 52k 1 703 (1 633, +4,3 %), décode en code 91,3 à 94,8 t/s (92,6 à 96,2, réponses plus courtes), agentique 59,8 t/s (60,8), acceptance 92,6 % (92,0), mémoire 108 907 Mio (109 816), chargement 95,5 s (106,5), 16 scénarios en 81,1 s (72,6), reprise 93,2 % (98,4), mêmes 3 ratés aux mêmes requêtes ; ratés dus au cache disque froid (format 19), confirmé par une seconde série à cache chaud : aucun raté, 4 reprises disque, reprise 98,5 % / 97,9 %, 16 scénarios en 113,3 s / 76,5 s (+4,7 % / +5,4 %), agentique 44,6 / 63,8 t/s ; DeepSeek non remesuré ; aucun réglage changé |
 | v0.31.0 (`be7bd3b`) | 06/11/2026 | montée (0.30.0 comprise) | DeepSeek au cache par composants (#1003) et ancien cache retiré (#1014), **yaml changé** : `GUFO_CACHE/deepseek-v4-flash`, staging retiré de sa ligne (dernier contournement #259/#279 clos) ; Flash-Next, points de reprise pris dans les passes de prefill (#963) et passes limitées par la capacité alignées (#1016), poids en révision Unsloth Dynamic 3.1 `d96201194f10` (#1031, mêmes tenseurs) ; schémas d'outils à tableaux sans `items` (#1012) ; 0.31.0 : API d'extensions surtout ; `--help` sans option ajoutée ni retirée ; les trois modèles remesurés sur silentchuck, 16/16, pas de boucle ; 27B contre la 0.29.0 (cache chaud) : prefill à 52k 494 t/s (495), à 6,5k 554 (554), décode en prose 46,7 à 52,3 t/s (47,1 à 50,4), agentique 44,9 t/s (44,6), acceptance 72,3 % (71,0), mémoire 64 623 Mio (63 500), chargement 30,4 s (24,5), 16 scénarios en 109,6 s (113,3), reprise 98,5 % (98,5), 4 reprises disque sans raté, cache conservé à travers la montée ; Flash-Next contre la 0.29.0 : prefill court 1 639 à 1 641 t/s (1 630 à 1 635), à 52k 1 701 (1 703), décode en code 94,0 à 97,3 t/s (91,3 à 94,8), mémoire 110 117 Mio (108 907), chargement 99,5 s (95,5) ; cache disque froid à la première série (nouveaux poids) : 3 ratés `no_compatible_boundary`, reprise 93,3 %, agentique 59,5 t/s, 74,7 s ; seconde série à cache chaud : aucun raté, 4 reprises disque, reprise 97,9 % (97,9), agentique 62,5 t/s (63,8), acceptance 94,1 % (92,0), 16 scénarios en 70,5 s (76,5) ; DeepSeek contre la 0.20.0 : prefill court 431 t/s (420), à 42k 459 (454), décode en prose 35,5 à 41,1 t/s (30,6 à 35,5), en code 44,0 à 44,8 (38,5 à 38,9, +15 %), mémoire 113 145 Mio (114 448), chargement 153 s (172), dossier de cache neuf : 3 ratés `no_compatible_boundary`, reprise 94,2 % (92,2), agentique 33,6 t/s (29,6), premier token 661 ms (696), 283,9 s dont un `slugify.js` à 116 s ; à cache chaud : aucun raté, 4 reprises disque, reprise 96,1 %, agentique 36,4 t/s, acceptance 88,1 % (87,1), 174,5 s ; aucun autre réglage changé |
 
+## Table n-gram de Flash-Next (06/11/2026)
+
+Flash-Next porte une grande table d'embeddings n-gram par couche
+(`per_layer_token_embd.weight`, 160 x 320 001 536 valeurs). Depuis la
+révision Unsloth Dynamic 3.1 (`d96201194f10`, celle de `download.sh`), elle
+est seule dans le dernier shard de chaque quant, en IQ4_NL pour notre
+UD-Q4_K_XL (`-00004-of-00004`, 28,8 Go), et Unsloth publie dans `engram/`
+des tables de rechange : Q8_0 (54,4 Go), Q5_1 (38,4 Go) et BF16 sans perte
+(102,4 Go), d'erreur relative 0,0053, 0,0376 et 0 contre 0,0757 pour
+l'IQ4_NL (README d'`engram/`). gufo lit IQ4_NL, Q8_0 et BF16, pas Q5_1
+(`src/models/qwen38_flash_next/ngram.cpp`, « unsupported n-gram table
+format »), et la lit sur le disque en accès direct avec un petit cache de
+lignes, hors RAM : la mémoire servie ne bouge pas avec la table (110 à
+113 Gio mesurés avec les trois).
+
+**Bascule** (`runtime/gufo/bench/table-ngram.sh`, commentaires de `poser` et
+`restaure`) : la table de rechange, vérifiée par son SHA-256 et numérotée
+4 sur 4 par le `set_split.py` d'Unsloth (deux valeurs d'en-tête), prend le
+nom du shard 4 par un lien symbolique relatif, l'original gardé en
+`.iq4nl` ; gufo, qui ouvre ses fichiers au démarrage seulement, la sert au
+lancement suivant. Le trap remet toujours l'original, puis le service
+repart dessus. Rien de versionné ne change.
+
+**Mesures**, gufo 0.31.0 sur silentchuck :
+
+- A/B de débits en Q8_0 (banc HTTP, boucle pi froide puis chaude) : prefill
+  et décode au niveau de l'IQ4_NL, 16/16 ; à chaud, agentique 58,3 t/s,
+  acceptance 91,4 %, 72,5 s (62,5 t/s, 94,1 %, 70,5 s en IQ4_NL), une série
+  chacune.
+- Divergence contre la table BF16 (`bench/divergence.py`, 40 prompts de
+  `prompts/divergence.txt` en glouton, 256 tokens, 20 meilleurs logprobs) :
+
+  | table | prompts identiques | préfixe identique moyen | KL moyenne (nats/token) | KL p99 | écart top-1/top-2 aux divergences |
+  |---|---|---|---|---|---|
+  | BF16, seconde collecte | 40/40 | 238,3 (toute la réponse) | 0 | 0 | |
+  | Q8_0 | 7/40 | 97 tokens | 0,00083 | 0,0119 | 0,148 |
+  | IQ4_NL (livrée) | 6/40 | 92,9 tokens | 0,00096 | 0,0139 | 0,145 |
+
+  Le glouton de gufo est reproductible à l'octet (deux BF16 identiques) :
+  tout écart vient de la table. Les deux tables quantifiées divergent de la
+  BF16 au même rythme, sur des quasi-égalités (0,15 nat entre les deux
+  premiers choix) ; une table 14 fois plus précise ne réduit la KL que de
+  14 %, à un niveau déjà de l'ordre du millième de nat par token.
+
+**Verdict** : table IQ4_NL livrée gardée. La Q8_0 coûte 25,6 Go de disque et
+deux fois plus d'octets lus par ligne pour un rapprochement de la BF16 à
+peine mesurable, et aucun gain en débit ni en tâches. Les tables Q8_0 et
+BF16 restent dans `MODELS_BASE/gufo/qwen3.8-flash-next/engram/` pour une
+prochaine mesure ; `table-ngram.sh bf16 bf16 q8_0 iq4_nl` la refait.
+
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
 Ticket ouvert par nous le 02/10/2026 à la demande du mainteneur (suite de
