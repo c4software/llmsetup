@@ -20,6 +20,65 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.31.0 (06/11/2026), montée le lendemain (0.30.0 comprise), les trois modèles remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 06/11/2026, machine libre, DeepSeek
+remesuré à sa demande (première fois depuis la 0.20.0) parce que son cache
+change. Image épinglée en `gufo-runtime:0.31.0` (`be7bd3b`), digest
+`9a6e2d43ca00`. Poids de Flash-Next passés à la révision Unsloth Dynamic
+3.1 `d96201194f10` (#1031) avant la remesure. `remesure.sh 27b flashnext
+deepseek` de 19:51 à 20:24 (`remesure.log` de `~/llm/gufo-test`), journaux
+agentiques dans `resultats/agentic/2026-11-06-0.31.0/` (`avant/` = la
+série à cache chaud du 04/11 en 0.29.0 pour les deux Qwen, celle du 21/10
+en 0.20.0 pour DeepSeek), puis une seconde série agentique à cache chaud
+sur Flash-Next et DeepSeek (debug, sessions pi gardées, `cache-chaud/`).
+16/16 partout, pas de boucle.
+
+Changements qui nous touchent :
+
+- **DeepSeek au cache par composants** (#1003, 0.30.0) et ancien cache
+  retiré (#1014). `docs/SERVER.md` étend à tout serveur les règles du 27B
+  et de Flash-Next : un seul serveur possède son dossier et y efface les
+  fichiers des autres, `--cache-disk-staging-bytes` est ignoré. **yaml
+  changé** : `GUFO_CACHE/deepseek-v4-flash`, créé par `runtime.sh`, et le
+  staging de 8 Gio retiré de sa ligne ; c'était le dernier reste du
+  contournement #259/#279. Les `*.kvc` de l'ancien format restent
+  orphelins à la racine de `GUFO_CACHE`.
+- **`--help` de `serve llm`** : aucune option ajoutée ni retirée ; les
+  défauts d'échantillonnage sont décrits « model preset, otherwise … »
+  (#1009), ce que fait déjà notre macro `qwen`.
+- **Flash-Next** : points de reprise pris dans les passes de prefill
+  (#963), passes limitées par la capacité alignées (#1016) ; nouvelle
+  révision des poids, mêmes types et formes de tenseurs selon gufo.
+
+Lecture :
+
+- **27B** : au niveau de la 0.29.0 à cache chaud. Prefill 494 t/s à 52k
+  (495) et 554 à 6,5k, décode en prose 46,7 à 52,3 t/s, agentique 44,9
+  t/s (44,6), acceptance 72,3 % (71,0), reprise 98,5 % avec 4 reprises
+  disque et aucun raté : son cache disque a traversé la montée.
+  16 scénarios en 109,6 s (113,3).
+- **Flash-Next** : prefill inchangé (1 701 t/s à 52k contre 1 703, court
+  1 639 à 1 641 contre 1 630 à 1 635), décode en code 94,0 à 97,3 t/s
+  (91,3 à 94,8). Première série : 3 ratés `no_compatible_boundary`,
+  reprise 93,3 %, agentique 59,5 t/s, le profil exact d'un cache disque
+  froid en 0.29.0 (93,2 %, 59,8 t/s) ; l'identité du cache tient aux
+  poids, qui ont changé de révision. **Confirmé** par la seconde série :
+  aucun raté, 4 reprises disque, reprise 97,9 % (97,9), agentique
+  62,5 t/s (63,8), acceptance 94,1 % (92,0), 16 scénarios en 70,5 s
+  (76,5).
+- **DeepSeek** contre la 0.20.0 : prefill court 431 t/s (420), à 42k 459
+  (454), décode en prose 35,5 à 41,1 t/s (30,6 à 35,5) et en code 44,0 à
+  44,8 (38,5 à 38,9, +15 %, sans doute #897 de la 0.28.1), chargement
+  153 s (172), mémoire 113 145 Mio (114 448). Sur dossier de cache neuf :
+  3 ratés `no_compatible_boundary`, reprise 94,2 % (92,2), agentique
+  33,6 t/s (29,6), premier token 661 ms (696), 283,9 s au total dont un
+  `slugify.js` à 116 s en troisième passe (15 à 22 s aux deux autres). À
+  cache chaud : aucun raté, 4 reprises disque, reprise 96,1 %, agentique
+  36,4 t/s, acceptance 88,1 % (87,1), 174,5 s.
+
+Le détail chiffré est dans « Versions : synthèse ».
+
 ## Release v0.29.0 (04/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 04/11/2026, machine libre (DeepSeek non
