@@ -68,8 +68,13 @@ telecharge() {
         --revision 4ca720788d1e01f1bff70c033e0d0028fd02e502 \
         mmproj-BF16.gguf --local-dir "$DL/qwen3.8-27b" ;;
     flashnext)
+      # Révision Unsloth Dynamic 3.1 d96201194f10, épinglée par le guide de
+      # gufo depuis la 0.31.0 (gufo-org/gufo#1031) : mêmes types et formes de
+      # tenseurs que 38bb39ee9782 (celle de nos mesures jusqu'à la 0.29.0),
+      # vitesse AR inchangée selon gufo. Les 4 shards, propres à gufo, sont
+      # retéléchargés en place (~104 Go) ; MTP et mmproj, partagés, inchangés.
       hf download unsloth/Qwen3.8-Flash-Next-GGUF \
-        --revision 38bb39ee97821de2c9009abb7e93950eec396e66 \
+        --revision d96201194f103c906994f283f504209dc8d2a10c \
         --include "UD-Q4_K_XL/*" --local-dir "$DL/qwen3.8-flash-next"
       du_parc qwen3.8-flash-next unsloth/Qwen3.8-Flash-Next-GGUF MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
       du_parc qwen3.8-flash-next unsloth/Qwen3.8-Flash-Next-GGUF mmproj-BF16.gguf ;;
