@@ -34,8 +34,9 @@
 #                  copier d'une machine à l'autre), que le --cleanup du
 #                  runtime llama-cpp-rocm-strix épargne
 #   GUFO_CACHE     cache disque de gufo, 16 Gio au plus pour DeepSeek (et
-#                  le 27B jusqu'à la 0.19.0), autant dans flash-next/ depuis
-#                  gufo 0.14.0 et dans qwen3.8-27b/ depuis la 0.20.0 (défaut
+#                  le 27B jusqu'à la 0.19.0) jusqu'à la 0.29.0, autant dans
+#                  flash-next/ depuis gufo 0.14.0, dans qwen3.8-27b/ depuis
+#                  la 0.20.0 et dans deepseek-v4-flash/ depuis la 0.30.0 (défaut
 #                  ~/.local/state/llm-setup/gufo-cache, à côté du cache du
 #                  runtime llama-cpp-rocm-strix ; dans GUFO_DATA/cache avant
 #                  le 09/10/2026). Partagé par l'usage réel et les bancs,
@@ -184,10 +185,11 @@ rt_gufo_env() {
 
 # avant_demarrage - dossiers de l'hôte que le compose monte : sans eux docker
 # les créerait en root. Et les sous-dossiers de cache propres à Flash-Next
-# (gufo 0.14.0) et au 27B (gufo 0.20.0, gufo-llama-swap.yaml), sous ce même
-# montage.
+# (gufo 0.14.0), au 27B (gufo 0.20.0) et à DeepSeek (gufo 0.30.0,
+# gufo-llama-swap.yaml), sous ce même montage.
 rt_gufo_avant_demarrage() {
-  mkdir -p "$GUFO_DATA" "$GUFO_CACHE/flash-next" "$GUFO_CACHE/qwen3.8-27b"
+  mkdir -p "$GUFO_DATA" "$GUFO_CACHE/flash-next" "$GUFO_CACHE/qwen3.8-27b" \
+    "$GUFO_CACHE/deepseek-v4-flash"
 }
 
 # pret - /health de llama-swap a répondu (pilotage générique) ; reste le

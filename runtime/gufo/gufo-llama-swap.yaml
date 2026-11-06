@@ -114,6 +114,16 @@
 #                         se reremplit. DeepSeek reste seul dans GUFO_CACHE
 #                         avec le staging de 8 Gio (docs/SERVER.md de gufo :
 #                         « For DeepSeek, … »).
+#                         Depuis la 0.30.0 (gufo-org/gufo#1003, DeepSeek passe
+#                         au cache par composants ; #1014 retire l'ancien),
+#                         DeepSeek suit à son tour ces règles, valables pour
+#                         tout serveur (docs/SERVER.md de gufo : « One server
+#                         owns the directory », « The server ignores
+#                         --cache-disk-staging-bytes ») : son dossier,
+#                         GUFO_CACHE/deepseek-v4-flash (créé par runtime.sh),
+#                         et plus de staging ; les 8 Gio de #259/#279 n'ont
+#                         plus d'objet. Son ancien cache (*.kvc à la racine de
+#                         GUFO_CACHE) est perdu, il se reremplit.
 #                         Une ligne par option de cache : remesure.sh les
 #                         retire par sed pour sa série SANS_CACHE=1.
 # =============================================================================
@@ -214,8 +224,7 @@ models:
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-
       ${gufo} --served-model-name deepseek-v4-flash
-      --cache-disk ${env.GUFO_CACHE} --cache-disk-bytes 17179869184
-      --cache-disk-staging-bytes 8589934592
+      --cache-disk ${env.GUFO_CACHE}/deepseek-v4-flash --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
       --speculative dspark
       --dspark-model ${env.MODELS_BASE}/gufo/DeepSeek-V4-Flash-DSpark-support-0731.gguf
