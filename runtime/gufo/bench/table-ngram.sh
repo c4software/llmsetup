@@ -12,6 +12,11 @@
 #            être répétée, la première est la référence. Conseillé :
 #            bf16 bf16 q8_0 iq4_nl (la seconde bf16 donne le plancher de bruit)
 #   TAG=…  dossier des collectes (défaut <date-heure>-<version de GUFO_IMAGE>)
+#   MESURE=agentique …  au lieu de la divergence, la boucle pi (agentic.sh,
+#            debug, sessions pi gardées) deux fois par table, cache disque
+#            froid puis chaud (une table change l'identité du cache) :
+#            débit et justesse en usage réel. Conseillé : iq4_nl q8_0 bf16
+#            (la livrée d'abord, témoin de la même session)
 #
 # Origine (06/11/2026) : la révision Unsloth Dynamic 3.1 (d96201194f10, celle
 # de download.sh) range la table, 160 x 320 001 536 valeurs, dans son propre
@@ -25,7 +30,9 @@
 # d'Unsloth (deux valeurs d'en-tête, split.no et split.count) ; un fichier
 # <table>.ok marque une table vérifiée et numérotée. Collectes dans
 # GUFO_DATA/resultats/divergence/<TAG>/, bilan ajouté à
-# GUFO_DATA/resultats/divergence.tsv.
+# GUFO_DATA/resultats/divergence.tsv ; en MESURE=agentique, journaux dans
+# GUFO_DATA/resultats/agentic/<TAG>-ngram/<n>-<table>/{froid,chaud}/ et bilan
+# par journal.py.
 set -euo pipefail
 DEPOT="$(realpath "$(dirname "$(realpath "$0")")/../../..")"
 BENCH="$DEPOT/runtime/gufo/bench"
@@ -47,7 +54,12 @@ done
 
 image="${GUFO_IMAGE:-$(<"$DEPOT/runtime/gufo/IMAGE")}"
 TAG="${TAG:-$(date +%F-%H%M)-${image##*:}}"
-D="$GUFO_DATA/resultats/divergence/$TAG"
+MESURE="${MESURE:-divergence}"
+case "$MESURE" in
+  divergence) D="$GUFO_DATA/resultats/divergence/$TAG" ;;
+  agentique) D="$GUFO_DATA/resultats/agentic/$TAG-ngram" ;;
+  *) echo "MESURE inconnue : $MESURE (divergence ou agentique)" >&2; exit 2 ;;
+esac
 mkdir -p "$D"
 
 fichier() { echo "$M/engram/Qwen3.8-Flash-Next-engram-${NOM[$1]}.gguf_file"; }
@@ -102,19 +114,35 @@ if "$DEPOT/setup-llm.sh" --en-marche; then relance=1; fi
 export BANC_SANS_RELANCE=1
 trap restaure EXIT
 
-echo "== $(date +%T) tables : $* ($image), collectes dans $D"
+echo "== $(date +%T) tables : $* ($image), mesure $MESURE, résultats dans $D"
 for t in $(printf '%s\n' "$@" | sort -u); do
   [[ "$t" == iq4_nl ]] || preparer "$t"
 done
 
 n=0; collectes=()
 attendus=$(grep -c '^====$' "$DEPOT/prompts/divergence.txt"); attendus=$((attendus + 1))
+# agentique <n> <table> : la boucle pi, cache froid puis chaud ; les journaux
+# de agentic.sh (écrasés à chaque passage) copiés après chaque série.
+agentique() {
+  local serie A="$GUFO_DATA/resultats/agentic"
+  for serie in froid chaud; do
+    echo "== $(date +%T) table $2, boucle agentique ($serie)"
+    DEBUG=1 PI_SESSIONS=1 "$BENCH/agentic.sh" gufo flashnext
+    mkdir -p "$D/$1-$2/$serie"
+    cp -a "$A"/gufo-flashnext.* "$D/$1-$2/$serie/"
+  done
+}
+
 for t in "$@"; do
   n=$((n + 1))
   sortie="$D/$n-$t.jsonl"
-  echo "== $(date +%T) collecte $n : table $t"
+  echo "== $(date +%T) mesure $n : table $t"
   poser "$t"
   ls -l "$S"
+  if [[ "$MESURE" == agentique ]]; then
+    agentique "$n" "$t"
+    continue
+  fi
   MESURE=divergence DIVERGENCE_SORTIE="$sortie" SUFFIXE="-ngram-$t" \
     "$BENCH/run.sh" gufo flashnext
   if [[ ! -f "$sortie" ]] || (($(wc -l <"$sortie") != attendus)); then
@@ -126,9 +154,22 @@ done
 restaure
 echo "== $(date +%T) shard 4 d'origine en place : $(ls -l "$S")"
 
-echo "== $(date +%T) comparaison à la collecte 1"
-python3 "$BENCH/divergence.py" compare "${collectes[@]}" \
-  --tsv "$GUFO_DATA/resultats/divergence.tsv" --image "$image"
+if [[ "$MESURE" == agentique ]]; then
+  echo "== $(date +%T) bilan des journaux"
+  n=0
+  for t in "$@"; do
+    n=$((n + 1))
+    for serie in froid chaud; do
+      echo "-- table $t, $serie"
+      python3 "$BENCH/journal.py" "$D/$n-$t/$serie/gufo-flashnext.log"
+      grep -h "Résumé" "$D/$n-$t/$serie/gufo-flashnext.out" 2>/dev/null || true
+    done
+  done
+else
+  echo "== $(date +%T) comparaison à la collecte 1"
+  python3 "$BENCH/divergence.py" compare "${collectes[@]}" \
+    --tsv "$GUFO_DATA/resultats/divergence.tsv" --image "$image"
+fi
 
 if ((relance)); then
   echo "== $(date +%T) retour du runtime d'usage réel"
