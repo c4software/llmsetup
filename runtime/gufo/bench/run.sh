@@ -15,6 +15,12 @@
 # gufo lancé derrière llama-swap, le modèle du cas préchargé)
 # Cas llama : 27b, flashnext, flashnext-large-ub, deepseek
 #
+# MESURE=divergence DIVERGENCE_SORTIE=<f.jsonl> … (gufo seulement) : au lieu
+# de mesure.py, divergence.py collecte (glouton, 20 meilleurs logprobs, jeu
+# prompts/divergence.txt) dans ce fichier ; appelé par table-ngram.sh.
+# SUFFIXE=… s'ajoute à l'étiquette (gufo-<cas><suffixe>) des lignes de
+# chargements.tsv et des journaux, pour distinguer des variantes de poids.
+#
 # Réglage gufo de ce banc : celui du compose (cache disque compris), 1 session
 # (SESSIONS=N), port 8009 (celui du service, exclusifs), sans redémarrage
 # automatique. Le runtime d'usage réel (gufo ou llama-server) est arrêté au
@@ -100,7 +106,7 @@ section() {  # cas -> section du models.ini
 }
 
 run_gufo() {
-  local cas="$1" label="gufo-$1" t0 t1 nom_modele
+  local cas="$1" label="gufo-$1${SUFFIXE:-}" t0 t1 nom_modele
   modele_gufo "$cas" >/dev/null || return 1
   liberer
   t0=$(date +%s.%N)
@@ -112,7 +118,12 @@ run_gufo() {
   printf '%s\t%s\tchargement %.1f s\n' "$(date +%FT%T)" "$label" \
     "$(awk -v a="$t0" -v b="$t1" 'BEGIN{print b-a}')" | tee -a "$RES/chargements.tsv"
   nom_modele="$(modele_gufo "$cas")"
-  python3 "$DEPOT/runtime/gufo/bench/mesure.py" "http://localhost:$PORT" "$nom_modele" "$label" "$RES" "$DEPOT/prompts" || true
+  if [[ "${MESURE:-}" == divergence ]]; then
+    python3 "$DEPOT/runtime/gufo/bench/divergence.py" collecte "http://localhost:$PORT" \
+      "$nom_modele" "$DEPOT/prompts/divergence.txt" "${DIVERGENCE_SORTIE:?}" || true
+  else
+    python3 "$DEPOT/runtime/gufo/bench/mesure.py" "http://localhost:$PORT" "$nom_modele" "$label" "$RES" "$DEPOT/prompts" || true
+  fi
   printf '%s\t%s\tmémoire utilisée %s Mio\n' "$(date +%FT%T)" "$label" \
     "$(free -m | awk '/^Mem/{print $3}')" | tee -a "$RES/chargements.tsv"
   docker logs "$GUFO_CONTENEUR" >"$RES/$label.log" 2>&1

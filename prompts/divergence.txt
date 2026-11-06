@@ -1,0 +1,116 @@
+Explique en quelques paragraphes pourquoi le ciel est bleu le jour et rouge au coucher du soleil.
+====
+Écris une fonction Python `fusionner_intervalles(intervalles)` qui fusionne une liste d'intervalles [début, fin] qui se chevauchent, avec sa docstring et trois tests unitaires.
+====
+Résume la Révolution française en dix dates clés, une ligne par date, avec une phrase d'explication chacune.
+====
+A train leaves Paris at 9:40 and travels at 280 km/h. Another leaves Lyon, 465 km away, at 10:05 towards Paris at 250 km/h. When and where do they cross? Show your reasoning step by step.
+====
+Traduis en anglais, en gardant le registre soutenu : « Il n'est point de bonheur sans liberté, ni de liberté sans courage. Ceux qui renoncent à l'une pour préserver l'autre finissent souvent par perdre les deux. »
+====
+Voici un fichier de configuration nginx. Explique ce que fait chaque bloc et signale les problèmes de sécurité :
+
+server {
+    listen 80;
+    server_name exemple.fr;
+    root /var/www/html;
+    autoindex on;
+    location /admin {
+        proxy_pass http://127.0.0.1:8080;
+    }
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+        include fastcgi_params;
+    }
+}
+====
+Write a Rust function that parses a line of the form `key = value # comment` into an `Option<(String, String)>`, trimming spaces and ignoring comments. Include edge cases in tests.
+====
+Quelle est la différence entre un processus et un thread ? Donne des exemples concrets sous Linux et les commandes pour les observer.
+====
+Tu disposes d'un outil `lire_fichier(chemin)` et d'un outil `ecrire_fichier(chemin, contenu)`. L'utilisateur demande : « corrige la faute de frappe "fonctoin" dans src/util.js ». Décris, appel par appel et au format JSON, les appels d'outils que tu ferais et pourquoi.
+====
+Calcule la dérivée de f(x) = x^3 · ln(x) − e^(2x) / (1 + x^2), puis donne sa valeur en x = 1 avec quatre décimales.
+====
+Rédige un courriel poli mais ferme à un fournisseur qui a livré avec trois semaines de retard une commande de 200 claviers, dont 14 défectueux. Propose une solution.
+====
+Explain the CAP theorem and give one real database that chooses each of the three trade-offs, with a short justification for each.
+====
+Écris un script bash robuste (set -euo pipefail) qui sauvegarde un dossier dans une archive tar.gz datée, garde les sept dernières et journalise chaque exécution.
+====
+Corrige ce code JavaScript et explique chaque bogue :
+
+function moyenne(tableau) {
+  let somme;
+  for (i = 0; i <= tableau.length; i++) {
+    somme += tableau[i];
+  }
+  return somme / tableau.length;
+}
+====
+Décris le cycle de l'eau pour un élève de dix ans, puis pour un étudiant en géographie.
+====
+Given the SQL tables `orders(id, customer_id, total, created_at)` and `customers(id, name, country)`, write a query returning, for each country, the customer with the highest total spending in 2025, with ties broken by name.
+====
+Quels sont les avantages et les inconvénients du nucléaire pour la production d'électricité en France ? Présente les arguments des deux côtés de façon équilibrée.
+====
+Implémente en C une file circulaire de taille fixe (init, push, pop, plein, vide) sans allocation dynamique, avec des commentaires.
+====
+Raconte une courte histoire (environ 200 mots) où un phare automatique découvre qu'il n'est plus seul sur son île.
+====
+Explique pas à pas comment fonctionne l'algorithme de Dijkstra sur ce graphe : A-B 4, A-C 2, C-B 1, B-D 5, C-D 8, D-E 3. Donne les distances finales depuis A.
+====
+Write a Python async function that fetches up to 10 URLs concurrently with aiohttp, with a global timeout, retries with exponential backoff, and returns a dict url -> status.
+====
+Un client se plaint : « mon application Docker ne trouve pas le fichier monté avec -v ./data:/data ». Liste les causes probables dans l'ordre et la commande pour vérifier chacune.
+====
+Donne la conjugaison du verbe « résoudre » au présent, au passé simple, au subjonctif présent et au conditionnel, avec une phrase d'exemple pour chaque temps.
+====
+Here is a Git conflict. Resolve it so that both features are kept, and explain your choice:
+
+<<<<<<< HEAD
+def total(items, tax=0.2):
+    return sum(i.price for i in items) * (1 + tax)
+=======
+def total(items, discount=0):
+    return sum(i.price for i in items) - discount
+>>>>>>> feature/discount
+====
+Explique ce qu'est une attaque par injection SQL, montre un exemple vulnérable en PHP et sa version corrigée avec des requêtes préparées.
+====
+Convertis cette liste en JSON valide, avec un tableau d'objets {nom, âge, ville} : Alice 34 Nantes ; Bob 27 Lille ; Chloé 41 Bordeaux ; Djamel 19 Strasbourg.
+====
+Pourquoi la complexité moyenne du tri rapide est-elle O(n log n) et sa pire complexité O(n²) ? Comment l'éviter en pratique ?
+====
+Write a haiku sequence (three haiku) about debugging a race condition at 3 a.m.
+====
+Écris un test pytest paramétré pour une fonction `est_bissextile(annee)`, couvrant les règles des siècles, puis la fonction elle-même.
+====
+Compare TCP et UDP sous forme de tableau (fiabilité, ordre, latence, usages typiques), puis explique dans quel cas QUIC change la donne.
+====
+Un réservoir se remplit par deux robinets en 3 h et 6 h et se vide par une fuite en 12 h. Tous ouverts, combien de temps faut-il pour le remplir ? Détaille le calcul.
+====
+Refactorise ce code Python pour le rendre lisible et testable, sans changer son comportement :
+
+def p(d):
+    r=[]
+    for k in d:
+        if d[k]!=None and type(d[k])==int and d[k]%2==0: r.append((k,d[k]*2))
+        elif d[k]!=None and type(d[k])==str: r.append((k,d[k].upper()))
+    return sorted(r,key=lambda x:x[0])
+====
+Explique à un développeur junior ce que sont les migrations de base de données, pourquoi on les versionne et les pièges à éviter en production.
+====
+Describe how a transformer language model generates text one token at a time, including attention, the KV cache and sampling.
+====
+Écris un Dockerfile multi-étapes pour une application Go, image finale minimale, utilisateur non root, et explique chaque ligne.
+====
+Liste dix départements français avec leur numéro et leur préfecture, sous forme de tableau Markdown.
+====
+Un utilisateur écrit : « supprime tous les fichiers .log de plus de 30 jours dans /var/log/app, mais pas ceux en cours d'écriture ». Propose la commande, explique-la et indique comment la tester sans rien supprimer.
+====
+Write a regular expression that validates French phone numbers in the forms 0612345678, 06 12 34 56 78, +33 6 12 34 56 78 and +33612345678, and explain each part.
+====
+Explique la différence entre « apporter » et « amener », puis entre « emmener » et « emporter », avec deux exemples corrects et une faute courante pour chacun.
+====
+Propose une architecture simple pour une application de prise de notes hors ligne qui se synchronise entre trois appareils, et explique comment gérer les conflits d'édition.
