@@ -104,7 +104,20 @@ rechange (synthèse dans `docs/GUFO.md`, « Table n-gram de Flash-Next »).
   que la comparaison écrasait ; corrigé (candidats réunis par texte) et
   recalculé sur les mêmes collectes, lignes fausses retirées du TSV.
 
-Verdict : IQ4_NL livrée gardée, la Q8_0 ne rapproche presque pas de la BF16.
+- **Boucle agentique des trois tables**, `MESURE=agentique table-ngram.sh
+  iq4_nl q8_0 bf16` (23:08 à 23:30, journaux dans
+  `resultats/agentic/2026-11-06-2308-0.31.0-ngram/`), froid puis chaud :
+  IQ4_NL 62,7 / 62,9 t/s, acceptance 94,1 / 93,8 %, reprise 98,1 / 98,1 %,
+  74,0 / 70,7 s ; Q8_0 61,9 / 63,5 t/s, 91,4 / 90,7 %, 98,4 / 97,6 %, 71,7 /
+  78,8 s ; BF16 61,7 / 62,5 t/s, 90,9 / 90,9 %, 94,0 % (3 ratés, dont 2
+  `no_compatible_boundary`) / 97,7 %, 78,0 / 80,0 s. 16/16 partout. À froid,
+  IQ4_NL et Q8_0 ont repris sur le disque dès le départ (4 reprises, aucun
+  raté) : changer de table ne vide pas toujours le cache, le cache froid de
+  l'A/B a une autre cause, non cherchée.
+
+Verdict : IQ4_NL livrée gardée ; Q8_0 et BF16 ne rapprochent presque pas de
+la BF16 et abaissent l'acceptance MTP d'environ 3 points. Tables de rechange
+(147 Gio) supprimées de silentchuck à la demande de l'utilisateur.
 
 ## Release v0.29.0 (04/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
 

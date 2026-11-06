@@ -629,12 +629,23 @@ repart dessus. Rien de versionné ne change.
   BF16 au même rythme, sur des quasi-égalités (0,15 nat entre les deux
   premiers choix) ; une table 14 fois plus précise ne réduit la KL que de
   14 %, à un niveau déjà de l'ordre du millième de nat par token.
+- Boucle pi des trois tables dans une même session
+  (`MESURE=agentique table-ngram.sh iq4_nl q8_0 bf16`, froid puis chaud) :
+  16/16 partout, décode 61,7 à 63,5 t/s pour toutes (la BF16, qui lit 5,7
+  fois plus sur le disque, ne ralentit pas), mais acceptance MTP 93,8 à
+  94,1 % en IQ4_NL contre 90,7 à 91,4 % en Q8_0 et 90,9 % en BF16, dans
+  chaque série (même sens qu'à l'A/B du jour) ; réponses plus longues
+  (3 814 à 3 998 tokens générés contre 3 845 à 4 347), 16 scénarios en 70,7
+  à 74,0 s contre 71,7 à 80,0 s. Hypothèse, non vérifiée : la tête MTP
+  d'Unsloth est assortie à la table livrée.
 
-**Verdict** : table IQ4_NL livrée gardée. La Q8_0 coûte 25,6 Go de disque et
-deux fois plus d'octets lus par ligne pour un rapprochement de la BF16 à
-peine mesurable, et aucun gain en débit ni en tâches. Les tables Q8_0 et
-BF16 restent dans `MODELS_BASE/gufo/qwen3.8-flash-next/engram/` pour une
-prochaine mesure ; `table-ngram.sh bf16 bf16 q8_0 iq4_nl` la refait.
+**Verdict** : table IQ4_NL livrée gardée. Q8_0 et BF16 coûtent 25,6 et 73,6
+Go de disque de plus pour un rapprochement de la BF16 à peine mesurable,
+aucun gain en tâches, et une acceptance MTP plus basse d'environ 3 points.
+Tables de rechange supprimées de silentchuck le 06/11/2026, à la demande de
+l'utilisateur (« aucun intérêt ») ; `table-ngram.sh` les retélécharge s'il
+faut refaire la mesure (`bf16 bf16 q8_0 iq4_nl` pour la divergence,
+`MESURE=agentique … iq4_nl q8_0 bf16` pour la boucle).
 
 ## Ticket #388 : boucle d'appels d'outils de Flash-Next
 
