@@ -62,13 +62,31 @@ preparer() {  # preparer <table> : téléchargée, vérifiée, numérotée 4 sur
   touch "$f.ok"
 }
 
+# La bascule : gufo charge Flash-Next par le shard 1, qui désigne les shards 2
+# à 4 par leur nom ; le shard 4 ne contient que la table (tenseurs identiques
+# d'une table à l'autre hors type, README d'engram/ chez Unsloth). Poser une
+# table de rechange = garder le shard d'origine sous S.iq4nl et mettre sous
+# le nom S un lien symbolique RELATIF vers la table d'engram/ : il reste sous
+# MODELS_BASE, donc valable aussi dans le conteneur, qui monte ce dossier.
+# gufo n'ouvre ses fichiers qu'au démarrage : chaque pose a lieu entre deux
+# démarrages (run.sh lance un gufo de banc neuf par collecte), jamais sous un
+# serveur en marche.
+#
+# restaure - l'original sous son nom. Ne supprime qu'un lien, jamais un vrai
+# fichier, et ne renomme S.iq4nl que si le nom est libre : sans effet sur un
+# état déjà propre, donc appelée avant chaque pose, à la fin et par le trap
+# EXIT (une exécution interrompue laisse l'original en place ; le service
+# d'usage réel n'est relancé qu'après).
 restaure() {
   if [[ -L "$S" ]]; then rm -f "$S"; fi
   if [[ -f "$S.iq4nl" && ! -e "$S" ]]; then mv "$S.iq4nl" "$S"; fi
   return 0
 }
 
-poser() {  # poser <table> : la table servie par le shard 4
+# poser <table> - la table que servira le prochain démarrage de gufo : part
+# toujours de l'état propre (restaure), rien de plus pour iq4_nl (celle du
+# shard d'origine), sinon l'original de côté et le lien vers engram/.
+poser() {
   restaure
   [[ "$1" == iq4_nl ]] && return 0
   mv "$S" "$S.iq4nl"
