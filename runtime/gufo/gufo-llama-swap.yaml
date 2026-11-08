@@ -329,7 +329,8 @@ models:
   # Mêmes routes, même édition. Ajouté le 08/11/2026 (gufo #784, dans l'image
   # depuis la 0.29.0) : 1024² en 18,6 s d'après le guide amont
   # (docs/models/qwen-image-2.1.md, 01/11/2026), contre 89,9 s pour
-  # Qwen-Image-2.1 en 40 étapes. Seule variante Turbo servie, à la demande de
+  # Qwen-Image-2.1 en 40 étapes ; mesuré ici le 08/11/2026 : 19,8 s chargé,
+  # 36,8 s en venant de Flash-Next. Seule variante Turbo servie, à la demande de
   # l'utilisateur : encodeur Heretic, comme la variante 40 étapes (l'encodeur
   # de Turbo est celui de Qwen-Image-2.1). Dossier monté par download.sh
   # qwen-image-turbo-heretic, qui lie le pipeline Turbo. Groupe « gros ».

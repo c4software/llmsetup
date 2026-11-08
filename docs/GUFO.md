@@ -471,7 +471,7 @@ constaté ni banc de régression ; essai détaillé dans le journal. Depuis le
 08/11/2026, `Qwen-Image-2.1-Turbo-heretic` à côté (checkpoint officiel
 distillé, toujours 8 étapes, même encodeur Heretic, `--setup
 qwen-image-turbo` puis `qwen-image-turbo-heretic`, 32,5 Go) : 1024² en
-18,6 s d'après le guide amont.
+19,8 s chargé, 36,8 s en venant de Flash-Next (08/11/2026, silentchuck).
 
 ## Suivi en amont
 

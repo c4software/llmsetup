@@ -41,7 +41,12 @@ le 08/11/2026, mêmes 750 tenseurs (noms, dtype, formes) et mêmes octets
 identiques hors version de transformers (5.3.0 contre 4.57.1) et ordre des
 clés. Les 749 tenseurs de l'encodeur Heretic y ont tous leur pendant de
 même forme. Le montage de `download.sh` (liens vers le pipeline, index
-écrit depuis l'en-tête) devient une fonction commune aux deux variantes. Non retenus pour l'instant :
+écrit depuis l'en-tête) devient une fonction commune aux deux variantes.
+Déployé sur silentchuck le 08/11/2026 (`--restart`, 0.31.0) : 1024², 8
+étapes, temps de requête par curl 36,8 s en venant de Flash-Next (bascule
+comprise), puis 19,8 s chargé (18,6 s annoncés par l'amont, contre 90 s
+mesurés ici en 40 étapes le 25/09) ; texte de l'image (« TURBO ») net,
+scène cohérente ; retour à Flash-Next 30,6 s. Non retenus pour l'instant :
 EmbeddingGemma 2 (1,5 Go, embeddings texte, image, audio, vidéo ; aucun
 client ne s'en sert) et MiniMax H3 (vidéo avec son, licence à accepter,
 un job à la fois).
