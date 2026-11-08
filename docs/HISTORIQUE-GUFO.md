@@ -20,6 +20,57 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.32.0 (08/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 08/11/2026, machine libre, DeepSeek non
+remesuré. Image épinglée en `gufo-runtime:0.32.0` (`c40862f`), digest
+`9e47025c4dab`. `remesure.sh 27b flashnext` de 21:24 à 21:39
+(`remesure.log` de `~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-11-08-0.32.0/` (`avant/` = la remesure du 06/11 en
+0.31.0, à cache chaud pour Flash-Next), puis une seconde série agentique à
+cache chaud sur le 27B (debug, sessions pi gardées, `cache-chaud/`). 16/16
+partout, pas de boucle.
+
+Changements qui nous touchent :
+
+- **Prefill découpé par couches** à côté des sessions qui décodent (#1079
+  27B, #1042 Flash-Next, #1080 DeepSeek, #1039 pour les extensions) : une
+  session qui lit un long prompt ne bloque plus le décode des autres.
+  `--prefill-chunk` est déprécié et ignoré (#1095) ; nous ne le passions pas.
+- **`--help`** : `serve llm` ne change que la description de
+  `--prefill-chunk`, `serve image` est identique. Toutes les options de
+  `gufo-llama-swap.yaml` sont encore dans la documentation 0.32.0, refondue
+  (#1090 : `docs/cli.md`, `docs/cache.md`, `docs/internal/`).
+- **Flash-Next** : expert partagé recouvert avec les experts routés au
+  décode (#1048), sans effet mesurable ici.
+- **Outils** : schémas stricts avec `$schema` (#1059) et unions de types
+  (#1052), budget de raisonnement clos par la grammaire (#1064), séparateur
+  d'ouverture d'outil (#1043). #1102 (valeur commençant par
+  `</parameter>`) est après le tag.
+- **Extensions en modules chargeables** (#1077) dans une version publiée :
+  strycast-qwen35moe s'installe désormais sur notre image (voir « À
+  surveiller »).
+
+Lecture :
+
+- **27B** : prefill inchangé (494,8 t/s à 52k contre 494,4, 554 à 6,5k
+  contre 555, court 505 à 520 contre 507 à 522). Décode en prose 44,9 à
+  51,4 t/s (46,7 à 52,3), médiane 45,0 contre 50,3 : non confirmé en
+  boucle agentique, où le décode est 45,4 puis 44,1 t/s (44,9), c'est la
+  variance du DFlash 2 sur trois passes ; en code 70,7 t/s de médiane
+  (69,1). Première série : 3 ratés `no_compatible_boundary`, reprise
+  93,6 % (98,5), le profil d'un cache disque froid ; contrairement à la
+  0.31.0, le cache du 27B n'a pas traversé la montée. **Confirmé** par la
+  seconde série : aucun raté, 4 reprises disque, reprise 98,8 % (98,5),
+  acceptance 70,7 % (72,3), 16 scénarios en 108,1 s (109,6).
+- **Flash-Next** : au niveau de la 0.31.0. Prefill à 52k 1 715 t/s
+  (1 701), court 1 608 à 1 629 (1 639 à 1 641), décode en code 92,1 à
+  96,9 t/s (94,0 à 97,3). Cache conservé : aucun raté, 4 reprises disque,
+  reprise 98,1 % (97,7), agentique 60,2 t/s (62,5), acceptance 93,9 %
+  (90,9), 16 scénarios en 73,3 s (70,5).
+
+Le détail chiffré est dans « Versions : synthèse ».
+
 ## Nouveaux modèles amont, Qwen-Image-2.1-Turbo ajouté avec l'encodeur Heretic, #299 remplacée par l'extension strycast (08/11/2026)
 
 Revue demandée par l'utilisateur le 08/11/2026 (docs amont réorganisées
