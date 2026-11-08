@@ -200,10 +200,10 @@ rt_gufo_pret() {
   _gufo_wait_precharge "$m"
 }
 
-# setup <image|27b|flashnext|deepseek|tts|asr|qwen-image|qwen-image-heretic|all>
+# setup <image|27b|flashnext|deepseek|tts|asr|qwen-image|qwen-image-heretic|qwen-image-turbo|qwen-image-turbo-heretic|all>
 # - image et poids de référence (download.sh), dans $MODELS_BASE.
 rt_gufo_setup() {
-  [[ -n "${1:-}" ]] || error "--setup (runtime gufo) attend : image, 27b, flashnext, deepseek, tts, asr, qwen-image, qwen-image-heretic ou all"
+  [[ -n "${1:-}" ]] || error "--setup (runtime gufo) attend : image, 27b, flashnext, deepseek, tts, asr, qwen-image, qwen-image-heretic, qwen-image-turbo, qwen-image-turbo-heretic ou all"
   MODELS_BASE="$MODELS_BASE" GUFO_IMAGE="$GUFO_IMAGE" "$GUFO_DIR/download.sh" "$1"
 }
 
@@ -236,13 +236,16 @@ Runtime gufo : gufo derrière llama-swap (docs/GUFO.md, runtime/gufo/README.md)
 Commandes du runtime :
   --setup <quoi>           Image et poids de gufo (runtime/gufo/download.sh) :
                            image, 27b, flashnext, deepseek, tts, asr,
-                           qwen-image, qwen-image-heretic ou all
+                           qwen-image, qwen-image-heretic, qwen-image-turbo,
+                           qwen-image-turbo-heretic ou all
   --start [modèle]         (commande commune) [modèle] = préchargé : flashnext,
                            27b, deepseek ; sans argument, celui du .env en
                            place, sinon flashnext. Le client choisit ensuite
-                           qwen3.8-27b, qwen3.8-flash-next, deepseek-v4-flash
-                           ou Qwen-Image-2.1-heretic par le champ « model » (un
-                           seul chargé à la fois, bascule automatique), plus la
+                           qwen3.8-27b, qwen3.8-flash-next, deepseek-v4-flash,
+                           Qwen-Image-2.1-heretic ou
+                           Qwen-Image-2.1-Turbo-heretic par le champ
+                           « model » (un seul chargé à la fois,
+                           bascule automatique), plus la
                            synthèse vocale Qwen3-TTS (trois variantes) et la
                            transcription Qwen3-ASR, chargées à côté.
                            2 sessions (GUFO_SESSIONS)

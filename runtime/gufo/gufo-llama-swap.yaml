@@ -305,7 +305,8 @@ models:
   # (et le LLM suivant décharge Qwen-Image). Temps de génération non publiés
   # par gufo ; mesuré ici le 25/09/2026 : 1024² en 40 étapes 90 s, 512² en
   # 20 étapes 16 s, retour à Flash-Next 38 s.
-  # Seule variante servie depuis le 25/09/2026 : même pipeline, encodeur de
+  # Seule variante 40 étapes servie depuis le 25/09/2026 (Turbo à côté
+  # depuis le 08/11/2026) : même pipeline, encodeur de
   # texte « abliterated » (catplusplus/Qwen21_Text_Encoder_Heretic, 54
   # tenseurs sur 749 : o_proj et down_proj des couches 9 à 35 du langage ;
   # vision, transformer et VAE identiques bit à bit). D'après sa fiche,
@@ -320,6 +321,24 @@ models:
       gufo serve image --host 127.0.0.1 --port ${PORT}
       --model ${env.MODELS_BASE}/gufo/Qwen-Image-2.1-heretic
       --served-model-name Qwen-Image-2.1-heretic
+    checkEndpoint: /health
+
+  # Qwen-Image-2.1-Turbo : checkpoint officiel entraîné à part (transformer et
+  # VAE différents de Qwen-Image-2.1, même licence Qwen Research), toujours
+  # 8 étapes : sans « steps » ou steps=8, toute autre valeur rend un HTTP 400.
+  # Mêmes routes, même édition. Ajouté le 08/11/2026 (gufo #784, dans l'image
+  # depuis la 0.29.0) : 1024² en 18,6 s d'après le guide amont
+  # (docs/models/qwen-image-2.1.md, 01/11/2026), contre 89,9 s pour
+  # Qwen-Image-2.1 en 40 étapes. Seule variante Turbo servie, à la demande de
+  # l'utilisateur : encodeur Heretic, comme la variante 40 étapes (l'encodeur
+  # de Turbo est celui de Qwen-Image-2.1). Dossier monté par download.sh
+  # qwen-image-turbo-heretic, qui lie le pipeline Turbo. Groupe « gros ».
+  "Qwen-Image-2.1-Turbo-heretic":
+    name: "Qwen-Image-2.1-Turbo, 8 étapes, encodeur Heretic (gufo)"
+    cmd: >-
+      gufo serve image --host 127.0.0.1 --port ${PORT}
+      --model ${env.MODELS_BASE}/gufo/Qwen-Image-2.1-Turbo-heretic
+      --served-model-name Qwen-Image-2.1-Turbo-heretic
     checkEndpoint: /health
 
 routing:
@@ -337,6 +356,7 @@ routing:
             - "qwen3.8-flash-next"
             - "deepseek-v4-flash"
             - "Qwen-Image-2.1-heretic"
+            - "Qwen-Image-2.1-Turbo-heretic"
         voix:
           # Une variante à la fois ; ne décharge pas le gros modèle
           # (exclusive: false) et n'est pas déchargée par lui (persistent).

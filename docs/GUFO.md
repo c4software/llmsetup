@@ -465,9 +465,13 @@ Vérifié le 25/09/2026 : `parler` sous pi en 10,6 s pour tout le tour,
 `image_generation` (alors nommé `generer_image`) 512² en 20 étapes sous omp en 90 s pour tout le tour (bascule
 vers Qwen-Image, puis retour à Flash-Next pour la réponse).
 
-Variante servie : `Qwen-Image-2.1-heretic` (encodeur de texte
-« abliterated »), SEULE variante servie depuis le 25/09/2026, sans gain
-constaté ni banc de régression ; essai détaillé dans le journal.
+Variante 40 étapes servie : `Qwen-Image-2.1-heretic` (encodeur de texte
+« abliterated »), seule variante servie du 25/09 au 08/11/2026, sans gain
+constaté ni banc de régression ; essai détaillé dans le journal. Depuis le
+08/11/2026, `Qwen-Image-2.1-Turbo-heretic` à côté (checkpoint officiel
+distillé, toujours 8 étapes, même encodeur Heretic, `--setup
+qwen-image-turbo` puis `qwen-image-turbo-heretic`, 32,5 Go) : 1024² en
+18,6 s d'après le guide amont.
 
 ## Suivi en amont
 
@@ -485,12 +489,14 @@ Tickets ouverts et vivants seulement : un ticket fermé, ou ouvert mais
 qui ne bouge plus, sort du tableau, ce qu'il a changé reste dans le journal
 et dans « Tickets : synthèse » (#388, fermé le 03/10/2026, a sa synthèse
 plus bas ; #200, #228 et #239, ouverts mais immobiles, retirés le
-14/10/2026).
+14/10/2026 ; #299, fermée le 07/11/2026, retirée le 08/11/2026). Une ligne
+sans numéro suit une extension communautaire : `gufo-amont.sh` ne la lit
+pas, elle se revoit à la main à chaque montée de version.
 
 | Ticket | Sujet | État au 02/10/2026 |
 |---|---|---|
-| #299 | PR : Qwen3.6-35B-A3B (`qwen35moe`, GDN + MoE 256 experts, MTP, DFlash 2), par slimsami, ouverte le 27/09 | **suivie à la demande de l'utilisateur** (28/09) : même architecture qu'Ornith-1.5-35B-A3B, notre modèle agentique par défaut (fine-tune de Qwen3.6-35B-A3B). Annoncé sur UD-Q6_K_XL : prefill 1 790 à 2 702 t/s contre 1 057 à 1 202 pour llama.cpp Vulkan, DFlash 2 à 83,3 t/s en glouton ; MTP pas encore branché dans `gufo serve`. À vérifier si elle est mergée : notre Ornith est en Q4_K_M (la PR ne cite que Q6_K et Q8_0 pour les experts), et gufo refuse les quants hors de ses formats ; le 30/09, **mise en attente par le mainteneur** : pas de nouveau modèle ni de nouvelle quant avant un produit stable avec les modèles actuels ; le 17/10, web2bruno annonce le MTP servi pour le 35B sur son fork (UD-Q8_K_XL, `-d 1`, prefill 2 280 t/s et décode 50 t/s à 16k) et demande des retours de test, sans objet ici ; le 19/10, rebasée sur la 0.17.1 avec ces commits MTP, toujours ouverte ; le 25/10, slimsami demande aux mainteneurs s'ils veulent le modèle ou s'il la ferme (garder la branche sur son fork), chiffres à l'appui en UD-Q4_K_XL : prefill 3 195 t/s à vide et 892 à 128K (Flash-Next le dépasse entre 32K et 64K), décode 56 t/s, 31 Gio ; propose de découper en PR (une quant d'abord, UD-Q6_K_XL), toujours pas de Q4_K_M ; le 27/10, slimsami oriente le travail vers un fork, « Strycast » (branche `staging`), où un modèle n'est mergé que s'il bat llama.cpp sur la même machine ; le 01/11, slimsami mesure sur son Strix Halo Flash-Next UD-Q4_K_XL (0.28.1) contre le 35B UD-Q6_K_XL (Strycast) : prefill 1 803 contre 3 382 t/s à 8K, 1 675 contre 1 477 à 128K, décode 29,2 contre 55,8, et 28,5 contre 34,2 à 128K ; il juge Flash-Next meilleur à 128 Go et réserve le 35B aux agents réactifs, au concurrent et aux petites machines ; image `ghcr.io/slimsami/strycast` annoncée ; Occamy 1.0 et KAT-Coder cités comme moins sujets aux boucles qu'Ornith ; PR toujours ouverte au 01/11 ; le 06/11, slimsami publie une extension externe, `slimsami/strycast-qwen35moe` (35B et Ornith 1.5 122B, MTP et DFlash2, **Q4_K_M** et Q8 annoncés, sorties identiques à son fork), hors image officielle (il faudrait construire la nôtre) ; le mainteneur doit revoir l'API d'extensions ; PR toujours ouverte |
 | #524 | PR : budget de réflexion (`thinking.budget_tokens`) sur `/v1/messages`, par jabata, mergée le 18/10 (0.18.0) | **suivie à la demande de l'utilisateur** (20/10), bien que fermée : aucun ticket ouvert ne porte la suite qu'elle annonce, le budget par requête sur Chat Completions et Responses (pour l'instant, seule l'option serveur `--reasoning-budget` vaut pour ces deux API). C'est elle qu'attend llm-proxy, qui traduit `/v1/messages` en `/v1/chat/completions` et jette `thinking` : il pourra alors traduire `budget_tokens`. Ligne à remplacer par le ticket ou la PR de cette suite dès qu'il existe |
+| strycast-qwen35moe | Extension communautaire de slimsami (`slimsami/strycast-qwen35moe-gufo-extension`, suite de #299) : Qwen3.6-35B-A3B et Ornith 1.5 122B (`gguf:qwen35moe`), MTP et DFlash2, KV 8 bits en option, **Q4_K_M** et Q8 annoncés, sorties identiques au fork Strycast | **suivie à la demande de l'utilisateur** (08/11), à revoir à la prochaine version de gufo : non revue par les mainteneurs, absente du registre `gufo-org/gufo-extension` ; s'installe par `gufo extension install <url>@<commit>`, modules expérimentaux de #1077 (main `0fb50ce`, après la 0.31.0, donc dans aucune version publiée au 08/11). À vérifier alors : version publiée avec les modules, entrée au registre, notre Ornith Q4_K_M chargé. L'intégrer demande d'étendre le runtime (volume du store d'extensions, révision épinglée hors de `IMAGE`, installation dans `--setup`) : à proposer avant de coder |
 | #861 | PR : LoRA pour Qwen-Image-2.1 (`gufo serve image --lora NAME=PATH`, `--lora-default NAME:SCALE`, champ `loras` par requête, `GET /sdapi/v1/loras`), par naerymdan, ouverte le 28/10, ferme #797 | **suivie à la demande de l'utilisateur** (01/11) : gufo n'applique aucun LoRA avant elle. Fusion dans les poids du transformer, temps par étape annoncé inchangé ; dispositions PEFT, kohya et `diffusion_model.`, F16 compris. Testée par D3rPapts sous Windows (Strix Halo) : sans LoRA, PNG identique à l'octet ; bascule de LoRA en 3 à 4 s. Pas encore de revue au 01/11. Une fois mergée et livrée : essayer chatrlabs Uncensored Omni v0.1 (BF16, rang 128, 671 Mo, force 1.0, 25 étapes, CFG 4, négatif `" "`) sur `Qwen-Image-2.1-heretic`, `--lora` dans `gufo-llama-swap.yaml`, cible dans `download.sh`. Son CFG 4 demande le true CFG de la PR #885, ouverte : sans elle, réglages de sa fiche non reproductibles. MOSS-Image non servi par gufo : #852 fermé le 30/10 (pas prévu), PR #907 ouverte le 31/10, testée sous Windows seulement, sans LoRA |
 
 Constat du 29/09/2026 (v0.2.0), non revu depuis : rien n'est suivi en amont
@@ -542,6 +548,14 @@ Historique complet dans le journal.
   25/10/2026 (retiré des voix).
 - **#368, régression de la v0.4.0 sur les requêtes avec outils** : le nôtre,
   du 01/10/2026, fermé (ralentissement corrigé par #373 en 0.5.0).
+- **#299, Qwen3.6-35B-A3B (`qwen35moe`)** : PR de slimsami ouverte le
+  27/09/2026, suivie pour Ornith-1.5-35B-A3B (même architecture). Mise en
+  attente par le mainteneur le 30/09 (pas de nouveau modèle avant un produit
+  stable) ; slimsami bascule vers son fork Strycast fin octobre, puis publie
+  le 06/11 une extension externe (35B et Ornith 1.5 122B, Q4_K_M compris) ;
+  PR fermée le 07/11/2026 par fedeizzo au profit de cette extension, suivie
+  depuis dans « À surveiller » (ligne strycast-qwen35moe). Chiffres annoncés
+  dans le journal.
 - **#388** : section « Ticket #388 » plus bas.
 
 ### Versions : synthèse
@@ -884,7 +898,10 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
      et chaque PR mergée qui touche le cache, le serveur, le 27B ou
      Flash-Next ;
    - repérer les tickets fermés, les questions qu'on nous pose (à noter
-     pour l'étape 8) et les PR suivies (#299 : Ornith).
+     pour l'étape 8) et les PR suivies ;
+   - les extensions communautaires suivies (lignes sans numéro de « À
+     surveiller », strycast-qwen35moe pour Ornith), à la main : dépôt de
+     l'extension et registre `gufo-org/gufo-extension`.
 2. **Nouvelles recommandations de réglage** (lecture) :
    - `runtime/gufo/tools/gufo-amont.sh diff <version épinglée> <nouvelle>` (tags
      avec leur `v`, `v0.19.0 v0.20.0` : sans lui, 404) : `docs/SERVER.md`,

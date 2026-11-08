@@ -21,7 +21,15 @@
 #                                        licence Qwen Research, non commerciale)
 #   runtime/gufo/download.sh qwen-image-heretic
 #                                        encodeur « abliterated » (≈ 16,3 Go, après
-#                                        qwen-image) : la seule variante servie
+#                                        qwen-image) : la variante 40 étapes servie
+#   runtime/gufo/download.sh qwen-image-turbo
+#                                        Qwen-Image-2.1-Turbo BF16, 8 étapes (≈ 32,5 Go,
+#                                        même licence), indépendant de qwen-image
+#   runtime/gufo/download.sh qwen-image-turbo-heretic
+#                                        le même encodeur « abliterated » monté sur
+#                                        Turbo (rien de plus si qwen-image-heretic est
+#                                        fait, après qwen-image-turbo) : la variante
+#                                        Turbo servie
 #   runtime/gufo/download.sh all         tout ce qui précède
 #
 # La cible du 27B (et son drafter DFlash 2 Q8_0 jusqu'au 24/10/2026, remplacé
@@ -51,6 +59,38 @@ du_parc() {
     return 0
   fi
   hf download "$2" "$3" --local-dir "$PARC/$1"
+}
+
+# heretic <pipeline> <variante> <cible du pipeline> - monte l'encodeur de
+# texte Qwen3-VL de Qwen-Image passé par l'abliteration de Heretic
+# (catplusplus, Apache-2.0) sur un pipeline Qwen-Image téléchargé : mêmes 749
+# tenseurs BF16, lm_head en moins (inutile à l'encodage). Seuls ses poids
+# servent : sa config.json est au format transformers 5 (rope_parameters), que
+# gufo refuse ; la config du pipeline décrit la même architecture. gufo exige
+# un index des tenseurs, écrit ici depuis l'en-tête du safetensors. Le reste
+# du pipeline (transformer, VAE, processeur) : liens vers le pipeline.
+heretic() {
+  local src="$1" dst="$2" f
+  [[ -f "$src/model_index.json" ]] || { echo "$(basename "$src") absent : download.sh $3 d'abord" >&2; exit 1; }
+  hf download catplusplus/Qwen21_Text_Encoder_Heretic \
+    --revision 7b004403c04dee95a18b959694a3cfdac5b28107 \
+    text_encoder/model.safetensors --local-dir "$DL/Qwen21_Text_Encoder_Heretic"
+  rm -rf "$dst"; mkdir -p "$dst/text_encoder"
+  for f in "$src"/*; do
+    [[ "$(basename "$f")" == text_encoder ]] || ln -s "$f" "$dst/"
+  done
+  ln -s "$src/text_encoder/config.json" "$src/text_encoder/generation_config.json" "$dst/text_encoder/"
+  ln -s "$DL/Qwen21_Text_Encoder_Heretic/text_encoder/model.safetensors" "$dst/text_encoder/"
+  python3 - "$dst/text_encoder" <<'PY'
+import json, struct, sys
+d = sys.argv[1]
+with open(f"{d}/model.safetensors", "rb") as f:
+    h = json.loads(f.read(struct.unpack("<Q", f.read(8))[0]))
+h.pop("__metadata__", None)
+with open(f"{d}/model.safetensors.index.json", "w") as f:
+    json.dump({"metadata": {}, "weight_map": {k: "model.safetensors" for k in sorted(h)}}, f, indent=1)
+print(f"index : {len(h)} tenseurs")
+PY
 }
 
 telecharge() {
@@ -104,43 +144,26 @@ telecharge() {
       hf download Qwen/Qwen-Image-2.1 \
         --revision b3179ad355be050328e483a9dfdd9e60cd62adfa \
         --local-dir "$DL/Qwen-Image-2.1" ;;
-    qwen-image-heretic)
-      # Encodeur Qwen3-VL de Qwen-Image passé par l'abliteration de Heretic
-      # (catplusplus, Apache-2.0) : mêmes 749 tenseurs BF16, lm_head en moins
-      # (inutile à l'encodage). Seuls ses poids servent : sa config.json est
-      # au format transformers 5 (rope_parameters), que gufo refuse ; la
-      # config officielle décrit la même architecture. gufo exige un index
-      # des tenseurs, écrit ici depuis l'en-tête du safetensors. Le reste du
-      # pipeline (transformer, VAE, processeur) : liens vers Qwen-Image-2.1.
-      local src="$DL/Qwen-Image-2.1" dst="$DL/Qwen-Image-2.1-heretic" f
-      [[ -f "$src/model_index.json" ]] || { echo "Qwen-Image-2.1 absent : download.sh qwen-image d'abord" >&2; exit 1; }
-      hf download catplusplus/Qwen21_Text_Encoder_Heretic \
-        --revision 7b004403c04dee95a18b959694a3cfdac5b28107 \
-        text_encoder/model.safetensors --local-dir "$DL/Qwen21_Text_Encoder_Heretic"
-      rm -rf "$dst"; mkdir -p "$dst/text_encoder"
-      for f in "$src"/*; do
-        [[ "$(basename "$f")" == text_encoder ]] || ln -s "$f" "$dst/"
-      done
-      ln -s "$src/text_encoder/config.json" "$src/text_encoder/generation_config.json" "$dst/text_encoder/"
-      ln -s "$DL/Qwen21_Text_Encoder_Heretic/text_encoder/model.safetensors" "$dst/text_encoder/"
-      python3 - "$dst/text_encoder" <<'PY'
-import json, struct, sys
-d = sys.argv[1]
-with open(f"{d}/model.safetensors", "rb") as f:
-    h = json.loads(f.read(struct.unpack("<Q", f.read(8))[0]))
-h.pop("__metadata__", None)
-with open(f"{d}/model.safetensors.index.json", "w") as f:
-    json.dump({"metadata": {}, "weight_map": {k: "model.safetensors" for k in sorted(h)}}, f, indent=1)
-print(f"index : {len(h)} tenseurs")
-PY
-      ;;
+    qwen-image-heretic) heretic "$DL/Qwen-Image-2.1" "$DL/Qwen-Image-2.1-heretic" qwen-image ;;
+    qwen-image-turbo-heretic)
+      # L'encodeur de Turbo est celui de Qwen-Image-2.1 (configs identiques
+      # hors version de transformers, fichier unique au lieu de 4 shards) :
+      # l'encodeur Heretic, dérivé de l'officiel, s'y monte tel quel.
+      # Identité des tenseurs vérifiée le 08/11/2026 sur silentchuck.
+      heretic "$DL/Qwen-Image-2.1-Turbo" "$DL/Qwen-Image-2.1-Turbo-heretic" qwen-image-turbo ;;
+    qwen-image-turbo)
+      # Révision et exclusion de assets/ (images de la fiche) : guide amont
+      # docs/models/qwen-image-2.1.md, 08/11/2026.
+      hf download Qwen/Qwen-Image-2.1-Turbo \
+        --revision fc13ba1986fcb905854dc8de2f52eee395f49b5b --exclude 'assets/*' \
+        --local-dir "$DL/Qwen-Image-2.1-Turbo" ;;
     *) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2 ;;
   esac
 }
 
 mkdir -p "$DL"
 if [[ "${1:-}" == all ]]; then
-  for quoi in image 27b flashnext deepseek tts asr qwen-image qwen-image-heretic; do telecharge "$quoi"; done
+  for quoi in image 27b flashnext deepseek tts asr qwen-image qwen-image-heretic qwen-image-turbo qwen-image-turbo-heretic; do telecharge "$quoi"; done
 else
   telecharge "${1:-}"
 fi

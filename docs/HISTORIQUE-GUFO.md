@@ -20,6 +20,45 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Nouveaux modèles amont, Qwen-Image-2.1-Turbo ajouté avec l'encodeur Heretic, #299 remplacée par l'extension strycast (08/11/2026)
+
+Revue demandée par l'utilisateur le 08/11/2026 (docs amont réorganisées
+le jour même par #1090, registre `gufo-org/gufo-extension`). Image
+épinglée inchangée, `gufo-runtime:0.31.0`.
+
+Modèles officiels de la 0.31.0 (`extensions.lock`) : DeepSeek V4 Flash,
+EmbeddingGemma 2, MiniMax H3 (FL2VA), Qwen (27B), Qwen3-ASR, Qwen3-TTS,
+Qwen3.8 Flash-Next, Qwen-Image-2.1. Retenu : **Qwen-Image-2.1-Turbo**
+(#784, mergée le 02/11, dans l'image depuis la 0.29.0), checkpoint distillé
+à 8 étapes, transformer et VAE propres ; 18,6 s par image 1024² d'après
+le guide amont contre 89,9 s pour Qwen-Image-2.1 en 40 étapes. Servi,
+à la demande de l'utilisateur, avec l'encodeur Heretic seulement
+(`Qwen-Image-2.1-Turbo-heretic`, groupe « gros », `--setup
+qwen-image-turbo` puis `qwen-image-turbo-heretic`, 31 Go sur disque).
+L'encodeur de Turbo est celui de Qwen-Image-2.1 : vérifié sur silentchuck
+le 08/11/2026, mêmes 750 tenseurs (noms, dtype, formes) et mêmes octets
+(sha256 par tenseur), en un fichier au lieu de 4 shards ; configs
+identiques hors version de transformers (5.3.0 contre 4.57.1) et ordre des
+clés. Les 749 tenseurs de l'encodeur Heretic y ont tous leur pendant de
+même forme. Le montage de `download.sh` (liens vers le pipeline, index
+écrit depuis l'en-tête) devient une fonction commune aux deux variantes. Non retenus pour l'instant :
+EmbeddingGemma 2 (1,5 Go, embeddings texte, image, audio, vidéo ; aucun
+client ne s'en sert) et MiniMax H3 (vidéo avec son, licence à accepter,
+un job à la fois).
+
+Extensions communautaires (hors image officielle, modules de #1077 après
+la 0.31.0) : strycast-qwen35moe (slimsami, Qwen3.6-35B-A3B et Ornith 1.5
+122B, Q4_K_M compris, non revue), ds41 (DeepSeek V4.1 Flash, franzmoca,
+revue, 112 à 154 Gio, experts lus depuis le SSD), lfm3 (API 0.2.16,
+postérieure à la 0.31.0), flint (40B MoE). strycast-qwen35moe entre dans
+« À surveiller », à revoir à la prochaine version.
+
+#299 fermée le 07/11/2026 par fedeizzo au profit de l'extension de
+slimsami, retirée du tableau « À surveiller ». Sa dernière ligne, telle
+quelle :
+
+| #299 | PR : Qwen3.6-35B-A3B (`qwen35moe`, GDN + MoE 256 experts, MTP, DFlash 2), par slimsami, ouverte le 27/09 | **suivie à la demande de l'utilisateur** (28/09) : même architecture qu'Ornith-1.5-35B-A3B, notre modèle agentique par défaut (fine-tune de Qwen3.6-35B-A3B). Annoncé sur UD-Q6_K_XL : prefill 1 790 à 2 702 t/s contre 1 057 à 1 202 pour llama.cpp Vulkan, DFlash 2 à 83,3 t/s en glouton ; MTP pas encore branché dans `gufo serve`. À vérifier si elle est mergée : notre Ornith est en Q4_K_M (la PR ne cite que Q6_K et Q8_0 pour les experts), et gufo refuse les quants hors de ses formats ; le 30/09, **mise en attente par le mainteneur** : pas de nouveau modèle ni de nouvelle quant avant un produit stable avec les modèles actuels ; le 17/10, web2bruno annonce le MTP servi pour le 35B sur son fork (UD-Q8_K_XL, `-d 1`, prefill 2 280 t/s et décode 50 t/s à 16k) et demande des retours de test, sans objet ici ; le 19/10, rebasée sur la 0.17.1 avec ces commits MTP, toujours ouverte ; le 25/10, slimsami demande aux mainteneurs s'ils veulent le modèle ou s'il la ferme (garder la branche sur son fork), chiffres à l'appui en UD-Q4_K_XL : prefill 3 195 t/s à vide et 892 à 128K (Flash-Next le dépasse entre 32K et 64K), décode 56 t/s, 31 Gio ; propose de découper en PR (une quant d'abord, UD-Q6_K_XL), toujours pas de Q4_K_M ; le 27/10, slimsami oriente le travail vers un fork, « Strycast » (branche `staging`), où un modèle n'est mergé que s'il bat llama.cpp sur la même machine ; le 01/11, slimsami mesure sur son Strix Halo Flash-Next UD-Q4_K_XL (0.28.1) contre le 35B UD-Q6_K_XL (Strycast) : prefill 1 803 contre 3 382 t/s à 8K, 1 675 contre 1 477 à 128K, décode 29,2 contre 55,8, et 28,5 contre 34,2 à 128K ; il juge Flash-Next meilleur à 128 Go et réserve le 35B aux agents réactifs, au concurrent et aux petites machines ; image `ghcr.io/slimsami/strycast` annoncée ; Occamy 1.0 et KAT-Coder cités comme moins sujets aux boucles qu'Ornith ; PR toujours ouverte au 01/11 ; le 06/11, slimsami publie une extension externe, `slimsami/strycast-qwen35moe` (35B et Ornith 1.5 122B, MTP et DFlash2, **Q4_K_M** et Q8 annoncés, sorties identiques à son fork), hors image officielle (il faudrait construire la nôtre) ; le mainteneur doit revoir l'API d'extensions ; PR toujours ouverte |
+
 ## Release v0.31.0 (06/11/2026), montée le lendemain (0.30.0 comprise), les trois modèles remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 06/11/2026, machine libre, DeepSeek
