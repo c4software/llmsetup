@@ -20,6 +20,78 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.33.0 (09/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck, extension strycast abandonnée
+
+Montée demandée par l'utilisateur le 09/11/2026, machine libre, DeepSeek non
+remesuré, sans gain attendu sous Linux : montée pour suivre la version.
+Image épinglée en `gufo-runtime:0.33.0` (`77dff82`), digest
+`cf76a084e33e`. `remesure.sh 27b flashnext` de 23:51 à 00:07
+(`remesure.log` de `~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-11-09-0.33.0/` (`avant/` = la seconde série du
+08/11 en 0.32.0, à cache chaud). 16/16 partout, pas de boucle.
+
+Changements lus :
+
+- **Flash-Next, #1112** (corrige #1107) : la 0.32.0 décodait 20 % moins
+  vite sous Windows, où chaque jonction de flux du recouvrement de l'expert
+  partagé (#1048) coûte plus que l'expert lui-même. Le moteur mesure
+  désormais les deux dispositions au chargement (environ 120 ms) et garde
+  la plus rapide ; sous Linux, l'amont mesure le recouvrement gardé et des
+  débits identiques (AR 30,6, MTP 63,0 t/s), ce que confirme notre mesure.
+- **Cache, #1104** : au plafond de 128 enregistrements, les copies
+  optionnelles (reprises, points de grille) étaient toutes refusées et la
+  table se figeait. Aucun refus de ce type (`retention action=1 reason=2`)
+  dans nos journaux de banc : sans effet ici.
+- **Cache, #1117** : copie d'un instantané qui chevauchait deux
+  enregistrements hôtes, `device_lost` sous Windows seulement.
+- **Images, #1050** : options de démarrage pour les fournisseurs d'image en
+  extension (`--text-encoder`) ; Qwen-Image, intégré, n'en déclare aucune :
+  `serve image --help` ne change que de libellé, notre montage de
+  l'encodeur Heretic par liens reste.
+- **DeepSeek** : décode plus rapide (#1106), DSpark glouton égal au décodage
+  simple (#1105) ; non remesuré.
+- **`--help`** (comparé sur silentchuck) : `serve llm` et `serve` identiques
+  à la 0.32.0, `serve image` change de libellé seulement. Documentation :
+  ni `docs/server.md` ni `docs/cli.md` ne changent ; aucun défaut changé,
+  toutes les lignes de « Paramètres de gufo et leur origine » tiennent.
+- **Contournements** : aucun ne devient inutile (`ttl: 60` de la
+  transcription, `capabilities.context`, GGUF refusés).
+- **Tickets suivis** : #861 et #1066 immobiles depuis le 05/11 et le 08/11,
+  aucune question posée.
+
+Lecture (entre parenthèses, la 0.32.0) :
+
+- **27B** : prefill à 52k 492,8 t/s (494,8), à 6,5k 551,5 (554), court
+  501,8 à 519,4 (505 à 520). Décode en prose 38,5 à 51,3 t/s (44,9 à
+  51,4), le creux de 38,5 sur une seule passe, variance du DFlash 2 :
+  agentique inchangé à 44,1 t/s (44,1) ; en code 69,1 t/s de médiane
+  (70,7). Mémoire 64 696 Mio (65 307), chargement 23,1 s (32,8, cache de
+  pages). Cache disque conservé à la montée : aucun raté, 4 reprises
+  disque, reprise 98,8 % (98,8), acceptance 70,5 % (70,7), premier token
+  des petites requêtes 320 ms (319), 16 scénarios en 104,1 s (108,1).
+- **Flash-Next** : prefill à 52k 1 712 t/s (1 715), court 1 623 à 1 630
+  (1 608 à 1 629), décode en code 91,5 à 97,2 t/s (92,1 à 96,9), mémoire
+  109 884 Mio (109 644), chargement 82,3 s (96,4). En prose, la passe 2
+  écrit cette fois le module demandé en Python d'un trait (1 000 tokens à
+  59,9 t/s, texte cohérent) au lieu d'ouvrir des appels d'outils ; les
+  deux autres restent courtes (198 et 41 tokens), comme avant. Cette
+  fois, c'est son cache disque qui n'a pas traversé la montée : 3 ratés
+  `no_compatible_boundary`, aucune reprise disque, 3 points de reprise
+  écrits, reprise 93,1 % (98,1), le profil d'un cache froid, celui du 27B
+  à la 0.32.0 ; décode agentique 63,7 t/s (60,2), acceptance 91,8 %
+  (93,9), premier token 141 ms (144), 16 scénarios en 74,4 s (73,3). Pas
+  de seconde série à cache chaud : sans changement du cache sous Linux, le
+  retour à 98 % est attendu au premier usage réel.
+
+**Extension strycast-qwen35moe abandonnée** à la demande de l'utilisateur
+le 09/11/2026, le jour même de son entrée au registre officiel
+(`gufo-org/gufo-extension` #6, mergée par fedeizzo : version 0.0.1,
+révision `4882b7a6`, générée depuis Strycast `8c946372` contre gufo
+`0fb50ce4`, licence des poids, compilation par un tiers et avis des
+mainteneurs encore à cocher dans la PR). Retirée de « À surveiller » et de
+la checklist de montée de version ; les entrées antérieures du journal qui
+la citent restent telles quelles.
+
 ## Release v0.32.0 (08/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 08/11/2026, machine libre, DeepSeek non
