@@ -489,14 +489,13 @@ Tickets ouverts et vivants seulement : un ticket fermé, ou ouvert mais
 qui ne bouge plus, sort du tableau, ce qu'il a changé reste dans le journal
 et dans « Tickets : synthèse » (#388, fermé le 03/10/2026, a sa synthèse
 plus bas ; #200, #228 et #239, ouverts mais immobiles, retirés le
-14/10/2026 ; #299, fermée le 07/11/2026, retirée le 08/11/2026). Une ligne
-sans numéro suit une extension communautaire : `gufo-amont.sh` ne la lit
-pas, elle se revoit à la main à chaque montée de version.
+14/10/2026 ; #299, fermée le 07/11/2026, retirée le 08/11/2026 ;
+l'extension strycast-qwen35moe, abandonnée le 09/11/2026 à la demande de
+l'utilisateur).
 
 | Ticket | Sujet | État au 02/10/2026 |
 |---|---|---|
 | #524 | PR : budget de réflexion (`thinking.budget_tokens`) sur `/v1/messages`, par jabata, mergée le 18/10 (0.18.0) | **suivie à la demande de l'utilisateur** (20/10), bien que fermée : aucun ticket ouvert ne porte la suite qu'elle annonce, le budget par requête sur Chat Completions et Responses (pour l'instant, seule l'option serveur `--reasoning-budget` vaut pour ces deux API). C'est elle qu'attend llm-proxy, qui traduit `/v1/messages` en `/v1/chat/completions` et jette `thinking` : il pourra alors traduire `budget_tokens`. Ligne à remplacer par le ticket ou la PR de cette suite dès qu'il existe |
-| strycast-qwen35moe | Extension communautaire de slimsami (`slimsami/strycast-qwen35moe-gufo-extension`, suite de #299) : Qwen3.6-35B-A3B et Ornith 1.5 122B (`gguf:qwen35moe`), MTP et DFlash2, KV 8 bits en option, **Q4_K_M** et Q8 annoncés, sorties identiques au fork Strycast | **suivie à la demande de l'utilisateur** (08/11), revue avec la 0.32.0 le 08/11 : les modules de #1077 y sont publiés, et l'image `gufo-runtime` contient la chaîne de compilation (store à garder dans un volume sur `/home/gufo/.local/share/gufo/extensions`, `docs/extensions.md`) ; toujours non revue par les mainteneurs, toujours absente du registre `gufo-org/gufo-extension` (deepseek41flash, flint, lfm3) ; dernier commit `bcd56656` du 08/11, généré depuis Strycast `88ca363e` contre gufo `0fb50ce4`, Ornith 1.5 122B Q4_K_M annoncé vérifié (simple et MTP). Aucun Ornith sur silentchuck ; bigchuck n'a que l'Ornith 1.5 35B-A3B Q4_K_M, que strycast n'annonce pas. L'intégrer demande d'étendre le runtime (volume du store d'extensions, révision épinglée hors de `IMAGE`, installation dans `--setup`) : à proposer avant de coder |
 | #1066 | Proposition : capacités d'extension pour la musique, le bruitage depuis une vidéo et le post-traitement image et vidéo (interpolation, **upscale Real-ESRGAN** : `POST /v1/images/upscale`, ×4, 62 ms par image en `realesr-general-x4v3`, déjà utilisé sur son fork), par D3rPapts, ouverte le 06/11 | **suivie à la demande de l'utilisateur** (08/11) : gufo n'a aucun upscale. En attendant, le chat de llm-proxy agrandit par une retouche de Qwen-Image-2.1-Turbo (`upscale_model`, 1024² vers 2048² en 182 s le 08/11, l'image est redessinée). Une fois livrée : un vrai super-résolveur dans le groupe d'images de `gufo-llama-swap.yaml` (poids à convertir, pas fournis par gufo), et le bouton *Agrandir* du proxy à rebrancher dessus. Pas encore de réponse de mainteneur au 08/11 |
 | #861 | PR : LoRA pour Qwen-Image-2.1 (`gufo serve image --lora NAME=PATH`, `--lora-default NAME:SCALE`, champ `loras` par requête, `GET /sdapi/v1/loras`), par naerymdan, ouverte le 28/10, ferme #797 | **suivie à la demande de l'utilisateur** (01/11) : gufo n'applique aucun LoRA avant elle. Fusion dans les poids du transformer, temps par étape annoncé inchangé ; dispositions PEFT, kohya et `diffusion_model.`, F16 compris. Testée par D3rPapts sous Windows (Strix Halo) : sans LoRA, PNG identique à l'octet ; bascule de LoRA en 3 à 4 s. Pas encore de revue au 01/11. Une fois mergée et livrée : essayer chatrlabs Uncensored Omni v0.1 (BF16, rang 128, 671 Mo, force 1.0, 25 étapes, CFG 4, négatif `" "`) sur `Qwen-Image-2.1-heretic`, `--lora` dans `gufo-llama-swap.yaml`, cible dans `download.sh`. Son CFG 4 demande le true CFG de la PR #885, ouverte : sans elle, réglages de sa fiche non reproductibles. MOSS-Image non servi par gufo : #852 fermé le 30/10 (pas prévu), PR #907 ouverte le 31/10, testée sous Windows seulement, sans LoRA |
 
@@ -555,8 +554,9 @@ Historique complet dans le journal.
   stable) ; slimsami bascule vers son fork Strycast fin octobre, puis publie
   le 06/11 une extension externe (35B et Ornith 1.5 122B, Q4_K_M compris) ;
   PR fermée le 07/11/2026 par fedeizzo au profit de cette extension, suivie
-  depuis dans « À surveiller » (ligne strycast-qwen35moe). Chiffres annoncés
-  dans le journal.
+  dans « À surveiller » du 08/11 au 09/11/2026, puis abandonnée à la demande
+  de l'utilisateur (entrée au registre officiel le 09/11, non intégrée).
+  Chiffres annoncés dans le journal.
 - **#388** : section « Ticket #388 » plus bas.
 
 ### Versions : synthèse
@@ -904,10 +904,7 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
      et chaque PR mergée qui touche le cache, le serveur, le 27B ou
      Flash-Next ;
    - repérer les tickets fermés, les questions qu'on nous pose (à noter
-     pour l'étape 8) et les PR suivies ;
-   - les extensions communautaires suivies (lignes sans numéro de « À
-     surveiller », strycast-qwen35moe pour Ornith), à la main : dépôt de
-     l'extension et registre `gufo-org/gufo-extension`.
+     pour l'étape 8) et les PR suivies.
 2. **Nouvelles recommandations de réglage** (lecture) :
    - `runtime/gufo/tools/gufo-amont.sh diff <version épinglée> <nouvelle>` (tags
      avec leur `v`, `v0.19.0 v0.20.0` : sans lui, 404) : `docs/SERVER.md`,
@@ -922,8 +919,7 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
    retiré le 06/11/2026 avec la 0.30.0)
    `ttl: 60` sur la transcription (#272, pour Qwen-Image au défaut du
    runtime depuis v0.2.0 ; retiré des voix le 25/10/2026), `capabilities.context` de llama-swap,
-   GGUF refusés (Flash-Next Signal en `IQ4_NL`, DeepSeek UD-IQ3_XXS, Ornith
-   Q4_K_M si #299 est mergée).
+   GGUF refusés (Flash-Next Signal en `IQ4_NL`, DeepSeek UD-IQ3_XXS).
 4. **Questions à l'utilisateur**, avant tout changement : monter de version
    ou non ; quels modèles remesurer (DeepSeek n'est plus remesuré depuis le
    28/09/2026 sauf demande) ; chaque réglage ou contournement que les étapes
