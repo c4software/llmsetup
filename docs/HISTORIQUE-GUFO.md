@@ -20,6 +20,87 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.34.0 (11/11/2026), montée le 12/11/2026, 27B et Flash-Next remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 12/11/2026, machine libre, DeepSeek non
+remesuré. Image épinglée en `gufo-runtime:0.34.0` (`2845939`), digest
+`49b1fce40cb4`. `remesure.sh 27b flashnext` de 09:32 à 09:47
+(`remesure-0.34.0.log` de `~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-11-12-0.34.0/` (`avant/` = la série du 09/11 en
+0.33.0) ; seconde série de Flash-Next seul de 09:48 à 09:56
+(`remesure-0.34.0-passe2.log`, `resultats/agentic/2026-11-12-0.34.0-passe2/`,
+`avant/` = la première série du jour). 16/16 partout, pas de boucle.
+
+Changements lus :
+
+- **Flash-Next, #912** : le recul MTP (repli en AR quand les propositions
+  échouent) restait figé après des observations en lot ; il se récupère
+  désormais. Acceptance agentique 92,0 puis 93,8 % (91,8 en 0.33.0) : pas
+  d'effet visible chez nous.
+- **Serveur, #1154** : le live frontier reprend après une réponse
+  re-tokenisée (raté `no_compatible_boundary` intermittent signalé sur
+  Flash-Next). Aucun raté à cache chaud ici, comme avant : invérifiable
+  sur notre banc.
+- **Outils, #1146, #1128, #1168** : nombres des appels d'outils rendus tels
+  que le modèle les écrit, plafonnés à 16 chiffres, défauts des objets
+  imbriqués comme llama.cpp.
+- **Qwen, #958, #969, #1127** : activations Q8 réutilisées, paire HC du FFN
+  fusionnée, moins de CPU à l'échantillonnage et aux n-grams ; l'amont ne
+  revendique aucun gain de bout en bout, et notre banc n'en voit pas.
+- **Sans effet ici** : #934 et #1121 (cache disque seul, sans cache RAM),
+  #1083 (refus `503 insufficient_memory` sur le budget d'état de prompt,
+  dont Qwen et Flash-Next sont exempts : KV admis au démarrage), #1159
+  (en-têtes HTTP parsés par httparse : `Transfer-Encoding` refusé en 400,
+  llama-swap ne l'envoie pas, banc sans erreur).
+- **`--help`** (comparé sur silentchuck) : dans `serve llm`, seules
+  `--draft-tokens`, `--min-draft-tokens` et `--draft-policy` changent,
+  dépréciées et ignorées (#1124, chaque modèle fixe sa longueur de draft,
+  jusqu'à sept) ; aucune n'est posée ici. `serve image` gagne `--lora` et
+  `--lora-default` (#861). Aucun défaut changé, toutes les lignes de
+  « Paramètres de gufo et leur origine » tiennent.
+- **Contournements** : aucun ne devient inutile (`ttl: 60` de la
+  transcription, `capabilities.context`, GGUF refusés).
+- **Tickets suivis** : #861 (LoRA de Qwen-Image) mergée le 11/11 et livrée
+  dans cette version ; l'essai prévu (chatrlabs Uncensored Omni sur
+  `Qwen-Image-2.1-heretic`) attend l'accord de l'utilisateur, et son CFG 4
+  la PR #885, encore ouverte. #1066 immobile depuis le 08/11.
+- **Outil** : `gufo-amont.sh diff` ne cherchait que les anciens chemins de
+  documentation (`docs/SERVER.md`, `docs/CLI.md`), déplacés par #1090 en
+  0.32.0 : les diffs des montées 0.32.0 et 0.33.0 n'avaient montré que le
+  CHANGELOG. Corrigé le 12/11 ; les docs de la 0.34.0 ont été lues par ce
+  filtre élargi.
+- **27B republié par Unsloth** (Dynamic 3.1, 11/11, révision `ce331efc`,
+  #1167) : nouvel UD-Q4_K_XL de 16,45 Gio (16,35), mêmes tenseurs, autres
+  types de quant ; mmproj et Q8 identiques à l'octet. Cette remesure porte
+  encore sur l'ancien fichier (19/08/2026) ; la requalification suit à
+  part.
+
+Lecture (entre parenthèses, la 0.33.0) :
+
+- **27B** : prefill à 52k 492,8 t/s (492,8), à 6,5k 551,5 à 553,0 (551,5),
+  court 511,3 à 523,6 (501,8 à 519,4). Décode en prose 39,5 à 52,9 t/s
+  (38,5 à 51,3), en code 69,2 t/s de médiane (69,1). Mémoire 64 769 Mio
+  (64 696), chargement 22,9 s (23,1). Cette fois, c'est le cache disque du
+  27B qui n'a pas traversé la montée (Flash-Next à la 0.33.0) : 3 ratés
+  `no_compatible_boundary`, 3 points de reprise écrits, reprise 93,7 %
+  (98,8), 17 s en prefill (8) ; décode agentique 43,8 t/s (44,1),
+  acceptance 70,9 % (70,5), premier token 319 ms (320), 16 scénarios en
+  111,2 s (104,1).
+- **Flash-Next** : prefill à 52k 1 704 t/s (1 712), court 1 634 à 1 643
+  (1 623 à 1 630, 1 353 en première passe), décode en code 91,9 à 97,1 t/s
+  (91,5 à 97,2). Mémoire 109 998 Mio (109 884), chargement 89,4 s (82,3).
+  Cache chaud cette fois : aucun raté, 4 reprises disque, reprise 98,1 %
+  (93,1, cache froid à la 0.33.0). Décode agentique 58,0 t/s (63,7),
+  acceptance 92,0 % (91,8), premier token 149 ms (141), 16 scénarios en
+  84,6 s (74,4), dont `stats.js` en 19,2 et 16,5 s (le modèle écrit une
+  valeur attendue fausse dans son test, puis la corrige). Seconde série
+  pour départager : reprise 98,4 %, décode agentique 61,6 t/s, acceptance
+  93,8 %, premier token 144 ms, 16 scénarios en 71,7 s. Le 58,0 de la
+  première série relève de la variance du modèle (4 205 tokens générés
+  contre 3 792), pas de la version. Au banc HTTP de la seconde série, la
+  première passe suivant le chargement est lente (prompt 674 et 891 t/s),
+  les suivantes au niveau (refactor 94,5 à 95,0 t/s).
+
 ## Release v0.33.0 (09/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck, extension strycast abandonnée
 
 Montée demandée par l'utilisateur le 09/11/2026, machine libre, DeepSeek non
