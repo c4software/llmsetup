@@ -105,9 +105,7 @@ Changements lus :
 - **Contournements** : aucun ne devient inutile (`ttl: 60` de la
   transcription, `capabilities.context`, GGUF refusés).
 - **Tickets suivis** : #861 (LoRA de Qwen-Image) mergée le 11/11 et livrée
-  dans cette version ; l'essai prévu (chatrlabs Uncensored Omni sur
-  `Qwen-Image-2.1-heretic`) attend l'accord de l'utilisateur, et son CFG 4
-  la PR #885, encore ouverte. #1066 immobile depuis le 08/11.
+  dans cette version. #1066 immobile depuis le 08/11.
 - **Outil** : `gufo-amont.sh diff` ne cherchait que les anciens chemins de
   documentation (`docs/SERVER.md`, `docs/CLI.md`), déplacés par #1090 en
   0.32.0 : les diffs des montées 0.32.0 et 0.33.0 n'avaient montré que le
