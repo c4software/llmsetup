@@ -97,15 +97,23 @@ telecharge() {
   case "$1" in
     image) docker pull "$IMG" ;;
     27b)
+      # Cible à la tête du repo (du_parc, partagée avec l'autre runtime) :
+      # Unsloth Dynamic 3.1 depuis le 11/11/2026, révision ce331efc que le
+      # guide de gufo épingle (gufo-org/gufo#1167), 17 659 407 264 octets,
+      # sha256 2a5f3565…, mêmes 866 tenseurs que la Dynamic 3.0 du 19/08/2026
+      # (4ca72078, 16,35 Gio) avec d'autres types de quant. Une machine qui a
+      # l'ancien fichier le garde (du_parc saute) : la remplacer est une
+      # requalification, faite sur silentchuck le 12/11/2026.
       du_parc qwen3.8-27b unsloth/Qwen3.8-27B-GGUF Qwen3.8-27B-UD-Q4_K_XL.gguf
-      # Drafter et mmproj : gufo n'épingle pas de révision pour le 27B, celles
-      # ci-dessous sont les têtes des repos le 24/10/2026 (2d9571f : le Q4_K_M
-      # mesuré le 25/09/2026).
+      # Drafter et mmproj : révisions épinglées ici. 2d9571f, tête du repo
+      # z-lab le 24/10/2026, est le Q4_K_M mesuré le 25/09/2026 ; mmproj à la
+      # révision ce331efc de la cible, identique à l'octet à celui de
+      # 4ca72078 servi depuis le 24/10/2026 (gufo-org/gufo#1167).
       hf download z-lab/Qwen3.8-27B-DFlash2-GGUF \
         --revision 2d9571f8ce46e151f61c6499c99dee6079e1d610 \
         Qwen3.8-27B-DFlash2-Q4_K_M.gguf --local-dir "$DL/qwen3.8-27b"
       hf download unsloth/Qwen3.8-27B-GGUF \
-        --revision 4ca720788d1e01f1bff70c033e0d0028fd02e502 \
+        --revision ce331efc48d5722b4b8041f72793e530eae18d9b \
         mmproj-BF16.gguf --local-dir "$DL/qwen3.8-27b" ;;
     flashnext)
       # Révision Unsloth Dynamic 3.1 d96201194f10, épinglée par le guide de

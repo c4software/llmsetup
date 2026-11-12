@@ -20,6 +20,49 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Qwen3.8-27B UD-Q4_K_XL en Unsloth Dynamic 3.1 (12/11/2026), requalifié sur silentchuck en 0.34.0
+
+Requalification demandée par l'utilisateur le 12/11/2026, après la remesure
+de la 0.34.0 sur l'ancien fichier. Unsloth a republié le 27B le 11/11/2026
+(révision `ce331efc48d5`, que gufo épingle par #1167) : nouvel
+UD-Q4_K_XL de 17 659 407 264 octets (16,45 Gio, contre 17 559 178 144 pour
+la Dynamic 3.0 du 19/08/2026), mêmes 866 tenseurs et mêmes formes, d'autres
+types de quant (Q5_K 199, Q8_0 119, IQ4_XS 91, Q6_K 50, Q4_K 37, IQ4_NL 9,
+Q3_K 1 ; avant Q5_K 191, Q8_0 110, IQ4_XS 70, Q4_K 69, Q6_K 56, IQ4_NL 6,
+Q3_K 3, IQ3_S 1, selon #1167). mmproj BF16 et Q8 identiques à l'octet.
+
+Sur silentchuck, l'ancien fichier est déplacé hors du parc
+(`~/llm/gufo-test/ancien-27b-dyn30/`, pour revenir en arrière ; à
+supprimer à la main une fois la requalification acquise), le nouveau est
+téléchargé à `ce331efc` au même chemin du parc, sha256 `2a5f3565…1211`
+conforme à l'etag HF. `download.sh` : commentaire de la cible et mmproj
+épinglé à `ce331efc` (même fichier). Deux séries `remesure.sh 27b` en
+0.34.0, de 10:20 à 10:38 (`remesure-27b-dyn31.log` et
+`remesure-27b-dyn31-passe2.log`, `resultats/agentic/2026-11-12-0.34.0-27b-dyn31*/`,
+`avant/` de la première = la série du matin sur l'ancien fichier). Justesse
+d'abord : `sanity` et aiguilles justes aux deux séries. 16/16 partout, pas
+de boucle.
+
+Lecture (entre parenthèses, l'ancien fichier en 0.34.0, le matin même) :
+prefill à 52k 492,7 puis 491,1 t/s (492,8), à 6,5k 550,5 à 552,8 (551,5 à
+553,0), court 503,6 à 522,7 (511,3 à 523,6) ; décode en prose 39,7 à
+53,5 t/s (39,5 à 52,9), en code 68,7 à 70,1 (68,5 à 69,3) ; cache au
+tour 2 à 100 % ; mémoire 64 535 Mio (64 769) ; chargement 15,6 et 14,1 s
+(22,9, cache de pages chaud après le téléchargement). Boucle agentique,
+première série, cache disque froid (nouveaux poids) : 3 ratés
+`no_compatible_boundary`, reprise 93,7 % (93,7, lui aussi froid après la
+montée), décode 43,3 t/s (43,8), acceptance 70,0 % (70,9), premier token
+317 ms (319), 16 scénarios en 121,4 s (111,2) pour 4 312 tokens générés
+(3 890). Seconde série, cache chaud : aucun raté, 4 reprises disque,
+reprise 99,0 %, décode 43,7 t/s, acceptance 71,0 %, premier token 318 ms,
+16 scénarios en 108,0 s. Rien ne distingue les deux fichiers sous gufo :
+Dynamic 3.1 retenu.
+
+Reste à faire : bigchuck (runtime `llama-cpp-rocm-strix`, qui lit le même
+chemin de parc) a toujours la Dynamic 3.0 et était injoignable le 12/11 ;
+l'y passer est une requalification de ce runtime (`--update qwen3.8-27b`,
+puis `qualif-modele.sh`, justesse d'abord), à faire à part.
+
 ## Release v0.34.0 (11/11/2026), montée le 12/11/2026, 27B et Flash-Next remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 12/11/2026, machine libre, DeepSeek non
