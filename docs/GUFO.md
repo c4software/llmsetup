@@ -911,8 +911,13 @@ la série qui l'a vu. `remesure.sh` le fait par défaut ; un appel direct à
      pour l'étape 8) et les PR suivies.
 2. **Nouvelles recommandations de réglage** (lecture) :
    - `runtime/gufo/tools/gufo-amont.sh diff <version épinglée> <nouvelle>` (tags
-     avec leur `v`, `v0.19.0 v0.20.0` : sans lui, 404) : `docs/SERVER.md`,
-     `docs/CLI.md`, guides et `QUALITY.md` / `EXPERIMENTS.md` des modèles ;
+     avec leur `v`, `v0.19.0 v0.20.0` : sans lui, 404) : `docs/cli.md`,
+     `docs/internal/server.md` et `cache.md`, guides `docs/models/*.md`,
+     `QUALITY.md` / `EXPERIMENTS.md` / `BENCHMARKS.md` de
+     `docs/internal/models/*/` (chemins amont depuis la 0.32.0, #1090 ;
+     `docs/SERVER.md` et `docs/CLI.md` avant, que le filtre de l'outil a
+     cherchés seuls jusqu'au 12/11/2026 : les diffs des montées 0.32.0 et
+     0.33.0 n'ont montré que le CHANGELOG) ;
    - `gufo serve llm --help` des deux images, comparé (`docker run --rm
      --entrypoint gufo <image> serve llm --help`, sur silentchuck) : options
      ajoutées, retirées, défauts changés ;

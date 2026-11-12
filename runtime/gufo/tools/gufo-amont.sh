@@ -19,8 +19,16 @@
 #   runtime/gufo/tools/gufo-amont.sh diff <de> [à]   documentation changée entre deux
 #                                       révisions (tag ou commit, à = dernière
 #                                       release) : liste, puis le détail des
-#                                       fichiers de réglage (SERVER.md, CLI.md,
-#                                       guides des modèles, CHANGELOG.md)
+#                                       fichiers de réglage (CHANGELOG.md,
+#                                       docs/cli.md, docs/install.md,
+#                                       docs/internal/server.md et cache.md,
+#                                       guides docs/models/*.md, et README,
+#                                       QUALITY, EXPERIMENTS, BENCHMARKS de
+#                                       docs/internal/models/*/). Chemins
+#                                       amont depuis la 0.32.0 (#1090) ; les
+#                                       anciens (docs/SERVER.md, docs/CLI.md,
+#                                       docs/models/*/) restent pour comparer
+#                                       des versions antérieures
 #
 # Tickets suivis : les « | #NNN | » du tableau « À surveiller » de
 # docs/GUFO.md, seule liste à tenir ; les tickets ouverts par l'utilisateur gh
@@ -72,7 +80,7 @@ diff() {
     -q '.files[] | select(.filename | test("\\.md$")) | "\(.status)  \(.filename)  +\(.additions) -\(.deletions)"'
   echo
   gh api "repos/$REPO/compare/$de...$a" \
-    -q '.files[] | select(.filename | test("^(docs/SERVER|docs/CLI|CHANGELOG)\\.md$|^docs/models/[^/]+/(README|QUALITY|EXPERIMENTS)\\.md$")) | "######## \(.filename)\n\(.patch // "(diff trop gros, voir GitHub)")\n"'
+    -q '.files[] | select(.filename | test("^(docs/SERVER|docs/CLI|CHANGELOG)\\.md$|^docs/models/[^/]+/(README|QUALITY|EXPERIMENTS)\\.md$|^docs/(cli|install)\\.md$|^docs/internal/(server|cache)\\.md$|^docs/models/[^/]+\\.md$|^docs/internal/models/[^/]+/(README|QUALITY|EXPERIMENTS|BENCHMARKS)\\.md$")) | "######## \(.filename)\n\(.patch // "(diff trop gros, voir GitHub)")\n"'
 }
 
 ticket() {
