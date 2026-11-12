@@ -32,8 +32,9 @@ Q3_K 1 ; avant Q5_K 191, Q8_0 110, IQ4_XS 70, Q4_K 69, Q6_K 56, IQ4_NL 6,
 Q3_K 3, IQ3_S 1, selon #1167). mmproj BF16 et Q8 identiques à l'octet.
 
 Sur silentchuck, l'ancien fichier est déplacé hors du parc
-(`~/llm/gufo-test/ancien-27b-dyn30/`, pour revenir en arrière ; à
-supprimer à la main une fois la requalification acquise), le nouveau est
+(`~/llm/gufo-test/ancien-27b-dyn30/`, pour revenir en arrière ;
+supprimé le jour même à la demande de l'utilisateur, la requalification
+acquise), le nouveau est
 téléchargé à `ce331efc` au même chemin du parc, sha256 `2a5f3565…1211`
 conforme à l'etag HF. `download.sh` : commentaire de la cible et mmproj
 épinglé à `ce331efc` (même fichier). Deux séries `remesure.sh 27b` en
