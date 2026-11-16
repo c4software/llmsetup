@@ -172,6 +172,12 @@ macros:
 # sans lui /v1/models n'en publie aucun ; le proxy (qui lit meta.n_ctx) n'en
 # transmet alors pas, et l'extension pi/omp retombe sur 128K. Doit rester égal
 # au --context de la macro gufo.
+# capabilities.in / out : llama-swap les publie dans /v1/models
+# (architecture.input_modalities / output_modalities, forme d'OpenRouter).
+# Sa découverte automatique ne les trouve pas : elle reconnaît llama-server
+# par owned_by « llamacpp », gufo répond « gufo », et le prober de repli
+# n'annonce que du texte. Sans eux, le proxy et ses clients (pi, omp,
+# OpenCode) croient les modèles aveugles. image en entrée = un --mmproj.
 models:
   # Qwen3.8-27B (--setup 27b) : cible UD-Q4_K_XL partagée avec le runtime
   # llama-cpp-rocm-strix (son propre --setup la prend aussi), drafter DFlash 2
@@ -192,6 +198,8 @@ models:
     checkEndpoint: /health
     capabilities:
       context: 262144
+      in: [text, image]
+      out: [text]
 
   # Qwen3.8-Flash-Next : cible UD-Q4_K_XL unsloth (--setup flashnext ;
   # gufo refuse le fine-tune Signal AP-Q4_K_XL du parc, tenseur IQ4_NL), tête
@@ -209,6 +217,8 @@ models:
     checkEndpoint: /health
     capabilities:
       context: 262144
+      in: [text, image]
+      out: [text]
 
   # DeepSeek V4 Flash : seule quant acceptée par gufo, IQ2XXS d'antirez +
   # support DSpark (--setup deepseek ; l'UD-IQ3_XXS du parc est
@@ -232,6 +242,8 @@ models:
     checkEndpoint: /health
     capabilities:
       context: 262144
+      in: [text]
+      out: [text]
 
   # ── Audio et image : autres serveurs de gufo (voir docs/models/ de gufo) ──
   # Poids BF16 safetensors dans MODELS_BASE/gufo (--setup tts, asr,
