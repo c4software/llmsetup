@@ -20,10 +20,10 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
-## Release v0.35.0 (17/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
+## Release v0.35.0 (17/11/2026), montée le jour même, 27B, Flash-Next et DeepSeek remesurés sur silentchuck
 
-Montée demandée par l'utilisateur le 17/11/2026, machine libre, DeepSeek non
-remesuré. Image épinglée en `gufo-runtime:0.35.0` (`0260e11`), digest
+Montée demandée par l'utilisateur le 17/11/2026, machine libre, DeepSeek
+remesuré à part (voir plus bas). Image épinglée en `gufo-runtime:0.35.0` (`0260e11`), digest
 `99e9b5471b7a`. `remesure.sh 27b flashnext` de 14:41 à 14:58
 (`remesure.log` de `~/llm/gufo-test`), journaux agentiques dans
 `resultats/agentic/2026-11-17-0.35.0/` (`avant/` = la série précédente, à
@@ -89,6 +89,19 @@ Lecture (entre parenthèses, la série précédente) :
   deux séries (58,0 et 61,6 en 0.34.0) ; acceptance 92,0 % (93,8), premier
   token 152 ms (144), 16 scénarios en 76,1 s (71,7). 42 points de reprise
   écrits (0), 47 refus `min_step` (59).
+- **DeepSeek**, remesuré à la demande de l'utilisateur le même jour
+  (`remesure.sh deepseek` de 15:16 à 15:30, `remesure-deepseek.log`, mêmes
+  dossiers ; entre parenthèses, la 0.31.0 du 06/11, `avant/` = sa série à
+  cache chaud) : `sanity` et aiguilles justes, 16/16, pas de boucle.
+  Prefill court 433 à 443 t/s hors première passe (431), à 42k 460,5 (459) ;
+  décode en prose 40,4 à 41,8 t/s (35,5 à 41,1), en code 46,4 à 47,3
+  (44,0 à 44,8, soit +6 %) ; cache au tour 2 à 100 % ; mémoire
+  113 587 Mio (113 145), chargement 127 s (153). Cache disque chaud (il a
+  traversé les montées depuis la 0.31.0) : aucun raté, 4 reprises disque,
+  reprise 96,2 % (96,1), décode agentique 39,1 t/s (36,4), soit +7 %,
+  acceptance 88,1 % (88,1), premier token 623 ms (656), 16 scénarios en
+  163,8 s (174,5) ; 55 points de reprise écrits (0), 72 refus `min_step`
+  (78).
 
 Après la série, par llm-proxy (`http://llmproxy`, modèles `silentchuck/`),
 pour le multipart strict de #1176 : voix `customvoice` (`eric`) en 2,6 s,
