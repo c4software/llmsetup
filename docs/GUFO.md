@@ -757,7 +757,10 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   servi depuis le 24/10/2026 avec le mmproj BF16 du 27B `4ca7207`, 0,9 Go,
   tous deux dans `~/models/gufo/qwen3.8-27b`). Présents
   sur bigchuck (191 Go dans `~/models/gufo`, `GUFO_DATA/models` avant le
-  09/10/2026).
+  09/10/2026). Depuis le 17/11/2026, tout ce que gufo propose passe par
+  `gufo model install`, dans `~/models/gufo/models/<id>` (révisions de
+  l'extension de l'image épinglée, fichiers présents repris par liens en
+  dur ; journal, « Téléchargements par gufo model install »).
 - `runtime/gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
   (`bench/mesure.py`). Cas gufo : `27b`, `flashnext`, `deepseek` ; cas service : `27b`, `flashnext`, `flashnext-large-ub`,
   `deepseek`.

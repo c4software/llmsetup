@@ -80,7 +80,8 @@ n'est pas répété dans ceux des runtimes.
   `IMAGE` et aucune version en dur ailleurs, cohérence de la configuration
   llama-swap (noms, `stop` transmis, contexte annoncé, groupes, binaire
   épinglé par SHA-256), modèle préchargé gardé par `--restart`, valeurs du
-  banc à part, poids partagés tous téléchargeables (`du_parc`).
+  banc à part, rien chargé hors de `MODELS_BASE/gufo` et chaque modèle
+  gufo installé (`gufo_model`).
 - Toute modif de `generate_models_ini`, d'un modèle (`runtime/llama-cpp-rocm-strix/lib/models.sh`) ou du
   découpage ⇒ comparer le ini généré avant/après (`generate_models_ini` se
   source sans réseau ni service) et signaler tout écart involontaire dans le

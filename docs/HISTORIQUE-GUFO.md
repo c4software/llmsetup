@@ -20,6 +20,51 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Téléchargements par gufo model install (17/11/2026), silentchuck migré
+
+Demandé par l'utilisateur après la montée en 0.35.0 (#1203). `download.sh`
+installe désormais par `gufo model install <id>`, lancé dans l'image
+épinglée, le 27B (`qwen27-q4`), Flash-Next (`flash-next-q4`), DeepSeek
+(`deepseek4`), la transcription (`qwen3-asr`) et Qwen-Image
+(`qwen-image-2.1`, `qwen-image-2.1-turbo`), dans `MODELS_BASE/gufo/models`.
+Les extensions de la 0.35.0 épinglent exactement nos révisions. Restent en
+`hf download` les voix (gufo ne les propose pas) et l'encodeur Heretic.
+
+- **Reprise sans téléchargement.** `gufo model install` ne reconnaît pas des
+  fichiers déjà en place (essai sur Qwen3-ASR : 4,7 Go retéléchargés en
+  44 s). Il range ses fichiers en blobs nommés par leur SHA-256, liés en dur
+  dans le dossier du modèle : lier les fichiers existants dans `blobs/` sous
+  leur SHA-256 avant l'installation suffit (0 octet téléchargé, même inode
+  que le parc). `gufo_model` le fait pour les fichiers qu'on lui désigne,
+  `vers_parc` relie les poids partagés au parc de llama-cpp-rocm-strix s'ils
+  y manquent.
+- **Migration de silentchuck**, de 16:08 à 16:36
+  (`~/llm/gufo-test/migration-gufo-model.log`) : transcription, 27B,
+  DeepSeek et Flash-Next sans téléchargement (même inode que les anciens
+  fichiers et que le parc, 3 liens) ; Qwen-Image et Turbo retéléchargés
+  (55,7 Go en 8 min, 115 Mo/s), parce que leurs anciens fichiers se lisaient
+  à 4 à 51 Mo/s : jusqu'à 75 868 extents sur le btrfs compressé (zstd:3),
+  contre 1 à 2 Go/s pour le reste et pour les fichiers neufs (858 à 2 798
+  extents). Leur SHA-256 aurait pris plus d'une heure. Les variantes Heretic
+  sont reconstruites sur les nouveaux pipelines. `--restart`, puis chaque
+  modèle essayé : 27B, DeepSeek et Flash-Next justes (17 × 23), voix puis
+  transcription, édition d'image par Turbo Heretic. Anciens dossiers encore
+  là : seuls les deux Qwen-Image (55,7 Go) ne sont pas partagés.
+- **fs-verity, fausses alertes du noyau.** 40 « FILE CORRUPTED » ce jour
+  (14:24:42 à 14:24:52, pendant le `docker pull` de la 0.35.0 ; 14:41:32,
+  build de l'image du routeur au début de la remesure), sur quatre blobs du
+  stockage de contenu de containerd (couches d'image, `io.containerd.snapshotter.v1`,
+  qui pose fs-verity), pas sur des poids ni sur le cache de gufo (qui
+  n'utilise pas fs-verity). Le hash lu est celui d'un bloc de 4 Kio de zéros
+  (`ad7facb2…`), aux multiples de 128 Kio (extents compressés de btrfs).
+  Relus à 16:37, les quatre blobs ont un SHA-256 conforme à leur nom, et la
+  relecture a produit 10 nouvelles alertes : bug connu du noyau 7.2 (silentchuck
+  en 7.2.15), btrfs vérifie une page de folio pas encore remplie par la
+  lecture anticipée d'un extent compressé, la relecture synchrone réussit
+  (projectbluefin/utah#1149 ; correctif dcf8811f63af de Qu Wenruo, dans
+  linux-next au moment des sources). Aucune donnée perdue. Rien à voir non
+  plus avec le cache froid de Flash-Next après la montée.
+
 ## Voix et transcription sur le NPU XDNA (17/11/2026), prototype en 0.35.0 sur silentchuck
 
 Demandé par l'utilisateur après la montée en 0.35.0 (#1216, #1186 :

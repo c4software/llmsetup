@@ -22,7 +22,8 @@ y bascule, les deux étant exclusifs.
 Sur la machine du service (silentchuck), un Strix Halo (gfx1151) : l'image
 et ses noyaux HIP ne visent que lui. Prérequis : ceux du README racine
 (docker activé au boot, groupes `docker`, `render` et `video`), plus le CLI
-`hf` de Hugging Face, dont `download.sh` se sert pour les poids.
+`hf` de Hugging Face, dont `download.sh` se sert pour les voix et l'encodeur
+Heretic (le reste passe par `gufo model install`, dans l'image).
 L'installation se fait sans basculer (`LLM_RUNTIME=gufo` vise ce runtime
 pour une commande), le service continuant de tourner :
 
@@ -107,7 +108,8 @@ Par le proxy (`http://llmproxy`), les mêmes modèles sont préfixés
 `image_generation` et `parler`.
 
 Le 27B tourne avec les fichiers du parc, que ce runtime partage avec le
-service : `--setup 27b` ne retélécharge rien s'ils sont là.
+service (liens en dur, même inode) : `--setup 27b` ne retélécharge rien
+s'ils sont là.
 `./setup-llm.sh --status` dit qui tient le port, `--requetes` suit les
 requêtes de gufo.
 
@@ -120,7 +122,7 @@ requêtes de gufo.
 | `Dockerfile.routeur` | L'image : celle de gufo plus le binaire llama-swap, épinglé par version et SHA-256 ; construite par compose |
 | `IMAGE` | L'image de gufo épinglée, une ligne (`ghcr.io/gufo-org/toolboxes/gufo-runtime:<version>`) : SEUL endroit à éditer pour changer de version. Défaut de `GUFO_IMAGE` pour `runtime.sh`, `download.sh`, `bench/remesure.sh` et `tools/gufo-amont.sh` ; `Dockerfile.routeur` la reçoit du `.env` |
 | `gufo-llama-swap.yaml` | La SEULE description des lignes de commande de gufo, modèle par modèle, versionnée, sans valeur machine (`${env.VAR}`) : réglages et leur origine, groupe exclusif, préchargement |
-| `download.sh image\|27b\|flashnext\|deepseek\|tts\|asr\|qwen-image\|qwen-image-heretic\|qwen-image-turbo\|qwen-image-turbo-heretic\|all` | Image et GGUF de référence de gufo, aux révisions épinglées par ses guides (`./setup-llm.sh --setup <quoi>`) ; la cible du 27B, la tête MTP et le mmproj de Flash-Next, partagés avec le service, aux mêmes chemins et sans révision épinglée (un fichier présent n'est jamais repris) |
+| `download.sh image\|27b\|flashnext\|deepseek\|tts\|asr\|qwen-image\|qwen-image-heretic\|qwen-image-turbo\|qwen-image-turbo-heretic\|all` | Image et poids de gufo (`./setup-llm.sh --setup <quoi>`). Depuis le 17/11/2026, 27B, Flash-Next, DeepSeek, transcription et Qwen-Image par `gufo model install` (révisions et SHA-256 de l'extension de l'image épinglée), dans `MODELS_BASE/gufo/models/<id>` ; les fichiers déjà présents sont repris par liens en dur, sans téléchargement ; la cible du 27B, la tête MTP et le mmproj de Flash-Next, partagés avec le service, y sont reliés en dur aux chemins du parc. Voix et encodeur Heretic en `hf download` |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
 | `tools/gufo-amont.sh` | Suivi de gufo en amont, en lecture seule (`gh api`) : releases, images publiées, commits, état des tickets suivis ; `ticket <n> [k]`, `diff <de> [à]`, `release [tag]`, `commits [date]`, `images [n]`. À la racine (`tools/`) avant le 09/10/2026 : **une autorisation locale sur l'ancien chemin (`.claude/settings.local.json`) est à mettre à jour** |
@@ -147,7 +149,10 @@ Nom exposé par gufo : `qwen3.8-27b` ou `qwen3.8-flash-next` (via le proxy :
 
 Les poids propres à gufo (`--setup <quoi>`) vont avec le parc, dans
 `~/models/gufo` (`MODELS_BASE/gufo`), depuis le 09/10/2026 : un seul dossier
-de modèles à copier d'une machine à l'autre. Le `--cleanup` du service
+de modèles à copier d'une machine à l'autre (en gardant les liens en dur,
+`cp -a` ou `rsync -H`). Depuis le 17/11/2026, ceux que gufo propose sont
+dans son sous-dossier `models/` (`GUFO_MODELS_DIR` de `gufo model`, blobs
+nommés par leur SHA-256 et `installed.json`). Le `--cleanup` du service
 épargne ce dossier parce que ce runtime le **réserve** (`RT_PARC_RESERVE`,
 contrat) : aucun de ses modèles ne le référence, il le verrait sinon orphelin. Avant cette date ils étaient dans `GUFO_DATA/models`.
 
