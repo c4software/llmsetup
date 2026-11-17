@@ -1,30 +1,33 @@
 #!/usr/bin/env bash
-# Récupère l'image de gufo et les poids que gufo exige, aux révisions épinglées
-# par ses guides de modèles (docs/models/*/README.md du dépôt gufo), dans
-# MODELS_BASE/gufo (défaut ~/models/gufo).
+# Récupère l'image de gufo et les poids que gufo exige. Depuis le 17/11/2026
+# (gufo 0.35.0, #1203), les modèles que gufo propose passent par
+# « gufo model install » (lancé dans l'image épinglée) : fichiers, révisions
+# et SHA-256 viennent du models.lock.json de son extension, donc de la ligne
+# de IMAGE, et non plus de ce script. Ils vont dans
+# MODELS_BASE/gufo/models/<id>/ (GUFO_MODELS_DIR), en blobs nommés par leur
+# SHA-256 et liés en dur dans le dossier du modèle. Ce que gufo ne propose
+# pas (les voix, l'encodeur Heretic) reste en hf download dans MODELS_BASE/gufo.
 # Appelé par ./setup-llm.sh --setup <quoi> (runtime gufo actif, ou
 # LLM_RUNTIME=gufo), ou seul.
 #
 # Usage :
 #   runtime/gufo/download.sh image       docker pull de l'image (8,3 Go)
-#   runtime/gufo/download.sh 27b         Qwen3.8-27B UD-Q4_K_XL unsloth, dans
-#                                        MODELS_BASE/qwen3.8-27b, plus son drafter
-#                                        DFlash 2 Q4_K_M z-lab et son mmproj BF16
-#                                        (≈ 2 Go), dans MODELS_BASE/gufo/qwen3.8-27b
-#   runtime/gufo/download.sh flashnext   Flash-Next UD-Q4_K_XL unsloth, 4 shards (≈ 104 Go),
-#                                        plus la tête MTP shared Q8_0 et le mmproj BF16,
-#                                        dans MODELS_BASE/qwen3.8-flash-next
-#   runtime/gufo/download.sh deepseek    DeepSeek V4 Flash IQ2XXS antirez + DSpark (≈ 93 Go)
-#   runtime/gufo/download.sh tts         Qwen3-TTS 12Hz 1.7B, trois variantes BF16 (≈ 13,5 Go)
-#   runtime/gufo/download.sh asr         Qwen3-ASR 1.7B BF16 (≈ 4,7 Go)
-#   runtime/gufo/download.sh qwen-image  Qwen-Image-2.1 BF16, pipeline complet (≈ 33,1 Go ;
-#                                        licence Qwen Research, non commerciale)
+#   runtime/gufo/download.sh 27b         qwen27-q4 : Qwen3.8-27B UD-Q4_K_XL unsloth,
+#                                        drafter DFlash 2 Q4_K_M z-lab, mmproj BF16 (19,7 Go)
+#   runtime/gufo/download.sh flashnext   flash-next-q4 : Flash-Next UD-Q4_K_XL unsloth,
+#                                        4 shards, tête MTP shared Q8_0, mmproj BF16 (115 Go)
+#   runtime/gufo/download.sh deepseek    deepseek4 : DeepSeek V4 Flash IQ2XXS antirez + DSpark (92,7 Go)
+#   runtime/gufo/download.sh tts         Qwen3-TTS 12Hz 1.7B, trois variantes BF16 (≈ 13,5 Go ;
+#                                        hf download, gufo ne les propose pas)
+#   runtime/gufo/download.sh asr         qwen3-asr : Qwen3-ASR 1.7B BF16 (4,7 Go)
+#   runtime/gufo/download.sh qwen-image  qwen-image-2.1 : Qwen-Image-2.1 BF16, pipeline complet
+#                                        (33,1 Go ; licence Qwen Research, non commerciale)
 #   runtime/gufo/download.sh qwen-image-heretic
 #                                        encodeur « abliterated » (≈ 16,3 Go, après
 #                                        qwen-image) : la variante 40 étapes servie
 #   runtime/gufo/download.sh qwen-image-turbo
-#                                        Qwen-Image-2.1-Turbo BF16, 8 étapes (≈ 32,5 Go,
-#                                        même licence), indépendant de qwen-image
+#                                        qwen-image-2.1-turbo : Qwen-Image-2.1-Turbo BF16,
+#                                        8 étapes (32,5 Go, même licence), indépendant de qwen-image
 #   runtime/gufo/download.sh qwen-image-turbo-heretic
 #                                        le même encodeur « abliterated » monté sur
 #                                        Turbo (rien de plus si qwen-image-heretic est
@@ -32,33 +35,58 @@
 #                                        Turbo servie
 #   runtime/gufo/download.sh all         tout ce qui précède
 #
-# La cible du 27B (et son drafter DFlash 2 Q8_0 jusqu'au 24/10/2026, remplacé
-# par le Q4_K_M conseillé par gufo, propre à ce runtime), la tête MTP et le mmproj de
-# Flash-Next sont des fichiers que gufo PARTAGE avec le runtime
-# llama-cpp-rocm-strix, dont le --setup les télécharge aussi (son
-# lib/models.sh). Jusqu'au 09/10/2026 gufo comptait sur lui ; un runtime
-# devant être autonome (runtime/CONTRAT.md), ils se prennent aussi ici
-# (du_parc), aux MÊMES chemins sous MODELS_BASE, hors de MODELS_BASE/gufo :
-# une machine déjà peuplée ne retélécharge rien, les deux runtimes lisent les
-# mêmes fichiers, et gufo-llama-swap.yaml n'a pas bougé. Sans révision
-# épinglée, comme le fait l'autre runtime ; un fichier déjà présent n'est donc jamais repris (hf comparerait
-# sinon son etag à la tête du repo). Pour le reste, aux révisions épinglées,
-# hf ne re-télécharge pas un fichier déjà présent. Qwen3-TTS : gufo n'épingle que le code amont,
-# les révisions HF ci-dessous sont celles du 25/09/2026.
+# Un modèle déjà installé n'est pas repris : une nouvelle image qui épingle
+# d'autres poids ne les fait pas bouger seule (« gufo model update », à la
+# main, est une requalification). gufo ne réutilise pas un fichier présent
+# sous un autre chemin : avant l'installation, gufo_model lie en dur dans
+# blobs/ (même système de fichiers) les fichiers déjà là qu'on lui désigne,
+# sous leur SHA-256, et gufo ne télécharge que ce qui manque (vérifié le
+# 17/11/2026 : 0 octet pour Qwen3-ASR, même inode que le parc).
+#
+# La cible du 27B, la tête MTP et le mmproj de Flash-Next sont des fichiers
+# que gufo PARTAGE avec le runtime llama-cpp-rocm-strix, dont le --setup les
+# télécharge aussi (son lib/models.sh), sous MODELS_BASE/qwen3.8-27b et
+# MODELS_BASE/qwen3.8-flash-next. Un runtime devant être autonome
+# (runtime/CONTRAT.md), gufo les installe lui-même ; vers_parc les lie en
+# dur à ces chemins s'ils manquent, et gufo_model reprend ceux qui y sont
+# déjà : une machine déjà peuplée ne retélécharge rien, les deux runtimes
+# lisent le même inode. Qwen3-TTS : gufo n'épingle que le code amont, les
+# révisions HF ci-dessous sont celles du 25/09/2026.
 set -euo pipefail
 IMG="${GUFO_IMAGE:-$(<"$(dirname "$(realpath "$0")")/IMAGE")}"
 PARC="${MODELS_BASE:-$HOME/models}"
 DL="$PARC/gufo"
 
-# du_parc <dossier sous MODELS_BASE> <repo> <chemin dans le repo> - un fichier
-# du parc, à la tête du repo, sauté s'il est déjà là. hf recrée sous
-# --local-dir le chemin relatif au repo (MTP/x.gguf reste dans MTP/).
-du_parc() {
-  if [[ -f "$PARC/$1/$3" ]]; then
-    echo "$3 déjà présent dans $PARC/$1, sauté."
-    return 0
+GM="$DL/models"
+
+# gufo_model <id> [fichier ou dossier déjà présent]... - installe un modèle
+# proposé par gufo dans GM. S'il ne l'est pas encore, les fichiers désignés
+# (récursivement) sont d'abord liés en dur dans GM/blobs sous leur SHA-256 :
+# gufo les reconnaît et ne télécharge que le reste. Un chemin absent est
+# ignoré ; un lien impossible (autre système de fichiers) aussi, le fichier
+# est alors téléchargé. HF_TOKEN est transmis s'il est posé.
+gufo_model() {
+  local id="$1" f s
+  shift
+  mkdir -p "$GM/blobs"
+  if ! grep -qs "\"id\": *\"$id\"" "$GM/installed.json"; then
+    while IFS= read -r -d '' f; do
+      s="$(sha256sum "$f" | cut -d' ' -f1)"
+      [[ -e "$GM/blobs/$s" ]] || ln "$f" "$GM/blobs/$s" 2>/dev/null || true
+    done < <(for f in "$@"; do [[ -e "$f" ]] && find "$f" -type f -print0; done)
   fi
-  hf download "$2" "$3" --local-dir "$PARC/$1"
+  docker run --rm --entrypoint gufo -e GUFO_MODELS_DIR="$GM" \
+    ${HF_TOKEN:+-e HF_TOKEN} -v "$GM:$GM" "$IMG" model install "$id"
+}
+
+# vers_parc <id> <chemin dans le modèle> <dossier sous MODELS_BASE> - lie en
+# dur un fichier installé par gufo au chemin où le runtime
+# llama-cpp-rocm-strix l'attend (même chemin relatif), s'il n'y est pas.
+vers_parc() {
+  local dst="$PARC/$3/$2"
+  [[ -e "$dst" ]] && return 0
+  mkdir -p "$(dirname "$dst")"
+  ln "$GM/$1/$2" "$dst"
 }
 
 # heretic <pipeline> <variante> <cible du pipeline> - monte l'encodeur de
@@ -97,43 +125,37 @@ telecharge() {
   case "$1" in
     image) docker pull "$IMG" ;;
     27b)
-      # Cible à la tête du repo (du_parc, partagée avec l'autre runtime) :
-      # Unsloth Dynamic 3.1 depuis le 11/11/2026, révision ce331efc que le
-      # guide de gufo épingle (gufo-org/gufo#1167), 17 659 407 264 octets,
-      # sha256 2a5f3565…, mêmes 866 tenseurs que la Dynamic 3.0 du 19/08/2026
-      # (4ca72078, 16,35 Gio) avec d'autres types de quant. Une machine qui a
-      # l'ancien fichier le garde (du_parc saute) : la remplacer est une
-      # requalification, faite sur silentchuck le 12/11/2026.
-      du_parc qwen3.8-27b unsloth/Qwen3.8-27B-GGUF Qwen3.8-27B-UD-Q4_K_XL.gguf
-      # Drafter et mmproj : révisions épinglées ici. 2d9571f, tête du repo
-      # z-lab le 24/10/2026, est le Q4_K_M mesuré le 25/09/2026 ; mmproj à la
-      # révision ce331efc de la cible, identique à l'octet à celui de
-      # 4ca72078 servi depuis le 24/10/2026 (gufo-org/gufo#1167).
-      hf download z-lab/Qwen3.8-27B-DFlash2-GGUF \
-        --revision 2d9571f8ce46e151f61c6499c99dee6079e1d610 \
-        Qwen3.8-27B-DFlash2-Q4_K_M.gguf --local-dir "$DL/qwen3.8-27b"
-      hf download unsloth/Qwen3.8-27B-GGUF \
-        --revision ce331efc48d5722b4b8041f72793e530eae18d9b \
-        mmproj-BF16.gguf --local-dir "$DL/qwen3.8-27b" ;;
+      # qwen27-q4 (extension qwen) : cible Unsloth Dynamic 3.1 depuis le
+      # 11/11/2026, révision ce331efc que gufo épingle (gufo-org/gufo#1167),
+      # 17 659 407 264 octets, sha256 2a5f3565…, mêmes 866 tenseurs que la
+      # Dynamic 3.0 du 19/08/2026 (4ca72078, 16,35 Gio) avec d'autres types
+      # de quant ; la remplacer a été une requalification, faite sur
+      # silentchuck le 12/11/2026. Drafter z-lab 2d9571f, tête du repo le
+      # 24/10/2026, le Q4_K_M mesuré le 25/09/2026 (Q8_0 du parc jusqu'au
+      # 24/10/2026) ; mmproj à ce331efc, identique à l'octet à celui de
+      # 4ca72078. Repris : la cible du parc (partagée) et l'ancien dossier
+      # MODELS_BASE/gufo/qwen3.8-27b (avant le 17/11/2026).
+      gufo_model qwen27-q4 "$PARC/qwen3.8-27b/Qwen3.8-27B-UD-Q4_K_XL.gguf" "$DL/qwen3.8-27b"
+      vers_parc qwen27-q4 Qwen3.8-27B-UD-Q4_K_XL.gguf qwen3.8-27b ;;
     flashnext)
-      # Révision Unsloth Dynamic 3.1 d96201194f10, épinglée par le guide de
-      # gufo depuis la 0.31.0 (gufo-org/gufo#1031) : mêmes types et formes de
-      # tenseurs que 38bb39ee9782 (celle de nos mesures jusqu'à la 0.29.0),
-      # vitesse AR inchangée selon gufo. Les 4 shards, propres à gufo, sont
-      # retéléchargés en place (~104 Go) ; MTP et mmproj, partagés, inchangés.
-      hf download unsloth/Qwen3.8-Flash-Next-GGUF \
-        --revision d96201194f103c906994f283f504209dc8d2a10c \
-        --include "UD-Q4_K_XL/*" --local-dir "$DL/qwen3.8-flash-next"
-      du_parc qwen3.8-flash-next unsloth/Qwen3.8-Flash-Next-GGUF MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
-      du_parc qwen3.8-flash-next unsloth/Qwen3.8-Flash-Next-GGUF mmproj-BF16.gguf ;;
+      # flash-next-q4 (extension qwen38_flash_next) : révision Unsloth
+      # Dynamic 3.1 d96201194f10, épinglée par gufo depuis la 0.31.0
+      # (gufo-org/gufo#1031) : mêmes types et formes de tenseurs que
+      # 38bb39ee9782 (celle de nos mesures jusqu'à la 0.29.0), vitesse AR
+      # inchangée selon gufo. 4 shards propres à gufo, tête MTP et mmproj
+      # partagés avec l'autre runtime. Repris : MTP et mmproj du parc, et
+      # l'ancien dossier MODELS_BASE/gufo/qwen3.8-flash-next (avant le
+      # 17/11/2026).
+      gufo_model flash-next-q4 "$PARC/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf" \
+        "$PARC/qwen3.8-flash-next/mmproj-BF16.gguf" "$DL/qwen3.8-flash-next/UD-Q4_K_XL"
+      vers_parc flash-next-q4 MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf qwen3.8-flash-next
+      vers_parc flash-next-q4 mmproj-BF16.gguf qwen3.8-flash-next ;;
     deepseek)
-      hf download antirez/deepseek-v4-gguf \
-        --revision 1cd7b564460821938add0475a60b942c409295e0 \
-        DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf \
-        --local-dir "$DL"
-      hf download antirez/deepseek-v4-gguf \
-        --revision e7f04037032990db0346398d249baf9fb9df1ccc \
-        DeepSeek-V4-Flash-DSpark-support-0731.gguf --local-dir "$DL" ;;
+      # deepseek4 (extension deepseek_v4_flash) : IQ2XXS antirez 1cd7b564,
+      # DSpark e7f04037. Repris : les anciens fichiers à la racine de
+      # MODELS_BASE/gufo (avant le 17/11/2026).
+      gufo_model deepseek4 "$DL/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf" \
+        "$DL/DeepSeek-V4-Flash-DSpark-support-0731.gguf" ;;
     tts)
       hf download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
         --revision 0c0e3051f131929182e2c023b9537f8b1c68adfe \
@@ -145,26 +167,25 @@ telecharge() {
         --revision fd4b254389122332181a7c3db7f27e918eec64e3 \
         --local-dir "$DL/Qwen3-TTS-12Hz-1.7B-Base" ;;
     asr)
-      hf download Qwen/Qwen3-ASR-1.7B \
-        --revision 7278e1e70fe206f11671096ffdd38061171dd6e5 \
-        --local-dir "$DL/Qwen3-ASR-1.7B" ;;
+      # qwen3-asr (extension qwen3_asr), révision 7278e1e7. Repris : l'ancien
+      # dossier (avant le 17/11/2026).
+      gufo_model qwen3-asr "$DL/Qwen3-ASR-1.7B" ;;
     qwen-image)
-      hf download Qwen/Qwen-Image-2.1 \
-        --revision b3179ad355be050328e483a9dfdd9e60cd62adfa \
-        --local-dir "$DL/Qwen-Image-2.1" ;;
-    qwen-image-heretic) heretic "$DL/Qwen-Image-2.1" "$DL/Qwen-Image-2.1-heretic" qwen-image ;;
+      # qwen-image-2.1 (extension qwen_image_21), révision b3179ad3. Repris :
+      # l'ancien dossier (avant le 17/11/2026).
+      gufo_model qwen-image-2.1 "$DL/Qwen-Image-2.1" ;;
+    qwen-image-heretic) heretic "$GM/qwen-image-2.1" "$DL/Qwen-Image-2.1-heretic" qwen-image ;;
     qwen-image-turbo-heretic)
       # L'encodeur de Turbo est celui de Qwen-Image-2.1 (configs identiques
       # hors version de transformers, fichier unique au lieu de 4 shards) :
       # l'encodeur Heretic, dérivé de l'officiel, s'y monte tel quel.
       # Identité des tenseurs vérifiée le 08/11/2026 sur silentchuck.
-      heretic "$DL/Qwen-Image-2.1-Turbo" "$DL/Qwen-Image-2.1-Turbo-heretic" qwen-image-turbo ;;
+      heretic "$GM/qwen-image-2.1-turbo" "$DL/Qwen-Image-2.1-Turbo-heretic" qwen-image-turbo ;;
     qwen-image-turbo)
-      # Révision et exclusion de assets/ (images de la fiche) : guide amont
-      # docs/models/qwen-image-2.1.md, 08/11/2026.
-      hf download Qwen/Qwen-Image-2.1-Turbo \
-        --revision fc13ba1986fcb905854dc8de2f52eee395f49b5b --exclude 'assets/*' \
-        --local-dir "$DL/Qwen-Image-2.1-Turbo" ;;
+      # qwen-image-2.1-turbo (extension qwen_image_21), révision fc13ba19,
+      # sans assets/ (images de la fiche). Repris : l'ancien dossier (avant
+      # le 17/11/2026).
+      gufo_model qwen-image-2.1-turbo "$DL/Qwen-Image-2.1-Turbo" ;;
     *) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//' >&2; exit 2 ;;
   esac
 }

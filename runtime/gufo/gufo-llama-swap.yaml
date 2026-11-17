@@ -179,21 +179,25 @@ macros:
 # n'annonce que du texte. Sans eux, le proxy et ses clients (pi, omp,
 # OpenCode) croient les modèles aveugles. image en entrée = un --mmproj.
 models:
-  # Qwen3.8-27B (--setup 27b) : cible UD-Q4_K_XL partagée avec le runtime
-  # llama-cpp-rocm-strix (son propre --setup la prend aussi), drafter DFlash 2
-  # Q4_K_M (adaptatif, 7 tokens max, défauts gufo) et mmproj BF16 propres à
-  # gufo, dans MODELS_BASE/gufo/qwen3.8-27b. mmproj passé explicitement : gufo
-  # ne le trouve seul qu'à côté de la cible, dans un dossier du parc que le
-  # --cleanup de l'autre runtime purgerait.
+  # Qwen3.8-27B (--setup 27b, « gufo model install qwen27-q4 » depuis le
+  # 17/11/2026) : cible UD-Q4_K_XL partagée avec le runtime
+  # llama-cpp-rocm-strix (même inode que MODELS_BASE/qwen3.8-27b, lien en
+  # dur), drafter DFlash 2 Q4_K_M (adaptatif, 7 tokens max, défauts gufo) et
+  # mmproj BF16, tous dans MODELS_BASE/gufo/models/qwen27-q4 (jusqu'au
+  # 17/11/2026 : cible du parc, drafter et mmproj dans
+  # MODELS_BASE/gufo/qwen3.8-27b). Drafter et mmproj passés explicitement,
+  # comme dans le guide de gufo : il ne trouve seul le mmproj qu'à côté de la
+  # cible (le cas désormais, pas avant, quand la cible était dans un dossier
+  # du parc que le --cleanup de l'autre runtime purgerait).
   "qwen3.8-27b":
     name: "Qwen3.8-27B (gufo, DFlash 2)"
     cmd: >-
       ${gufo} --served-model-name qwen3.8-27b
       --cache-disk ${env.GUFO_CACHE}/qwen3.8-27b --cache-disk-bytes 17179869184
-      --model ${env.MODELS_BASE}/qwen3.8-27b/Qwen3.8-27B-UD-Q4_K_XL.gguf
+      --model ${env.MODELS_BASE}/gufo/models/qwen27-q4/Qwen3.8-27B-UD-Q4_K_XL.gguf
       --speculative dflash2
-      --dflash-model ${env.MODELS_BASE}/gufo/qwen3.8-27b/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
-      --mmproj ${env.MODELS_BASE}/gufo/qwen3.8-27b/mmproj-BF16.gguf
+      --dflash-model ${env.MODELS_BASE}/gufo/models/qwen27-q4/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
+      --mmproj ${env.MODELS_BASE}/gufo/models/qwen27-q4/mmproj-BF16.gguf
       ${qwen}
     checkEndpoint: /health
     capabilities:
@@ -201,18 +205,20 @@ models:
       in: [text, image]
       out: [text]
 
-  # Qwen3.8-Flash-Next : cible UD-Q4_K_XL unsloth (--setup flashnext ;
-  # gufo refuse le fine-tune Signal AP-Q4_K_XL du parc, tenseur IQ4_NL), tête
-  # MTP shared Q8_0 et mmproj BF16 du parc (même cible de --setup).
+  # Qwen3.8-Flash-Next : cible UD-Q4_K_XL unsloth (--setup flashnext,
+  # « gufo model install flash-next-q4 » depuis le 17/11/2026 ; gufo refuse
+  # le fine-tune Signal AP-Q4_K_XL du parc, tenseur IQ4_NL), tête MTP shared
+  # Q8_0 et mmproj BF16, les deux partagés avec le parc (liens en dur), tous
+  # dans MODELS_BASE/gufo/models/flash-next-q4.
   "qwen3.8-flash-next":
     name: "Qwen3.8-Flash-Next (gufo, MTP)"
     cmd: >-
       ${gufo} --served-model-name qwen3.8-flash-next
       --cache-disk ${env.GUFO_CACHE}/flash-next --cache-disk-bytes 17179869184
-      --model ${env.MODELS_BASE}/gufo/qwen3.8-flash-next/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
+      --model ${env.MODELS_BASE}/gufo/models/flash-next-q4/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
       --speculative mtp
-      --mtp-model ${env.MODELS_BASE}/qwen3.8-flash-next/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
-      --mmproj ${env.MODELS_BASE}/qwen3.8-flash-next/mmproj-BF16.gguf
+      --mtp-model ${env.MODELS_BASE}/gufo/models/flash-next-q4/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+      --mmproj ${env.MODELS_BASE}/gufo/models/flash-next-q4/mmproj-BF16.gguf
       ${qwen}
     checkEndpoint: /health
     capabilities:
@@ -221,7 +227,8 @@ models:
       out: [text]
 
   # DeepSeek V4 Flash : seule quant acceptée par gufo, IQ2XXS d'antirez +
-  # support DSpark (--setup deepseek ; l'UD-IQ3_XXS du parc est
+  # support DSpark (--setup deepseek, « gufo model install deepseek4 »
+  # depuis le 17/11/2026, MODELS_BASE/gufo/models/deepseek4 ; l'UD-IQ3_XXS du parc est
   # refusé). Plus légère que celle du service : un comptage raté à 26k tokens
   # le 24/09/2026, justesse à surveiller. 16/16 en boucle agentique pi.
   # --think off : la 0.2.0 le fait raisonner par défaut (effort high, sans
@@ -235,9 +242,9 @@ models:
     cmd: >-
       ${gufo} --served-model-name deepseek-v4-flash
       --cache-disk ${env.GUFO_CACHE}/deepseek-v4-flash --cache-disk-bytes 17179869184
-      --model ${env.MODELS_BASE}/gufo/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
+      --model ${env.MODELS_BASE}/gufo/models/deepseek4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
       --speculative dspark
-      --dspark-model ${env.MODELS_BASE}/gufo/DeepSeek-V4-Flash-DSpark-support-0731.gguf
+      --dspark-model ${env.MODELS_BASE}/gufo/models/deepseek4/DeepSeek-V4-Flash-DSpark-support-0731.gguf
       --think off
     checkEndpoint: /health
     capabilities:
@@ -246,8 +253,11 @@ models:
       out: [text]
 
   # ── Audio et image : autres serveurs de gufo (voir docs/models/ de gufo) ──
-  # Poids BF16 safetensors dans MODELS_BASE/gufo (--setup tts, asr,
-  # qwen-image). Routes relayées par llama-swap : /v1/audio/speech,
+  # Poids BF16 safetensors : voix dans MODELS_BASE/gufo (--setup tts),
+  # transcription et Qwen-Image dans MODELS_BASE/gufo/models/<id> (--setup
+  # asr, qwen-image, qwen-image-turbo, par « gufo model install » depuis le
+  # 17/11/2026 ; les variantes Heretic restent dans MODELS_BASE/gufo et lient
+  # le pipeline). Routes relayées par llama-swap : /v1/audio/speech,
   # /v1/audio/voices, /v1/audio/transcriptions, /v1/images/generations et
   # /v1/images/edits. Le flux WebSocket /v1/audio/speech/stream de la synthèse
   # n'est pas une route de llama-swap : passer par /upstream/<modèle>/.
@@ -306,7 +316,7 @@ models:
     name: "Qwen3-ASR 1.7B (gufo)"
     cmd: >-
       gufo serve asr --host 127.0.0.1 --port ${PORT}
-      --model ${env.MODELS_BASE}/gufo/Qwen3-ASR-1.7B
+      --model ${env.MODELS_BASE}/gufo/models/qwen3-asr
       --served-model-name qwen3-asr-1.7b
     checkEndpoint: /health
     ttl: 60

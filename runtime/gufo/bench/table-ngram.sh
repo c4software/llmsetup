@@ -25,7 +25,8 @@
 # Q5_1), par lecture directe sur le disque, hors RAM. A/B du jour en Q8_0 :
 # débits et 16/16 inchangés, d'où cette mesure de qualité.
 #
-# Tables dans MODELS_BASE/gufo/qwen3.8-flash-next/engram/, vérifiées par leur
+# Tables dans MODELS_BASE/gufo/models/flash-next-q4/engram/ (gufo/qwen3.8-flash-next
+# avant le 17/11/2026, gufo model install), vérifiées par leur
 # SHA-256 publié (révision d96201) puis numérotées 4 sur 4 par le set_split.py
 # d'Unsloth (deux valeurs d'en-tête, split.no et split.count) ; un fichier
 # <table>.ok marque une table vérifiée et numérotée. Collectes dans
@@ -37,7 +38,7 @@ set -euo pipefail
 DEPOT="$(realpath "$(dirname "$(realpath "$0")")/../../..")"
 BENCH="$DEPOT/runtime/gufo/bench"
 GUFO_DATA="${GUFO_DATA:-$HOME/llm/gufo-test}"
-M="${MODELS_BASE:-$HOME/models}/gufo/qwen3.8-flash-next"
+M="${MODELS_BASE:-$HOME/models}/gufo/models/flash-next-q4"
 S="$M/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00004-of-00004.gguf"
 REV=d96201194f103c906994f283f504209dc8d2a10c
 declare -A SHA=(

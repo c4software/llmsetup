@@ -261,19 +261,28 @@ else
   echo "[FAIL] banc : les valeurs du banc débordent sur l'usage réel"; cat "$SVC/etat/docker.log"; rc=1
 fi
 
-# (c) Téléchargements : chaque fichier que gufo-llama-swap.yaml charge hors de
+# (c) Téléchargements : gufo-llama-swap.yaml ne charge rien hors de
 #     MODELS_BASE/gufo (les poids partagés avec le runtime
-#     llama-cpp-rocm-strix) est pris par une ligne du_parc de download.sh, au
-#     même chemin. Sans cela le runtime ne serait pas autonome : une machine
-#     sans l'autre runtime n'aurait aucun moyen de les obtenir.
+#     llama-cpp-rocm-strix y sont liés en dur, voir download.sh), sans quoi
+#     le runtime ne serait pas autonome : une machine sans l'autre runtime
+#     n'aurait aucun moyen de les obtenir. Et chaque modèle chargé sous
+#     MODELS_BASE/gufo/models/<id> (« gufo model install », depuis le
+#     17/11/2026) est installé par une ligne gufo_model <id> de download.sh.
+#     (Jusqu'au 17/11/2026 : chaque poids partagé chargé hors de
+#     MODELS_BASE/gufo avait sa ligne du_parc, au même chemin.)
 DLS="$(cat "$RT_DIR/download.sh")"
 avant=$rc
 while IFS= read -r chemin; do
-  dossier="${chemin%%/*}"; fichier="${chemin#*/}"
-  grep -qE "^[[:space:]]+du_parc $dossier [^ ]+ $fichier( ;;)?$" <<<"$DLS" \
-    || { echo "[FAIL] download.sh : $chemin (chargé par llama-swap) n'est téléchargé par aucune cible"; rc=1; }
-done < <(grep -oE '\$\{env\.MODELS_BASE\}/[^ ]+\.gguf' <<<"$LSY" | sed 's|^\${env\.MODELS_BASE}/||' | grep -v '^gufo/')
-[[ $rc -eq $avant ]] && echo "[OK]   download.sh : les poids partagés chargés par llama-swap ont tous leur ligne du_parc"
+  echo "[FAIL] gufo-llama-swap.yaml : $chemin chargé hors de MODELS_BASE/gufo"; rc=1
+done < <(grep -oE '\$\{env\.MODELS_BASE\}/[^ ]+' <<<"$LSY" | sed 's|^\${env\.MODELS_BASE}/||' | grep -v '^gufo/')
+n=0
+while IFS= read -r id; do
+  n=$((n + 1))
+  grep -qE "^[[:space:]]+gufo_model $id( |$)" <<<"$DLS" \
+    || { echo "[FAIL] download.sh : le modèle gufo $id (chargé par llama-swap) n'est installé par aucune cible"; rc=1; }
+done < <(grep -oE '\$\{env\.MODELS_BASE\}/gufo/models/[^/ ]+' <<<"$LSY" | sed 's|.*/||' | sort -u)
+((n > 0)) || { echo "[FAIL] gufo-llama-swap.yaml : aucun modèle sous MODELS_BASE/gufo/models"; rc=1; }
+[[ $rc -eq $avant ]] && echo "[OK]   download.sh : rien chargé hors de MODELS_BASE/gufo, et les $n modèles gufo chargés par llama-swap ont tous leur ligne gufo_model"
 if out="$(MODELS_BASE="$SVC/home/models" bash "$RT_DIR/download.sh" inconnu 2>&1 </dev/null)"; then
   echo "[FAIL] download.sh : cible inconnue acceptée"; rc=1
 elif grep -q "download.sh 27b" <<<"$out"; then
@@ -282,5 +291,5 @@ else
   echo "[FAIL] download.sh : usage sans la cible 27b : $out"; rc=1
 fi
 
-[[ "$rc" -eq 0 ]] && echo "── sh-unit gufo : .env, compose llama-swap rendu par docker compose config, configuration llama-swap cohérente (LLM, voix, transcription, image, groupes), image épinglée à un seul endroit, noms de modèle, pilotage (modèle préchargé gardé, image absente et modèle inconnu refusés, valeurs du banc à part) et téléchargements (poids partagés) conformes. ──"
+[[ "$rc" -eq 0 ]] && echo "── sh-unit gufo : .env, compose llama-swap rendu par docker compose config, configuration llama-swap cohérente (LLM, voix, transcription, image, groupes), image épinglée à un seul endroit, noms de modèle, pilotage (modèle préchargé gardé, image absente et modèle inconnu refusés, valeurs du banc à part) et téléchargements (rien hors de MODELS_BASE/gufo, modèles gufo installés) conformes. ──"
 exit "$rc"
