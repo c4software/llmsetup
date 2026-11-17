@@ -20,6 +20,46 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Voix et transcription sur le NPU XDNA (17/11/2026), prototype en 0.35.0 sur silentchuck
+
+Demandé par l'utilisateur après la montée en 0.35.0 (#1216, #1186 :
+`gufo serve tts --npu` et `gufo serve asr --npu`). Prototype hors dépôt :
+conteneurs `docker run` à part (image 0.35.0, `--device /dev/accel/accel0`,
+`--ulimit memlock=-1:-1`, sans `/dev/kfd` ni `/dev/dri`), à côté de
+llama-swap, mêmes poids que le service ; rien de versionné n'a changé.
+silentchuck a le pilote `amdxdna` et `/dev/accel/accel0` ; l'image embarque
+XRT (`xrt-amdxdna-2.26`). Voix `customvoice` (`eric`), réponses WAV (non
+diffusées en flux : premier octet = fin de la synthèse), trois répétitions,
+écarts sous 1 %.
+
+| Mesure | GPU (service) | NPU |
+|---|---|---|
+| voix, phrase courte | 2,83 s pour 7,4 s d'audio (×2,6 temps réel) | 4,32 s pour 4,3 s (×1,0) |
+| voix, paragraphe | 12,7 s pour 32,2 s (×2,5) | 29,9 s pour 29,4 s (×1,0) |
+| transcription, 32 s d'audio | 2,48 s | 5,29 s |
+| transcription, 96 s d'audio | 6,69 s | 13,9 s |
+| mémoire hôte, voix | +6,0 Gio | +9,3 Gio |
+| mémoire hôte, transcription | +5,3 Gio | +9,8 Gio |
+| décode du 27B pendant une voix en boucle | 30,2 t/s | 45,1 t/s |
+| décode du 27B pendant une transcription en boucle | 20,5 t/s | 44,7 t/s |
+
+Décode du 27B seul : 50,0 t/s (600 tokens, glouton). Justesse : textes
+transcrits identiques sur GPU et NPU ; voix NPU juste à la retranscription,
+débit de parole plus rapide (moins de pauses, d'où les durées d'audio
+différentes). L'amont annonce ×1,4 temps réel pour la voix sur NPU, nous
+mesurons ×1,0.
+
+Lecture : sur le NPU, le LLM ne perd plus que 10 % de décode pendant la voix
+ou la transcription, au lieu de 40 % et 59 % sur le GPU. En échange, la voix
+n'est plus qu'au temps réel (une phrase de 4 s attend 4 s, sans flux), la
+transcription est deux fois plus lente (toujours ×7 le temps réel), et
+chaque modèle prend 3 à 4,5 Gio d'hôte de plus. **Bloquant avec
+Flash-Next** (111 Gio) : la voix NPU échoue au chargement
+(`mmap ... Cannot allocate memory` sur un tampon de 1,8 Gio, puis
+`DRM_IOCTL_AMDXDNA_CREATE_HWCTX ... err=-12`), et la transcription NPU seule
+charge mais laisse 36 Mio disponibles à l'hôte : conteneurs arrêtés aussitôt,
+Flash-Next resté prêt. Le NPU ne vaut donc qu'à côté du 27B (68 Gio).
+
 ## Release v0.35.0 (17/11/2026), montée le jour même, 27B, Flash-Next et DeepSeek remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 17/11/2026, machine libre, DeepSeek
