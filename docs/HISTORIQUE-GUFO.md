@@ -20,6 +20,84 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.35.0 (17/11/2026), montée le jour même, 27B et Flash-Next remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 17/11/2026, machine libre, DeepSeek non
+remesuré. Image épinglée en `gufo-runtime:0.35.0` (`0260e11`), digest
+`99e9b5471b7a`. `remesure.sh 27b flashnext` de 14:41 à 14:58
+(`remesure.log` de `~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-11-17-0.35.0/` (`avant/` = la série précédente, à
+cache chaud : la seconde série du 12/11 sur la Dynamic 3.1 pour le 27B, la
+seconde série de la 0.34.0 pour Flash-Next). Justesse d'abord : `sanity` et
+aiguilles justes sur les deux modèles. 16/16 partout, pas de boucle.
+
+Changements lus :
+
+- **Flash-Next, #1209** : les 98 304 premières lignes de la tête de
+  brouillon MTP deviennent une copie Q4_K de la tête Q8_0, quantifiée au
+  chargement (141,6 Mio de plus). L'amont annonce +2,6 % de décode à C1
+  échantillonné, acceptance inchangée, sortie inchangée (vérification
+  exacte). Plus #1230 (lignes MTP compactées hors du tampon de norme) et
+  #1195 (streams de transfert partagés pour le cache).
+- **27B, #1224 et #1185** : points de reprise capturés dans le pas de
+  prefill, tuiles KV partagées entre les lignes de vérification. Aucun
+  chiffre de bout en bout en amont.
+- **Cache disque, #1183** : la règle des 2048 tokens d'écart ne vaut plus
+  que pour les points du prompt ; la fin de chaque réponse (frontière
+  générée) est capturée au repos et écrite sur disque. L'éviction disque
+  n'est plus un LRU global : historique d'une conversation remplacé avant
+  la dernière frontière d'une autre, conversations réutilisées protégées,
+  historique d'accès persistant (`v2/uses`, compté dans le budget) qui
+  survit à un redémarrage propre. Plus #1194, #1196, #1205 (reprise au
+  démarrage, écritures concurrentes).
+- **Serveur, #1176 (cassant)** : corps multipart analysés selon la RFC 7578,
+  strictement. #1207 : `--max-pending 0` répond 429 quand toutes les
+  sessions sont prises (non posé ici). #1175 : profil d'ordonnancement
+  obligatoire pour les modèles texte, ancien budget de prefill retiré (aucune
+  option de notre côté).
+- **Hors de notre parc** : vrai CFG, image vers image et éditions à plusieurs
+  références pour Qwen-Image (#1212), API A1111 `/sdapi/v1/*` (#1214),
+  NPU XDNA (`--npu`, #1216, #1186), `gufo model install` (#1203).
+
+`--help` de `serve llm` des deux images comparé sur silentchuck : seule la
+description de `--max-pending` change, aucun défaut. Aucun réglage changé.
+
+Lecture (entre parenthèses, la série précédente) :
+
+- **27B** : prefill à 52k 492,5 t/s (492,7), à 6,5k 549,1 à 551,9 (550,5 à
+  552,8), court 502,3 à 521,7 (503,6 à 522,7). Décode en prose 47,6 à
+  56,9 t/s (39,7 à 53,5), en code 68,9 à 70,2 (68,7 à 70,1). Cache au
+  tour 2 à 100 %. Mémoire 67 925 Mio (64 533), soit +3,3 Gio ; chargement
+  35,2 s (14,1, cache de pages chaud ; 22,9 à la montée en 0.34.0). Le budget
+  RAM du cache est le même (32 Gio demandés) : la mesure est un `free -m`
+  après le banc, qui compte les pages du cache engagées par paliers ; la
+  hausse vient vraisemblablement des frontières générées désormais retenues
+  (19 publications disque pendant le banc HTTP), non vérifié. Boucle
+  agentique, cache disque chaud (la Dynamic 3.1 a traversé la montée) :
+  4 reprises disque, aucun raté, reprise 98,9 % (99,0), décode 43,6 t/s
+  (43,7), acceptance 71,0 % (71,0), premier token 341 ms (318),
+  16 scénarios en 111,7 s (108,0). **52 points de reprise écrits sur
+  disque (0)**, 50 refus `min_step` (50) : les fins de réponse de #1183.
+- **Flash-Next** : prefill à 52k 1 718 t/s (1 704), à 6,5k 1 665 à 1 740,
+  court 1 575 à 1 595 hors première passe (1 634 à 1 643), première passe
+  lente comme d'habitude (1 335 et 1 398). Décode en code 96,4 à 97,7 t/s
+  (91,9 à 97,1). Mémoire 111 116 Mio (109 998), chargement 104,3 s (89,4).
+  Cache disque froid après la montée (manifestes relus, aucun point
+  compatible) : 3 ratés `no_compatible_boundary`, aucune reprise disque,
+  reprise 93,6 % (98,4). Décode agentique 63,7 t/s (61,6), soit +3,4 %,
+  dans l'ordre de #1209 mais à l'intérieur de la variance déjà vue entre
+  deux séries (58,0 et 61,6 en 0.34.0) ; acceptance 92,0 % (93,8), premier
+  token 152 ms (144), 16 scénarios en 76,1 s (71,7). 42 points de reprise
+  écrits (0), 47 refus `min_step` (59).
+
+Après la série, par llm-proxy (`http://llmproxy`, modèles `silentchuck/`),
+pour le multipart strict de #1176 : voix `customvoice` (`eric`) en 2,6 s,
+puis transcription du WAV produit en 0,7 s, texte exact ; édition d'image
+par Qwen-Image-2.1-Turbo (512², « petit soleil jaune en haut à droite »)
+en 40 s, image juste ; Flash-Next rechargé, réponse avec `stop` correcte.
+`GET /v1/audio/voices` répond 404 par le proxy (servi par gufo sous
+`/upstream/<modèle>/`) : hors montée, non creusé.
+
 ## Qwen3.8-27B UD-Q4_K_XL en Unsloth Dynamic 3.1 (12/11/2026), requalifié sur silentchuck en 0.34.0
 
 Requalification demandée par l'utilisateur le 12/11/2026, après la remesure
