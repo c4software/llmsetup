@@ -492,11 +492,12 @@ plus bas ; #200, #228 et #239, ouverts mais immobiles, retirés le
 14/10/2026 ; #299, fermée le 07/11/2026, retirée le 08/11/2026 ;
 l'extension strycast-qwen35moe, abandonnée le 09/11/2026 à la demande de
 l'utilisateur ; #861, mergée le 11/11/2026 et livrée en 0.34.0, retirée le
-12/11/2026).
+12/11/2026 ; #524, suivie pour un budget de réflexion par requête sur Chat
+Completions et Responses que rien en amont ne porte, abandonnée le
+18/11/2026 à la demande de l'utilisateur).
 
 | Ticket | Sujet | État au 02/10/2026 |
 |---|---|---|
-| #524 | PR : budget de réflexion (`thinking.budget_tokens`) sur `/v1/messages`, par jabata, mergée le 18/10 (0.18.0) | **suivie à la demande de l'utilisateur** (20/10), bien que fermée : aucun ticket ouvert ne porte la suite qu'elle annonce, le budget par requête sur Chat Completions et Responses (pour l'instant, seule l'option serveur `--reasoning-budget` vaut pour ces deux API). C'est elle qu'attend llm-proxy, qui traduit `/v1/messages` en `/v1/chat/completions` et jette `thinking` : il pourra alors traduire `budget_tokens`. Ligne à remplacer par le ticket ou la PR de cette suite dès qu'il existe |
 | #1066 | Proposition : capacités d'extension pour la musique, le bruitage depuis une vidéo et le post-traitement image et vidéo (interpolation, **upscale Real-ESRGAN** : `POST /v1/images/upscale`, ×4, 62 ms par image en `realesr-general-x4v3`, déjà utilisé sur son fork), par D3rPapts, ouverte le 06/11 | **suivie à la demande de l'utilisateur** (08/11) : gufo n'a aucun upscale. En attendant, le chat de llm-proxy agrandit par une retouche de Qwen-Image-2.1-Turbo (`upscale_model`, 1024² vers 2048² en 182 s le 08/11, l'image est redessinée). Une fois livrée : un vrai super-résolveur dans le groupe d'images de `gufo-llama-swap.yaml` (poids à convertir, pas fournis par gufo), et le bouton *Agrandir* du proxy à rebrancher dessus. Pas encore de réponse de mainteneur au 08/11. Le 14/11, D3rPapst nous répond : extension `upscale-gufo-extension` (Real-ESRGAN natif HIP, proposée au registre par gufo-org/gufo-extension#12), appelée par `/v1/images/edits` faute de capacité dédiée (côtés multiples de 32, 4 MP au plus). gufo-org/gufo-extension#12 mergée le 17/11 par fedeizzo : l'extension est au registre (`gufo extension install upscale`, 0.1.0) ; capacité `image_upscale` toujours sans avis de mainteneur au 18/11 (aucun sur #1066 ni sur #12). Choix de l'utilisateur le 17/11, maintenu le 18/11 : ni essai ni réponse pour l'instant |
 
 Constat du 29/09/2026 (v0.2.0), non revu depuis : rien n'est suivi en amont
