@@ -20,6 +20,98 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.36.0 (23/11/2026), montée le jour même, 27B, Flash-Next et DeepSeek remesurés sur silentchuck
+
+Montée demandée par l'utilisateur le 23/11/2026, machine libre, les trois
+modèles remesurés (DeepSeek à sa demande). Image épinglée en
+`gufo-runtime:0.36.0` (`4a7d8c6`), digest `69a858b08865`.
+`remesure.sh 27b flashnext deepseek` de 22:46 à 23:20 (`remesure.log` de
+`~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-11-23-0.36.0/` (`avant/` = les séries de la 0.35.0
+du 17/11). Justesse d'abord : `sanity` et aiguilles justes sur les trois
+modèles. 16/16 partout, pas de boucle.
+
+Changements lus :
+
+- **Flash-Next, #1321 et #1265** : MoE en wave32, WMMA Q8 packed-K16,
+  graphes HIP en lot, masques de grammaire gardés sur le GPU ; prompt seul
+  en passes de 14K lignes sur une zone de travail transitoire. #1274 : zone
+  de prefill large rendue quand le serveur est inactif.
+- **Cache par composants** (27B et Flash-Next) : les points de reprise
+  gardent les pages de la session au lieu d'une copie, restauration RAM par
+  mappage (#1308, #1251, nouvel événement `row_storage`) ; restaurations
+  disque lues par huit morceaux en parallèle, tampon interne de 8 Mio au
+  lieu de 1 (#1271) ; restauration sur le moteur de copie SDMA à côté des
+  décodeurs (#1291, #1299) ; fins de réponse gardées tant que la file
+  d'écriture n'est pas pleine (#1283) ; chaque éviction disque journalisée
+  (#1253, `disk_entry_evicted`).
+- **Mémoire hôte** : #1275 rend de la RAM du cache quand un autre processus
+  en prend (`host_pressure_release`, utile à côté de la voix et de la
+  transcription) ; #1273 ne soustrait plus deux fois la réserve hôte et
+  `CmaFree` (sans effet sur silentchuck, `CmaFree` à 0) ; #1258 : plus de
+  sessions que n'en tient la mémoire à contexte plein se la partagent (27B
+  et Flash-Next ; non utilisé, 2 sessions).
+- **DeepSeek, #1264 et #1295** : KV compressé en mémoire partagée mappée à
+  la demande, signes IQ2/IQ3 en SWAR.
+- **Serveur** : connexions HTTP/1.1 gardées ouvertes entre requêtes,
+  `--max-connections` ne compte plus les connexions inactives (#1332) ;
+  étape de chargement dans le corps du 503 (#1298), affichée par llama-swap
+  à partir de la v269 (épinglé en v257 ici, `healthCheckTimeout: 300`
+  inchangé) ; JPEG décodés en Rust (#1312, cassant : JPEG arithmétiques,
+  sans perte ou à marqueur DNL refusés en 400).
+- **Hors de notre parc** : FLAC, MP3 et Ogg en transcription (#1259),
+  Qwen-Image jusqu'à 4,5 mégapixels (#1330), Loom intégré (#1315).
+
+`--help` de `serve llm` des deux images comparé sur silentchuck : seul le
+défaut de `--cache-disk-staging-bytes` change (1 → 8 Mio), option que nous
+ne posons plus depuis la 0.30.0. Aucun réglage changé ; `ttl: 60` de la
+transcription (#272) gardé, rien dans la release ne le rend inutile (#1268
+ne vaut que pour un fournisseur de parole qui déclare sa limite).
+
+Lecture (entre parenthèses, la 0.35.0) :
+
+- **27B** : prefill à 52k 494,1 t/s (492,5), à 6,5k 553,3 à 554,9 (549,1 à
+  551,9), court 508,5 à 522,0 (502,3 à 521,7). Décode en prose 46,1 à
+  57,0 t/s (47,6 à 56,9), en code 69,1 à 70,6 (68,9 à 70,2). Cache au
+  tour 2 à 100 %. Mémoire 59 977 Mio (67 925), soit −7,8 Gio, cohérent avec
+  les points de reprise qui gardent les pages de la session (#1308) sans
+  être vérifié ; chargement 33,4 s (35,2). Boucle agentique à cache disque
+  froid après la montée (points de reprise de la 0.35.0 inutilisables,
+  comme Flash-Next à la montée précédente) : 3 ratés
+  `no_compatible_boundary` sur les trois premières requêtes, aucune reprise
+  disque, reprise 93,5 % (98,9), prefill 17 s (8). **Décode agentique
+  47,3 t/s (43,6), soit +8,5 %**, acceptance 70,2 % (71,0), premier token
+  321 ms (341), 16 scénarios en 111,0 s (111,7). 56 points de reprise
+  écrits (52), 53 refus `min_step` (50), 44 évictions
+  `reason=admission` (dossier plein à 16 Gio ; événement nouveau, #1253).
+- **Flash-Next** : prefill à 52k 1 810 t/s (1 718), soit +5,4 %, à 6,5k
+  1 603 à 1 687 (1 665 à 1 740), court 1 592 à 1 615 hors première passe
+  (1 575 à 1 595), première passe lente comme d'habitude (1 328 et 1 406).
+  Décode en code 95,9 à 98,4 t/s (96,4 à 97,7). Mémoire 108 526 Mio
+  (111 116), chargement 115,4 s (104,3). Cache disque de nouveau froid
+  après la montée : 3 ratés `no_compatible_boundary`, aucune reprise
+  disque, reprise 93,5 % (93,6). **Décode agentique 70,5 t/s (63,7), soit
+  +10,7 %**, au-delà de la variance vue entre deux séries ; acceptance
+  91,4 % (92,0), premier token 150 ms (152), 16 scénarios en 74,1 s (76,1).
+  58 points de reprise écrits (42), 51 refus `min_step` (47),
+  39 évictions `reason=admission`.
+- **DeepSeek** : prefill court 436,5 à 442,0 t/s hors première passe (433
+  à 443), à 5,3k 461,6 à 463,2, à 42k 461,6 (460,5). Décode en prose 40,0 à
+  41,6 t/s (40,4 à 41,8), en code 45,0 à 47,6 (46,4 à 47,3 ; la passe à
+  45,0 n'a généré que 496 tokens). Cache au tour 2 à 100 %. Mémoire
+  117 478 Mio (113 587), soit +3,8 Gio, peut-être le KV compressé en
+  mémoire partagée de #1264, non vérifié ; chargement 159,2 s (127). Cache
+  disque chaud : 4 reprises disque, aucun raté, reprise 96,1 % (96,2),
+  décode agentique 39,5 t/s (39,1), acceptance 86,7 % (88,1), premier token
+  613 ms (623), 16 scénarios en 163,7 s (163,8) ; 50 points de reprise
+  écrits (55), 77 refus `min_step` (72), aucune éviction.
+
+Après la série, Flash-Next relancé en usage réel par `remesure.sh` :
+`/v1/models` publie les neuf modèles, une requête avec `stop` s'arrête au
+bon endroit (`finish_reason` `stop`). Voix et transcription non revérifiées
+(aucun changement de leur chemin HTTP dans la release, hors formats
+d'entrée de la transcription).
+
 ## Téléchargements par gufo model install (17/11/2026), silentchuck migré
 
 Demandé par l'utilisateur après la montée en 0.35.0 (#1203). `download.sh`
