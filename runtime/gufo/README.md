@@ -33,6 +33,7 @@ export LLM_RUNTIME=gufo                # pour les --setup qui suivent
 ./setup-llm.sh --setup flashnext       # Flash-Next UD-Q4_K_XL (104 Go), tête MTP et mmproj
 ./setup-llm.sh --setup 27b             # Qwen3.8-27B (déjà là si le service est installé), drafter DFlash 2 Q4_K_M et mmproj
 ./setup-llm.sh --setup deepseek        # DeepSeek IQ2XXS + DSpark (93 Go), si voulu
+./setup-llm.sh --setup inkling         # Inkling 2 Mini UD-Q4_K_XL + DSpark et mmproj (18,8 Go), si voulu
 ./setup-llm.sh --setup tts             # synthèse vocale, trois variantes (13,5 Go), si voulu
 ./setup-llm.sh --setup asr             # transcription (4,7 Go), si voulu
 ./setup-llm.sh --setup qwen-image      # génération d'images (33 Go, licence non commerciale), si voulu
@@ -77,8 +78,8 @@ La version de gufo ne bouge jamais seule : éditer la ligne de `IMAGE`, puis
 `--setup image` et `--restart` (checklist de `docs/GUFO.md`).
 
 gufo démarre **toujours derrière llama-swap** (la voie que gufo recommande) :
-le client choisit `qwen3.8-27b`, `qwen3.8-flash-next` ou `deepseek-v4-flash`
-par le champ `model`, comme avec le routeur du service, et llama-swap arrête
+le client choisit `qwen3.8-27b`, `qwen3.8-flash-next`, `deepseek-v4-flash`
+ou `inkling-2-mini` (depuis gufo 0.37.0, non mesuré ici) par le champ `model`, comme avec le routeur du service, et llama-swap arrête
 un gufo pour lancer l'autre. Un seul modèle est chargé à la fois (aucune
 paire ne tient dans 124 Gio) ; l'argument de `--start` ne choisit que le
 modèle préchargé (Flash-Next par défaut). Mesuré sur bigchuck le
@@ -122,7 +123,7 @@ requêtes de gufo.
 | `Dockerfile.routeur` | L'image : celle de gufo plus le binaire llama-swap, épinglé par version et SHA-256 ; construite par compose |
 | `IMAGE` | L'image de gufo épinglée, une ligne (`ghcr.io/gufo-org/toolboxes/gufo-runtime:<version>`) : SEUL endroit à éditer pour changer de version. Défaut de `GUFO_IMAGE` pour `runtime.sh`, `download.sh`, `bench/remesure.sh` et `tools/gufo-amont.sh` ; `Dockerfile.routeur` la reçoit du `.env` |
 | `gufo-llama-swap.yaml` | La SEULE description des lignes de commande de gufo, modèle par modèle, versionnée, sans valeur machine (`${env.VAR}`) : réglages et leur origine, groupe exclusif, préchargement |
-| `download.sh image\|27b\|flashnext\|deepseek\|tts\|asr\|qwen-image\|qwen-image-heretic\|qwen-image-turbo\|qwen-image-turbo-heretic\|all` | Image et poids de gufo (`./setup-llm.sh --setup <quoi>`). Depuis le 17/11/2026, 27B, Flash-Next, DeepSeek, transcription et Qwen-Image par `gufo model install` (révisions et SHA-256 de l'extension de l'image épinglée), dans `MODELS_BASE/gufo/models/<id>` ; les fichiers déjà présents sont repris par liens en dur, sans téléchargement ; la cible du 27B, la tête MTP et le mmproj de Flash-Next, partagés avec le service, y sont reliés en dur aux chemins du parc. Voix et encodeur Heretic en `hf download` |
+| `download.sh image\|27b\|flashnext\|deepseek\|inkling\|tts\|asr\|qwen-image\|qwen-image-heretic\|qwen-image-turbo\|qwen-image-turbo-heretic\|all` | Image et poids de gufo (`./setup-llm.sh --setup <quoi>`). Depuis le 17/11/2026, 27B, Flash-Next, DeepSeek, Inkling 2 Mini (depuis le 26/11/2026), transcription et Qwen-Image par `gufo model install` (révisions et SHA-256 de l'extension de l'image épinglée), dans `MODELS_BASE/gufo/models/<id>` ; les fichiers déjà présents sont repris par liens en dur, sans téléchargement ; la cible du 27B, la tête MTP et le mmproj de Flash-Next, partagés avec le service, y sont reliés en dur aux chemins du parc. Voix et encodeur Heretic en `hf download` |
 | `bench/run.sh gufo\|llama <cas>...` | Banc HTTP (`bench/mesure.py`) : justesse, `--bench`, `spec-refactor`, prefill long avec aiguille, cache au tour 2 |
 | `bench/agentic.sh gufo\|llama <cas>...` | Boucle pi de `bench-agentic/`, contre gufo ou le service, sans toucher `logs/` |
 | `tools/gufo-amont.sh` | Suivi de gufo en amont, en lecture seule (`gh api`) : releases, images publiées, commits, état des tickets suivis ; `ticket <n> [k]`, `diff <de> [à]`, `release [tag]`, `commits [date]`, `images [n]`. À la racine (`tools/`) avant le 09/10/2026 : **une autorisation locale sur l'ancien chemin (`.claude/settings.local.json`) est à mettre à jour** |

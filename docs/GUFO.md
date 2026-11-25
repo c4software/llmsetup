@@ -736,7 +736,7 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
 (défaut `~/llm/gufo-test` sur bigchuck, déjà peuplé), sauf les poids propres
 à gufo, rangés avec le parc dans `~/models/gufo` depuis le 09/10/2026 :
 
-- `./setup-llm.sh --runtime gufo [flashnext|27b|deepseek]` (bascule
+- `./setup-llm.sh --runtime gufo [flashnext|27b|deepseek|inkling]` (bascule
   mémorisée ; `LLM_RUNTIME=gufo ./setup-llm.sh --start [modèle]` pour un essai
   sans rien mémoriser ; `--gufo [modèle]` jusqu'au 09/10/2026) : gufo, toujours derrière
   llama-swap (section « Routeur » ci-dessus), à la place du service sur
@@ -749,7 +749,7 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   préchargé ou le garder, `--requetes` pour suivre les requêtes
   (`--gufo-logs`). Le dernier lancé repart seul au
   démarrage de bigchuck ; démarrer un runtime arrête l'autre (plus de refus).
-- `LLM_RUNTIME=gufo ./setup-llm.sh --setup image|27b|flashnext|deepseek|all`
+- `LLM_RUNTIME=gufo ./setup-llm.sh --setup image|27b|flashnext|deepseek|inkling|all`
   (`--gufo-download` jusqu'au 09/10/2026 ; `runtime/gufo/download.sh`) : le
   27B et son drafter, la tête MTP et le mmproj de Flash-Next, partagés avec
   le service, aux mêmes chemins du parc et sans révision épinglée ; et image et GGUF de référence aux révisions
@@ -765,7 +765,7 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   l'extension de l'image épinglée, fichiers présents repris par liens en
   dur ; journal, « Téléchargements par gufo model install »).
 - `runtime/gufo/bench/run.sh gufo|llama <cas>...` : banc HTTP
-  (`bench/mesure.py`). Cas gufo : `27b`, `flashnext`, `deepseek` ; cas service : `27b`, `flashnext`, `flashnext-large-ub`,
+  (`bench/mesure.py`). Cas gufo : `27b`, `flashnext`, `deepseek`, `inkling` ; cas service : `27b`, `flashnext`, `flashnext-large-ub`,
   `deepseek`.
 - `runtime/gufo/bench/agentic.sh gufo|llama <cas>...` : boucle pi de
   `bench-agentic/`, `PASSES=3`, garde-temps d'une heure.

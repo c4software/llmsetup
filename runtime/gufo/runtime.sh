@@ -72,6 +72,7 @@ declare -A GUFO_MODELES=(
   [27b]=qwen3.8-27b
   [flashnext]=qwen3.8-flash-next
   [deepseek]=deepseek-v4-flash
+  [inkling]=inkling-2-mini
 )
 
 # _gufo_nom <court|complet> - le nom de modèle de gufo-llama-swap.yaml, ou
@@ -185,11 +186,11 @@ rt_gufo_env() {
 
 # avant_demarrage - dossiers de l'hôte que le compose monte : sans eux docker
 # les créerait en root. Et les sous-dossiers de cache propres à Flash-Next
-# (gufo 0.14.0), au 27B (gufo 0.20.0) et à DeepSeek (gufo 0.30.0,
-# gufo-llama-swap.yaml), sous ce même montage.
+# (gufo 0.14.0), au 27B (gufo 0.20.0), à DeepSeek (gufo 0.30.0) et à
+# Inkling 2 Mini (gufo 0.37.0, gufo-llama-swap.yaml), sous ce même montage.
 rt_gufo_avant_demarrage() {
   mkdir -p "$GUFO_DATA" "$GUFO_CACHE/flash-next" "$GUFO_CACHE/qwen3.8-27b" \
-    "$GUFO_CACHE/deepseek-v4-flash"
+    "$GUFO_CACHE/deepseek-v4-flash" "$GUFO_CACHE/inkling-2-mini"
 }
 
 # pret - /health de llama-swap a répondu (pilotage générique) ; reste le
@@ -200,10 +201,10 @@ rt_gufo_pret() {
   _gufo_wait_precharge "$m"
 }
 
-# setup <image|27b|flashnext|deepseek|tts|asr|qwen-image|qwen-image-heretic|qwen-image-turbo|qwen-image-turbo-heretic|all>
+# setup <image|27b|flashnext|deepseek|inkling|tts|asr|qwen-image|qwen-image-heretic|qwen-image-turbo|qwen-image-turbo-heretic|all>
 # - image et poids de référence (download.sh), dans $MODELS_BASE.
 rt_gufo_setup() {
-  [[ -n "${1:-}" ]] || error "--setup (runtime gufo) attend : image, 27b, flashnext, deepseek, tts, asr, qwen-image, qwen-image-heretic, qwen-image-turbo, qwen-image-turbo-heretic ou all"
+  [[ -n "${1:-}" ]] || error "--setup (runtime gufo) attend : image, 27b, flashnext, deepseek, inkling, tts, asr, qwen-image, qwen-image-heretic, qwen-image-turbo, qwen-image-turbo-heretic ou all"
   MODELS_BASE="$MODELS_BASE" GUFO_IMAGE="$GUFO_IMAGE" "$GUFO_DIR/download.sh" "$1"
 }
 
@@ -235,13 +236,14 @@ Runtime gufo : gufo derrière llama-swap (docs/GUFO.md, runtime/gufo/README.md)
 
 Commandes du runtime :
   --setup <quoi>           Image et poids de gufo (runtime/gufo/download.sh) :
-                           image, 27b, flashnext, deepseek, tts, asr,
-                           qwen-image, qwen-image-heretic, qwen-image-turbo,
-                           qwen-image-turbo-heretic ou all
+                           image, 27b, flashnext, deepseek, inkling, tts,
+                           asr, qwen-image, qwen-image-heretic,
+                           qwen-image-turbo, qwen-image-turbo-heretic ou all
   --start [modèle]         (commande commune) [modèle] = préchargé : flashnext,
-                           27b, deepseek ; sans argument, celui du .env en
-                           place, sinon flashnext. Le client choisit ensuite
-                           qwen3.8-27b, qwen3.8-flash-next, deepseek-v4-flash,
+                           27b, deepseek, inkling ; sans argument, celui du
+                           .env en place, sinon flashnext. Le client choisit
+                           ensuite qwen3.8-27b, qwen3.8-flash-next,
+                           deepseek-v4-flash, inkling-2-mini,
                            Qwen-Image-2.1-heretic ou
                            Qwen-Image-2.1-Turbo-heretic par le champ
                            « model » (un seul chargé à la fois,

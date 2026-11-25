@@ -168,7 +168,7 @@ fi
 # nom court de runtime.sh existe ; llama-swap épinglé par somme.
 LSY="$(cat "$RT_DIR/gufo-llama-swap.yaml")"
 LSY_CTX="$(grep -oE -- '--context [0-9]+' <<<"$LSY" | head -1 | cut -d' ' -f2)"
-for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash; do
+for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash inkling-2-mini; do
   bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
   if grep -q -- "--served-model-name $m" <<<"$bloc" && ! grep -q 'stripParams' <<<"$bloc" \
      && [[ -n "$LSY_CTX" ]] && grep -qE "^      context: $LSY_CTX$" <<<"$bloc" \

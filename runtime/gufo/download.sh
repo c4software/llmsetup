@@ -17,6 +17,8 @@
 #   runtime/gufo/download.sh flashnext   flash-next-q4 : Flash-Next UD-Q4_K_XL unsloth,
 #                                        4 shards, tête MTP shared Q8_0, mmproj BF16 (115 Go)
 #   runtime/gufo/download.sh deepseek    deepseek4 : DeepSeek V4 Flash IQ2XXS antirez + DSpark (92,7 Go)
+#   runtime/gufo/download.sh inkling     inkling-2-mini : Inkling 2 Mini UD-Q4_K_XL unsloth,
+#                                        drafter DSpark Q8_0, mmproj BF16 (18,8 Go ; gufo 0.37.0)
 #   runtime/gufo/download.sh tts         Qwen3-TTS 12Hz 1.7B, trois variantes BF16 (≈ 13,5 Go ;
 #                                        hf download, gufo ne les propose pas)
 #   runtime/gufo/download.sh asr         qwen3-asr : Qwen3-ASR 1.7B BF16 (4,7 Go)
@@ -156,6 +158,12 @@ telecharge() {
       # MODELS_BASE/gufo (avant le 17/11/2026).
       gufo_model deepseek4 "$DL/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf" \
         "$DL/DeepSeek-V4-Flash-DSpark-support-0731.gguf" ;;
+    inkling)
+      # inkling-2-mini (extension inkling2, gufo 0.37.0, gufo-org/gufo#1340) :
+      # Unsloth 8078d149, cible UD-Q4_K_XL (sha256 e6427665…), mmproj BF16 et
+      # drafter DSpark Q8_0, seule disposition que gufo accepte. Rien à
+      # reprendre : le runtime llama-cpp-rocm-strix ne sert pas ce modèle.
+      gufo_model inkling-2-mini ;;
     tts)
       hf download Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
         --revision 0c0e3051f131929182e2c023b9537f8b1c68adfe \
@@ -192,7 +200,7 @@ telecharge() {
 
 mkdir -p "$DL"
 if [[ "${1:-}" == all ]]; then
-  for quoi in image 27b flashnext deepseek tts asr qwen-image qwen-image-heretic qwen-image-turbo qwen-image-turbo-heretic; do telecharge "$quoi"; done
+  for quoi in image 27b flashnext deepseek inkling tts asr qwen-image qwen-image-heretic qwen-image-turbo qwen-image-turbo-heretic; do telecharge "$quoi"; done
 else
   telecharge "${1:-}"
 fi

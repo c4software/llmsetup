@@ -35,7 +35,7 @@
 #                                                  refusé si le fichier a des
 #                                                  modifications locales)
 #
-# Cas gufo : 27b, flashnext, deepseek (modèles de runtime/gufo/gufo-llama-swap.yaml,
+# Cas gufo : 27b, flashnext, deepseek, inkling (modèles de runtime/gufo/gufo-llama-swap.yaml,
 # gufo lancé derrière llama-swap, le modèle du cas préchargé)
 # Cas llama : 27b, flashnext, flashnext-large-ub, deepseek
 #
@@ -117,6 +117,7 @@ modele_gufo() {  # cas -> modèle de gufo-llama-swap.yaml
     27b) echo qwen3.8-27b ;;
     flashnext) echo qwen3.8-flash-next ;;
     deepseek) echo deepseek-v4-flash ;;
+    inkling) echo inkling-2-mini ;;
     *) echo "cas inconnu : $1" >&2; return 2 ;;
   esac
 }

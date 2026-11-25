@@ -19,7 +19,7 @@
 # apparue qu'une fois sur plusieurs séries, et la rejouer pour en avoir le
 # transcript coûtait une seconde série (et ne la reproduit pas forcément).
 #
-# Cas : ceux de run.sh et agentic.sh (27b, flashnext, deepseek). DeepSeek
+# Cas : ceux de run.sh et agentic.sh (27b, flashnext, deepseek, inkling). DeepSeek
 # n'est plus remesuré depuis le 28/09/2026 sauf demande.
 #
 # agentic.sh écrase GUFO_DATA/resultats/agentic/gufo-<cas>.* à chaque

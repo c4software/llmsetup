@@ -8,6 +8,7 @@
 #   - « gros » : les LLM et Qwen-Image, un seul à la fois ; aucune paire ne
 #     tient en mémoire (Flash-Next ~100 Gio en 2 sessions, DeepSeek ~93 Gio,
 #     27B ~45 Gio, Qwen-Image 33 Go de poids BF16, 124 Gio en tout) ;
+#     Inkling 2 Mini (~30 Gio annoncés) y est aussi, par choix, du 26/11/2026 ;
 #   - « voix » : les trois variantes de Qwen3-TTS, une à la fois, à côté du
 #     gros modèle, jamais déchargées par lui, déchargées après 60 s sans
 #     requête (gufo-org/gufo#272) ;
@@ -133,6 +134,9 @@
 #                         et plus de staging ; les 8 Gio de #259/#279 n'ont
 #                         plus d'objet. Son ancien cache (*.kvc à la racine de
 #                         GUFO_CACHE) est perdu, il se reremplit.
+#                         Inkling 2 Mini (0.37.0) suit la même règle dès son
+#                         ajout : GUFO_CACHE/inkling-2-mini (créé par
+#                         runtime.sh), 16 Gio, sans staging.
 #                         Une ligne par option de cache : remesure.sh les
 #                         retire par sed pour sa série SANS_CACHE=1.
 # =============================================================================
@@ -261,6 +265,48 @@ models:
       in: [text]
       out: [text]
 
+  # Inkling 2 Mini (Thinking Machines, 20/11/2026, Apache 2.0) : MoE 26B,
+  # 3,4B actifs, les 12 couches du milieu parcourues trois fois ; texte et
+  # images. Dans l'image depuis gufo 0.37.0 (gufo-org/gufo#1340), ajouté le
+  # 26/11/2026 sans remesure ici, à la demande de l'utilisateur. Seule
+  # révision acceptée par gufo : Unsloth 8078d149 (--setup inkling, « gufo
+  # model install inkling-2-mini », MODELS_BASE/gufo/models/inkling-2-mini) :
+  # cible UD-Q4_K_XL (17,6 Go, experts NVFP4 d'origine), mmproj BF16 et
+  # drafter DSpark Q8_0 du checkpoint ; les dispositions antérieures
+  # d'Unsloth (Old_Support/) sont refusées.
+  # Contexte natif 1 048 576 tokens, ramené aux 262144 de la macro gufo.
+  # --think off : Inkling ne coupe jamais son raisonnement ; gufo traduit
+  # « off » par le niveau 0 du template, comme llama.cpp, et le modèle écrit
+  # encore une courte réflexion (29 à 345 tokens sur des prompts courts,
+  # docs/models/inkling-2-mini.md). Masquer la réflexion faisait écrire les
+  # arguments d'un appel d'outil en texte avec tool_choice auto (notes
+  # internes de gufo) : gufo ne le fait pas. Même défaut que les autres LLM
+  # du groupe, choisi par l'utilisateur ; un client relève l'effort par
+  # requête (reasoning_effort). Arguments d'outils générés en clés triées,
+  # l'ordre du template. Échantillonnage : generation_config amont (temp 1,
+  # sans troncature), laissé à gufo.
+  # Annoncé par gufo le 24/11/2026 (Strix Halo, glouton, raisonnement
+  # coupé ; BENCHMARKS.md, avant les gains de #1403) : prefill 1 916 t/s à
+  # vide, 1 219 à 64k ; décode 47,4 t/s, 31,9 à 64k ; DSpark 59,1, 43,1 à
+  # 64k, ~76 sur du texte prévisible ; ~28 à 30 Gio ; prêt en 4,7 s.
+  # Fiche du modèle : rappel factuel plus faible que Qwen3.8-27B, peut
+  # supprimer ou écraser des fichiers sans confirmation (bac à sable).
+  "inkling-2-mini":
+    name: "Inkling 2 Mini (gufo, DSpark)"
+    cmd: >-
+      ${gufo} --served-model-name inkling-2-mini
+      --cache-disk ${env.GUFO_CACHE}/inkling-2-mini --cache-disk-bytes 17179869184
+      --model ${env.MODELS_BASE}/gufo/models/inkling-2-mini/Inkling-2-Mini-UD-Q4_K_XL.gguf
+      --speculative dspark
+      --dspark-model ${env.MODELS_BASE}/gufo/models/inkling-2-mini/dspark-Inkling-2-Mini-Q8_0.gguf
+      --mmproj ${env.MODELS_BASE}/gufo/models/inkling-2-mini/mmproj-BF16.gguf
+      --think off
+    checkEndpoint: /health
+    capabilities:
+      context: 262144
+      in: [text, image]
+      out: [text]
+
   # ── Audio et image : autres serveurs de gufo (voir docs/models/ de gufo) ──
   # Poids BF16 safetensors : voix dans MODELS_BASE/gufo (--setup tts),
   # transcription et Qwen-Image dans MODELS_BASE/gufo/models/<id> (--setup
@@ -387,6 +433,7 @@ routing:
             - "qwen3.8-27b"
             - "qwen3.8-flash-next"
             - "deepseek-v4-flash"
+            - "inkling-2-mini"
             - "Qwen-Image-2.1-heretic"
             - "Qwen-Image-2.1-Turbo-heretic"
         voix:
