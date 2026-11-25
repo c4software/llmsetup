@@ -33,9 +33,18 @@
 #   --context 262144      contexte natif, celui du service ; défaut de gufo
 #                         depuis d5fd781 (4096 avant), gardé explicite car
 #                         capabilities.context doit lui rester égal
-#   --sessions N          2 par défaut : la seconde évite qu'une requête annexe
+#   --sessions N          3 par défaut : la seconde évite qu'une requête annexe
 #                         du client (titre, résumé) évince la conversation
-#                         principale de la RAM (+7 Gio)
+#                         principale de la RAM (+7 Gio) ; la troisième, depuis
+#                         le 25/11/2026, sert les sous-agents d'omp lancés en
+#                         parallèle du fil principal (à 2, mesuré le 25/11 :
+#                         r236, 98 tokens générés en 239 s, presque tout en
+#                         file). Coût mesuré au chargement de Flash-Next à
+#                         262144 de contexte : +0,7 Gio de mémoire GPU
+#                         (98 234 → 98 978 Mio), 1,1 Gio de moins de RAM
+#                         disponible (23 433 → 22 306 Mio) ; décode presque
+#                         intact à deux requêtes simultanées (médianes sur
+#                         48 h : 53,7 t/s à batch_width 2, 56,2 seul)
 #   (pas de --max-tokens) défaut de gufo -1 depuis gufo-org/gufo#276 :
 #                         jusqu'à EOS, comme le service (aucun n-predict).
 #                         32768 explicite jusqu'au 26/09/2026, contre le

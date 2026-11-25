@@ -20,7 +20,7 @@ la synthèse et ce qui sert au travail courant.
 - **En service** : image épinglée par la ligne de `runtime/gufo/IMAGE`, seul
   endroit où la version courante est écrite (historique des montées dans
   « Versions : synthèse »), remesurée à chaque montée ; derrière llama-swap,
-  en `--think off`, 2 sessions, cache disque 16 Gio par dossier (Flash-Next
+  en `--think off`, 3 sessions, cache disque 16 Gio par dossier (Flash-Next
   et le 27B ont chacun le leur, DeepSeek aussi depuis la 0.30.0), plus de
   staging (ignoré par tous les modèles depuis la 0.30.0) ;
   réglages dans « Paramètres de gufo et leur origine ».
@@ -360,7 +360,8 @@ réelles dans le journal (« Évaluation face au service »).
   refuse les points de reprise trop gros (27B le 24/09, en silence à
   l'époque ; sessions réelles de Flash-Next le 26/09, journalisé depuis
   #279), d'où 8 Gio ; `--sessions 2` évite qu'une requête
-  annexe évince la conversation (7 Gio de plus sur Flash-Next) ; changer la
+  annexe évince la conversation (7 Gio de plus sur Flash-Next), la
+  troisième session (25/11/2026) sert les sous-agents lancés en parallèle ; changer la
   configuration du serveur vide le cache disque, la fixer une fois pour
   toutes.
 - **Sessions réelles** (Claude Code via le proxy, omp, pi) : 86 à 93 % du
@@ -741,7 +742,7 @@ données restent hors du dépôt et hors de `~/models`, dans `GUFO_DATA`
   llama-swap (section « Routeur » ci-dessus), à la place du service sur
   `:8009`, l'argument choisissant le modèle préchargé (compose
   `runtime/gufo/docker-compose.yml`, `.env` généré dans
-  `GUFO_DATA`, 2 sessions par défaut, `GUFO_SESSIONS=N` pour changer, nom
+  `GUFO_DATA`, 3 sessions par défaut, `GUFO_SESSIONS=N` pour changer, nom
   exposé `qwen3.8-27b` ou `qwen3.8-flash-next`, cache disque 16 Gio par
   modèle dans son dossier, utilisateur de l'hôte). `--runtime llama-cpp-rocm-strix` pour revenir
   au service (`--gufo-off`), `--restart [modèle]` pour changer de modèle
@@ -895,7 +896,7 @@ sienne et met cette ligne à jour.
 | Paramètre | `runtime/gufo/gufo-llama-swap.yaml` | Défaut de gufo | Exemples gufo (guides des modèles) | Origine |
 |---|---|---|---|---|
 | `--context` | 262144 | contexte natif depuis d5fd781 (4096 avant) | 32768 | nous : contexte natif, celui du service ; redondant depuis d5fd781 (chargement : `context_tokens=262144`), gardé explicite parce que `capabilities.context` doit lui rester égal |
-| `--sessions` | 2 | 1 | 2 | gufo (guides du 27B et de Flash-Next) et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) |
+| `--sessions` | 3 | 1 | 2 | gufo (guides du 27B et de Flash-Next) et notre mesure (7 Gio, plus d'éviction par les requêtes annexes) ; 3 depuis le 25/11/2026 pour les sous-agents d'omp en parallèle (+0,7 Gio de mémoire GPU au chargement de Flash-Next, décode presque intact à deux requêtes simultanées) |
 | `--max-tokens` | non posé (-1, jusqu'à EOS) | -1 depuis #276 (128 avant) | non indiqué | gufo, comme le service (llama.cpp à -1, aucun `n-predict` dans le ini) ; 32768 explicite jusqu'au 26/09/2026, quand le défaut de 128 coupait un client sans `max_tokens` |
 | échantillonnage | non posé (profil de gufo) ; temp 0,7, top-k 20, top-p 0,8, min-p 0, presence 1,5 explicites pour Qwen, temp 1,0, top-k 40, top-p 0,95 pour DeepSeek jusqu'au 29/09/2026 | profil officiel du modèle depuis v0.2.0 (#282) : Qwen sans raisonnement 0,7 / 0,8 / 20 / 1,5, avec 1,0 / 0,95 / 20 / 0 ; DeepSeek 1,0 / 0,95 / top-k 0 ; glouton avant | aucun | gufo, depuis v0.2.0 : Qwen officiel, profil instruct, celui des sections nothink du service et de nos anciennes valeurs ; surchargeable par requête |
 | `--think` | off | raisonnement : Qwen effort xhigh, DeepSeek effort high depuis v0.2.0 (sans raisonnement avant) | non indiqué | nous : équivalent des sections nothink pour Qwen, mesuré le 02/10/2026 sur Flash-Next (0.2.0, boucle agentique pi, 3 passes) : `--think on --reasoning-effort xhigh` donne 16/16 aussi, mais 71,4 s par passe contre 30,9 s (x2,3, somme des médianes par scénario), 2,4 fois plus de tokens générés, décode 44,5 contre 50,4 t/s, acceptance MTP 76,2 contre 84,6 %, cache inchangé (93 %) ; à activer par requête côté client si besoin ; pour DeepSeek, raisonnement sans budget mesuré à +43 % de temps en agentique le 29/09/2026 (non posé entre la montée en 0.2.0 et cette mesure) |

@@ -101,7 +101,7 @@ _run_svc() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé
 #     et ne laisse aucune variable ; gufo-llama-swap.yaml est cohérent.
 GENV="$(_run_svc 'generate_gufo_env qwen3.8-flash-next')"
 for attendu in "GUFO_PRECHARGE=qwen3.8-flash-next" "COMPOSE_PROJECT_NAME=gufo" "GUFO_CONTENEUR=gufo-8009" \
-               "GUFO_RESTART=unless-stopped" "GUFO_PORT=8009" "GUFO_SESSIONS=2" \
+               "GUFO_RESTART=unless-stopped" "GUFO_PORT=8009" "GUFO_SESSIONS=3" \
                "GUFO_CACHE=$SVC/home/.local/state/llm-setup/gufo-cache" \
                "GID_RENDER=303" "GID_VIDEO=986" "SVC_UID=$(id -u)"; do
   if grep -qxF -- "$attendu" <<<"$GENV"; then

@@ -20,6 +20,35 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Trois sessions pour Flash-Next (25/11/2026)
+
+Demandé par l'utilisateur après une tâche omp à quatre sous-agents servie
+lentement par le proxy. À 2 sessions, le fil principal (r219 : 79,6k tokens
+de prompt, 12 159 générés en 266 s) occupait une session pendant que les
+sous-agents se partageaient l'autre : r236, 98 tokens générés en 239 s,
+presque tout en file ; 14 requêtes sur 215 attendaient plus de 10 s en 48 h.
+Décode presque intact à deux requêtes simultanées (médianes sur 48 h des
+réponses de plus de 300 tokens : 56,2 t/s seul, 53,7 t/s à batch_width 2),
+la session de plus est donc du débit en plus.
+
+- `GUFO_SESSIONS` passe de 2 à 3 par défaut (`runtime.sh`, test du `.env`,
+  README, `docs/GUFO.md`). Chargement de Flash-Next à 262144 de contexte :
+  mémoire GPU 98 234 → 98 978 Mio, RAM disponible 23 433 → 22 306 Mio,
+  `state_reserved_mib` 13 780 → 20 670. Le contexte reste à 262144 : la
+  session en plus coûte peu, le réduire n'aurait rien libéré d'utile.
+- `--cache-ram-bytes` reste non posée : le budget automatique suit les
+  sessions (20,7 Gio à 3) et gufo rend la RAM du cache sous pression
+  (#1275, 0.36.0). Un plafond de 18 Gio a été envisagé puis écarté le même
+  jour : il ne garde que de la marge, au prix de points de reprise, et les
+  7 captures refusées en une heure à 2 sessions
+  (`frontier_capture_refused reason=std::bad_alloc`, RAM disponible à
+  8,3 Gio en charge) sont arrivées avec un budget de 13,8 Gio. À revoir si
+  la pression mémoire gêne en usage réel.
+- Changer la configuration vide le cache disque de Flash-Next, qui se
+  reremplit.
+- Côté client : omp limité à 2 sous-agents simultanés (`task.maxConcurrency`)
+  et sous-agents en effort `medium`.
+
 ## Release v0.36.0 (23/11/2026), montée le jour même, 27B, Flash-Next et DeepSeek remesurés sur silentchuck
 
 Montée demandée par l'utilisateur le 23/11/2026, machine libre, les trois
