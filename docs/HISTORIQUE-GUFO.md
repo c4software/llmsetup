@@ -20,6 +20,99 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Release v0.37.0 (25/11/2026), montée le 26/11/2026, Inkling 2 Mini ajouté, 27B et Flash-Next remesurés sur silentchuck
+
+Montée demandée par l'utilisateur pour Inkling 2 Mini (gufo-org/gufo#1340,
+premier modèle de gufo hors Qwen et DeepSeek), machine libre (aucune requête
+depuis trois heures, 00:28). Image épinglée en `gufo-runtime:0.37.0`
+(`684b716`), digest `9548e9946c18`. `remesure.sh 27b flashnext` de 00:31 à
+00:48 (`remesure.log` de `~/llm/gufo-test`), journaux agentiques dans
+`resultats/agentic/2026-11-26-0.37.0/` (`avant/` = les séries de la 0.36.0
+du 23/11). Justesse d'abord : `sanity` et aiguilles justes sur les deux
+modèles. 16/16 partout, pas de boucle. DeepSeek non remesuré, Inkling
+installé mais non mesuré, au choix de l'utilisateur.
+
+Changements lus :
+
+- **Inkling 2 Mini, #1340** : MoE 26B de Thinking Machines (3,4B actifs,
+  12 couches parcourues trois fois), texte et images, DSpark avec le drafter
+  du checkpoint ; seule révision Unsloth `8078d149`. Accélérations déjà dans
+  la release : DSpark en lot et échantillonné (#1403), encodeur d'images 2 à
+  2,5 fois plus rapide (#1401). Chiffres annoncés (BENCHMARKS.md amont, avant
+  #1403) : prefill 1 916 t/s à vide, 1 219 à 64k ; décode 47,4 t/s, DSpark
+  59,1 (43,1 à 64k) ; ~28 à 30 Gio ; prêt en 4,7 s. Accueil du 20/11 : à
+  égalité avec Qwen3.8-27B à l'indice d'Artificial Analysis pour un coût par
+  tâche six fois moindre, devant lui sur le code agentique selon le
+  fabricant, derrière sur le rappel factuel (non-hallucination 63,4 % contre
+  71,4 %) ; Vals le classe 38e sur 43 et signale des boucles de raisonnement
+  en débogage.
+- **Serveur HTTP en Rust, #1366** (cassant) : tokio et hyper au lieu du
+  transport C++, contrats gardés (`--max-connections`, 120 s sans progrès,
+  pings SSE, limites WebSocket) ; noms d'en-têtes en casse titre, tailles de
+  morceaux en hexadécimal majuscule. Requêtes et réponses de chat décodées
+  et encodées en Rust (#1380, #1398, #1381), protocole Realtime de la voix
+  aussi (#1395).
+- **Outils** : grammaire bornée sur les schémas récursifs (#1388, #1387,
+  grammaires identiques à l'octet sur 750 schémas), alternatives `required`
+  respectées (#1343).
+- **Flash-Next, #1397** : la tête de brouillon MTP Q4_K arrondit pareil seule
+  et en lot ; ses brouillons ne dépendent plus du nombre de sessions qui
+  décodent ensemble. Couches réorganisées en étapes surchargeables (#1364,
+  #1372), sans effet attendu.
+- **Qwen** : copies des instantanés coupées aux frontières du mappage KV
+  (#1368), jeton différé avancé avant un pas de décode multi-tokens (#1369).
+- **Hors de notre parc** : experts MoE lus depuis le disque dans un cache
+  borné (#1318, extensions), PNG encodés en Rust (#1390, cassant ;
+  fichiers 3 à 16 % plus petits), paquet Debian par `apt.gufo.blog`.
+
+`--help` de `serve llm` des deux images comparé sur silentchuck : identique à
+l'octet. Doc de réglage (`docs/cli.md`, `server.md`, `cache.md`) : rien pour
+nos options. `models.lock.json` du 27B, de Flash-Next, de DeepSeek, de la
+transcription et de Qwen-Image identiques entre les deux tags : aucun poids
+à reprendre. Aucun réglage changé.
+
+Inkling ajouté (`inkling-2-mini`, `--setup inkling`, `--start inkling`) :
+groupe « gros », DSpark et mmproj, `--think off` comme les Qwen (le modèle
+écrit encore une courte réflexion, gufo traduisant « off » par le niveau 0
+du template), contexte ramené à 262144, cache disque dans
+`GUFO_CACHE/inkling-2-mini`, 3 sessions par la macro commune. Téléchargé sur
+silentchuck en 174 s (18,78 Go, `gufo model install`). Publié par
+`/v1/models` après la série.
+
+Lecture (entre parenthèses, la 0.36.0) :
+
+- **27B** : prefill à 52k 494,5 t/s (494,1), à 6,5k 554,2 à 554,9 (553,3 à
+  554,9), court 509,2 à 524,2 (508,5 à 522,0). Décode en prose 50,3 à
+  53,3 t/s (46,1 à 57,0), en code 69,0 à 70,5 (69,1 à 70,6). Cache au tour 2
+  à 100 %. Mémoire 59 762 Mio (59 977), chargement 39,7 s (33,4). Cache
+  disque chaud, celui de la série du 23/11 : 4 reprises disque, aucun raté,
+  reprise 98,6 % (93,5), prefill 9 s (17). Décode agentique 48,0 t/s
+  (47,3), acceptance 71,0 % (70,2), premier token 327 ms (321), 16 scénarios
+  en 109,9 s (111,0). 55 points de reprise écrits (56), 51 refus `min_step`
+  (53), 49 évictions `reason=admission` (44).
+- **Flash-Next** : prefill à 52k 1 810 t/s (1 810), à 6,5k 1 491 et 1 798
+  (1 603 à 1 687), court 1 608 à 1 626 hors première passe (1 592 à 1 615),
+  première passe lente comme d'habitude (1 258). Décode en code 94,6 à
+  98,9 t/s (95,9 à 98,4). La passe 2 de `bench` (prose) décode à 52,5 t/s :
+  réponse échantillonnée moins prévisible, acceptance 61,3 % contre 96,6 %
+  à la passe 1 (journal de gufo), pas le moteur ; le `?` de `bench` est
+  habituel sur Flash-Next (réponse courte sans `class Inventory`, déjà en
+  0.35.0 et 0.36.0). Mémoire 108 897 Mio (108 526), chargement 108,4 s
+  (115,4). Cache disque encore froid : 3 ratés `no_compatible_boundary`,
+  aucune reprise disque, reprise 93,1 % (93,5). Décode agentique 64,4 t/s
+  (70,5) pour 3 940 tokens générés (4 167), acceptance 91,7 % (91,4),
+  premier token 138 ms (150), 16 scénarios en 75,9 s (74,1), soit +2,4 % :
+  dans la variance d'une série (63,7 t/s en 0.35.0). 43 points de reprise
+  écrits (58), 51 refus `min_step` (51), 16 évictions `reason=admission`
+  (39).
+
+Après la série, Flash-Next relancé en usage réel par `remesure.sh` :
+`/v1/models` publie les dix modèles (Inkling compris), une requête avec
+`stop` s'arrête au bon endroit (`finish_reason` `stop`, `usage` présent), un
+flux SSE se termine par son `usage` et `[DONE]` derrière la nouvelle couche
+HTTP. Voix et transcription non revérifiées (protocole Realtime de la voix
+réécrit, route WebSocket non exercée).
+
 ## Trois sessions pour Flash-Next (25/11/2026)
 
 Demandé par l'utilisateur après une tâche omp à quatre sous-agents servie
