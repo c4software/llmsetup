@@ -282,7 +282,17 @@ models:
   # arguments d'un appel d'outil en texte avec tool_choice auto (notes
   # internes de gufo) : gufo ne le fait pas. Même défaut que les autres LLM
   # du groupe, choisi par l'utilisateur ; un client relève l'effort par
-  # requête (reasoning_effort). Arguments d'outils générés en clés triées,
+  # requête (reasoning_effort). --reasoning-budget 512 (choix de
+  # l'utilisateur, 26/11/2026) : sur une tâche longue, la réflexion du niveau
+  # 0 dépassait 1 000 tokens et remplissait le budget sans réponse (banc
+  # HTTP, même symptôme que gufo-org/gufo#1412). gufo retire depuis la 0.37.0
+  # (fe3ace13) le bloc de réponse ouvert d'office, qui cassait les appels
+  # d'outils ; la PR #1413, qui le rétablit hors outils, est refusée par le
+  # mainteneur (Inkling forcé sans réflexion rate ses appels sous pi). Le
+  # plafond force la fin de la réflexion sans l'interdire : 512 couvre la
+  # plus longue réflexion mesurée en boucle agentique (~200 tokens) et les
+  # 29 à 345 annoncés sur prompts courts. Une requête le change par
+  # reasoning_budget_tokens. Arguments d'outils générés en clés triées,
   # l'ordre du template. Échantillonnage : generation_config amont (temp 1,
   # sans troncature), laissé à gufo.
   # Annoncé par gufo le 24/11/2026 (Strix Halo, glouton, raisonnement
@@ -308,7 +318,7 @@ models:
       --speculative dspark
       --dspark-model ${env.MODELS_BASE}/gufo/models/inkling-2-mini/dspark-Inkling-2-Mini-Q8_0.gguf
       --mmproj ${env.MODELS_BASE}/gufo/models/inkling-2-mini/mmproj-BF16.gguf
-      --think off
+      --think off --reasoning-budget 512
     checkEndpoint: /health
     capabilities:
       context: 262144
