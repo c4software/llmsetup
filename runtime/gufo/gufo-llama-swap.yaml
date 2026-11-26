@@ -31,9 +31,12 @@
 #
 # Réglages communs (macro gufo) et leur origine, détaillés dans docs/GUFO.md
 # (« Paramètres de gufo et leur origine ») :
-#   --context 262144      contexte natif, celui du service ; défaut de gufo
-#                         depuis d5fd781 (4096 avant), gardé explicite car
-#                         capabilities.context doit lui rester égal
+#   --context N           posé par modèle depuis le 26/11/2026 (dans la macro
+#                         avant) : 262144 pour les Qwen et DeepSeek, contexte
+#                         natif, celui du service, défaut de gufo depuis
+#                         d5fd781 (4096 avant) ; 524288 pour Inkling (natif
+#                         1 048 576, choix de l'utilisateur). Gardé explicite
+#                         car capabilities.context doit lui rester égal
 #   --sessions N          3 par défaut : la seconde évite qu'une requête annexe
 #                         du client (titre, résumé) évince la conversation
 #                         principale de la RAM (+7 Gio) ; la troisième, depuis
@@ -162,7 +165,7 @@ macros:
   # port que llama-swap lui attribue.
   "gufo": >-
     gufo serve llm --host 127.0.0.1 --port ${PORT}
-    --context 262144 --sessions ${env.GUFO_SESSIONS}
+    --sessions ${env.GUFO_SESSIONS}
   # Qwen sans raisonnement (sections nothink du service). Échantillonnage
   # officiel Qwen laissé à gufo depuis la 0.2.0 (gufo-org/gufo#282) : profil
   # sans raisonnement 0,7 / top-p 0,8 / top-k 20 / presence 1,5, exactement nos
@@ -192,7 +195,7 @@ macros:
 # capabilities.context : llama-swap n'interroge pas gufo sur son contexte, et
 # sans lui /v1/models n'en publie aucun ; le proxy (qui lit meta.n_ctx) n'en
 # transmet alors pas, et l'extension pi/omp retombe sur 128K. Doit rester égal
-# au --context de la macro gufo.
+# au --context de la ligne de commande du modèle.
 # capabilities.in / out : llama-swap les publie dans /v1/models
 # (architecture.input_modalities / output_modalities, forme d'OpenRouter).
 # Sa découverte automatique ne les trouve pas : elle reconnaît llama-server
@@ -213,7 +216,7 @@ models:
   "qwen3.8-27b":
     name: "Qwen3.8-27B (gufo, DFlash 2)"
     cmd: >-
-      ${gufo} --served-model-name qwen3.8-27b
+      ${gufo} --served-model-name qwen3.8-27b --context 262144
       --cache-disk ${env.GUFO_CACHE}/qwen3.8-27b --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/qwen27-q4/Qwen3.8-27B-UD-Q4_K_XL.gguf
       --speculative dflash2
@@ -234,7 +237,7 @@ models:
   "qwen3.8-flash-next":
     name: "Qwen3.8-Flash-Next (gufo, MTP)"
     cmd: >-
-      ${gufo} --served-model-name qwen3.8-flash-next
+      ${gufo} --served-model-name qwen3.8-flash-next --context 262144
       --cache-disk ${env.GUFO_CACHE}/flash-next --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/flash-next-q4/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
       --speculative mtp
@@ -261,7 +264,7 @@ models:
   "deepseek-v4-flash":
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-
-      ${gufo} --served-model-name deepseek-v4-flash
+      ${gufo} --served-model-name deepseek-v4-flash --context 262144
       --cache-disk ${env.GUFO_CACHE}/deepseek-v4-flash --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/deepseek4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
       --speculative dspark
@@ -282,7 +285,12 @@ models:
   # cible UD-Q4_K_XL (17,6 Go, experts NVFP4 d'origine), mmproj BF16 et
   # drafter DSpark Q8_0 du checkpoint ; les dispositions antérieures
   # d'Unsloth (Old_Support/) sont refusées.
-  # Contexte natif 1 048 576 tokens, ramené aux 262144 de la macro gufo.
+  # Contexte natif 1 048 576 tokens, ramené à 524288 (choix de l'utilisateur,
+  # 26/11/2026 ; 262144 de la macro avant). L'état des huit passages
+  # d'attention complète coûte 32 KiB par token, réservés au fil de la
+  # conversation (docs/models/inkling-2-mini.md) : ~16 Gio pour une session
+  # pleine, ~48 Gio pour les 3 sessions pleines, en plus des ~49 Gio mesurés.
+  # 1 048 576 écarté : 3 sessions pleines dépasseraient la mémoire.
   # --think off : Inkling ne coupe jamais son raisonnement ; gufo traduit
   # « off » par le niveau 0 du template, comme llama.cpp, et le modèle écrit
   # encore une courte réflexion (29 à 345 tokens sur des prompts courts,
@@ -322,7 +330,7 @@ models:
   "inkling-2-mini":
     name: "Inkling 2 Mini (gufo, DSpark)"
     cmd: >-
-      ${gufo} --served-model-name inkling-2-mini
+      ${gufo} --served-model-name inkling-2-mini --context 524288
       --cache-disk ${env.GUFO_CACHE}/inkling-2-mini --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/inkling-2-mini/Inkling-2-Mini-UD-Q4_K_XL.gguf
       --speculative dspark
@@ -331,7 +339,7 @@ models:
       --think off --reasoning-budget 512
     checkEndpoint: /health
     capabilities:
-      context: 262144
+      context: 524288
       in: [text, image]
       out: [text]
 

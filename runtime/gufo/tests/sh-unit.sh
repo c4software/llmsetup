@@ -163,13 +163,13 @@ else
 fi
 # gufo-llama-swap.yaml : chaque modèle porte le même nom que son
 # --served-model-name (sinon gufo répond 404), ne retire plus stop ni
-# stop_sequences (gérés par gufo depuis #260), annonce le --context de la macro gufo (capabilities.context, lu
+# stop_sequences (gérés par gufo depuis #260), annonce le --context de sa ligne de commande (capabilities.context, lu
 # par le proxy), ne pointe que sous le parc (MODELS_BASE, dont MODELS_BASE/gufo) ; groupe exclusif ; chaque
 # nom court de runtime.sh existe ; llama-swap épinglé par somme.
 LSY="$(cat "$RT_DIR/gufo-llama-swap.yaml")"
-LSY_CTX="$(grep -oE -- '--context [0-9]+' <<<"$LSY" | head -1 | cut -d' ' -f2)"
 for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash inkling-2-mini; do
   bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
+  LSY_CTX="$(grep -oE -- '--context [0-9]+' <<<"$bloc" | head -1 | cut -d' ' -f2)"
   if grep -q -- "--served-model-name $m" <<<"$bloc" && ! grep -q 'stripParams' <<<"$bloc" \
      && [[ -n "$LSY_CTX" ]] && grep -qE "^      context: $LSY_CTX$" <<<"$bloc" \
      && ! grep -oE '[^ ]+\.gguf' <<<"$bloc" | grep -vqE '^\$\{env\.MODELS_BASE\}/'; then
