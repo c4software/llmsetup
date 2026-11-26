@@ -149,6 +149,11 @@ Lecture (entre parenthèses, la 0.36.0) :
   « 25 » ; avec `reasoning_budget_tokens: 100`, la réflexion s'arrête à
   87 tokens, puis la même réponse. Le plafond par requête s'applique, et le
   modèle répond après la coupure.
+- **26/11/2026, commentaire sur gufo-org/gufo#1412** (relu et validé par
+  l'utilisateur) : nos chiffres d'Inkling. Sans outils, la réflexion du
+  niveau 0 dépasse 1 000 tokens sur nos tâches longues ; sous pi, elle reste
+  courte. `--reasoning-budget 512` y est proposé comme compromis entre la
+  0.37.0 et #1413, avec nos vitesses.
 
 Après la série, Flash-Next relancé en usage réel par `remesure.sh` :
 `/v1/models` publie les dix modèles (Inkling compris), une requête avec
