@@ -101,7 +101,7 @@ _run_svc() {  # $1 = appel bash ; $2 = env supplémentaire ; stdin fermé
 #     et ne laisse aucune variable ; gufo-llama-swap.yaml est cohérent.
 GENV="$(_run_svc 'generate_gufo_env qwen3.8-flash-next')"
 for attendu in "GUFO_PRECHARGE=qwen3.8-flash-next" "COMPOSE_PROJECT_NAME=gufo" "GUFO_CONTENEUR=gufo-8009" \
-               "GUFO_RESTART=unless-stopped" "GUFO_PORT=8009" "GUFO_SESSIONS=3" "GUFO_SESSIONS_INKLING=2" \
+               "GUFO_RESTART=unless-stopped" "GUFO_PORT=8009" "GUFO_SESSIONS=2" "GUFO_SESSIONS_FLASHNEXT=3" \
                "GUFO_CACHE=$SVC/home/.local/state/llm-setup/gufo-cache" \
                "GID_RENDER=303" "GID_VIDEO=986" "SVC_UID=$(id -u)"; do
   if grep -qxF -- "$attendu" <<<"$GENV"; then
@@ -163,8 +163,8 @@ else
 fi
 # gufo-llama-swap.yaml : chaque modèle porte le même nom que son
 # --served-model-name (sinon gufo répond 404), ne retire plus stop ni
-# stop_sequences (gérés par gufo depuis #260), pose ses --sessions (GUFO_SESSIONS, Inkling
-# GUFO_SESSIONS_INKLING), annonce le --context de sa ligne de commande (capabilities.context, lu
+# stop_sequences (gérés par gufo depuis #260), pose ses --sessions (GUFO_SESSIONS, Flash-Next
+# GUFO_SESSIONS_FLASHNEXT), annonce le --context de sa ligne de commande (capabilities.context, lu
 # par le proxy), ses niveaux de réflexion (metadata.reasoning_efforts, parmi ceux du
 # proxy), ne pointe que sous le parc (MODELS_BASE, dont MODELS_BASE/gufo) ; groupe exclusif ; chaque
 # nom court de runtime.sh existe ; llama-swap épinglé par somme.
@@ -172,7 +172,7 @@ LSY="$(cat "$RT_DIR/gufo-llama-swap.yaml")"
 for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash inkling-2-mini; do
   bloc="$(awk -v m="  \"$m\":" '$0==m{f=1;next} f&&/^  "/{f=0} f' <<<"$LSY")"
   LSY_CTX="$(grep -oE -- '--context [0-9]+' <<<"$bloc" | head -1 | cut -d' ' -f2)"
-  LSY_SES='${env.GUFO_SESSIONS}'; [[ $m == inkling-2-mini ]] && LSY_SES='${env.GUFO_SESSIONS_INKLING}'
+  LSY_SES='${env.GUFO_SESSIONS}'; [[ $m == qwen3.8-flash-next ]] && LSY_SES='${env.GUFO_SESSIONS_FLASHNEXT}'
   if grep -q -- "--served-model-name $m" <<<"$bloc" && ! grep -q 'stripParams' <<<"$bloc" \
      && [[ -n "$LSY_CTX" ]] && grep -qE "^      context: $LSY_CTX$" <<<"$bloc" \
      && [[ $(grep -oF -- "--sessions $LSY_SES" <<<"$bloc" | wc -l) -eq 1 ]] && [[ $(grep -c -- '--sessions' <<<"$bloc") -eq 1 ]] \

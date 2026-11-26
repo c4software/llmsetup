@@ -20,7 +20,7 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
-## Inkling 2 Mini à 2 sessions, omp et ses sous-agents restent sur Flash-Next (26/11/2026)
+## Flash-Next seul à 3 sessions, le 27B, DeepSeek et Inkling à 2 ; omp et ses sous-agents restent sur Flash-Next (26/11/2026)
 
 Test demandé par l'utilisateur, sur le modèle de celui de Flash-Next de la
 veille : une tâche omp d'audit doc / code à trois sous-agents parallèles
@@ -39,11 +39,15 @@ sous-agents `medium`, `task.maxConcurrency` 3), Inkling à 3 sessions et
   446k tokens avant sa compaction (omp compacte près du contexte annoncé),
   362 `grep`/`sed` aux motifs répétés sans écrire la synthèse ; arrêté.
   Aucune erreur, RAM disponible de 79 à 30 Gio.
-- Inkling passe à 2 sessions (`GUFO_SESSIONS_INKLING`, choix de
-  l'utilisateur) : `--sessions` sort de la macro `gufo` et se pose par
-  modèle, inchangé à `GUFO_SESSIONS` (3) pour les Qwen et DeepSeek ; les
-  bancs posent les deux à `SESSIONS`. Vaut après `--restart` ; le cache
-  disque d'Inkling se reremplit.
+- Inkling passe à 2 sessions (choix de l'utilisateur), puis le même soir
+  le 27B et DeepSeek aussi : la troisième session ne sert qu'aux sous-agents
+  d'omp, qui tournent sur Flash-Next. `--sessions` sort de la macro `gufo`
+  et se pose par modèle : `GUFO_SESSIONS` passe à 2 (27B, DeepSeek,
+  Inkling), `GUFO_SESSIONS_FLASHNEXT` garde 3 à Flash-Next (un premier
+  commit avait mis Inkling seul à part, `GUFO_SESSIONS_INKLING`, retirée) ;
+  les bancs posent les deux à `SESSIONS`. Vaut après `--restart` ; les
+  caches disques du 27B, de DeepSeek et d'Inkling se reremplissent, pas
+  celui de Flash-Next.
 - omp revient sur Flash-Next (`maxConcurrency` 2) et compacte ses
   sous-agents à 96 000 tokens (`task.agentCompactionThresholdOverrides`,
   entier exigé). Inkling et Flash-Next sont dans le même groupe exclusif :

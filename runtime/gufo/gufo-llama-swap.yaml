@@ -38,9 +38,12 @@
 #                         1 048 576, choix de l'utilisateur). Gardé explicite
 #                         car capabilities.context doit lui rester égal
 #   --sessions N          posé par modèle depuis le 26/11/2026 (dans la macro
-#                         avant). Qwen et DeepSeek : GUFO_SESSIONS, 3 par
-#                         défaut ; Inkling : GUFO_SESSIONS_INKLING, 2 par
-#                         défaut (voir son bloc). La seconde évite qu'une requête annexe
+#                         avant). GUFO_SESSIONS, 2 par défaut, pour le 27B,
+#                         DeepSeek et Inkling ; GUFO_SESSIONS_FLASHNEXT, 3
+#                         par défaut, pour Flash-Next, seul modèle d'omp et de
+#                         ses sous-agents (choix de l'utilisateur, 26/11/2026 :
+#                         les autres à 3 de cette date au 25/11, voir le bloc
+#                         d'Inkling). La seconde évite qu'une requête annexe
 #                         du client (titre, résumé) évince la conversation
 #                         principale de la RAM (+7 Gio) ; la troisième, depuis
 #                         le 25/11/2026, sert les sous-agents d'omp lancés en
@@ -246,7 +249,7 @@ models:
   "qwen3.8-flash-next":
     name: "Qwen3.8-Flash-Next (gufo, MTP)"
     cmd: >-
-      ${gufo} --served-model-name qwen3.8-flash-next --context 262144 --sessions ${env.GUFO_SESSIONS}
+      ${gufo} --served-model-name qwen3.8-flash-next --context 262144 --sessions ${env.GUFO_SESSIONS_FLASHNEXT}
       --cache-disk ${env.GUFO_CACHE}/flash-next --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/flash-next-q4/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
       --speculative mtp
@@ -304,8 +307,8 @@ models:
   # conversation (docs/models/inkling-2-mini.md) : ~16 Gio pour une session
   # pleine, ~48 Gio pour les 3 sessions pleines, en plus des ~49 Gio mesurés.
   # 1 048 576 écarté : 3 sessions pleines dépasseraient la mémoire.
-  # 2 sessions (GUFO_SESSIONS_INKLING) depuis le 26/11/2026 au soir, au lieu
-  # des 3 de GUFO_SESSIONS (choix de l'utilisateur) : la seconde garde son
+  # 2 sessions (GUFO_SESSIONS, comme le 27B et DeepSeek) depuis le 26/11/2026
+  # au soir, au lieu de 3 (choix de l'utilisateur) : la seconde garde son
   # rôle (requêtes annexes du client), la troisième ne servait qu'aux
   # sous-agents d'omp, qui ne gagnent rien ici. Mesuré le 26/11 (tâche omp à
   # 3 sous-agents, 226 requêtes) : 98 % du prompt repris, attente médiane
@@ -353,7 +356,7 @@ models:
   "inkling-2-mini":
     name: "Inkling 2 Mini (gufo, DSpark)"
     cmd: >-
-      ${gufo} --served-model-name inkling-2-mini --context 524288 --sessions ${env.GUFO_SESSIONS_INKLING}
+      ${gufo} --served-model-name inkling-2-mini --context 524288 --sessions ${env.GUFO_SESSIONS}
       --cache-disk ${env.GUFO_CACHE}/inkling-2-mini --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/inkling-2-mini/Inkling-2-Mini-UD-Q4_K_XL.gguf
       --speculative dspark
