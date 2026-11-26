@@ -164,7 +164,8 @@ fi
 # gufo-llama-swap.yaml : chaque modèle porte le même nom que son
 # --served-model-name (sinon gufo répond 404), ne retire plus stop ni
 # stop_sequences (gérés par gufo depuis #260), annonce le --context de sa ligne de commande (capabilities.context, lu
-# par le proxy), ne pointe que sous le parc (MODELS_BASE, dont MODELS_BASE/gufo) ; groupe exclusif ; chaque
+# par le proxy), ses niveaux de réflexion (metadata.reasoning_efforts, parmi ceux du
+# proxy), ne pointe que sous le parc (MODELS_BASE, dont MODELS_BASE/gufo) ; groupe exclusif ; chaque
 # nom court de runtime.sh existe ; llama-swap épinglé par somme.
 LSY="$(cat "$RT_DIR/gufo-llama-swap.yaml")"
 for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash inkling-2-mini; do
@@ -172,8 +173,9 @@ for m in qwen3.8-27b qwen3.8-flash-next deepseek-v4-flash inkling-2-mini; do
   LSY_CTX="$(grep -oE -- '--context [0-9]+' <<<"$bloc" | head -1 | cut -d' ' -f2)"
   if grep -q -- "--served-model-name $m" <<<"$bloc" && ! grep -q 'stripParams' <<<"$bloc" \
      && [[ -n "$LSY_CTX" ]] && grep -qE "^      context: $LSY_CTX$" <<<"$bloc" \
+     && grep -qE '^      reasoning_efforts: \[(none|minimal|low|medium|high|xhigh|max)(, (none|minimal|low|medium|high|xhigh|max))*\]$' <<<"$bloc" \
      && ! grep -oE '[^ ]+\.gguf' <<<"$bloc" | grep -vqE '^\$\{env\.MODELS_BASE\}/'; then
-    echo "[OK]   llama-swap : $m nommé comme gufo le sert, stop transmis, contexte annoncé ($LSY_CTX), fichiers sous le parc"
+    echo "[OK]   llama-swap : $m nommé comme gufo le sert, stop transmis, contexte annoncé ($LSY_CTX), niveaux de réflexion, fichiers sous le parc"
   else
     echo "[FAIL] llama-swap : bloc $m incohérent dans gufo-llama-swap.yaml"; rc=1
   fi

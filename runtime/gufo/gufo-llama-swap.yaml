@@ -202,6 +202,11 @@ macros:
 # par owned_by « llamacpp », gufo répond « gufo », et le prober de repli
 # n'annonce que du texte. Sans eux, le proxy et ses clients (pi, omp,
 # OpenCode) croient les modèles aveugles. image en entrée = un --mmproj.
+# metadata.reasoning_efforts : les niveaux de réflexion (reasoning_effort)
+# que le modèle distingue chez gufo (docs/models/<modèle>.md de la version
+# épinglée), publiés par llama-swap dans /v1/models (meta.llamaswap) ; le
+# proxy les lit pour le catalogue de Codex de sa page (llm-proxy
+# v2026.11.26.4). Un niveau absent est un alias d'un autre chez gufo.
 models:
   # Qwen3.8-27B (--setup 27b, « gufo model install qwen27-q4 » depuis le
   # 17/11/2026) : cible UD-Q4_K_XL partagée avec le runtime
@@ -228,6 +233,8 @@ models:
       context: 262144
       in: [text, image]
       out: [text]
+    metadata:
+      reasoning_efforts: [none, low, medium, high, xhigh]
 
   # Qwen3.8-Flash-Next : cible UD-Q4_K_XL unsloth (--setup flashnext,
   # « gufo model install flash-next-q4 » depuis le 17/11/2026 ; gufo refuse
@@ -249,6 +256,8 @@ models:
       context: 262144
       in: [text, image]
       out: [text]
+    metadata:
+      reasoning_efforts: [none, low, medium, high, xhigh]
 
   # DeepSeek V4 Flash : seule quant acceptée par gufo, IQ2XXS d'antirez +
   # support DSpark (--setup deepseek, « gufo model install deepseek4 »
@@ -275,6 +284,8 @@ models:
       context: 262144
       in: [text]
       out: [text]
+    metadata:
+      reasoning_efforts: [none, low, high, max]
 
   # Inkling 2 Mini (Thinking Machines, 20/11/2026, Apache 2.0) : MoE 26B,
   # 3,4B actifs, les 12 couches du milieu parcourues trois fois ; texte et
@@ -342,6 +353,8 @@ models:
       context: 524288
       in: [text, image]
       out: [text]
+    metadata:
+      reasoning_efforts: [none, minimal, low, medium, high, xhigh]
 
   # ── Audio et image : autres serveurs de gufo (voir docs/models/ de gufo) ──
   # Poids BF16 safetensors : voix dans MODELS_BASE/gufo (--setup tts),
