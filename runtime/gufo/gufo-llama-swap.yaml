@@ -268,7 +268,7 @@ models:
   # Inkling 2 Mini (Thinking Machines, 20/11/2026, Apache 2.0) : MoE 26B,
   # 3,4B actifs, les 12 couches du milieu parcourues trois fois ; texte et
   # images. Dans l'image depuis gufo 0.37.0 (gufo-org/gufo#1340), ajouté le
-  # 26/11/2026 sans remesure ici, à la demande de l'utilisateur. Seule
+  # 26/11/2026 à la demande de l'utilisateur. Seule
   # révision acceptée par gufo : Unsloth 8078d149 (--setup inkling, « gufo
   # model install inkling-2-mini », MODELS_BASE/gufo/models/inkling-2-mini) :
   # cible UD-Q4_K_XL (17,6 Go, experts NVFP4 d'origine), mmproj BF16 et
@@ -289,6 +289,14 @@ models:
   # coupé ; BENCHMARKS.md, avant les gains de #1403) : prefill 1 916 t/s à
   # vide, 1 219 à 64k ; décode 47,4 t/s, 31,9 à 64k ; DSpark 59,1, 43,1 à
   # 64k, ~76 sur du texte prévisible ; ~28 à 30 Gio ; prêt en 4,7 s.
+  # Mesuré ici le 26/11/2026 (silentchuck, 0.37.0, remesure.sh inkling) :
+  # justesse OK (sanity, aiguilles à 6,5k et 52k, cache au tour 2) ; prefill
+  # 1 880 t/s à 52k, ~2 000 à 6,5k ; décode DSpark 60 à 68 t/s en prose, 77 à
+  # 88 en code ; 48 713 Mio ; chargement à froid 22,6 s. Agentique : 16/16,
+  # 73,7 t/s, acceptance 79,7 %, 118,1 s (27B 109,9, Flash-Next 75,9).
+  # Malgré --think off, sur une tâche longue la réflexion dépasse 1 000
+  # tokens (bench, refactor : aucune réponse dans le budget), alors qu'elle
+  # reste courte dans la boucle agentique (médiane ~107 caractères).
   # Fiche du modèle : rappel factuel plus faible que Qwen3.8-27B, peut
   # supprimer ou écraser des fichiers sans confirmation (bac à sable).
   "inkling-2-mini":

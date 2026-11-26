@@ -20,7 +20,7 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
-## Release v0.37.0 (25/11/2026), montée le 26/11/2026, Inkling 2 Mini ajouté, 27B et Flash-Next remesurés sur silentchuck
+## Release v0.37.0 (25/11/2026), montée le 26/11/2026, Inkling 2 Mini ajouté et mesuré, 27B et Flash-Next remesurés sur silentchuck
 
 Montée demandée par l'utilisateur pour Inkling 2 Mini (gufo-org/gufo#1340,
 premier modèle de gufo hors Qwen et DeepSeek), machine libre (aucune requête
@@ -29,8 +29,9 @@ depuis trois heures, 00:28). Image épinglée en `gufo-runtime:0.37.0`
 00:48 (`remesure.log` de `~/llm/gufo-test`), journaux agentiques dans
 `resultats/agentic/2026-11-26-0.37.0/` (`avant/` = les séries de la 0.36.0
 du 23/11). Justesse d'abord : `sanity` et aiguilles justes sur les deux
-modèles. 16/16 partout, pas de boucle. DeepSeek non remesuré, Inkling
-installé mais non mesuré, au choix de l'utilisateur.
+modèles. 16/16 partout, pas de boucle. DeepSeek non remesuré. Inkling
+installé sans mesure au choix de l'utilisateur, puis vérifié à sa demande le
+même jour (`remesure.sh inkling`, 06:56 à 07:03, `remesure-inkling.log`).
 
 Changements lus :
 
@@ -105,6 +106,21 @@ Lecture (entre parenthèses, la 0.36.0) :
   dans la variance d'une série (63,7 t/s en 0.35.0). 43 points de reprise
   écrits (58), 51 refus `min_step` (51), 16 évictions `reason=admission`
   (39).
+- **Inkling** (première mesure ici) : `sanity` juste, aiguilles retrouvées
+  à 6,5k et 52k, cache au tour 2 à 100 %. Prefill à 52k 1 880 t/s, à 6,5k
+  2 022 à 2 047, court 1 881 à 2 080. Décode en prose 59,8 à 68,1 t/s, en
+  code 77,1 à 87,9, 52,3 à 52k. Les `?` de `bench`, `refactor` et
+  `cache_t1` ne sont pas des réponses fausses : malgré `--think off` (niveau
+  0 du template), la réflexion occupe tout le budget (1 000, 1 500 et 60
+  tokens) et aucune réponse n'est écrite. Ces t/s sont donc ceux de la
+  réflexion. La doc amont annonce 29 à 345 tokens de réflexion sur des
+  prompts courts ; sur nos tâches longues, c'est plus de 1 000. Mémoire
+  48 713 Mio, chargement à froid 22,6 s. Boucle agentique : 16/16, réflexion
+  courte (41 blocs, médiane 107 caractères, au plus 776), décode 73,7 t/s,
+  acceptance 79,7 %, premier token 125 ms, reprise 92,5 % (cache disque
+  neuf, 3 ratés `no_compatible_boundary`), 16 scénarios en 118,1 s (27B
+  109,9, Flash-Next 75,9) ; la réflexion coûte surtout aux réponses courtes
+  (`simple` 1,5 s contre 0,4 et 0,3). Aucun réglage changé.
 
 Après la série, Flash-Next relancé en usage réel par `remesure.sh` :
 `/v1/models` publie les dix modèles (Inkling compris), une requête avec
