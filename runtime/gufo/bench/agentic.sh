@@ -58,6 +58,7 @@ PORT=8009
 # réel (ils sont exclusifs), sans redémarrage automatique, avec projet,
 # conteneur et .env séparés de ceux de l'usage réel.
 export GUFO_DATA GUFO_PORT=$PORT GUFO_RESTART=no GUFO_SESSIONS="${SESSIONS:-1}" \
+  GUFO_SESSIONS_INKLING="${SESSIONS:-1}" \
   GUFO_PROJET=gufo-banc GUFO_CONTENEUR=gufo-banc GUFO_ENV_FILE="$GUFO_DATA/banc.env"
 PASSES="${PASSES:-3}"
 RES="$GUFO_DATA/resultats/agentic"
@@ -73,7 +74,7 @@ LLAMA_LANCE=0
 #          usage réel : sans LLM_RUNTIME et sans aucune valeur du banc, qui
 #          sinon repartirait avec lui s'il s'agit de gufo ;
 #   llama  le runtime llama-cpp-rocm-strix, pour les cas « llama ».
-SANS_BANC=(env -u LLM_RUNTIME -u GUFO_PORT -u GUFO_RESTART -u GUFO_SESSIONS
+SANS_BANC=(env -u LLM_RUNTIME -u GUFO_PORT -u GUFO_RESTART -u GUFO_SESSIONS -u GUFO_SESSIONS_INKLING
            -u GUFO_PROJET -u GUFO_CONTENEUR -u GUFO_ENV_FILE)
 banc()  { LLM_RUNTIME=gufo "$DEPOT/setup-llm.sh" "$@"; }
 reel()  { "${SANS_BANC[@]}" "$DEPOT/setup-llm.sh" "$@"; }

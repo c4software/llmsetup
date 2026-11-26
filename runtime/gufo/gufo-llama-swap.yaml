@@ -37,7 +37,10 @@
 #                         d5fd781 (4096 avant) ; 524288 pour Inkling (natif
 #                         1 048 576, choix de l'utilisateur). Gardé explicite
 #                         car capabilities.context doit lui rester égal
-#   --sessions N          3 par défaut : la seconde évite qu'une requête annexe
+#   --sessions N          posé par modèle depuis le 26/11/2026 (dans la macro
+#                         avant). Qwen et DeepSeek : GUFO_SESSIONS, 3 par
+#                         défaut ; Inkling : GUFO_SESSIONS_INKLING, 2 par
+#                         défaut (voir son bloc). La seconde évite qu'une requête annexe
 #                         du client (titre, résumé) évince la conversation
 #                         principale de la RAM (+7 Gio) ; la troisième, depuis
 #                         le 25/11/2026, sert les sous-agents d'omp lancés en
@@ -165,7 +168,6 @@ macros:
   # port que llama-swap lui attribue.
   "gufo": >-
     gufo serve llm --host 127.0.0.1 --port ${PORT}
-    --sessions ${env.GUFO_SESSIONS}
   # Qwen sans raisonnement (sections nothink du service). Échantillonnage
   # officiel Qwen laissé à gufo depuis la 0.2.0 (gufo-org/gufo#282) : profil
   # sans raisonnement 0,7 / top-p 0,8 / top-k 20 / presence 1,5, exactement nos
@@ -221,7 +223,7 @@ models:
   "qwen3.8-27b":
     name: "Qwen3.8-27B (gufo, DFlash 2)"
     cmd: >-
-      ${gufo} --served-model-name qwen3.8-27b --context 262144
+      ${gufo} --served-model-name qwen3.8-27b --context 262144 --sessions ${env.GUFO_SESSIONS}
       --cache-disk ${env.GUFO_CACHE}/qwen3.8-27b --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/qwen27-q4/Qwen3.8-27B-UD-Q4_K_XL.gguf
       --speculative dflash2
@@ -244,7 +246,7 @@ models:
   "qwen3.8-flash-next":
     name: "Qwen3.8-Flash-Next (gufo, MTP)"
     cmd: >-
-      ${gufo} --served-model-name qwen3.8-flash-next --context 262144
+      ${gufo} --served-model-name qwen3.8-flash-next --context 262144 --sessions ${env.GUFO_SESSIONS}
       --cache-disk ${env.GUFO_CACHE}/flash-next --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/flash-next-q4/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
       --speculative mtp
@@ -273,7 +275,7 @@ models:
   "deepseek-v4-flash":
     name: "DeepSeek V4 Flash (gufo, IQ2XXS antirez, DSpark)"
     cmd: >-
-      ${gufo} --served-model-name deepseek-v4-flash --context 262144
+      ${gufo} --served-model-name deepseek-v4-flash --context 262144 --sessions ${env.GUFO_SESSIONS}
       --cache-disk ${env.GUFO_CACHE}/deepseek-v4-flash --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/deepseek4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix-0731.gguf
       --speculative dspark
@@ -302,6 +304,16 @@ models:
   # conversation (docs/models/inkling-2-mini.md) : ~16 Gio pour une session
   # pleine, ~48 Gio pour les 3 sessions pleines, en plus des ~49 Gio mesurés.
   # 1 048 576 écarté : 3 sessions pleines dépasseraient la mémoire.
+  # 2 sessions (GUFO_SESSIONS_INKLING) depuis le 26/11/2026 au soir, au lieu
+  # des 3 de GUFO_SESSIONS (choix de l'utilisateur) : la seconde garde son
+  # rôle (requêtes annexes du client), la troisième ne servait qu'aux
+  # sous-agents d'omp, qui ne gagnent rien ici. Mesuré le 26/11 (tâche omp à
+  # 3 sous-agents, 226 requêtes) : 98 % du prompt repris, attente médiane
+  # 0,6 s, mais décode à 15,1 t/s par requête à 3 simultanées (11 au-delà de
+  # 100k de contexte ; 40 à 68 seul), ~33 t/s au total, à peine plus qu'une
+  # session : à long contexte chaque pas relit l'état des trois sessions (les
+  # 188 t/s à 8 utilisateurs de gufo sont mesurés à 4k). omp et ses
+  # sous-agents restent sur Flash-Next (~54 t/s par requête à 2).
   # --think off : Inkling ne coupe jamais son raisonnement ; gufo traduit
   # « off » par le niveau 0 du template, comme llama.cpp, et le modèle écrit
   # encore une courte réflexion (29 à 345 tokens sur des prompts courts,
@@ -341,7 +353,7 @@ models:
   "inkling-2-mini":
     name: "Inkling 2 Mini (gufo, DSpark)"
     cmd: >-
-      ${gufo} --served-model-name inkling-2-mini --context 524288
+      ${gufo} --served-model-name inkling-2-mini --context 524288 --sessions ${env.GUFO_SESSIONS_INKLING}
       --cache-disk ${env.GUFO_CACHE}/inkling-2-mini --cache-disk-bytes 17179869184
       --model ${env.MODELS_BASE}/gufo/models/inkling-2-mini/Inkling-2-Mini-UD-Q4_K_XL.gguf
       --speculative dspark

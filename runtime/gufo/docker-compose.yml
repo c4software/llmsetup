@@ -70,6 +70,7 @@ services:
       MODELS_BASE: ${MODELS_BASE:?}
       GUFO_CACHE: ${GUFO_CACHE:?}
       GUFO_SESSIONS: ${GUFO_SESSIONS:?}
+      GUFO_SESSIONS_INKLING: ${GUFO_SESSIONS_INKLING:?}
       GUFO_PRECHARGE: ${GUFO_PRECHARGE:?}
     # Parc au MÊME chemin et en lecture seule (les lignes de commande portent
     # des chemins absolus de l'hôte) ; les poids propres à gufo y sont depuis

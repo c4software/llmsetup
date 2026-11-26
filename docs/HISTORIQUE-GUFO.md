@@ -20,6 +20,37 @@ Les deux tableaux de remesure, qui couvrent plusieurs entrées, sont à la fin
 (« Mesures d'une version à l'autre »). Tickets et commentaires sont publiés
 sous le compte c4software.
 
+## Inkling 2 Mini à 2 sessions, omp et ses sous-agents restent sur Flash-Next (26/11/2026)
+
+Test demandé par l'utilisateur, sur le modèle de celui de Flash-Next de la
+veille : une tâche omp d'audit doc / code à trois sous-agents parallèles
+(copie jetable du dépôt), omp entièrement sur Inkling (fil principal `high`,
+sous-agents `medium`, `task.maxConcurrency` 3), Inkling à 3 sessions et
+524 288 de contexte, suivi par le journal de gufo et les stats du proxy.
+
+- Phase des sous-agents (26 min, 226 requêtes) : 97,9 % du prompt repris,
+  durée médiane 11,4 s, p90 48 s, attente médiane 0,6 s (21 requêtes à plus
+  de 10 s, jusqu'à 278 s : le fil principal fait une quatrième requête).
+  Décode à 15,1 t/s par requête à `batch_width` 3 (13,2 au-delà de 80k de
+  contexte, 11 vers 140k), 32,6 t/s au total ; seul, 40 à 68 t/s. Les
+  188 t/s à 8 utilisateurs de gufo (BENCHMARKS.md) sont mesurés à 4k de
+  contexte : à 100k et plus, chaque pas relit l'état des trois sessions.
+- Fil principal ensuite (30 min, 405 requêtes, 99,5 % repris) : monté à
+  446k tokens avant sa compaction (omp compacte près du contexte annoncé),
+  362 `grep`/`sed` aux motifs répétés sans écrire la synthèse ; arrêté.
+  Aucune erreur, RAM disponible de 79 à 30 Gio.
+- Inkling passe à 2 sessions (`GUFO_SESSIONS_INKLING`, choix de
+  l'utilisateur) : `--sessions` sort de la macro `gufo` et se pose par
+  modèle, inchangé à `GUFO_SESSIONS` (3) pour les Qwen et DeepSeek ; les
+  bancs posent les deux à `SESSIONS`. Vaut après `--restart` ; le cache
+  disque d'Inkling se reremplit.
+- omp revient sur Flash-Next (`maxConcurrency` 2) et compacte ses
+  sous-agents à 96 000 tokens (`task.agentCompactionThresholdOverrides`,
+  entier exigé). Inkling et Flash-Next sont dans le même groupe exclusif :
+  pas de fil principal sur l'un et de sous-agents sur l'autre. La même
+  tâche sur Flash-Next, lancée ensuite, a été arrêtée à la demande avant la
+  fin : pas de comparaison à tâche identique.
+
 ## Release v0.37.0 (25/11/2026), montée le 26/11/2026, Inkling 2 Mini ajouté et mesuré, 27B et Flash-Next remesurés sur silentchuck
 
 Montée demandée par l'utilisateur pour Inkling 2 Mini (gufo-org/gufo#1340,

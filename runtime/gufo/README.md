@@ -171,7 +171,8 @@ défaut `~/llm/gufo-test` :
 - `resultats/` : sorties des bancs.
 
 Variables : `GUFO_DATA`, `GUFO_CACHE`, `MODELS_BASE` (téléchargement seul), `GUFO_IMAGE`, `GUFO_SESSIONS` (défaut 3 ; `SESSIONS`
-pour les bancs, défaut 1), `PASSES` (banc agentique). Les bancs posent
+pour les bancs, défaut 1), `GUFO_SESSIONS_INKLING` (Inkling 2 Mini, défaut 2 ;
+`SESSIONS` aussi pour les bancs), `PASSES` (banc agentique). Les bancs posent
 eux-mêmes `GUFO_PROJET=gufo-banc`, `GUFO_CONTENEUR=gufo-banc`,
 `GUFO_RESTART=no` et leur `.env`.
 

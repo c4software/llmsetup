@@ -47,7 +47,9 @@
 #                  Dockerfile.routeur la reçoit du .env. Épinglée : gufo publie
 #                  des versions depuis le 28/09/2026 et une image est une série
 #                  de mesures, docs/GUFO.md)
-#   GUFO_SESSIONS  sessions (défaut 3)
+#   GUFO_SESSIONS  sessions des Qwen et de DeepSeek (défaut 3)
+#   GUFO_SESSIONS_INKLING  sessions d'Inkling 2 Mini (défaut 2, voir son bloc
+#                  dans gufo-llama-swap.yaml)
 #   GUFO_PORT      port hôte (défaut SERVER_PORT ; le pilotage attend /health
 #                  sur SERVER_PORT, le changer ne sert qu'à lire un .env)
 #   GUFO_RESTART   politique de redémarrage (défaut unless-stopped)
@@ -120,6 +122,7 @@ GUFO_CONTENEUR=$GUFO_CONTENEUR
 GUFO_RESTART=${GUFO_RESTART:-unless-stopped}
 GUFO_PORT=${GUFO_PORT:-$SERVER_PORT}
 GUFO_SESSIONS=${GUFO_SESSIONS:-3}
+GUFO_SESSIONS_INKLING=${GUFO_SESSIONS_INKLING:-2}
 GUFO_RUNTIME_DIR=$GUFO_DIR
 GUFO_ROUTEUR_IMAGE=gufo-routeur:latest
 GUFO_PRECHARGE=$precharge
