@@ -170,8 +170,16 @@ macros:
   # --min-p 0.0 --presence-penalty 1.5) ; une requête qui active le
   # raisonnement reçoit le profil avec raisonnement (1,0 / 0,95 / 20 / 0)
   # au lieu de nos 0,7 figés. Un client surcharge chaque valeur par requête.
+  # --reasoning-budget 32768 (choix de l'utilisateur, 26/11/2026) : sans effet
+  # en --think off, il ne vaut que pour une requête qui active la réflexion à
+  # la main, où les Qwen réfléchissent parfois trop ou bouclent. 32 768, la
+  # sortie que Qwen conseille avec réflexion, ne coupe pas une réflexion
+  # honnête et met fin à une boucle (gufo force la fin de la réflexion, puis
+  # le modèle répond). Une requête le change par reasoning_budget_tokens.
+  # Non posé de la 0.18.0 (#524) au 26/11/2026 : le raisonnement se réglait
+  # par le client.
   "qwen": >-
-    --think off
+    --think off --reasoning-budget 32768
   # DeepSeek : aucune macro depuis la 0.2.0 (gufo-org/gufo#282). Profil agentic
   # officiel 0731 de gufo (temp 1,0, top-p 0,95, top-k 0). Avant : temp 1,0,
   # top-k 40, top-p 0,95, min-p 0 (la section du service). --think off posé
