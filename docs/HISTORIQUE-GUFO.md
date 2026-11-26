@@ -120,7 +120,25 @@ Lecture (entre parenthèses, la 0.36.0) :
   acceptance 79,7 %, premier token 125 ms, reprise 92,5 % (cache disque
   neuf, 3 ratés `no_compatible_boundary`), 16 scénarios en 118,1 s (27B
   109,9, Flash-Next 75,9) ; la réflexion coûte surtout aux réponses courtes
-  (`simple` 1,5 s contre 0,4 et 0,3). Aucun réglage changé.
+  (`simple` 1,5 s contre 0,4 et 0,3).
+- **Inkling, réflexion plafonnée** (`--reasoning-budget 512`, choix de
+  l'utilisateur ; `remesure.sh inkling` de 08:09 à 08:15,
+  `remesure-inkling-budget.log`, journaux dans
+  `resultats/agentic/2026-11-26-0.37.0-budget512/`). En ligne, plusieurs
+  serveurs coupent la réflexion en ouvrant le bloc de réponse dans le prompt.
+  gufo le faisait aussi, puis l'a retiré en 0.37.0 (fe3ace13), parce que cela
+  faisait écrire les arguments des appels d'outils en texte. Le symptôme est
+  décrit dans gufo-org/gufo#1412 ; la PR #1413 le rétablirait hors outils,
+  mais le mainteneur la refuse (sous pi, Inkling sans réflexion rate ses
+  appels). Le plafond force la fin de la réflexion sans l'interdire. Justesse
+  inchangée, et les réponses s'écrivent désormais : `refactor` passe en OK,
+  avec un décode en code de 106,7 à 132,1 t/s. `bench` écrit son code mais
+  s'arrête à 1 000 tokens avant `class Inventory`, d'où le `?` (comme
+  Flash-Next). `cache_t1` (60 tokens, sous le plafond) reste `?`. Prefill
+  et mémoire identiques (1 879 t/s à 52k, 48 943 Mio). Boucle agentique :
+  16/16, décode 74,3 t/s, acceptance 79,7 %, reprise 98,2 % (cache disque
+  chaud), 16 scénarios en 93,4 s (118,1 sans plafond), dont `creation` en
+  13,1 s (22,7).
 
 Après la série, Flash-Next relancé en usage réel par `remesure.sh` :
 `/v1/models` publie les dix modèles (Inkling compris), une requête avec

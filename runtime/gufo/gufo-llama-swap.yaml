@@ -304,9 +304,11 @@ models:
   # 1 880 t/s à 52k, ~2 000 à 6,5k ; décode DSpark 60 à 68 t/s en prose, 77 à
   # 88 en code ; 48 713 Mio ; chargement à froid 22,6 s. Agentique : 16/16,
   # 73,7 t/s, acceptance 79,7 %, 118,1 s (27B 109,9, Flash-Next 75,9).
-  # Malgré --think off, sur une tâche longue la réflexion dépasse 1 000
+  # Malgré --think off, sur une tâche longue la réflexion dépassait 1 000
   # tokens (bench, refactor : aucune réponse dans le budget), alors qu'elle
   # reste courte dans la boucle agentique (médiane ~107 caractères).
+  # Plafonnée à 512 (même jour) : réponses écrites, refactor juste, décode en
+  # code 107 à 132 t/s ; agentique 16/16, 74,3 t/s, 93,4 s.
   # Fiche du modèle : rappel factuel plus faible que Qwen3.8-27B, peut
   # supprimer ou écraser des fichiers sans confirmation (bac à sable).
   "inkling-2-mini":
