@@ -139,6 +139,16 @@ Lecture (entre parenthèses, la 0.36.0) :
   16/16, décode 74,3 t/s, acceptance 79,7 %, reprise 98,2 % (cache disque
   chaud), 16 scénarios en 93,4 s (118,1 sans plafond), dont `creation` en
   13,1 s (22,7).
+- **Qwen, réflexion plafonnée à 32 768 tokens** (`--reasoning-budget 32768`
+  dans la macro `qwen`, 27B et Flash-Next, choix de l'utilisateur). Le
+  plafond est sans effet en `--think off` : il vaut pour les requêtes qui
+  activent la réflexion à la main, où les Qwen réfléchissent parfois trop ou
+  bouclent. 32 768 est la sortie que Qwen conseille avec réflexion.
+  `--restart` à 08:20. Contrôle sur Flash-Next, réflexion activée, même
+  question : sans plafond par requête, 201 tokens de réflexion puis
+  « 25 » ; avec `reasoning_budget_tokens: 100`, la réflexion s'arrête à
+  87 tokens, puis la même réponse. Le plafond par requête s'applique, et le
+  modèle répond après la coupure.
 
 Après la série, Flash-Next relancé en usage réel par `remesure.sh` :
 `/v1/models` publie les dix modèles (Inkling compris), une requête avec
