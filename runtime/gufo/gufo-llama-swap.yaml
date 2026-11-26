@@ -308,8 +308,8 @@ models:
   # vide, 1 219 à 64k ; décode 47,4 t/s, 31,9 à 64k ; DSpark 59,1, 43,1 à
   # 64k, ~76 sur du texte prévisible ; ~28 à 30 Gio ; prêt en 4,7 s.
   # Mesuré ici le 26/11/2026 (silentchuck, 0.37.0, remesure.sh inkling) :
-  # justesse OK (sanity, aiguilles à 6,5k et 52k, cache au tour 2) ; prefill
-  # 1 880 t/s à 52k, ~2 000 à 6,5k ; décode DSpark 60 à 68 t/s en prose, 77 à
+  # justesse OK (sanity, aiguilles à 4,9k et 39k, cache au tour 2) ; prefill
+  # 1 880 t/s à 39k, ~2 000 à 4,9k ; décode DSpark 60 à 68 t/s en prose, 77 à
   # 88 en code ; 48 713 Mio ; chargement à froid 22,6 s. Agentique : 16/16,
   # 73,7 t/s, acceptance 79,7 %, 118,1 s (27B 109,9, Flash-Next 75,9).
   # Malgré --think off, sur une tâche longue la réflexion dépassait 1 000

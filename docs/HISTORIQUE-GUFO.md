@@ -107,9 +107,9 @@ Lecture (entre parenthèses, la 0.36.0) :
   écrits (58), 51 refus `min_step` (51), 16 évictions `reason=admission`
   (39).
 - **Inkling** (première mesure ici) : `sanity` juste, aiguilles retrouvées
-  à 6,5k et 52k, cache au tour 2 à 100 %. Prefill à 52k 1 880 t/s, à 6,5k
+  à 4,9k et 39k tokens (le même texte que les 6,5k et 52k des Qwen, découpé par le tokenizer d'Inkling), cache au tour 2 à 100 %. Prefill à 39k 1 880 t/s, à 4,9k
   2 022 à 2 047, court 1 881 à 2 080. Décode en prose 59,8 à 68,1 t/s, en
-  code 77,1 à 87,9, 52,3 à 52k. Les `?` de `bench`, `refactor` et
+  code 77,1 à 87,9, 52,3 à 39k. Les `?` de `bench`, `refactor` et
   `cache_t1` ne sont pas des réponses fausses : malgré `--think off` (niveau
   0 du template), la réflexion occupe tout le budget (1 000, 1 500 et 60
   tokens) et aucune réponse n'est écrite. Ces t/s sont donc ceux de la
@@ -135,7 +135,7 @@ Lecture (entre parenthèses, la 0.36.0) :
   avec un décode en code de 106,7 à 132,1 t/s. `bench` écrit son code mais
   s'arrête à 1 000 tokens avant `class Inventory`, d'où le `?` (comme
   Flash-Next). `cache_t1` (60 tokens, sous le plafond) reste `?`. Prefill
-  et mémoire identiques (1 879 t/s à 52k, 48 943 Mio). Boucle agentique :
+  et mémoire identiques (1 879 t/s à 39k, 48 943 Mio). Boucle agentique :
   16/16, décode 74,3 t/s, acceptance 79,7 %, reprise 98,2 % (cache disque
   chaud), 16 scénarios en 93,4 s (118,1 sans plafond), dont `creation` en
   13,1 s (22,7).
